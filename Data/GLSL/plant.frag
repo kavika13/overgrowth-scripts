@@ -4,6 +4,8 @@ uniform sampler2D tex;
 uniform sampler2D tex2;
 uniform samplerCube tex3;
 uniform samplerCube tex4;
+uniform sampler2D tex5;
+uniform sampler2D tex6;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
@@ -50,7 +52,7 @@ void main()
 
 	color = diffuse_color*0.5 * colormap.xyz + spec_color * normalmap.a;
 
-	color += back_NdotL * 0.5 * colormap.xyz * vec3(1.0,1.0,0.5);
+	color += back_NdotL * 0.5 * texture2D(tex6,gl_TexCoord[0].xy).xyz;
 	
 	color = mix(color, textureCube(tex4,normalize(rel_pos)).xyz, length(rel_pos)/far);
 	
