@@ -55,7 +55,7 @@ PointLightData FetchPointLight(uint light_index) {
 }
 
 
-void CalculateLightContrib(inout vec3 out_color, vec3 world_vert, vec3 ws_normal) {
+void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal) {
 	uint num_lights_ = uint(num_lights);
 
 	uint num_z_clusters = grid_size.z;
@@ -106,7 +106,13 @@ void CalculateLightContrib(inout vec3 out_color, vec3 world_vert, vec3 ws_normal
 		vec3 n = normalize(to_light);
 		float d = max(0.0, dot(to_light, ws_normal));
 
-		out_color += falloff * d * l.color;
+		diffuse_color += falloff * d * l.color;
+
+
+        vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
+        float spec = min(1.0, pow(max(0.0,dot(ws_normal,H)),100.0)*1.0);
+
+		spec_color += falloff * spec * l.color;
 	}
 }
 
@@ -197,9 +203,6 @@ uniform sampler2D translucency_tex;
 #define UNIFORM_PROJECTED_SHADOW_TEXTURE \
 uniform sampler2DShadow projected_shadow_sampler;
 
-#define UNIFORM_EXTRA_AO \
-uniform float extra_ao;
-
 #define UNIFORM_STIPPLE_FADE \
 uniform float fade;
 
@@ -249,8 +252,7 @@ ws_normal = normalize(ws_normal);
 
 #define CALC_DIRECT_DIFFUSE_COLOR \
 float NdotL = GetDirectContrib(ws_light, ws_normal,shadow_tex.r);\
-vec3 diffuse_color = GetDirectColor(NdotL);\
-CalculateLightContrib(diffuse_color, world_vert, ws_normal);
+vec3 diffuse_color = GetDirectColor(NdotL);
 
 #define CALC_DIFFUSE_LIGHTING \
 CALC_DIRECT_DIFFUSE_COLOR \
@@ -311,8 +313,7 @@ vec3 color = diffuse_color * colormap.xyz + \
              spec_color * GammaCorrectFloat(colormap.a);
 
 #define CALC_COLOR_ADJUST \
-color *= BalanceAmbient(NdotL); \
-color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
+color *= BalanceAmbient(NdotL);
 
 #define CALC_HAZE \
 AddHaze(color, ws_vertex, spec_cubemap);

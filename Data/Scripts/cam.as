@@ -26,10 +26,31 @@ const float _camera_media_mode_inertia = 0.99f;
 const float _acceleration = 20.0f;
 const float _base_speed = 5.0f;
 
+bool just_got_control = false;
+
 void Update() {
-    if(!co.controlled){
+    if(!co.controlled) {
+        just_got_control = true;
         return;
     }
+
+    if( just_got_control ) {
+        if( co.has_position_initialized == false ) {
+
+            co.has_position_initialized = true; 
+
+            int num_chars = GetNumCharacters();
+            if( num_chars > 0 )
+            {
+                 MovementObject@ char = ReadCharacter(0);
+                 Object@ char_obj = ReadObjectFromID(char.GetID());
+                 position = char_obj.GetTranslation() + vec3(0,1,0);
+            }
+
+        }
+        just_got_control = false; 
+    }
+
     if(level.QueryIntFunction("int HasCameraControl()") == 1){
         return;
     }

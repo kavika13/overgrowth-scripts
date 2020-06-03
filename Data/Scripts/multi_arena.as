@@ -390,7 +390,7 @@ void ReceiveMessage(string msg) {
         // If we have some values -- we're in an arena series
         if( arenaSession.size() != 0 ) {
             // Go back to the arena menu
-            LoadLevel("arena");
+            LoadLevel("back");
         }
         else {
             // Proceed to a new battle in this arena
@@ -498,6 +498,7 @@ void ReceiveMessage(string msg) {
             {
                 Log(info,"Player got mortally wounded\n");
                 global_data.player_deaths++;
+                global_data.addHiddenState( "mortally_wounded" );
             }
         }
         else if( token == "character_knocked_out" )
@@ -514,6 +515,7 @@ void ReceiveMessage(string msg) {
                 {
                     Log(info,"Player got a ko\n");
                     global_data.player_kos++;
+                    global_data.addHiddenState( "knocked_out" );
                 }
             }
         }
@@ -601,12 +603,20 @@ void EndMatch(bool victory) {
             SetWinText(new_fans, global_data.fan_base, excitement_level);
         }
         
+
     if( not has_ended_match )
     {
-        global_data.done_with_current_node = true;
-        global_data.arena_victory = victory;
-        global_data.ResolveWorldNode();
-        global_data.WritePersistentInfo();
+        if( global_data.getSessionProfile() >= 0 ) //Are we running on a valid profile?
+        {
+            global_data.done_with_current_node = true;
+            global_data.arena_victory = victory;
+            global_data.ResolveWorldNode();
+            global_data.WritePersistentInfo();
+        }
+        else
+        {
+            Log( info, "There is no loaded profile, not calculating arena resulting state" );
+        }
 
         has_ended_match = true;
     }

@@ -130,7 +130,7 @@ void ReceiveMessage(string msg) {
         has_gui = false;
     } else if(token == "go_to_main_menu"){
         level.SendMessage("dispose_level");
-        LoadLevel("mainmenu");
+        LoadLevel("back");
     } else if(token == "clearhud"){
 	    hotspot_image_string.resize(0);
 	} else if(token == "manual_reset"){

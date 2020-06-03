@@ -38,7 +38,7 @@ DecalData FetchDecal(uint decal_index) {
 }
 
 
-void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_vert) {
+void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec_amount, inout float roughness, inout float ambient_mult, in vec3 world_vert) {
 	uint num_z_clusters = grid_size.z;
 
 	vec4 ndcPos;
@@ -94,48 +94,70 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_ve
 
 		vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
 
-		// we must supply texture gradients here since we have non-uniform control flow
-		// non-uniformness happens when we have z cluster discontinuities
+        bool ambient_shadow = false;
+        if(int(decal.tint[3]) == 1){
+            ambient_shadow = true;
+            #if defined(CHARACTER) || defined(ITEM)
+                continue;
+            #endif 
+        } else {
+            #if defined(CHARACTER) || defined(ITEM)
+                continue;
+            #endif 
+        }
+        if(ambient_shadow){
+            float mult = max(0.5, min(1.0, pow(length(temp*2.0), 1.0)));
+            ambient_mult *= mult;
+        } else {
 
-		vec2 color_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_uv;
-		vec2 color_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_uv;
+    		// we must supply texture gradients here since we have non-uniform control flow
+    		// non-uniformness happens when we have z cluster discontinuities
 
-		vec2 color_tex_coord = start_uv + size_uv * (temp.xz + vec2(0.5));
-		vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
+    		vec2 color_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_uv;
+    		vec2 color_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_uv;
 
-#ifdef DECAL_NORMALS
+    		vec2 color_tex_coord = start_uv + size_uv * (temp.xz + vec2(0.5));
+    		vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
 
-		vec2 normal_tex_coord = start_normal + size_normal * (temp.xz + vec2(0.5));
+    #ifdef DECAL_NORMALS
 
-		vec2 normal_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_normal;
-		vec2 normal_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_normal;
+    		vec2 normal_tex_coord = start_normal + size_normal * (temp.xz + vec2(0.5));
 
-		vec4 decal_normal = textureGrad(decal_normal_tex, normal_tex_coord, normal_tex_dx, normal_tex_dy);
+    		vec2 normal_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_normal;
+    		vec2 normal_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_normal;
 
-#endif  // DECAL_NORMALS
-        float decal_normal_dot = dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0f)/1.0f);
-        if( decal_normal_dot > 0.80f )
-        {
-            float submix = 1.0f; 
+    		vec4 decal_normal = textureGrad(decal_normal_tex, normal_tex_coord, normal_tex_dx, normal_tex_dy);
 
-            if( decal_normal_dot < 0.85f )
+    #endif  // DECAL_NORMALS
+            float decal_normal_dot = dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0f)/1.0f);
+            if( decal_normal_dot > 0.80f )
             {
-                submix = (decal_normal_dot - 0.80f)*(1.0f/0.05f);
-            }
+                float submix = 1.0f; 
 
-            if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-                
-            } else {
-                colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a * submix);
-#ifdef DECAL_NORMALS
-                vec3 decal_tan = normalize(cross(ws_normal, (decal.transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
-                vec3 decal_bitan = cross(ws_normal, decal_tan);
-                vec3 new_normal = vec3(0);
-                new_normal += ws_normal * (decal_normal.b*2.0-1.0);
-                new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
-                new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
-                ws_normal = normalize(mix(ws_normal, new_normal, decal_color.a));
-#endif  // DECAL_NORMALS
+                if( decal_normal_dot < 0.85f )
+                {
+                    submix = (decal_normal_dot - 0.80f)*(1.0f/0.05f);
+                }
+
+                if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
+                    
+                } else {
+                    if(int(decal.tint[3]) == 2){ // Decal is blood
+                        spec_amount = mix(spec_amount, 0.05, decal_color.a * submix);
+                        roughness = mix(roughness, 0.0, decal_color.a * submix);
+                        decal_color.xyz *= 0.3;
+                    }
+                    colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a * submix);
+    #ifdef DECAL_NORMALS
+                    vec3 decal_tan = normalize(cross(ws_normal, (decal.transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
+                    vec3 decal_bitan = cross(ws_normal, decal_tan);
+                    vec3 new_normal = vec3(0);
+                    new_normal += ws_normal * (decal_normal.b*2.0-1.0);
+                    new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
+                    new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
+                    ws_normal = normalize(mix(ws_normal, new_normal, decal_color.a));
+    #endif  // DECAL_NORMALS
+                }
             }
         }
 	}

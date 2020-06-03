@@ -211,10 +211,6 @@ float GetSpecContrib ( const vec3 light_pos,
     return min(1.0, pow(max(0.0,dot(normal,H)),pow_val)*1.0)*unshadowed*primary_light_color.a;
 }
 
-float BalanceAmbient ( const float direct_contrib ) {
-    return 1.0-direct_contrib*0.2;
-}
-
 float GetHazeAmount( in vec3 relative_position ) { 
     float near = 0.1;
     float far = 1000.0;

@@ -21,14 +21,19 @@ void Initialize(){
     ribbon_background.Init();
 }
 
+void Dispose() {
+
+}
+
+bool CanGoBack() {
+    return true;
+}
+
 void Update(){
     visible = UpdateVisible(visible, target_visible);
     string callback = gui.GetCallback(gui_id);
     if(callback.length() > 0){
         this_ui.SendCallback(callback);
-    }
-    if(GetInputDown(0,'esc')){
-        this_ui.SendCallback("back");
     }
     ribbon_background.Update();
     ribbon_background.MoveGUI(gui_id);

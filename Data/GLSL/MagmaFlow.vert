@@ -2,7 +2,7 @@
 #include "lighting150.glsl"
 
 in vec3 vertex_attrib;
-in vec2 tex_coords_attrib;
+in vec2 tex_coord_attrib;
 #ifdef TANGENT
 in vec3 tangent_attrib;
 in vec3 bitangent_attrib;
@@ -55,7 +55,7 @@ void main() {
         transformed_vertex.xyz += model_rotation_mat[instance_id] * vertex_offset;
     #endif
     gl_Position = projection_view_mat * transformed_vertex;    
-    frag_tex_coords = tex_coords_attrib;
+    frag_tex_coords = tex_coord_attrib;
     #ifndef DEPTH_ONLY
         world_vert = transformed_vertex.xyz;
         ws_vertex = transformed_vertex.xyz - cam_pos;
