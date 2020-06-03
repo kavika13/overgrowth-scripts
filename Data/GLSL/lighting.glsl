@@ -1,14 +1,17 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
+float GetDirectContribSimple( float amount ) {
+	return amount * gl_LightSource[0].diffuse.a;
+}
+
 float GetDirectContrib( const vec3 light_pos,
 					    const vec3 normal, 
 					    const float unshadowed ) {
 	float direct_contrib;
 	direct_contrib = max(0.0,dot(light_pos, normal));
 	direct_contrib *= unshadowed;
-	direct_contrib *= gl_LightSource[0].diffuse.a;
-	return direct_contrib;
+	return GetDirectContribSimple(direct_contrib);
 }
 
 vec3 UnpackObjNormal(const vec4 normalmap) {

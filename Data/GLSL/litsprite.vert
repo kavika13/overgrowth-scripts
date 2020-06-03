@@ -1,8 +1,6 @@
-#extension GL_ARB_texture_rectangle : enable
-
 uniform sampler2D tex0;
-uniform sampler2DRect tex5;
-uniform float size;
+uniform samplerCube tex3;
+uniform float shadowed;
 
 void main()
 {	

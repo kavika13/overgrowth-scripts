@@ -45,7 +45,7 @@ const float _duck_vel_inertia = 0.89f;
 
 const float _roll_speed = 2.0f;
 const float _roll_accel = 50.0f;
-const float _ragdoll_recovery_time = 5.0f;
+const float _ragdoll_recovery_time = 1.0f;
 const float _roll_ground_speed = 12.0f;
 float recovery_time;
 vec3 roll_direction;
@@ -133,6 +133,25 @@ void UpdateGroundMovementControls() {
 	float speed = _walk_accel * run_phase;
 	speed = mix(speed,speed*_duck_speed_mult,duck_amount);
 	this_mo.velocity += adjusted_vel * time_step * speed;
+}
+
+void DrawIKTarget(string str) {
+	vec3 pos = this_mo.GetIKTargetPosition(str);
+	DebugDrawWireSphere(pos,
+						0.1f,
+						vec3(1.0f),
+						_delete_on_draw);
+}
+
+
+void MoveIKTarget(string str, vec3 offset) {
+	vec3 pos = this_mo.GetIKTargetPosition(str);
+	DebugDrawLine(pos,
+				  pos+offset,
+				  vec3(1.0f),
+				  _delete_on_draw);
+	this_mo.SetIKTargetOffset(str, offset);
+
 }
 
 void draw() {
@@ -248,7 +267,7 @@ void HandleGroundCollision() {
 		}
 
 		bool in_air = HandleStandingCollision();
-		if(in_air){
+		if(in_air || ground_normal.y < _ground_normal_y_threshold){
 			SetOnGround(false);
 			jump_info.StartFall();
 		} else {
@@ -496,6 +515,63 @@ void UpdateAnimation() {
 	}
 
 	this_mo.SetCOMOffset(com_offset, com_offset_vel);
+}
+
+const float _check_up = 1.0f;
+const float _check_down = -1.0f;
+	
+vec3 GetLegTargetOffset(vec3 initial_pos){
+	/*DebugDrawLine(initial_pos + vec3(0.0f,_check_up,0.0f),
+				  initial_pos + vec3(0.0f,_check_down,0.0f),
+				  vec3(1.0f),
+				  _delete_on_draw);*/
+	this_mo.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
+								    initial_pos + vec3(0.0f,_check_down,0.0f),
+								    0.05f);
+
+	if(sphere_col.NumContacts() == 0){
+		return vec3(0.0f);
+	}
+
+	float target_y_pos = sphere_col.position.y;
+	float height = initial_pos.y - this_mo.position.y + _leg_sphere_size;
+	target_y_pos += height;
+	/*DebugDrawWireSphere(sphere_col.position,
+				  0.05f,
+				  vec3(1.0f),
+				  _delete_on_draw);*/
+	
+	float offset_amount = target_y_pos - initial_pos.y;
+	offset_amount /= max(0.0f,height)+1.0f;
+
+	offset_amount = max(-0.15f,min(0.15f,offset_amount));
+
+	return vec3(0.0,offset_amount, 0.0f);
+}
+
+float offset_height = 0.0f;
+
+void UpdateIKTargets() {
+	if(!on_ground){
+		jump_info.UpdateIKTargets();
+	} else {
+		vec3 left_leg = this_mo.GetIKTargetPosition("left_leg");
+		vec3 left_leg_offset = GetLegTargetOffset(left_leg);
+		this_mo.SetIKTargetOffset("left_leg",left_leg_offset);
+
+		vec3 right_leg = this_mo.GetIKTargetPosition("right_leg");
+		vec3 right_leg_offset = GetLegTargetOffset(right_leg);
+		this_mo.SetIKTargetOffset("right_leg",right_leg_offset);
+
+		//float curr_avg_offset_height = min(0.0f,
+		//						  min(left_leg_offset.y, right_leg_offset.y));
+		float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;
+		float min_offset_height = min(0.0f, min(left_leg_offset.y, right_leg_offset.y));
+		float mix_amount = min(1.0f,length(this_mo.velocity));
+		float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
+		offset_height = mix(offset_height, curr_offset_height, 0.1f);
+		this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height,0.0f));
+	}
 }
 
 void UpdateVelocity() {

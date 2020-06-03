@@ -24,6 +24,18 @@ bool WantsToFlip() {
 	return GetInputPressed("crouch");
 }
 
+bool WantsToGrabLedge() {
+	return GetInputDown("grab");
+}
+
+bool WantsToJumpOffWall() {
+	return GetInputPressed("jump");
+}
+
+bool WantsToFlipOffWall() {
+	return GetInputPressed("crouch");
+}
+
 bool WantsToAccelerateJump() {
 	return GetInputDown("jump");
 }
