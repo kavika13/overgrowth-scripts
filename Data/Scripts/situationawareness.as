@@ -52,6 +52,16 @@ class Situation {
         }
     }
 
+    
+    void MovementObjectDeleted(int id) {
+        for(uint i=0; i<known_chars.size(); ++i){
+            if(known_chars[i].id == id){
+                known_chars.removeAt(i);
+                return;
+            }
+        }
+    }
+
     void Update() {
     }
 

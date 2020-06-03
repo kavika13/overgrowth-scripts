@@ -19,6 +19,9 @@ DropKeyState drop_key_state = _dks_nothing;
 enum ItemKeyState {_iks_nothing, _iks_sheathe, _iks_unsheathe};
 ItemKeyState item_key_state = _iks_nothing;
 
+void AIMovementObjectDeleted(int id) {
+}
+
 void UpdateBrain(){
     if(GetInputDown(this_mo.controller_id, "grab")){
         grab_key_time += time_step * num_frames;

@@ -348,6 +348,22 @@ void MakeBeaconParticle(){
     }
 }
 
+void MovementObjectDeleted(int id){
+    Print("Learning that movement object with id "+id+" has been deleted\n");
+    Print("My target id is: "+target_id+"\n");
+    if(id == target_id){
+        target_id = -1;       
+    }
+    if(id == force_look_target_id){
+        force_look_target_id = -1;       
+    }
+    if(id == look_target.id){
+        look_target.id = -1;
+        look_target.type = _none;
+    }
+    AIMovementObjectDeleted(id);
+}
+
 void Update(int _num_frames) {
     /*int num_items = GetNumItems();
     string str;
@@ -1980,7 +1996,7 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
         if(length_squared(flat_dir)>0.0f){
             this_mo.SetRotationFromFacing(flat_dir);
         }
-    } else {
+    } else if(knocked_out == _awake) {
         WakeUp(_wake_block_stand);
         vec3 impact_dir = attack_getter2.GetImpactDir();
         vec3 right;
@@ -4919,11 +4935,11 @@ void ApplyCameraControls() {
     }
 
 
-    if(level.QueryIntFunction("int HasFocus()")==0){
+    if(!level.HasFocus()){
         SetGrabMouse(true);
     }
     if(!camera.GetAutoCamera()){
-        if(level.QueryIntFunction("int HasFocus()")==0 && cam_input){   
+        if(!level.HasFocus() && cam_input){   
             target_rotation -= GetLookXAxis(this_mo.controller_id);
             target_rotation2 -= GetLookYAxis(this_mo.controller_id);   
         }
