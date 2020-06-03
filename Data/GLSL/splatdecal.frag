@@ -1,60 +1,61 @@
-#extension GL_ARB_shader_texture_lod : require
+#pragma transparent
+#include "object_shared.glsl"
+#include "object_frag.glsl"
 
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex2;
-uniform sampler2D tex4;
-uniform vec3 color_tint;
+#define base_normal_tex tex5
+
+UNIFORM_COMMON_TEXTURES
+uniform sampler2D base_normal_tex;
+UNIFORM_LIGHT_DIR
+UNIFORM_EXTRA_AO
+UNIFORM_COLOR_TINT
 uniform float wetness;
 
-varying mat3 tangent_to_world;
-varying vec3 vertex_pos;
-varying vec3 light_pos;
-varying vec3 ws_vertex;
+VARYING_REL_POS
+VARYING_SHADOW
+varying vec3 tangent;
+varying vec3 normal;
 
-#include "lighting.glsl"
-#include "relativeskypos.glsl"
+#define shadow_tex_coords gl_TexCoord[1].xy
 
 void main()
 {    
-    vec3 color;
-    
+    vec4 colormap = texture2D(tex0,gl_TexCoord[0].st);
     if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
-        gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
-        gl_TexCoord[0].z<-1.0 || gl_TexCoord[0].z>1.0) {
+       gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
+       gl_TexCoord[0].z<-0.1 || gl_TexCoord[0].z>0.1 ||
+        colormap.a <= 0.01) {
         discard;
     }
-    
+    // Calculate normal
+    vec3 base_normal_tex = texture2D(base_normal_tex,gl_TexCoord[0].st).rgb;
+    vec3 base_normal = normal;
+    vec3 base_tangent = tangent;
+    vec3 base_bitangent = normalize(cross(base_tangent,base_normal));
+    base_tangent = normalize(cross(base_normal,base_bitangent));
 
-    float shadowed = texture2D(tex4,gl_TexCoord[1].xy).x;
-    vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
-    vec3 normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
+    vec4 normalmap = texture2D(tex1,gl_TexCoord[0].st);
+    vec3 ws_normal = vec3(base_normal * normalmap.b +
+                          base_tangent * (normalmap.r*2.0-1.0) +
+                          base_bitangent * (normalmap.g*2.0-1.0));
+    ws_normal = normalize(ws_normal);
+    
+    CALC_SHADOWED
+    CALC_DIFFUSE_LIGHTING
 
-    float NdotL = max(0.0,dot(light_pos, normal))*shadowed;
-    vec3 diffuse_color = vec3(NdotL * 0.5);
-    
-    vec3 diffuse_map_vec = normal;
-    diffuse_map_vec = tangent_to_world * diffuse_map_vec;
-    diffuse_color += textureCubeLod(tex2,diffuse_map_vec,5.0).xyz * 0.5;
-    
-    vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
-    float spec = min(1.0, pow(max(0.0,dot(normal,H)),850.0)*pow(20.0,wetness)*0.5 * NdotL) ;
+    vec3 H = normalize(normalize(ws_vertex*-1.0) + normalize(ws_light));
+    float spec = min(1.0, pow(max(0.0,dot(ws_normal,H)),850.0)*pow(20.0,wetness)*0.5 * shadow_tex.r * gl_LightSource[0].diffuse.a);
     vec3 spec_color = vec3(spec);
     
-    vec3 spec_map_vec = reflect(vertex_pos,normal);
-    spec_map_vec = tangent_to_world * spec_map_vec;
-    spec_color += textureCube(tex2,spec_map_vec).xyz * 0.01;
-    
-    vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
-    colormap.xyz *= (wetness*0.5+0.75);
-    
-    float fresnel = 1.0;// - dot(normalize(vertex_pos), vec3(0,0,-1))*0.8;
-    color = diffuse_color * colormap.xyz * color_tint + spec_color * fresnel;
-    
-    AddHaze(color, ws_vertex, tex2);
+    vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
+    spec_map_vec = reflect(ws_vertex,ws_normal);
+    //spec_color += textureCube(tex2,spec_map_vec).xyz * 0.1;
 
-    //    colormap.a = 1.0;
-    //color = colormap.xyz;
+    colormap.xyz *= mix(0.2, 0.4, max(0.0, min(1.0, wetness * 1.4 - 0.4)));
 
-    gl_FragColor = vec4(color,colormap.a);
+    CALC_COMBINED_COLOR_WITH_TINT
+    CALC_COLOR_ADJUST
+    CALC_HAZE
+    CALC_EXPOSURE
+    CALC_FINAL_ALPHA
 }

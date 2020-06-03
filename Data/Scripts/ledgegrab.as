@@ -330,7 +330,7 @@ LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
     LedgeHeightInfo ledge_height_info;
 
     float cyl_height = 1.0f;                                                    // Get ledge height by sweeping a cylinder downwards onto the ledge
-    vec3 test_start = pos+vec3(0.0f,7.0f,0.0f)+ledge_dir * 0.5f;
+    vec3 test_start = pos+vec3(0.0f,2.5f,0.0f)+ledge_dir * 0.5f;
     vec3 test_end = pos+vec3(0.0f,0.5f,0.0f)+ledge_dir * 0.5f;
     
     col.GetSweptCylinderCollision(test_start,
@@ -367,7 +367,7 @@ LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
     ledge_height_info.edge_height = sphere_col.position.y - cyl_height * 0.5f;
     vec3 surface_pos = sphere_col.position;
 
-    col.GetCylinderCollision(surface_pos + vec3(0.0f,0.07f,0.0f),               // Make sure that top surface is clear, i.e. player could stand on it
+    col.GetCylinderCollisionDoubleSided(surface_pos + vec3(0.0f,0.07f,0.0f),               // Make sure that top surface is clear, i.e. player could stand on it
                                 _leg_sphere_size,
                                 1.0f);
 
@@ -544,36 +544,95 @@ class LedgeInfo {
         return sphere_col.position - vec3(0.0f, _height_under_ledge, 0.0f);
     }
 
-    bool CheckLedges(bool pure_check = false) {        
-        LedgeDirInfo ledge_dir_info = GetPossibleLedgeDir(this_mo.position);
-        if(!ledge_dir_info.success){
-            return false;
-        }        
-    
-        if(ledge_dir_info.downwards_surface && !pure_check){
-            if(on_ledge){
-                Print("Letting go because nearest surface is downwards\n");
+    bool CheckLedges(bool pure_check = false) {
+        // Find the direction of the nearest ledge candidate
+        vec3 possible_ledge_dir;
+        if(on_ledge){
+            // Check at hand level if on ledge already for smooth shimmying around corners
+            vec3 test_pos = vec3(this_mo.position.x, ledge_height, this_mo.position.z);
+            LedgeDirInfo ledge_dir_info = GetPossibleLedgeDir(test_pos);
+            if(ledge_dir_info.success){
+                possible_ledge_dir = ledge_dir_info.ledge_dir;
+            } else {
+                if(!pure_check){
+                    on_ledge = false;
+                }
+                return false;
             }
-            if(!pure_check){
-                on_ledge = false;
+        } else {
+            // Check at various levels otherwise to catch high bars and low ledges
+            bool success = false;
+            int counter = 0;
+            while(!success && counter < 3){
+                vec3 test_pos = this_mo.position + vec3(0.0f, counter * 0.3f, 0.0f);
+                LedgeDirInfo ledge_dir_info = GetPossibleLedgeDir(test_pos);
+                possible_ledge_dir = ledge_dir_info.ledge_dir;
+                if(ledge_dir_info.success){
+                    success = true;
+                }    
+                ++counter;
             }
-            return false;
+            if(!success){
+                if(!pure_check){
+                    on_ledge = false;
+                }
+                return false;
+            }
         }
-
-            
-        vec3 possible_ledge_dir = ledge_dir_info.ledge_dir;
+    
+        // Get the height of the candidate ledge        
         possible_ledge_dir.y = 0.0f;
         possible_ledge_dir = normalize(possible_ledge_dir);
         LedgeHeightInfo ledge_height_info = GetLedgeHeightInfo(this_mo.position, possible_ledge_dir);
         if(ledge_height_info.success == false){
-            if(!pure_check){
-                on_ledge = false;
+            if(!on_ledge){
+                // If failed, check for the height of the second nearest candidate ledge
+                bool success = false;
+                int counter = 0;
+                vec3 old_possible_ledge_dir = possible_ledge_dir;
+                while(!success && counter < 3){
+                    vec3 test_pos = this_mo.position + vec3(0.0f, counter * 0.3f, 0.0f);
+                    test_pos -= possible_ledge_dir * 0.1f;
+                    LedgeDirInfo ledge_dir_info = GetPossibleLedgeDir(test_pos);
+                    possible_ledge_dir = ledge_dir_info.ledge_dir;
+                    if(ledge_dir_info.success){
+                        success = true;
+                    }    
+                    ++counter;
+                }
+                if(success){
+                    possible_ledge_dir.y = 0.0f;
+                    possible_ledge_dir = normalize(possible_ledge_dir);
+                    ledge_height_info = GetLedgeHeightInfo(this_mo.position - old_possible_ledge_dir*0.2, possible_ledge_dir);
+                    if(ledge_height_info.success == false) {
+                        if(!pure_check){
+                            if(on_ledge){
+                                Print("Letting go because of GetLedgeHeightInfo\n");
+                            }
+                            on_ledge = false;
+                        }
+                        return false;
+                    } else {
+                        this_mo.position -= old_possible_ledge_dir * 0.1f;
+                    }
+                }
+            } else {
+                if(!pure_check){
+                    if(on_ledge){
+                        Print("Letting go because of GetLedgeHeightInfo\n");
+                    }
+                    on_ledge = false;
+                }
+                return false;
             }
-            return false;
         }
         
+        // Check if we are trying to transition to a much higher ledge
         if(on_ledge && ledge_height_info.edge_height > ledge_height + 0.5f){
             if(!pure_check){
+                if(on_ledge){
+                    Print("Letting go because of edge_height\n");
+                }
                 on_ledge = false;
             }
             return false;
@@ -583,7 +642,25 @@ class LedgeInfo {
             }
         }
 
+        // Check if we are going to penetrate the ground
+        {
+            vec3 test_pos = vec3(this_mo.position.x, ledge_height, this_mo.position.z);
+            test_pos -= possible_ledge_dir * 0.1f;
+            col.GetSweptSphereCollision(test_pos,
+                                        test_pos + vec3(0.0f, -0.5f, 0.0f),
+                                        _leg_sphere_size);
+            if(sphere_col.NumContacts() > 0) {
+                if(!pure_check && on_ledge){
+                    Print("Letting go because nearest surface is downwards\n");
+                    on_ledge = false;
+                }
+                return false;
+            }
+        }
+
         ledge_dir = possible_ledge_dir;
+
+        // The remainder of this function is just for grabbing onto new ledges
         if(on_ledge){
             return false;                                                             // The rest of this function is only useful for
         }                                                                       // determining whether or not we can grab the ledge
@@ -604,6 +681,9 @@ class LedgeInfo {
         if(pure_check){
             return true;
         }
+
+        // Set last_update far away so we don't use it
+        last_update = this_mo.position + vec3(99,99,99);
 
         if(!pure_check && ledge_grab_info.can_grab){                            // If ledge is within reach, grab it
             if(ledge_grab_info.scramble_grab){                                  // If height difference requires the scramble grab, then
@@ -631,7 +711,8 @@ class LedgeInfo {
             disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
             this_mo.velocity = vec3(0.0f);
-            ledge_grab_pos = CalculateGrabPos();
+            //ledge_grab_pos = CalculateGrabPos();            
+            ledge_grab_pos = vec3(this_mo.position.x, ledge_height - _height_under_ledge, this_mo.position.z);
             shimmy_anim.Start(ledge_grab_pos, possible_ledge_dir, this_mo.velocity);
             ghost_movement = false;
 
@@ -653,6 +734,8 @@ class LedgeInfo {
         allow_ik = true;
         ghost_movement = false;
     }
+
+    vec3 last_update;
     
     void UpdateLedge(const Timestep &in ts) {
         if(playing_animation){
@@ -690,7 +773,24 @@ class LedgeInfo {
             return;
         }
 
+        if(on_ledge && weapon_slots[primary_weapon_slot] != -1){
+            ItemObject@ item_obj = ReadItemID(weapon_slots[primary_weapon_slot]);
+            if(item_obj.GetMass() > 1.0f){
+                DropWeapon();
+            }
+        }
+
         CheckLedges();
+        if(on_ledge){
+            last_update = this_mo.position;
+        } else {
+            last_update.y = this_mo.position.y;
+            if(distance_squared(last_update, this_mo.position) < 0.1f){
+                this_mo.velocity += (last_update - this_mo.position) / ts.step();
+                this_mo.position = last_update;
+            }
+            on_ledge = true;
+        }
         /*DebugDrawWireSphere(this_mo.position,
                             _leg_sphere_size,
                             vec3(1.0f),
@@ -730,7 +830,8 @@ class LedgeInfo {
         this_mo.velocity.x *= pow(_ledge_move_damping, ts.frames());             // Damp horizontal movement
         this_mo.velocity.z *= pow(_ledge_move_damping, ts.frames());
 
-        vec3 new_ledge_grab_pos = CalculateGrabPos();                           
+        //vec3 new_ledge_grab_pos = CalculateGrabPos();         
+        vec3 new_ledge_grab_pos = vec3(this_mo.position.x, target_height, this_mo.position.z);
         shimmy_anim.Update(new_ledge_grab_pos, ledge_dir, ts);                      // Update hand and foot animation
 
         //DebugDrawWireSphere(this_mo.position, _leg_sphere_size, vec3(1.0f), _delete_on_update); 
@@ -745,6 +846,7 @@ class LedgeInfo {
                          pow(inertia,ts.frames()));
         this_mo.SetRotationFromFacing(disp_ledge_dir); 
         if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
+            this_mo.SetRotationFromFacing(ledge_dir); 
             if(this_mo.velocity.y >= 3.0f + ts.frames() * 0.25f){
                 on_ledge = false;    
                 climbed_up = true;

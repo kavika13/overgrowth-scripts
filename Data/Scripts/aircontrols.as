@@ -278,6 +278,7 @@ class JumpInfo {
         down_jetpack_fuel = _jump_fuel * 0.5f;
         
         this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size);
+        AISound(this_mo.position, QUIET_SOUND_AI);
         this_mo.velocity += old_vel_flat;
         tilt = this_mo.velocity * 5.0f;
     }
@@ -299,10 +300,15 @@ class JumpInfo {
         this_mo.velocity = jump_vel;
         //Print("Start jump: "+this_mo.velocity.y+"\n");
         jetpack_fuel = _jump_fuel;
+        if(character_getter.GetTag("species") != "rabbit"){
+            jetpack_fuel *= 0.2f;
+            this_mo.velocity.y *= 0.6f;
+        }
         jump_launch = 1.0f;
         down_jetpack_fuel = _jump_fuel*0.5f;
         
         this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+        AISound(this_mo.position, QUIET_SOUND_AI);
         
         if(length(target_velocity)>0.4f){
             this_mo.SetRotationFromFacing(target_velocity);

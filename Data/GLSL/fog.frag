@@ -1,5 +1,3 @@
-#extension GL_ARB_shader_texture_lod : require
-
 uniform sampler2D tex0;
 uniform samplerCube tex3;
 uniform mat4 obj2world;

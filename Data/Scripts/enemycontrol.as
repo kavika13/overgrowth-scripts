@@ -8,13 +8,17 @@ float startle_time;
 bool has_jump_target = false;
 vec3 jump_target_vel;
 
+float awake_time = 0.0f;
+const float AWAKE_NOTICE_THRESHOLD = 1.0f;
+
+float enemy_seen = 0.0f;
+
 bool hostile = true;
 bool listening = true;
 bool ai_attacking = false;
 bool hostile_switchable = true;
 int waypoint_target = -1;
 int old_waypoint_target = -1;
-const float _view_distance = 90.0f;
 const float _throw_counter_probability = 0.2f;
 bool will_throw_counter;
 int ground_punish_decision = -1;
@@ -33,8 +37,13 @@ bool going_to_dodge = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
 
-bool in_arena = false;
 bool combat_allowed = true;
+
+class InvestigatePoint {
+    vec3 pos;
+    float seen_time;
+};
+array<InvestigatePoint> investigate_points;
 
 const float kGetWeaponDelay = 0.4f;
 float get_weapon_delay = kGetWeaponDelay;
@@ -42,14 +51,21 @@ float get_weapon_delay = kGetWeaponDelay;
 enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
-enum AISubGoal {_unknown = -1, _punish_fall = 0, _provoke_attack = 1, _avoid_jump_kick = 2, 
-_wait_and_attack = 3, _rush_and_attack = 4, _defend = 5, _surround_target = 6, _escape_surround = 7};
+enum AISubGoal {_unknown = -1, _punish_fall, _provoke_attack, _avoid_jump_kick, _wait_and_attack, _rush_and_attack, _defend, _surround_target, _escape_surround, 
+    _investigate_slow, _investigate_urgent, _investigate_body, _investigate_around};
 AISubGoal sub_goal = _wait_and_attack; 
 
+AIGoal old_goal;
+AISubGoal old_sub_goal;
+
+int investigate_target_id = -1;
 vec3 nav_target;
 int ally_id = -1;
 int escort_id = -1;
+int chase_target_id = -1;
 int weapon_target_id = -1;
+
+float investigate_body_time;
 
 enum PathFindType {_pft_nav_mesh, _pft_climb, _pft_drop, _pft_jump};
 PathFindType path_find_type = _pft_nav_mesh;
@@ -68,15 +84,24 @@ void AIMovementObjectDeleted(int id) {
             SetGoal(_patrol);
         }
     }
+    if(investigate_target_id == id){
+        investigate_target_id = -1;
+        if(goal == _investigate){
+            SetGoal(_patrol);
+        }
+    }
     if(escort_id == id){
         escort_id = -1;
         if(goal == _escort){
             SetGoal(_patrol);
         }
     }
-    if(goal == _attack && target_id == -1){
-        SetGoal(_patrol);
-    }   
+    if(chase_target_id == id){
+        chase_target_id = -1;
+        if(goal == _attack && chase_target_id == -1){
+            SetGoal(_patrol);
+        }   
+    }
 }
 
 int IsUnaware() {
@@ -89,8 +114,9 @@ bool WantsToDragBody(){
 
 void ResetMind() {
     goal = _patrol;
-    target_id = -1;
     situation.clear();
+    path_find_type = _pft_nav_mesh;
+    float awake_time = 0.0f;
 }
 
 int IsIdle() {
@@ -159,41 +185,60 @@ TargetHistory target_history;
 vec3 last_seen_target_position;
 vec3 last_seen_target_velocity;
 
+void Startle() {
+    startled = true;
+    startle_time = 1.0f;    
+}
+
 void Notice(int character_id){
     situation.Notice(character_id);
-    target_id = character_id;
-    last_seen_target_position = ReadCharacterID(character_id).position;
-    last_seen_target_velocity = ReadCharacterID(character_id).velocity;
-    switch(goal){
-        case _patrol:
-            startled = true;
-            startle_time = 1.0f;
-            SetGoal(_attack);
-            break;
-        case _investigate:
-            startled = true;
-            startle_time = 1.0f;
-            SetGoal(_attack);
-            break;
-        case _escort:
-            SetGoal(_attack);
-            break;
+    MovementObject@ char = ReadCharacterID(character_id);
+    if(!this_mo.OnSameTeam(char) && (goal != _attack || chase_target_id == -1)){
+        chase_target_id = character_id;
+        last_seen_target_position = ReadCharacterID(character_id).position;
+        last_seen_target_velocity = ReadCharacterID(character_id).velocity;
+        switch(goal){
+            case _patrol:
+                Startle();
+                this_mo.PlaySoundGroupVoice("engage",0.0f);
+                SetGoal(_attack);
+                break;
+            case _investigate:
+                Startle();
+                this_mo.PlaySoundGroupVoice("engage",0.0f);
+                SetGoal(_attack);
+                break;
+            case _escort:
+                SetGoal(_attack);
+                break;
+        }
     }
 }
 
-void NotifySound(int created_by_id, float max_dist, vec3 pos) {
-    if(!listening){
+void NotifySound(int created_by_id, vec3 pos) {
+    if(!listening || awake_time < AWAKE_NOTICE_THRESHOLD || knocked_out != _awake || created_by_id == this_mo.GetID()){
         return;
     }
     if(goal == _patrol || goal == _investigate){
         bool same_team = false;
         character_getter.Load(this_mo.char_path);
-        if(this_mo.OnSameTeam(ReadCharacterID(created_by_id))){
+        if(this_mo.OnSameTeam(ReadCharacterID(created_by_id)) && situation.KnowsAbout(created_by_id)){
             same_team = true;
         }
         if(!same_team){
+            if(goal == _patrol){
+                Startle();
+                this_mo.PlaySoundGroupVoice("suspicious",0.0f);
+                random_look_delay = 1.0f;
+                random_look_dir = pos - this_mo.position;
+            }
             nav_target = pos;
             SetGoal(_investigate);
+            SetSubGoal(_investigate_slow);
+            investigate_target_id = -1;
+            if(chase_target_id == -1) {
+                //DebugText("Player "+this_mo.GetID()+" hear", "Player "+this_mo.GetID()+" says: I heard something!", 1.0f);
+            }
         }
     }
 }
@@ -224,7 +269,6 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _can_climb){
         trying_to_climb = _jump;
-        Print("Trying to climb = jump\n");
     }
     if(event == _activeblocked){
         float temp_block_followup = p_block_followup;
@@ -259,6 +303,7 @@ void SetGoal(AIGoal new_goal){
 }
 
 float move_delay = 0.0f;
+float repulsor_delay = 0.0f;
 
 void MindReceiveMessage(string msg){
     TokenIterator token_iter;
@@ -290,19 +335,31 @@ void MindReceiveMessage(string msg){
         } else if(second_token == "false"){
             combat_allowed = false;
         }
-    } else if(token == "in_arena"){
-        token_iter.FindNextToken(msg);
-        string second_token = token_iter.GetToken(msg);
-        if(second_token == "true"){
-            in_arena = true;
-        } else if(second_token == "false"){
-            in_arena = false;
-        }
     } else if(token == "notice"){
         Print("Received notice message\n");
         token_iter.FindNextToken(msg);
         int id = atoi(token_iter.GetToken(msg));
         Notice(id);
+    } else if(token == "notice"){
+        Print("Received notice message\n");
+        token_iter.FindNextToken(msg);
+        int id = atoi(token_iter.GetToken(msg));
+        Notice(id);
+    } else if(token == "nearby_sound"){
+        vec3 pos;
+        float max_range;
+        int id;
+        for(int i=0; i<5; ++i){
+            token_iter.FindNextToken(msg);
+            switch(i){
+            case 0: pos.x = atof(token_iter.GetToken(msg)); break;
+            case 1: pos.y = atof(token_iter.GetToken(msg)); break;
+            case 2: pos.z = atof(token_iter.GetToken(msg)); break;
+            case 3: max_range = atof(token_iter.GetToken(msg)); break;
+            case 4: id = atoi(token_iter.GetToken(msg)); break;
+            }
+        }
+        NotifySound(id, pos);
     }
 }
 
@@ -376,12 +433,81 @@ void DisplayGoals() {
         case _rush_and_attack: text += "_rush_and_attack"; break;
         case _surround_target: text += "_surround_target"; break;
         case _escape_surround: text += "_escape_surround"; break;
+        case _investigate_around: text += "_investigate_around"; break;
+        case _investigate_slow: text += "_investigate_slow"; break;
+        case _investigate_urgent: text += "_investigate_urgent"; break;
+        case _investigate_body: text += "_investigate_body"; break;
         default: text += sub_goal; break;
     }
     DebugText(label, text,0.1f);
 }
 
+void UpdateTargetDecision() {
+    int closest_enemy = -1;
+    float closest_dist = 0.0f;
+    for(uint i=0; i<situation.known_chars.size(); ++i){
+        if(!situation.known_chars[i].friendly && situation.known_chars[i].knocked_out == _awake){
+            //MovementObject@ char = ReadCharacterID(situation.known_chars[i].id);
+            //DebugDrawLine(this_mo.position, situation.known_chars[i].last_known_position, vec3(1.0f, 0.0f ,0.0f), _fade);
+            MovementObject@ char = ReadCharacterID(situation.known_chars[i].id);
+            float dist = distance_squared(situation.known_chars[i].last_known_position, this_mo.position);
+            if(closest_enemy == -1 || dist < closest_dist){
+                closest_dist = dist;
+                closest_enemy = situation.known_chars[i].id;
+            }
+        }
+    }
+    if(closest_enemy != -1){
+        chase_target_id = closest_enemy;
+    }
+}
+
+void CheckForNearbyWeapons() {
+    bool wants_to_get_weapon = false;
+    if(weapon_slots[primary_weapon_slot] == -1 && hostile){
+        int nearest_weapon = -1;
+        float nearest_dist = 0.0f;
+        const float _max_dist = 30.0f;
+        for(int i=0, len=situation.known_items.size(); i<len; ++i){
+            ItemObject @item_obj = ReadItemID(situation.known_items[i].id);
+            if(item_obj.IsHeld() || item_obj.GetType() != _weapon){
+                continue;
+            }
+            vec3 pos = situation.known_items[i].last_known_position;
+            float dist = distance_squared(pos, this_mo.position);
+            if(dist > _max_dist * _max_dist){
+                continue;
+            }
+            if(nearest_weapon == -1 || dist < nearest_dist){ 
+                nearest_weapon = item_obj.GetID();
+                nearest_dist = dist;
+            }
+
+        }
+        if(nearest_weapon != -1){
+            wants_to_get_weapon = true;
+            weapon_target_id = nearest_weapon;
+        }
+    }
+    if(wants_to_get_weapon){
+        if(get_weapon_delay >= 0.0f){
+            get_weapon_delay -= time_step;
+        } else {
+            old_goal = goal;
+            old_sub_goal = sub_goal;
+            SetGoal(_get_weapon);
+        }
+    } else {
+        get_weapon_delay = kGetWeaponDelay;
+    }
+}
+
 void UpdateBrain(const Timestep &in ts){
+    if(knocked_out != _awake){
+        return;
+    }
+    UpdateTargetDecision();
+    awake_time += ts.step();
     const bool display_goals = false;
     if(display_goals){
         DisplayGoals();
@@ -402,54 +528,90 @@ void UpdateBrain(const Timestep &in ts){
             startled = false;
             AchievementEvent("enemy_alerted");
         }
-        return;
     }
+
+    if(GetInputDown(this_mo.controller_id, "b")){
+        SetGoal(_investigate);
+        SetSubGoal(_investigate_around);
+        investigate_target_id = -1;
+        investigate_points.resize(0);
+    }
+
     move_delay = max(0.0f, move_delay - ts.step());
+    repulsor_delay = max(0.0f, repulsor_delay - ts.step());
 
-    bool wants_to_get_weapon = false;
-    if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile && goal != _patrol){
-        int num_items = GetNumItems();
-        int nearest_weapon = -1;
-        float nearest_dist = 0.0f;
-        const float _max_dist = 30.0f;
-        for(int i=0; i<num_items; i++){
-            ItemObject @item_obj = ReadItem(i);
-            if(item_obj.IsHeld() || item_obj.GetType() != _weapon){
-                continue;
-            }
-            vec3 pos = item_obj.GetPhysicsPosition();
-            float dist = distance_squared(pos, this_mo.position);
-            if(dist > _max_dist * _max_dist){
-                continue;
-            }
-            if(nearest_weapon == -1 || dist < nearest_dist){ 
-                nearest_weapon = item_obj.GetID();
-                nearest_dist = dist;
+    // Update vision
+    if(hostile && awake_time > AWAKE_NOTICE_THRESHOLD){
+        bool print_visible_chars = false;
+        if(print_visible_chars) {
+            array<int> characters;
+            GetVisibleCharacters(0, characters);
+            for(int i=0, len=characters.size(); i<len; ++i){
+                string desc;
+                MovementObject@ char = ReadCharacterID(characters[i]);
+                if(char.GetIntVar("knocked_out") == _awake){
+                    desc += "awake";
+                } else {
+                    desc += "unconscious";
+                }
+                desc += " ";
+                if(this_mo.OnSameTeam(char)){
+                    desc += "ally";
+                } else {
+                    desc += "enemy";
+                }
+                DebugText(this_mo.getID()+"visible_character"+i, this_mo.getID()+" sees character "+characters[i]+" ("+desc+")", 0.5f);
             }
         }
-        if(nearest_weapon != -1){
-            wants_to_get_weapon = true;
-            weapon_target_id = nearest_weapon;
-        }
-    }
 
-    if(wants_to_get_weapon){
-        if(get_weapon_delay >= 0.0f){
-            get_weapon_delay -= time_step;
-        } else {
-            goal = _get_weapon;
+        array<int> visible_characters;
+        GetVisibleCharacters(0, visible_characters);
+        for(int i=0, len=visible_characters.size(); i<len; ++i){
+            int id = visible_characters[i];
+            MovementObject@ char = ReadCharacterID(id);
+            if(this_mo.OnSameTeam(char)){
+                if(char.GetIntVar("knocked_out") != _awake && goal == _patrol){
+                    // Check if we already know that this character is unconscious 
+                    bool already_known = false;
+                    int known_id = situation.KnownID(id);
+                    if(known_id != -1 && situation.known_chars[known_id].knocked_out != _awake){
+                        already_known = true;
+                    }        
+                    if(!already_known){
+                        // Investigate body of ally                
+                        Startle();
+                        this_mo.PlaySoundGroupVoice("suspicious",0.0f);
+                        random_look_delay = 1.0f;
+                        random_look_dir = char.position - this_mo.position;
+                        SetGoal(_investigate);
+                        SetSubGoal(_investigate_urgent);
+                        investigate_target_id = id;
+                    }
+                }
+                Notice(id);
+            } else {
+                if(char.GetIntVar("knocked_out") == _awake){
+                    enemy_seen += 1.0f / (distance_squared(this_mo.position, char.position) + 1.0f) * 10.0f;
+                }
+            }
+            int known_id = situation.KnownID(id);;
+            if(known_id != -1){
+                situation.known_chars[known_id].knocked_out = char.GetIntVar("knocked_out");
+                situation.known_chars[known_id].last_known_position = char.position;
+            }            
+        }
+
+        // Notice enemy if alerted above threshold
+        if(enemy_seen >= 1.0f){
+            array<int> enemies;
+            GetMatchingCharactersInArray(visible_characters, enemies, _TC_ENEMY | _TC_CONSCIOUS);
+            int closest_id = GetClosestCharacterInArray(this_mo.position, enemies, 0.0f);
+            if(closest_id != -1){
+                Notice(closest_id);
+            }
         }
     } else {
-        get_weapon_delay = kGetWeaponDelay;
-    }
-
-    if(hostile){
-        int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
-        if(closest_id != -1){
-            Notice(closest_id);
-        }
-    } else {
-        target_id = -1;
+        chase_target_id = -1;
         force_look_target_id = -1;
     }
 
@@ -460,14 +622,94 @@ void UpdateBrain(const Timestep &in ts){
         break;
     case _investigate:  {
         ai_attacking = false;
-        GetPath(nav_target);
+        GetPath(GetInvestigateTargetPos());
         if(path.NumPoints() > 0){
             vec3 path_end = path.GetPoint(path.NumPoints()-1);
             if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
-                SetGoal(_patrol);
+                if(sub_goal == _investigate_slow){
+                    SetGoal(_patrol);
+                } else if(sub_goal == _investigate_urgent){
+                    SetSubGoal(_investigate_body);
+                    investigate_body_time = time + RangedRandomFloat(2.0f, 4.0f);
+                }
             }      
-        } else {
-            SetGoal(_patrol);
+        }
+        if(sub_goal == _investigate_body && time > investigate_body_time){
+            sub_goal = _investigate_around;
+            investigate_target_id = -1;
+            SetSubGoal(_investigate_around);
+            investigate_points.resize(0);
+        }
+        if(sub_goal == _investigate_around){
+            if(investigate_points.size() == 0){
+                float range = 8.0f;
+                investigate_points.resize(0);
+                for(int i=-3; i<3; ++i){
+                    for(int j=-3; j<3; ++j){
+                        vec3 rand_offset(i*range + RangedRandomFloat(-range*0.5f,range*0.5f), RangedRandomFloat(-range, range), j*range + RangedRandomFloat(-range*0.5f,range*0.5f));
+                        vec3 investigate = NavPoint(this_mo.position + rand_offset);
+                        if(investigate != vec3(0.0f)){
+                            NavPath path = GetPath(this_mo.position, investigate);
+                            if(path.success){
+                                InvestigatePoint point;
+                                investigate.y += _leg_sphere_size;
+                                point.pos = investigate;
+                                point.seen_time = 0.0f;
+                                investigate_points.push_back(point);
+                            }
+                        }
+                    }
+                }
+            }
+            mat4 transform = this_mo.rigged_object().GetAvgIKChainTransform("head");
+            vec3 head_pos = transform * vec4(0.0f,0.0f,0.0f,1.0f);
+            vec3 head_facing = normalize(transform * vec4(0.0f,0.8f,0.2f,0.0f));
+            for(int i=investigate_points.size()-1; i>=0; --i){
+                if(distance_squared(this_mo.position, investigate_points[i].pos) < 1.0f){
+                    investigate_points[i].seen_time += ts.step() * 5.0f;
+                } else if(dot(normalize(investigate_points[i].pos-head_pos), head_facing) > 0.5f){
+                    if(col.GetRayCollision(head_pos, investigate_points[i].pos) == investigate_points[i].pos){
+                        investigate_points[i].seen_time += ts.step() * 3.0f;
+                    }
+                }
+                if(investigate_points[i].seen_time >= 1.0f){
+                    investigate_points.removeAt(i);
+                }
+            }
+            const bool debug_draw_investigate = false;
+            float closest_dist = 0.0f;
+            int closest_point_id = -1;
+            for(int i=0, len=investigate_points.size(); i<len; ++i){
+                if(debug_draw_investigate){
+                    DebugDrawWireSphere(investigate_points[i].pos, 1.0f, vec3(1.0f), _fade);
+                }
+                NavPath path = GetPath(this_mo.position, investigate_points[i].pos);
+                float dist = 0.0f;
+                for(int i=0, len=path.NumPoints()-1; i<len; ++i){
+                    dist += distance(path.GetPoint(i), path.GetPoint(i+1));
+                }
+                if(closest_point_id == -1 || dist < closest_dist){
+                    closest_point_id = i;
+                    closest_dist = dist;
+                }
+            }
+            if(closest_point_id != -1){
+                nav_target = investigate_points[closest_point_id].pos;
+                if(debug_draw_investigate){
+                    DebugDrawLine(this_mo.position, nav_target, vec3(1.0f), _fade);
+                    NavPath path = GetPath(this_mo.position, nav_target);
+                    if(path.success){
+                        for(int i=0, len=path.NumPoints()-1; i<len; ++i){
+                            DebugDrawLine(path.GetPoint(i), path.GetPoint(i+1), vec3(0.0f, 1.0f, 0.0f), _fade);
+                        }
+                    } else {
+                        for(int i=0, len=path.NumPoints()-1; i<len; ++i){
+                            DebugDrawLine(path.GetPoint(i), path.GetPoint(i+1), vec3(1.0f, 0.0f, 0.0f), _fade);
+                        }
+                    }
+                }
+            }
+            CheckForNearbyWeapons();
         }
         break;}
     case _attack:{
@@ -475,12 +717,12 @@ void UpdateBrain(const Timestep &in ts){
             SetGoal(_patrol);
             break;
         }
-        MovementObject@ target = ReadCharacterID(target_id);
+        MovementObject@ target = ReadCharacterID(chase_target_id);
                 
-        if(notice_target_aggression_id != target_id){
+        if(notice_target_aggression_id != chase_target_id){
             notice_target_aggression_delay = 0.0f;
         }
-        notice_target_aggression_id = target_id;
+        notice_target_aggression_id = chase_target_id;
         float target_threat_amount = target.GetFloatVar("threat_amount");
         if(target_threat_amount > 0.6f && length_squared(target.velocity) < 1.0){
             notice_target_aggression_delay += ts.step();
@@ -488,7 +730,7 @@ void UpdateBrain(const Timestep &in ts){
             notice_target_aggression_delay = 0.0f;   
         }
                 
-        if(target.GetIntVar("knocked_out") != _awake && !in_arena){
+        if(target.GetIntVar("knocked_out") != _awake){
             SetGoal(_patrol);
         }
                 
@@ -580,11 +822,24 @@ void UpdateBrain(const Timestep &in ts){
             strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
         }
         if(temp_health < 0.5f){
-            ally_id = GetClosestCharacterID(1000.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
+            ally_id = GetClosestCharacterID(1000.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE | _TC_KNOWN );
             if(ally_id != -1){
                 //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
                 SetGoal(_get_help);
             }
+        }
+
+        bool print_potential_allies = false;
+        if(print_potential_allies){
+            array<int> characters;
+            GetCharacters(characters);
+            array<int> matching_characters;
+            GetMatchingCharactersInArray(characters, matching_characters, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE | _TC_KNOWN);
+            string allies;
+            for(int i=0, len=matching_characters.size(); i<len; ++i){
+                allies += matching_characters[i] + " ";
+            }
+            DebugText(this_mo.getID()+"Known allies: ", this_mo.getID()+" Known allies: "+allies, 0.5f);
         }
 
         // Assume target is moving in a straight line at slowly-decreasing velocity
@@ -592,15 +847,15 @@ void UpdateBrain(const Timestep &in ts){
         last_seen_target_velocity *= pow(0.995f, ts.frames());
 
         // If ray check is successful, update knowledge of target position and velocity
-        vec3 real_target_pos = ReadCharacterID(target_id).position;
+        vec3 real_target_pos = ReadCharacterID(chase_target_id).position;
         vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
-        if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
+        if(ReadCharacterID(chase_target_id).VisibilityCheck(head_pos)){
             last_seen_target_position = real_target_pos;
-            last_seen_target_velocity = ReadCharacterID(target_id).velocity;
+            last_seen_target_velocity = ReadCharacterID(chase_target_id).velocity;
         }
     
         target_history.Update(last_seen_target_position, last_seen_target_velocity, ts);
-
+        CheckForNearbyWeapons();
         break;}
     case _get_help: {
         if(ally_id == -1){
@@ -612,14 +867,12 @@ void UpdateBrain(const Timestep &in ts){
             SetGoal(_attack);
             char.ReceiveMessage("escort_me "+this_mo.getID());
         }
+        CheckForNearbyWeapons();
         break; }
     case _get_weapon:
         if(weapon_slots[primary_weapon_slot] != -1 || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
-            if(target_id == -1){
-                SetGoal(_patrol);           
-            } else {
-                SetGoal(_attack);
-            }
+            SetGoal(old_goal);
+            SetSubGoal(old_sub_goal);
         }
         break;
     case _struggle:
@@ -721,6 +974,9 @@ bool WantsToCrouch() {
     if(goal == _struggle){
         return struggle_crouch;
     }
+    if(goal == _investigate && sub_goal == _investigate_body){
+        return true;
+    }
     return false;
 }
 
@@ -769,7 +1025,7 @@ bool WantsToAttack() {
 }
 
 bool WantsToRollFromRagdoll(){
-    if(ragdoll_time > roll_after_ragdoll_delay){
+    if(ragdoll_time > roll_after_ragdoll_delay && combat_allowed){
         return true;
     } else {
         return false;
@@ -786,11 +1042,11 @@ bool ShouldDefend(BlockOrDodge bod){
         recharge = active_dodge_recharge;
     }
     if(goal != _attack || startled || recharge > 0.0f || 
-       target_id == -1 || !hostile)
+       chase_target_id == -1 || !hostile)
     {
         return false;
     }
-    MovementObject @char = ReadCharacterID(target_id);
+    MovementObject @char = ReadCharacterID(chase_target_id);
     if((bod == BLOCK && char.GetIntVar("state") == _attack_state) || 
        (bod == DODGE && char.GetIntVar("knife_layer_id") != -1))
     {
@@ -803,7 +1059,7 @@ bool ShouldDefend(BlockOrDodge bod){
 bool WantsToStartActiveBlock(const Timestep &in ts){
     bool should_block = ShouldDefend(BLOCK);
     if(should_block && !going_to_block){
-        MovementObject @char = ReadCharacterID(target_id);
+        MovementObject @char = ReadCharacterID(chase_target_id);
         block_delay = char.rigged_object().anim_client().GetTimeUntilEvent("blockprepare");
         if(block_delay != -1.0f){
             going_to_block = true;
@@ -848,7 +1104,7 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
 bool WantsToDodge(const Timestep &in ts){
     bool should_block = ShouldDefend(DODGE);
     if(should_block && !going_to_dodge){
-        MovementObject @char = ReadCharacterID(target_id);
+        MovementObject @char = ReadCharacterID(chase_target_id);
         dodge_delay = char.rigged_object().anim_client().GetTimeUntilEvent("blockprepare");
         if(dodge_delay != -1.0f){
             going_to_dodge = true;
@@ -939,35 +1195,80 @@ vec3 GetNextPathPoint() {
     }
     return next_point;
 }
+
+class WaypointInfo {
+    bool success;
+    vec3 target_point;
+    bool following_friend;
+}
+
+WaypointInfo GetWaypointInfo(int id){
+    WaypointInfo info;
+    info.success = false;
+    if(id != -1){
+        if(ObjectExists(id)){
+            Object@ object = ReadObjectFromID(id);
+            if(object.GetType() == _path_point_object){
+                info.target_point = path_script_reader.GetPointPosition(id);
+                info.success = true;
+                info.following_friend = false;
+            } else if(object.GetType() == _movement_object){
+                if(situation.KnowsAbout(id)){
+                    info.target_point = ReadCharacterID(id).position;
+                    info.success = true;
+                    info.following_friend = true;
+                }
+            }
+        }
+    }
+    return info;
+}
    
 vec3 GetPatrolMovement(){
     vec3 target_velocity;
     vec3 target_point = this_mo.position;
-    if(waypoint_target == -1){
+    bool following_friend = false;
+    WaypointInfo waypoint_info = GetWaypointInfo(waypoint_target);
+    if(!waypoint_info.success){
         old_waypoint_target = -1;
         waypoint_target = this_mo.GetWaypointTarget();
+        waypoint_info = GetWaypointInfo(waypoint_target);
     }
-    if(waypoint_target != -1){
-        target_point = path_script_reader.GetPointPosition(waypoint_target);
+    if(waypoint_info.success){
+        target_point = waypoint_info.target_point;
+        following_friend = waypoint_info.following_friend;
     }
     if(xz_distance_squared(this_mo.position, target_point) < 1.0f){
-        int temp = waypoint_target;
+        if(waypoint_target != -1){
+            if(ObjectExists(waypoint_target)){
+                Object@ object = ReadObjectFromID(waypoint_target);
+                if(object.GetType() == _path_point_object){
+                    int temp = waypoint_target;
 
-        waypoint_target = path_script_reader.GetOtherConnectedPoint(
-            waypoint_target, old_waypoint_target);
-        old_waypoint_target = temp;
+                    waypoint_target = path_script_reader.GetOtherConnectedPoint(
+                        waypoint_target, old_waypoint_target);
+                    old_waypoint_target = temp;
         
-        if(waypoint_target == -1){
-            waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
+                    if(waypoint_target == -1){
+                        waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
+                    }
+                }
+            }
         }
     }
     if(move_delay > 0.0f){
         target_point = this_mo.position;
     }
-    target_velocity = GetMovementToPoint(target_point, 0.0f);
-    float target_speed = 0.2f;
-    if(length_squared(target_velocity) > target_speed){
-        target_velocity = normalize(target_velocity) * target_speed;
+    if(following_friend) {
+        target_velocity = GetMovementToPoint(target_point, 1.0f, 1.0f, 0.0f);
+    } else {
+        if(target_point != this_mo.position){
+            target_velocity = GetMovementToPoint(target_point, 0.0f);
+            float target_speed = 0.2f;
+            if(length_squared(target_velocity) > target_speed){
+                target_velocity = normalize(target_velocity) * target_speed;
+            }
+        }
     }
     return target_velocity;
 }
@@ -1132,6 +1433,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     //}
 
     if(path.NumPoints() > 0 && on_ground){
+       // If path cannot reach target point, check if we can climb or drop to it 
        if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
            PredictPathOutput predict_path_output = PredictPath(this_mo.position, point);
            if(predict_path_output.type == _ppt_climb){
@@ -1176,10 +1478,12 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
        }*/
     }
 
+    // Get flat direction to next point
     vec3 rel_dir = point - this_mo.position;
     rel_dir.y = 0.0f;
     rel_dir = normalize(rel_dir);
 
+    // If target point is closer than we want to be, then project it backwards (staying within walkable bounds)
     if(distance_squared(target_point, point) < target_dist*target_dist){
         vec3 right_dir(rel_dir.z, 0.0f, -rel_dir.x);
         vec3 raycast_point = NavRaycast(point, point - rel_dir * target_dist + right_dir * strafe_vel);
@@ -1193,12 +1497,15 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
         }
     } 
 
-    // Set target velocity to approach target position
+    // Set target velocity to flat vector from character to target
     target_velocity = target_point - this_mo.position;
     target_velocity.y = 0.0;
+
+    // Decompose target_vel into components going towards target, and perpendicular
     vec3 target_vel_indirect = target_velocity - dot(rel_dir, target_velocity) * rel_dir;
     vec3 target_vel_direct = target_velocity - target_vel_indirect;
  
+    // 
     float dist = length(target_vel_direct);
     float seek_dist = slow_radius;
     dist = max(0.0, dist-seek_dist);
@@ -1209,6 +1516,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     vec3 repulsor_force = GetRepulsorForce();
     if(length_squared(repulsor_force) > 0.0f){
         vec3 raycast_point = NavRaycast(this_mo.position, this_mo.position + repulsor_force);
+        raycast_point.y = this_mo.position.y;
         repulsor_force *= distance(raycast_point, this_mo.position)/length(repulsor_force);
     }
     target_velocity += repulsor_force;
@@ -1229,7 +1537,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
 }
 
 vec3 GetDodgeDirection() {
-    MovementObject @char = ReadCharacterID(target_id);
+    MovementObject @char = ReadCharacterID(chase_target_id);
     return normalize(this_mo.position - char.position);
 }
 
@@ -1262,6 +1570,14 @@ void MouseControlPathTest() {
 float struggle_change_time = 0.0f;
 vec3 struggle_dir;
 
+vec3 GetInvestigateTargetPos(){
+    if(investigate_target_id == -1){
+        return nav_target;
+    } else {
+        return ReadCharacterID(investigate_target_id).position; 
+    }    
+}
+
 int last_seen_sphere = -1;
 vec3 GetBaseTargetVelocity() {
     if(startled){
@@ -1281,10 +1597,24 @@ vec3 GetBaseTargetVelocity() {
         DebugDrawWireSphere(nav_target, 0.2f, vec3(1.0f), _fade);
         return GetMovementToPoint(nav_target, 1.0f); 
     } else if(goal == _investigate){
+        float speed = 0.2f;
+        if(sub_goal == _investigate_urgent || sub_goal == _investigate_body){
+            speed = 1.0f;
+        }
+        if(sub_goal == _investigate_urgent || sub_goal == _investigate_body || sub_goal == _investigate_around){
+            speed = 0.7f;
+        }
+        if(sub_goal == _investigate_body){
+            speed = 0.0f;
+        }
+        float slow_radius = 0.0f;
+        if(sub_goal == _investigate_urgent){
+            slow_radius = 1.0f;
+        }
         if(move_delay <= 0.0f){
-            return GetMovementToPoint(nav_target, 0.0f) * 0.2f;
+            return GetMovementToPoint(GetInvestigateTargetPos(), slow_radius) * speed;
         } else {
-            return GetMovementToPoint(this_mo.position, 0.0f) * 0.2f;
+            return GetMovementToPoint(this_mo.position, 0.0f) * speed;
         }
     } else if(goal == _struggle){
         return struggle_dir; 
@@ -1315,6 +1645,7 @@ vec3 GetRepulsorForce(){
         vec3 repulsion = (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
         if(length_squared(repulsion) > 0.0f && move_delay <= 0.0f){
             char.ReceiveMessage("excuse_me "+this_mo.getID());
+            repulsor_delay = 1.0f;
         }
         repulsor_total += repulsion;
     }
@@ -1351,8 +1682,16 @@ void ResetWaypointTarget() {
     old_waypoint_target = -1;
 }
 
-bool WantsToWalkBackwards() {
-    return (goal == _patrol && waypoint_target == -1);
+WalkDir WantsToWalkBackwards() {
+    if(goal == _patrol && waypoint_target == -1){
+        if(repulsor_delay > 0){
+            return WALK_BACKWARDS;
+        } else {
+            return STRAFE;
+        }
+    } else {
+        return FORWARDS;
+    }
 }
 
 bool WantsReadyStance() {

@@ -25,8 +25,7 @@ varying vec3 tangent_to_world3;
 #include "texturepack.glsl"
 #include "relativeskypos.glsl"
 
-void main()
-{            
+void main() {            
     if((rand(gl_FragCoord.xy)) < fade){
         discard;
     };
