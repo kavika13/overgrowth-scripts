@@ -38,5 +38,5 @@ void main()
 	depth_blend = max(0.0,min(1.0,depth_blend));
 	depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
 	
-	gl_FragColor = vec4(diffuse_color,colormap.a*gl_Color.a*depth_blend);
+	gl_FragColor = vec4(diffuse_color*gl_Color.xyz,colormap.a*gl_Color.a*depth_blend);
 }

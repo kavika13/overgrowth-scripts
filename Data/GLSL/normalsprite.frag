@@ -29,5 +29,7 @@ void main()
 
 	color *= gl_Color.xyz;
 
+	color = NdotL;
+
 	gl_FragColor = vec4(color,color_tex.a*gl_Color.a);
 }

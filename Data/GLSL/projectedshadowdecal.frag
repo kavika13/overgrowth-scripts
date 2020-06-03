@@ -1,9 +1,13 @@
+#pragma blendmode_multiply
+
 uniform sampler2DShadow tex0;
+uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2D tex5;
 uniform vec3 ws_light;
 
 varying vec4 ProjShadow;
+varying vec3 normal;
 
 const float _shadow_depth = 20.0;
 const float _half_shadow_depth = _shadow_depth * 0.5;
@@ -42,8 +46,18 @@ void main()
 
 		// Fade shadow based on distance
 		color.a *= pow(texture2D(tex4,gl_TexCoord[1].xy).r,0.25);
-		color.a *= (1.0-GetAmbientMultiplierScaled())*1.1;
+		color.a *= pow((1.0-GetAmbientMultiplierScaled())*1.1,0.4);
 		color.a *=max(0.0,(1.0 - distance_fade));
+
+		color.xyz = LookupCubemapSimple(normal, tex3)*GetAmbientMultiplier();
+		float avg_color = (color.x + color.y + color.z) * 0.333;
+		color.xyz = (color.xyz - vec3(avg_color))*1.3 + vec3(avg_color);
+		color.xyz *= color.a;
+		// * GetAmbientContrib(shadow_tex.g)
+
+		//color.xyz = vec3(1.0)-(gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a);
+		//color.xyz += LookupCubemapSimple(normal, tex3)*color.a*GetAmbientMultiplier();
+		//color.a = 1.0;
 
 		gl_FragColor = color;
 	}

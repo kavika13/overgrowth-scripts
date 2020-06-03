@@ -79,6 +79,12 @@ vec3 accel_tilt;
 
 float cancel_delay;
 
+bool active_blocking = false;
+float active_block_duration = 0.0f;
+float active_block_recharge = 0.0f;
+
+string curr_attack;
+
 void EndAttack() {
 	SetState(_movement_state);
 	if(!on_ground){
@@ -91,7 +97,56 @@ void EndHitReaction() {
 	SetState(_movement_state);
 }
 
-void WasHit(string type, vec3 dir, vec3 pos) {
+void WasBlocked() {
+	if(curr_attack == "frontkick"){
+		this_mo.SwapAnimation("Data/Animations/r_frontkickblocked.anm");
+		mirrored_stance = !mirrored_stance;
+	} else if(curr_attack == "spinkickright"){
+		this_mo.SwapAnimation("Data/Animations/r_spinkickrightblocked.anm");
+	} else if(curr_attack == "sweep") {
+		this_mo.SwapAnimation("Data/Animations/r_sweepblocked.anm");
+	}
+}
+
+int WasHit(string type, vec3 dir, vec3 pos) {
+	if(type == "spinkickrightblocked" ||
+	   type == "spinkickleftblocked" ||
+	   type == "sweeprightblocked" ||
+	   type == "sweepleftblocked" ||
+	   type == "frontkickrightblocked" ||
+	   type == "frontkickleftblocked")
+	{
+		string sound = "Data/Sounds/hit/hit_normal.xml";
+		PlaySoundGroup(sound, pos);
+		//MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
+		MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+		MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+		TimedSlowMotion(0.1f,0.3f, 0.05f);
+	}
+	if(type == "highrightblockprepare" ||
+	   type == "highleftblockprepare" ||
+	   type == "medrightblockprepare" ||
+	   type == "medleftblockprepare" ||
+	   type == "lowrightblockprepare" ||
+	   type == "lowleftblockprepare")
+	{
+		if(state == _movement_state && limp == false){
+			if(active_blocking){
+				SetState(_hit_reaction_state);
+				hit_reaction_anim_set = false;
+			
+				hit_reaction_event = type;
+
+				dir.y = 0.0f;
+				dir = normalize(dir) * -1;
+				if(length_squared(dir)>0.0f){
+					this_mo.SetRotationFromFacing(dir);
+				}
+				ActiveBlocked();
+				return 1;
+			}
+		}
+	}
 	if((type == "spinkickrightimpact" ||
 		type == "sweeprightimpact" ||
 		type == "spinkickleftimpact" ||
@@ -103,27 +158,25 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 			duck_amount > 0.5f)
 		{
 			//TimedSlowMotion(0.1f,0.7f, 0.05f);
-			return;
+			return 0;
 		}
 		if(type == "legcannon"){
 			target.velocity += dir * -10.0f;
 			block_health = 0.0f;
 		}
-
-		string sound = "Data/Sounds/FistImpact.xml";
-		PlaySoundGroup(sound, pos);
-		MakeImpactParticle(pos);
 	
 		block_health -= (rand()%5+3)*0.1f;
 		block_health = max(0.0f, block_health);
 
 		if(block_health <= 0.0f || state == _attack_state || !on_ground){
+			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
 			float force = 20000.0f*(1.0f-temp_health*0.5f);
 			GoLimp();
 			if(type == "frontkick"){
 				this_mo.ApplyForceToRagdoll(dir*force,pos);
 			} else if(type == "legcannon"){
-				this_mo.ApplyForceToRagdoll(dir*force*1.5f,pos);
+				this_mo.ApplyForceToRagdoll(dir*force*2.5f,pos);
 			} else {
 				vec3 right;
 				right.x = -dir.z;
@@ -152,9 +205,20 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 			if(temp_health <= 0.0f && knocked_out==0){
 				knocked_out = 1;
 				TimedSlowMotion(0.1f,0.7f, 0.05f);
+				string sound = "Data/Sounds/hit/hit_medium.xml";
+				PlaySoundGroup(sound, pos);
+			} else {
+				string sound = "Data/Sounds/hit/hit_medium.xml";
+				PlaySoundGroup(sound, pos);
 			}
 			temp_health = max(0.0f, temp_health);
 		} else {
+			string sound = "Data/Sounds/hit/hit_normal.xml";
+			PlaySoundGroup(sound, pos);
+			//MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
+			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+			
 			SetState(_hit_reaction_state);
 			hit_reaction_anim_set = false;
 		
@@ -167,6 +231,7 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 			}
 		}
 	}
+	return 0;
 }
 
 void HandleAnimationEvent(string event, vec3 world_pos){
@@ -175,16 +240,18 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 		GoLimp();
 	}
 	
-	/*
+	
 	if(event == "leftstep" ||
 	   event == "leftwalkstep" ||
 	   event == "leftwallstep" ||
 	   event == "leftrunstep" ||
 	   event == "leftcrouchwalkstep")
 	{
-		this_mo.AddDecalAtBone("left_leg", "footstep");
-		PlaySoundGroup("Data/Sounds/footstep_mud.xml", world_pos);
-		MakeSplatParticle(world_pos);
+		//this_mo.MaterialDecalAtBone("step", "left_leg");
+		this_mo.MaterialParticleAtBone("step","left_leg");
+		//this_mo.AddDecalAtBone("left_leg", "footstep");
+		//PlaySoundGroup("Data/Sounds/footstep_mud.xml", world_pos);
+		//MakeSplatParticle(world_pos);
 	}
 	if(event == "rightstep" ||
 	   event == "rightwalkstep" ||
@@ -192,11 +259,13 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 	   event == "rightrunstep" ||
 	   event == "rightcrouchwalkstep")
 	{
-		this_mo.AddDecalAtBone("right_leg", "footstep");
+		//this_mo.MaterialDecalAtBone("step", "right_leg");
+		this_mo.MaterialParticleAtBone("step","right_leg");
+		/*this_mo.AddDecalAtBone("right_leg", "footstep");
 		PlaySoundGroup("Data/Sounds/footstep_mud.xml", world_pos);
-		MakeSplatParticle(world_pos);
+		MakeSplatParticle(world_pos);*/
 	}
-	*/
+	
 	if(event == "leftstep" || event == "rightstep"){
 		this_mo.MaterialEvent(event, world_pos);
 	}
@@ -221,13 +290,25 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
 	if((event == "spinkickrightimpact" || event == "sweeprightimpact" ||
+		event == "spinkickrightblocked" || event == "spinkickleftblocked" ||
+		event == "sweeprightblocked" || event == "sweepleftblocked" ||
 		event == "spinkickleftimpact" || event == "sweepleftimpact" ||
-		event == "frontkick" || event == "legcannon") && 
+		event == "frontkick" || event == "frontkickleftblocked" ||
+		event == "highrightblockprepare" ||
+	    event == "highleftblockprepare" ||
+	    event == "medrightblockprepare" ||
+	    event == "medleftblockprepare" ||
+	    event == "lowrightblockprepare" ||
+	    event == "lowleftblockprepare" ||
+	    event == "frontkickrightblocked" || event == "legcannon") && 
 	   distance(this_mo.position, target.position) < 1.6f){
 		vec3 facing = this_mo.GetFacing();
 		vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
 		vec3 dir = normalize(target.position - this_mo.position);
-		target.WasHit(event, dir, world_pos);
+		int return_val = target.WasHit(event, dir, world_pos);
+		if(return_val == 1){
+			WasBlocked();
+		}
 		if(event == "frontkick"){
 			if(distance(this_mo.position, target.position) < 1.0f){
 				vec3 dir = normalize(target.position - this_mo.position);
@@ -650,7 +731,7 @@ void UpdateAirWhooshSound() {
 	if(!on_ground){
 		whoosh_amount *= 1.5f;
 	}
-	SetAirWhoosh(whoosh_amount*0.7f,whoosh_pitch);
+	SetAirWhoosh(whoosh_amount*0.5f,whoosh_pitch);
 }
 
 void UpdateAttacking() {	
@@ -702,40 +783,37 @@ void UpdateAttacking() {
 	}
 
 	if(!attack_animation_set){
-		if(on_ground){
-			if(!WantsToCrouch()){
-				duck_amount = 0.0f;
-				if(front){
-					if(mirrored_stance){
-						this_mo.StartMirroredMobileAnimation("Data/Animations/r_frontkick.anm");
-					} else {
-						this_mo.StartMobileAnimation("Data/Animations/r_frontkick.anm");
-					}
-					mirrored_stance = !mirrored_stance;
-				} else if(!mirrored){
-					this_mo.StartAnimation("Data/Animations/r_spinkickright.anm");
-					mirrored_stance = false;
-				} else {
-					this_mo.StartMirroredAnimation("Data/Animations/r_spinkickright.anm");
-					mirrored_stance = true;
-				}
-				this_mo.MaterialEvent("kick", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
-				//string path = "Data/Sounds/concrete_foley/bunny_kick_concrete.xml";
-				//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		ChooseAttack(front);
+		if(curr_attack == "frontkick"){
+			duck_amount = 0.0f;
+			if(mirrored_stance){
+				this_mo.StartMirroredMobileAnimation("Data/Animations/r_frontkick.anm");
 			} else {
-				duck_amount = 1.0f;
-				if(!mirrored){
-					this_mo.StartAnimation("Data/Animations/r_sweep.anm");
-					mirrored_stance = false;
-				} else {
-					this_mo.StartMirroredAnimation("Data/Animations/r_sweep.anm");
-					mirrored_stance = true;
-				}
-				this_mo.MaterialEvent("sweep", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
-				//string path = "Data/Sounds/concrete_foley/bunny_sweep_concrete.xml";
-				//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+				this_mo.StartMobileAnimation("Data/Animations/r_frontkick.anm");
 			}
-		} else {
+			this_mo.MaterialEvent("kick", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+			mirrored_stance = !mirrored_stance;
+		} else if(curr_attack == "spinkickright"){
+			duck_amount = 0.0f;
+			if(!mirrored){
+				this_mo.StartAnimation("Data/Animations/r_spinkickright.anm");
+				mirrored_stance = false;
+			} else {
+				this_mo.StartMirroredAnimation("Data/Animations/r_spinkickright.anm");
+				mirrored_stance = true;
+			}
+			this_mo.MaterialEvent("kick", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+		} else if(curr_attack == "sweep"){
+			duck_amount = 1.0f;
+			if(!mirrored){
+				this_mo.StartAnimation("Data/Animations/r_sweep.anm");
+				mirrored_stance = false;
+			} else {
+				this_mo.StartMirroredAnimation("Data/Animations/r_sweep.anm");
+				mirrored_stance = true;
+			}
+			this_mo.MaterialEvent("sweep", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+		} else if(curr_attack == "legcannon"){
 			this_mo.StartAnimation("Data/Animations/r_legcannon.anm");
 			leg_cannon_flip = 0.0f;
 		}
@@ -754,7 +832,43 @@ void UpdateAttacking() {
 void UpdateHitReaction() {
 	if(!hit_reaction_anim_set){
 		int choice = ((1.0f-block_health)*2.99f);
-		if(hit_reaction_event == "spinkickrightimpact"){
+		if(hit_reaction_event == "highrightblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockhighleft.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblockhighright.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "highleftblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockhighright.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblockhighleft.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "medrightblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockmedleft.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblockmedright.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "medleftblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockmedright.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblockmedleft.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "lowrightblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblocklowleft.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblocklowright.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "lowleftblockprepare"){
+			if(mirrored_stance){
+				this_mo.StartMirroredAnimation("Data/Animations/r_activeblocklowright.anm",40.0f);
+			} else {
+				this_mo.StartAnimation("Data/Animations/r_activeblocklowleft.anm",40.0f);
+			}
+		} else if(hit_reaction_event == "spinkickrightimpact"){
 			mirrored_stance = false;
 			switch(choice){
 				case 0:
@@ -880,6 +994,9 @@ void SetState(int _state) {
 		}
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
+	}
+	if(state != _attack_state){
+		curr_attack = "";
 	}
 }
 
@@ -1067,6 +1184,7 @@ const float _smear_time_threshold = 0.3f;
 float smear_sound_time = 0.0f;
 float left_smear_time = 0.0f;
 float right_smear_time = 0.0f;
+float _dist_threshold = 0.1f;
 vec3 left_decal_pos;
 vec3 right_decal_pos;
 void DecalCheck(){
@@ -1081,36 +1199,63 @@ void DecalCheck(){
 						0.1f,
 						vec3(1.0f),
 						_delete_on_update);*/
-		if(distance(curr_left_decal_pos, left_decal_pos) > 0.1f){
+		if(distance(curr_left_decal_pos, left_decal_pos) > _dist_threshold){
 			if(left_smear_time < _smear_time_threshold){
-				this_mo.ChangeLastDecalDirection("left_leg",curr_left_decal_pos - left_decal_pos);
+				//this_mo.ChangeLastMaterialDecalDirection("left_leg",curr_left_decal_pos - left_decal_pos);
 			} 
-			if(smear_sound_time > 0.1f){
+			/*if(smear_sound_time > 0.1f){
 				PlaySoundGroup("Data/Sounds/footstep_mud.xml", curr_left_decal_pos);
 				smear_sound_time = 0.0f;
-			}
-			this_mo.AddDecalAtBone("left_leg","footstep");
-			MakeSplatParticle(curr_left_decal_pos);
+			}*/
+			//this_mo.MaterialDecalAtBone("step","left_leg");
+			this_mo.MaterialParticleAtBone("skid","left_leg");
+			//MakeSplatParticle(curr_left_decal_pos);
 			left_decal_pos = curr_left_decal_pos;
 			left_smear_time = 0.0f;
 		}
-		if(distance(curr_right_decal_pos, right_decal_pos) > 0.1f){
+		if(distance(curr_right_decal_pos, right_decal_pos) > _dist_threshold){
 			if(right_smear_time < _smear_time_threshold){
-				this_mo.ChangeLastDecalDirection("right_leg",curr_right_decal_pos - right_decal_pos);
+				//this_mo.ChangeLastMaterialDecalDirection("right_leg",curr_right_decal_pos - right_decal_pos);
 			}
-			if(smear_sound_time > 0.1f){
+			/*if(smear_sound_time > 0.1f){
 				PlaySoundGroup("Data/Sounds/footstep_mud.xml", curr_left_decal_pos);
 				smear_sound_time = 0.0f;
-			}
+			}*/
 			right_decal_pos = curr_right_decal_pos;
-			this_mo.AddDecalAtBone("right_leg","footstep");
-			MakeSplatParticle(curr_right_decal_pos);
+			//this_mo.MaterialDecalAtBone("step","right_leg");
+			this_mo.MaterialParticleAtBone("skid","right_leg");
+			//MakeSplatParticle(curr_right_decal_pos);
 			right_smear_time = 0.0f;
 		}
 	}
 }
 
+void HandleActiveBlock() {
+	if(WantsToStartActiveBlock()){
+		if(active_block_recharge <= 0.0f){
+			active_blocking = true;
+			active_block_duration = 0.2f;
+		}
+		active_block_recharge = 0.2f;
+	} 
+	if(active_blocking){
+		active_block_duration -= time_step;
+		if(active_block_duration <= 0.0f){
+			active_blocking = false;
+		}
+	} else {
+		if(active_block_recharge > 0.0f){
+			active_block_recharge -= time_step;
+		}
+	}
+	if(!controlled){
+		active_blocking = (rand()%2)!=0;
+	}
+}
+
 void update(bool _controlled) {	
+	HandleActiveBlock();
+
 	AIUpdate();
 	time += time_step;
 	//this_mo.SetMorphTargetWeight("fist_l",min(1,max(0,sin(time*3))),0.0f);
@@ -1133,6 +1278,13 @@ void update(bool _controlled) {
 	if(limp){
 		return;
 	}
+
+	/*vec3 vel(RangedRandomFloat(-20.0f,20.0f),
+			 RangedRandomFloat(0.0f,100.0f),
+			 RangedRandomFloat(-20.0f,20.0f));
+	MakeParticle("Data/Particles/spark.xml",this_mo.position, vel);*/
+
+	//MakeImpactParticle(this_mo.position);
 
 	block_health += time_step * 0.3f;
 	block_health = min(temp_health, block_health);
@@ -1216,14 +1368,13 @@ void update(bool _controlled) {
 
 	this_mo.SetTilt(tilt);
 
-	/*
+	
 	if(on_ground && state == _movement_state){
 		DecalCheck();
 	}
 	left_smear_time += time_step;
 	right_smear_time += time_step;
 	smear_sound_time += time_step;
-	*/
 }
 
 void init() {

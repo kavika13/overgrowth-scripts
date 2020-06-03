@@ -140,6 +140,7 @@ class FlipInfo {
 			flip_axis = target_flip_axis;
 			flip_vel = -2.0f;
 		}
+		this_mo.MaterialEvent("flip", this_mo.position);
 	}
 
 	void StartFlip(){

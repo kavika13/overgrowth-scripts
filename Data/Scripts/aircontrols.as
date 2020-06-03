@@ -18,7 +18,8 @@ class JumpInfo {
 	float wall_hit_time;
 	vec3 wall_dir;
 	vec3 wall_run_facing;
-	bool down_jump_used;
+
+	float down_jetpack_fuel;
 
 	LedgeInfo ledge_info;
 
@@ -180,9 +181,9 @@ class JumpInfo {
 				this_mo.velocity.y += time_step * _jump_fuel_burn;
 			}
 		} else {
-			if(!down_jump_used){
-				down_jump_used = true;
-				this_mo.velocity.y -= 1.5f;
+			if(down_jetpack_fuel > 0.0){
+				down_jetpack_fuel -= time_step * _jump_fuel_burn;
+				this_mo.velocity.y -= time_step * _jump_fuel_burn;
 			}
 		}
 
@@ -230,7 +231,7 @@ class JumpInfo {
 		this_mo.velocity = jump_vel * 0.5f;
 		jetpack_fuel = _jump_fuel;
 		jump_launch = 1.0f;
-		down_jump_used = false;
+		down_jetpack_fuel = _jump_fuel * 0.5f;
 		
 		//string sound = "Data/Sounds/Impact-Grass3.wav";
 		//PlaySound(sound, this_mo.position );
@@ -251,7 +252,7 @@ class JumpInfo {
 		this_mo.velocity = jump_vel;
 		jetpack_fuel = _jump_fuel;
 		jump_launch = 1.0f;
-		down_jump_used = false;
+		down_jetpack_fuel = _jump_fuel*0.5f;
 		
 		//string sound = "Data/Sounds/Impact-Grass3.wav";
 		//PlaySound(sound, this_mo.position );

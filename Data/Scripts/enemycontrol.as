@@ -1,11 +1,22 @@
 #include "aschar.as"
 
 bool hostile = false;
+bool ai_attacking = false;
 
 void AIUpdate(){
 	if(GetInputPressed("c")){
 		hostile = !hostile;
 	}
+	if(hostile && rand()%150==0){
+		ai_attacking = !ai_attacking;
+	}
+	if(!hostile){
+		ai_attacking = false;
+	}
+}
+
+void ActiveBlocked(){
+	ai_attacking = true;
 }
 
 bool WantsToCrouch() {
@@ -21,10 +32,14 @@ bool WantsToJump() {
 }
 
 bool WantsToAttack() { 
-	return hostile;
+	return ai_attacking;
 }
 
 bool WantsToRollFromRagdoll(){
+	return false;
+}
+
+bool WantsToStartActiveBlock(){
 	return false;
 }
 
@@ -84,4 +99,20 @@ vec3 GetTargetVelocity() {
 		target_vel.y = 0.0f;
 		return normalize(target_vel);
 	}*/
+}
+
+void ChooseAttack(bool front) {
+	curr_attack = "";
+	if(on_ground){
+		int choice = rand()%3;
+		if(choice==0){
+			curr_attack = "frontkick";			
+		} else if(choice == 1){
+			curr_attack = "spinkickright";
+		} else {
+			curr_attack = "sweep";
+		}	
+	} else {
+		curr_attack = "legcannon";
+	}
 }

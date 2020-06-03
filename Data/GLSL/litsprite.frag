@@ -16,5 +16,5 @@ void main()
 	
 	color *= BalanceAmbient(NdotL);
 	
-	gl_FragColor = vec4(color,colormap.a*gl_Color.a);
+	gl_FragColor = vec4(color*gl_Color.xyz,colormap.a*gl_Color.a);
 }

@@ -3,6 +3,9 @@
 void AIUpdate(){
 }
 
+void ActiveBlocked(){
+}
+
 bool WantsToCrouch() {
 	if(!controlled) return false;
 	return GetInputDown("crouch");
@@ -34,6 +37,11 @@ bool WantsToFlip() {
 }
 
 bool WantsToGrabLedge() {
+	if(!controlled) return false;
+	return GetInputDown("grab");
+}
+
+bool WantsToStartActiveBlock(){
 	if(!controlled) return false;
 	return GetInputDown("grab");
 }
@@ -93,4 +101,21 @@ vec3 GetTargetVelocity() {
 	}
 	
 	return target_velocity;
+}
+
+void ChooseAttack(bool front) {
+	curr_attack = "";
+	if(on_ground){
+		if(!WantsToCrouch()){
+			if(front){
+				curr_attack = "frontkick";			
+			} else {
+				curr_attack = "spinkickright";
+			}
+		} else {
+			curr_attack = "sweep";
+		}	
+	} else {
+		curr_attack = "legcannon";
+	}
 }
