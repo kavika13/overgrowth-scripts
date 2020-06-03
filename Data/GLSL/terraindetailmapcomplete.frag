@@ -18,104 +18,82 @@ uniform vec3 avg_color2;
 uniform vec3 avg_color3;
 uniform vec3 cam_pos;
 uniform int weight_component;
+uniform vec3 ws_light;
 
 varying vec3 tangent;
-varying vec3 vertex_pos;
-varying vec3 light_pos;
-varying vec3 rel_pos;
+varying vec3 ws_vertex;
 varying float alpha;
 
 #include "lighting.glsl"
 #include "texturepack.glsl"
+#include "relativeskyposfrag.glsl"
 
 void main()
 {	
-	vec4 weight_map = texture2D(tex0,gl_TexCoord[0].xy);
-
-	vec3 color = vec3(0.0);
-
-	vec3 terrain_color = texture2D(tex1,gl_TexCoord[0].xy).xyz;
-	
-	vec3 average_color = vec3(0.0);
-	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[0].xy).rgb;
-	
+	// Get weights
+	vec4 weight_map = texture2D(tex0,tc0);
 	weight_map[3] = 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]);
-	float total_weight = weight_map[0] +
-						 weight_map[1] +
-						 weight_map[2] +
-						 weight_map[3];
 
-	float inv_total_weight = 1.0 / total_weight;
+	// Get fade
+	float detail_fade_distance = 200.0;
+	float detail_fade = min(1.0,max(0.0,length(ws_vertex)/detail_fade_distance));
 
-	average_color = avg_color0 * weight_map[0] +
-					avg_color1 * weight_map[1] +
-					avg_color2 * weight_map[2] +
-					avg_color3 * weight_map[3];
-	average_color *= inv_total_weight;
-	
-	vec3 tint = terrain_color / average_color;
-
-	color = tint;
-
-	vec3 base_normalmap = texture2D(tex4,gl_TexCoord[0].xy).xyz;
+	// Get normal
+	vec3 base_normalmap = texture2D(tex4,tc0).xyz;
 	vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
-	vec3 bitangent = normalize(cross(tangent,base_normal));
-	vec3 new_tangent = normalize(cross(base_normal,bitangent));
+	vec3 base_bitangent = normalize(cross(tangent,base_normal));
+	vec3 base_tangent = normalize(cross(base_normal,base_bitangent));
 
-	mat3 to_normal = mat3(new_tangent,
-						  bitangent,
-						  base_normal);
+	mat3 ws_from_ns = mat3(base_tangent,
+						   base_bitangent,
+						   base_normal);
 
-	float NdotL;
-	vec3 diffuse_color;
-	vec3 H;
-	float spec;
-	vec3 spec_color;
-	vec3 spec_map_vec;
-
-	float fade_distance = 200.0;
-	float fade = min(1.0,max(0.0,length(rel_pos)/fade_distance));
-
-	vec3 normalmap = (texture2D(tex7,gl_TexCoord[1].xy) * weight_map[0] +
-					 texture2D(tex9,gl_TexCoord[1].xy) * weight_map[1] +
-					 texture2D(tex11,gl_TexCoord[1].xy) * weight_map[2] +
-					 texture2D(tex13,gl_TexCoord[1].xy) * weight_map[3]).xyz;
-	normalmap *= inv_total_weight;
-	normalmap = UnpackTanNormal(vec4(normalmap,1.0));
-	normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),fade);
+	vec4 normalmap = (texture2D(tex7 ,tc1) * weight_map[0] +
+					  texture2D(tex9 ,tc1) * weight_map[1] +
+					  texture2D(tex11,tc1) * weight_map[2] +
+					  texture2D(tex13,tc1) * weight_map[3]);
+	normalmap.xyz = UnpackTanNormal(normalmap);
+	normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),detail_fade);
 	
-	vec3 normal = to_normal * normalmap;
-	NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
-	diffuse_color = GetDirectColor(NdotL);
+	vec3 ws_normal = ws_from_ns * normalmap.xyz;
+
+	// Get diffuse lighting
+	vec3 shadow_tex = texture2D(tex5,tc0).rgb;
+	float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
+	vec3 diffuse_color = GetDirectColor(NdotL);
 	
-	diffuse_color += LookupCubemapSimple(normal, tex3) *
+	diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
 					 GetAmbientContrib(shadow_tex.g);
 	
-	H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
-	spec = min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0 * NdotL) ;
-	spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
+	// Get spec lighting
+	vec3 ws_H = normalize(normalize(ws_vertex*-1.0) + ws_light);
+	float spec = min(1.0, pow(max(0.0,dot(ws_normal,ws_H)),10.0) * shadow_tex.r);
+	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
-	spec_map_vec = reflect(vertex_pos,normal);
+	vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 	spec_color += LookupCubemapSimple(spec_map_vec, tex2) *
-				  GetAmbientContrib(shadow_tex.g) * 2.0;
-	 
-	vec4 colormap = texture2D(tex6,gl_TexCoord[1].xy) * weight_map[0] +
-				    texture2D(tex8,gl_TexCoord[1].xy) * weight_map[1] +
-				    texture2D(tex10,gl_TexCoord[1].xy) * weight_map[2] +
-				    texture2D(tex12,gl_TexCoord[1].xy) * weight_map[3];
-	colormap *= inv_total_weight;
+				  GetAmbientContrib(shadow_tex.g);
+	
+	// Get tint
+	vec3 average_color = avg_color0 * weight_map[0] +
+					     avg_color1 * weight_map[1] +
+						 avg_color2 * weight_map[2] +
+						 avg_color3 * weight_map[3];
+	vec3 terrain_color = texture2D(tex1,tc0).xyz;
+	vec3 tint = terrain_color / average_color;
 
-	colormap.xyz = mix(colormap.xyz,average_color,fade);
-	
-	color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
-	
+	// Get colormap
+	vec4 colormap = texture2D(tex6,tc1) * weight_map[0] +
+				    texture2D(tex8,tc1) * weight_map[1] +
+				    texture2D(tex10,tc1) * weight_map[2] +
+				    texture2D(tex12,tc1) * weight_map[3];
+	colormap.xyz = mix(colormap.xyz,average_color,detail_fade);
+
+	// Put it all together
+	vec3 color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
 	color *= BalanceAmbient(NdotL);
-	
-	AddHaze(color, rel_pos, tex3);
-
+	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
-
-	//color = weight_map.xyz;
 	
 	gl_FragColor = vec4(color,alpha);
 }

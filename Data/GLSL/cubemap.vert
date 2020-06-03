@@ -3,44 +3,33 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
-//uniform mat4 obj2world;
 uniform vec3 cam_pos;
-uniform float in_light;
+uniform vec3 ws_light;
 
-varying vec3 vertex_pos;
-varying vec3 light_pos;
-varying mat3 tangent_to_world;
-varying vec3 rel_pos;
+varying vec3 ws_vertex;
+varying vec3 tangent_to_world1;
+varying vec3 tangent_to_world2;
+varying vec3 tangent_to_world3;
 
-#include "transposemat3.glsl"
-#include "relativeskypos.glsl"
 #include "pseudoinstance.glsl"
 #include "shadowpack.glsl"
 #include "texturepack.glsl"
 
 void main()
 {	
-	mat4 obj2world = GetPseudoInstanceMat4();
 	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
+	mat3 tan_to_obj = mat3(gl_MultiTexCoord1.xyz, gl_MultiTexCoord2.xyz, gl_Normal);
+	mat3 tangent_to_world = obj2worldmat3 * tan_to_obj;
+	tangent_to_world1 = normalize(tangent_to_world[0]);
+	tangent_to_world2 = normalize(tangent_to_world[1]);
+	tangent_to_world3 = normalize(tangent_to_world[2]);
 
-	vec3 normal = normalize(gl_Normal);
-	vec3 temp_tangent = normalize(gl_MultiTexCoord1.xyz);
-	vec3 bitangent = normalize(gl_MultiTexCoord2.xyz);
+	mat4 obj2world = GetPseudoInstanceMat4();
+	vec4 transformed_vertex = obj2world * gl_Vertex;
+	ws_vertex = transformed_vertex.xyz - cam_pos;
 	
-	tangent_to_world = obj2worldmat3 * mat3(temp_tangent, bitangent, normal);
-	
-	vec3 eyeSpaceVert = (gl_ModelViewMatrix * obj2world * gl_Vertex).xyz;
-	vertex_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * eyeSpaceVert;
-	
-	light_pos = normalize(transposeMat3(gl_NormalMatrix  * tangent_to_world) * gl_LightSource[0].position.xyz);
- 
-	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
-	
-	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;;
-	//gl_Position = vec4((gl_MultiTexCoord0.st - vec2(0.5)) * vec2(2.0),0.0,1.0);
+	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * transformed_vertex;
 	
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
-	
-	gl_FrontColor = gl_Color;
 } 

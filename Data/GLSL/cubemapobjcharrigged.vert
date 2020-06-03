@@ -4,54 +4,32 @@ uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2DShadow tex5;
-uniform mat4 obj2world;
 uniform vec3 cam_pos;
-uniform float in_light;
 uniform mat4 shadowmat;
+uniform vec3 ws_light;
 //uniform mat4 bones[64];
 
-varying vec3 vertex_pos;
-varying vec3 light_pos;
-varying vec3 rel_pos;
-varying vec3 world_light;
+varying vec3 ws_vertex;
 varying vec3 concat_bone1;
 varying vec3 concat_bone2;
-varying vec3 concat_bone3;
-
-#include "transposemat3.glsl"
-#include "relativeskypos.glsl"
 
 void main()
 {	
-	mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
-
+	// Reconstruct bone matrix from tex_coords
 	mat4 concat_bone;
-
 	concat_bone[0] = vec4(gl_MultiTexCoord1[0],gl_MultiTexCoord2[0],gl_MultiTexCoord4[0],0.0);
 	concat_bone[1] = vec4(gl_MultiTexCoord1[1],gl_MultiTexCoord2[1],gl_MultiTexCoord4[1],0.0);
 	concat_bone[2] = vec4(gl_MultiTexCoord1[2],gl_MultiTexCoord2[2],gl_MultiTexCoord4[2],0.0);
 	concat_bone[3] = vec4(gl_MultiTexCoord1[3],gl_MultiTexCoord2[3],gl_MultiTexCoord4[3],1.0);
 	
+	// Set up varyings to pass bone matrix to fragment shader
 	concat_bone1 = concat_bone[0].xyz;
 	concat_bone2 = concat_bone[1].xyz;
-	concat_bone3 = concat_bone[2].xyz;
 
-	vec3 eyeSpaceVert = (gl_ModelViewMatrix * concat_bone * gl_Vertex).xyz;
-	vertex_pos = normalize(transpose_normal_matrix * eyeSpaceVert);
-	
-	mat3 light_to_world = mat3(obj2world[0].xyz,obj2world[1].xyz,obj2world[2].xyz) * transposeMat3(gl_NormalMatrix);	
-
-	world_light = normalize(light_to_world * gl_LightSource[0].position.xyz);
-	world_light.x *= -1.0;
-	world_light.y *= -1.0;
-
-	//mat3 concat_bone_mat3 = mat3(concat_bone[0].xyz,concat_bone[1].xyz,concat_bone[2].xyz);
-
-	light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
-
-	rel_pos = CalcRelativePositionForSky(obj2world * concat_bone, cam_pos);
+	vec4 transformed_vertex = concat_bone * gl_Vertex;
+	ws_vertex = transformed_vertex.xyz - cam_pos;
  
-	gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
+	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
 	gl_TexCoord[0] = gl_MultiTexCoord0;
-	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * concat_bone * gl_Vertex;
+	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
 } 
