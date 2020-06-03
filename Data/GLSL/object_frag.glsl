@@ -70,6 +70,7 @@ void object_frag(){} // This is just here to make sure it gets added to include 
 #define translucency_tex tex5
 #define blood_tex tex6
 #define fur_tex tex7
+#define tint_map tex8
 
 #define UNIFORM_COMMON_TEXTURES \
 uniform sampler2D color_tex; \
@@ -115,6 +116,9 @@ uniform sampler2D blood_tex;
 #define UNIFORM_FUR_TEXTURE \
 uniform sampler2D fur_tex;
 
+#define UNIFORM_TINT_TEXTURE \
+uniform sampler2D tint_map;
+
 #define UNIFORM_TRANSLUCENCY_TEXTURE \
 uniform sampler2D translucency_tex;
 
@@ -140,6 +144,9 @@ uniform int stipple_val;
 
 #define UNIFORM_COLOR_TINT \
 uniform vec3 color_tint;
+
+#define UNIFORM_TINT_PALETTE \
+uniform vec3 tint_palette[5];
 
 #define CALC_BLOODY_WEAPON_SPEC \
 float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(100.0,50.0,(1.0-wetblood)*blood_amount)); \
@@ -216,6 +223,16 @@ vec4 colormap = texture2D(color_tex,gl_TexCoord[0].xy);
 
 #define CALC_MORPHED_COLOR_MAP \
 vec4 colormap = texture2D(color_tex,gl_TexCoord[0].zw);
+
+#define CALC_MORPHED_AND_TINTED_COLOR_MAP \
+vec4 colormap = texture2D(color_tex,gl_TexCoord[0].zw); \
+vec4 tintmap = texture2D(tint_map,gl_TexCoord[0].zw); \
+vec3 tint_mult = mix(vec3(1.0), tint_palette[0], tintmap.r) * \
+                 mix(vec3(1.0), tint_palette[1], tintmap.g) * \
+                 mix(vec3(1.0), tint_palette[2], tintmap.b) * \
+                 mix(vec3(1.0), tint_palette[3], tintmap.a) * \
+                 mix(vec3(1.0), tint_palette[4], 1.0-(tintmap.r+tintmap.g+tintmap.b+tintmap.a)); \
+colormap.xyz *= tint_mult;
 
 #define CALC_BLOOD_ON_COLOR_MAP \
 ApplyBloodToColorMap(colormap, blood_amount, wetblood);

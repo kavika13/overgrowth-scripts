@@ -125,7 +125,7 @@ class JumpInfo {
     }
 
     void UpdateLedgeAnimation() {
-        this_mo.StartCharAnimation("idle");
+        ApplyIdle(5.0f, true);
     }
 
     void UpdateIKTargets() {
