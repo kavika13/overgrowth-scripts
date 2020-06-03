@@ -763,42 +763,7 @@ void Update() {
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
-    
     /*
-    if(GetInputPressed(controller_id, "t")){
-        array<int> @object_ids = GetObjectIDs();
-        int num_objects = object_ids.length();
-        for(int i=0; i<num_objects; ++i){
-            DeleteObjectID(object_ids[i]);
-        }
-        float obj_size_x = 5.0f;
-        float obj_size_y = 3.6f;
-        for(int i=0; i<5; ++i){
-            for(int j=0; j<5; ++j){
-                int obj_id = CreateObject("Data/Objects/Crete/CreteCube.xml");
-                Object @obj = ReadObjectFromID(obj_id);
-                obj.SetTranslation(vec3(i*obj_size_x,100.0f+RangedRandomFloat(-0.4f,0.4f),j*obj_size_y));
-                if(i==2 && j==2){
-                    ScriptParams @params = obj.GetScriptParams();
-                    params.SetString("Name","Center Block");
-                }
-            }
-        }
-        {
-            int obj_id = CreateObject("Data/Objects/IGF_Characters/IGF_TurnerActor.xml");
-            Object @obj = ReadObjectFromID(obj_id);
-            obj.SetPlayer(true); 
-            obj.SetTranslation(vec3(0.0f,110.0f+0.2f,0.0f));
-        }        
-        for(int i=0; i<5; ++i) {
-            if(rand()%2 == 0){
-                int obj_id = CreateObject("Data/Objects/IGF_Characters/IGF_GuardActor.xml");
-                Object @obj = ReadObjectFromID(obj_id);
-                obj.SetTranslation(vec3(20.0f,110.0f+0.2f,0.0f + i*3));
-            }
-        }        
-    }
-    
     array<int> @object_ids = GetObjectIDs();
     int num_objects = object_ids.length();
     for(int i=0; i<num_objects; ++i){
