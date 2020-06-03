@@ -158,6 +158,12 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),1000.0f,flags);
 		SetState(_hit_reaction_state);
 		hit_reaction_anim_set = true;
+		if(!controlled){
+			string sound = "Data/Sounds/voice/torikamal/losefooting.xml";
+			this_mo.PlaySoundGroupVoice(sound, 0.3f);
+			sound = "Data/Sounds/voice/torikamal/land_fall.xml";
+			this_mo.PlaySoundGroupVoice(sound, 0.6f);
+		}
 	}
 	if(type == "attackblocked")
 	{
@@ -206,6 +212,11 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 			block_health = 0.0f;
 		}
 	
+		if(!controlled){
+			string sound = "Data/Sounds/voice/torikamal/facehit.xml";
+			this_mo.PlaySoundGroupVoice(sound,0.0f);
+		}
+
 		block_health -= attack_getter2.GetBlockDamage();
 		block_health = max(0.0f, block_health);
 
@@ -240,6 +251,12 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 				TimedSlowMotion(0.1f,0.7f, 0.05f);
 				string sound = "Data/Sounds/hit/hit_medium.xml";
 				PlaySoundGroup(sound, pos);
+				if(!controlled){
+					string sound = "Data/Sounds/voice/torikamal/groan.xml";
+					this_mo.PlaySoundGroupVoice(sound,0.4f);
+					sound = "Data/Sounds/voice/torikamal/sleeping.xml";
+					this_mo.PlaySoundGroupVoice(sound,1.5f);
+				}
 			} else {
 				string sound = "Data/Sounds/hit/hit_medium.xml";
 				PlaySoundGroup(sound, pos);
@@ -248,6 +265,10 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		} else {
 			string sound = "Data/Sounds/hit/hit_normal.xml";
 			PlaySoundGroup(sound, pos);
+			if(!controlled && rand()%2==0){
+				string sound = "Data/Sounds/voice/torikamal/was_hit_taunt.xml";
+				this_mo.PlaySoundGroupVoice(sound,0.2f);
+			}
 			//MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
 			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
 			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
@@ -264,8 +285,9 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 				this_mo.SetRotationFromFacing(dir);
 			}
 		}
+		return 2;
 	}
-	return 2;
+	return 4;
 }
 
 // Animation events are created by the animation files themselves. For example, when the run animation is played, it calls HandleAnimationEvent( "leftrunstep", left_foot_pos ) when the left foot hits the ground.
@@ -350,6 +372,13 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 		}
 		if((return_val == 2 || return_val ==3) && controlled){
 			camera.AddShake(0.5f);
+		}
+		if((return_val == 2) && !controlled){
+			//if(this_mo.ReadCharacter(target_id).IsKnockedOut() == 0){
+			/*if(rand()%2==0){
+				string sound = "Data/Sounds/voice/torikamal/hit_taunt.xml";
+				this_mo.PlaySoundGroupVoice(sound);
+			}*/
 		}
 		if(return_val != 0 && attack_getter.GetSpecial() == "legcannon"){
 			this_mo.velocity += dir * -10.0f;
@@ -521,6 +550,11 @@ void UpdateGroundAttackControls() {
 		//Print("Starting attack\n");
 		attack_animation_set = false;
 		attacking_with_throw = false;
+		if(!controlled){
+			string sound = "Data/Sounds/voice/torikamal/throwingpunch.xml";
+			this_mo.PlaySoundGroupVoice(sound,0.0f);
+		}
+
 		/*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
 			TimedSlowMotion(0.2f,0.4f, 0.15f);
 		}*/
@@ -671,7 +705,9 @@ void Land(vec3 vel) {
 		if(slide_amount > 0.0f){
 			float slide_vel = slide_amount*length(this_mo.velocity);
 			float vol = min(1.0f,slide_amount * slide_vel * 0.2f);
-			this_mo.MaterialEvent("slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), vol);
+			if(vol > 0.2f){
+				this_mo.MaterialEvent("slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), vol);
+			}
 		}
 		duck_amount = 1.0;
 		target_duck_amount = 1.0;
@@ -1697,12 +1733,13 @@ void update(bool _controlled, int _num_frames) {
 		ApplyCameraControls();
 		return;
 	}
-
-	/*vec3 vel(RangedRandomFloat(-20.0f,20.0f),
+/*
+	vec3 vel(RangedRandomFloat(-20.0f,20.0f),
 			 RangedRandomFloat(0.0f,100.0f),
 			 RangedRandomFloat(-20.0f,20.0f));
-	vel *= 0.05;*/
-	//MakeParticle("Data/Particles/spark.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	vel *= 0.05;
+	vec3 pos = this_mo.GetAvgIKChainTransform("head") * vec3(0.0f,0.0f,0.0f);
+	MakeParticle("Data/Particles/spark.xml",pos, vel)*/;
 	//MakeParticle("Data/Particles/smoke.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
 	//MakeParticle("Data/Particles/heavysand.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
 	//MakeParticle("Data/Particles/heavydirt.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);

@@ -12,6 +12,8 @@ const float _wall_run_friction = 0.1f; // used to let wall running pull the char
 // at the end of this file, JumpInfo is instantiated as jump_info
 // aschar.as uses jump_info to execute code in aircontrol.as
 
+bool left_foot_jump = false;
+bool to_jump_with_left = false;
 
 class JumpInfo {
 	float jetpack_fuel; // the amount of fuel available for acceleration
@@ -78,7 +80,11 @@ class JumpInfo {
 		up_coord += 0.5f;
 		this_mo.SetBlendCoord("up_coord",up_coord);
 		this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
-		this_mo.SetAnimation(character_getter.GetAnimPath("jump"),20.0f);
+		int8 flags = 0;
+		if(left_foot_jump){
+			flags = _ANM_MIRRORED;
+		}
+		this_mo.SetAnimation(character_getter.GetAnimPath("jump"),20.0f,flags);
 		this_mo.SetIKEnabled(false);
 	}
 
@@ -270,6 +276,9 @@ class JumpInfo {
 		if(length(target_velocity)>0.4f){
 			this_mo.SetRotationFromFacing(target_velocity);
 		}
+
+		left_foot_jump = to_jump_with_left;
+		to_jump_with_left = !to_jump_with_left;
 	}
 
 	void StartFall() {

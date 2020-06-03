@@ -10,6 +10,9 @@ uniform float fade;
 uniform mat4 shadowmat;
 
 varying vec3 ws_vertex;
+varying vec3 tangent_to_world1;
+varying vec3 tangent_to_world2;
+varying vec3 tangent_to_world3;
 
 #include "pseudoinstance.glsl"
 #include "lighting.glsl"
@@ -27,8 +30,11 @@ void main()
 	};
 	// Get normal
 	vec4 normalmap = texture2D(tex1,tc0);
-	vec3 os_normal = UnpackObjNormal(normalmap);
-	vec3 ws_normal = normalMatrix * os_normal;
+	vec3 unpacked_normal = UnpackTanNormal(normalmap);
+	vec3 ws_normal = tangent_to_world1 * unpacked_normal.x +
+					 tangent_to_world2 * unpacked_normal.y +
+					 tangent_to_world3 * unpacked_normal.z;
+
 	ws_normal = normalize(ws_normal);
 
 	// Get diffuse lighting
@@ -57,6 +63,8 @@ void main()
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 
 	color *= Exposure();
+
+	//color = unpacked_normal;
 
 	gl_FragColor = vec4(color,1.0);
 }
