@@ -68,7 +68,7 @@ void main()
 #endif
 
 #ifdef DEPTH_ONLY
-    out_color = vec4(0.0, 0.0, 0.0, 1.0);
+    out_color = vec4(0.0, 0.0, 0.0, alpha);
 #else
     // Reconstruct third bone axis
     vec3 concat_bone3 = cross(concat_bone1, concat_bone2);
@@ -104,7 +104,7 @@ void main()
         int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
         uvec4 data = texelFetch(ambient_grid_data, cell_id/4);
         guess = data[cell_id%4];
-        use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, guess);
+        use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, guess);
     } else {
         for(int i=0; i<6; ++i){
             ambient_cube_color[i] = vec3(0.0);
@@ -143,10 +143,21 @@ void main()
     CALC_BLOOD_ON_COLOR_MAP
     CALC_COMBINED_COLOR
     color *= BalanceAmbient(NdotL);
+    color.xyz *= 2.0;
     CALC_RIM_HIGHLIGHT
-    CALC_HAZE
+    //CALC_HAZE    
+    if(!use_amb_cube){
+        vec3 fog_color = textureLod(spec_cubemap,ws_vertex,5.0).xyz;
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));
+    } else {
+        vec3 fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex);
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));        
+    }
+
     CALC_FINAL_UNIVERSAL(alpha);
-    
+
+    //out_color.xyz = LookupCubemapSimpleLod(reflect(ws_vertex, ws_normal), spec_cubemap, 2.0);
+
     //gl_FragColor.xyz = vec3(sin(time)*20+20,0.0,0.0);
     //gl_FragColor.xyz = total;
 

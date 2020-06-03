@@ -1,7 +1,9 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
+
 uniform vec4 primary_light_color;
+
 
 float rand(vec2 co){
     return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);

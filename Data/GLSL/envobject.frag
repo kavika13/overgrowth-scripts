@@ -14,7 +14,14 @@ UNIFORM_EXTRA_AO
 UNIFORM_DETAIL4_TEXTURES
 UNIFORM_AVG_COLOR4
 #endif
+#ifdef TERRAIN
+    uniform sampler2D tex14;
+    #define warp_tex tex14
+#endif
 
+//#define EMISSIVE
+
+#ifndef TERRAIN
 const int kMaxInstances = 100;
 
 uniform InstanceInfo {
@@ -23,6 +30,7 @@ uniform InstanceInfo {
     vec4 color_tint[kMaxInstances];
     vec4 detail_scale[kMaxInstances];
 };
+#endif
 
 uniform usamplerBuffer ambient_grid_data;
 uniform usamplerBuffer ambient_color_buffer;
@@ -38,6 +46,12 @@ uniform int subdivisions_z;
 uniform vec3 cam_pos;
 uniform mat4 shadow_matrix[4];
 
+#ifdef TERRAIN
+in vec3 frag_tangent;
+in float alpha;
+in vec4 frag_tex_coords;
+in vec3 world_vert;
+#else
 #ifdef TANGENT
 in mat3 tan_to_obj;
 #endif
@@ -46,6 +60,7 @@ in vec3 world_vert;
 #ifndef NO_INSTANCE_ID
 flat in int instance_id;
 #endif
+#endif
 
 out vec4 out_color;
 
@@ -53,7 +68,14 @@ out vec4 out_color;
 #define tc0 frag_tex_coords
 
 void main() {   
-    vec4 colormap = texture(tex0,frag_tex_coords);
+    #ifdef TERRAIN
+        vec2 test_offset = (texture(warp_tex,frag_tex_coords.xy*200.0).xy-0.5)*0.001;
+        vec2 base_tex_coords = frag_tex_coords.xy + test_offset;
+        vec2 detail_coords = frag_tex_coords.zw;
+    #else
+        vec2 base_tex_coords = frag_tex_coords;
+    #endif
+    vec4 colormap = texture(tex0, base_tex_coords);
 
 	vec3 ws_vertex;
 	vec4 shadow_coords[4];
@@ -72,35 +94,43 @@ void main() {
         }
     #endif
     #ifdef DEPTH_ONLY
+    #ifdef ALPHA
         out_color = vec4(vec3(1.0), colormap.a);
+    #else
+        out_color = vec4(vec3(1.0), 1.0);
+    #endif
         return;
     #else
     #ifdef NO_INSTANCE_ID
         int instance_id = 0;
     #endif
     #ifdef DETAILMAP4
-        vec4 weight_map = GetWeightMap(weight_tex, frag_tex_coords);
+        vec4 weight_map = GetWeightMap(weight_tex, base_tex_coords);
         float total = weight_map[0] + weight_map[1] + weight_map[2] + weight_map[3];
         weight_map /= total;
         CALC_DETAIL_FADE
-
         // Get normal
         float color_tint_alpha;
         mat3 ws_from_ns;
         {
-            vec4 base_normalmap = texture(tex1,frag_tex_coords);
-            color_tint_alpha = base_normalmap.a;
-
-            #ifdef BASE_TANGENT
-                vec3 base_normal = normalize(tan_to_obj * UnpackTanNormal(base_normalmap));
+            #ifdef TERRAIN
+                vec3 base_normalmap = texture(tex1,base_tex_coords).xyz;
+                vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
+                vec3 base_bitangent = normalize(cross(frag_tangent,base_normal));
+                vec3 base_tangent = normalize(cross(base_normal,base_bitangent));
             #else
-                vec3 base_normal = UnpackObjNormalV3(base_normalmap.xyz);
+                vec4 base_normalmap = texture(tex1,base_tex_coords);
+                color_tint_alpha = base_normalmap.a;
+                #ifdef BASE_TANGENT
+                    vec3 base_normal = normalize(tan_to_obj * UnpackTanNormal(base_normalmap));
+                #else
+                    vec3 base_normal = UnpackObjNormalV3(base_normalmap.xyz);
+                #endif
+                vec3 base_bitangent = normalize(cross(base_normal,tan_to_obj[0]));
+                vec3 base_tangent = normalize(cross(base_bitangent,base_normal));
+                base_bitangent *= 1.0 - step(dot(base_bitangent, tan_to_obj[1]),0.0) * 2.0;
             #endif
 
-            vec3 base_bitangent = normalize(cross(base_normal,tan_to_obj[0]));
-            vec3 base_tangent = normalize(cross(base_bitangent,base_normal));
-            base_bitangent *= 1.0 - step(dot(base_bitangent, tan_to_obj[1]),0.0) * 2.0;
-        
             ws_from_ns = mat3(base_tangent,
                               base_bitangent,
                               base_normal);
@@ -108,18 +138,29 @@ void main() {
 
         vec3 ws_normal;
         {
-            vec4 normalmap = (texture(detail_normal, vec3(frag_tex_coords*detail_scale[instance_id][0], detail_normal_indices.x)) * weight_map[0] +
-                              texture(detail_normal, vec3(frag_tex_coords*detail_scale[instance_id][1], detail_normal_indices.y)) * weight_map[1] +
-                              texture(detail_normal, vec3(frag_tex_coords*detail_scale[instance_id][2], detail_normal_indices.z)) * weight_map[2] +
-                              texture(detail_normal, vec3(frag_tex_coords*detail_scale[instance_id][3], detail_normal_indices.w)) * weight_map[3]);
+            #ifdef TERRAIN
+                vec4 normalmap = (texture(detail_normal, vec3(detail_coords, 0)) * weight_map[0] +
+                                  texture(detail_normal, vec3(detail_coords, 1)) * weight_map[1] +
+                                  texture(detail_normal, vec3(detail_coords, 2)) * weight_map[2] +
+                                  texture(detail_normal, vec3(detail_coords, 3)) * weight_map[3]);
+            #else
+                vec4 normalmap = (texture(detail_normal, vec3(base_tex_coords*detail_scale[instance_id][0], detail_normal_indices.x)) * weight_map[0] +
+                                  texture(detail_normal, vec3(base_tex_coords*detail_scale[instance_id][1], detail_normal_indices.y)) * weight_map[1] +
+                                  texture(detail_normal, vec3(base_tex_coords*detail_scale[instance_id][2], detail_normal_indices.z)) * weight_map[2] +
+                                  texture(detail_normal, vec3(base_tex_coords*detail_scale[instance_id][3], detail_normal_indices.w)) * weight_map[3]);
+            #endif
             normalmap.xyz = UnpackTanNormal(normalmap);
             normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),detail_fade);
 
-            ws_normal = normalize((model_mat[instance_id] * vec4((ws_from_ns * normalmap.xyz),0.0)).xyz);
+            #ifdef TERRAIN
+                ws_normal = ws_from_ns * normalmap.xyz;
+            #else
+                ws_normal = normalize((model_mat[instance_id] * vec4((ws_from_ns * normalmap.xyz),0.0)).xyz);
+            #endif
         }
 
         // Get color
-        vec3 base_color = texture(color_tex,frag_tex_coords).xyz;
+        vec3 base_color = texture(color_tex,base_tex_coords).xyz;
         vec3 tint;
         {
             vec3 average_color = avg_color0 * weight_map[0] +
@@ -130,12 +171,21 @@ void main() {
             tint = base_color / average_color;
         }
 
-        colormap = texture(detail_color, vec3(frag_tex_coords*detail_scale[instance_id][0], detail_color_indices.x)) * weight_map[0] +
-                        texture(detail_color, vec3(frag_tex_coords*detail_scale[instance_id][1], detail_color_indices.y)) * weight_map[1] +
-                        texture(detail_color, vec3(frag_tex_coords*detail_scale[instance_id][2], detail_color_indices.z)) * weight_map[2] +
-                        texture(detail_color, vec3(frag_tex_coords*detail_scale[instance_id][3], detail_color_indices.w)) * weight_map[3];
+        #ifdef TERRAIN
+            colormap = texture(detail_color, vec3(detail_coords, detail_color_indices.x)) * weight_map[0] +
+                       texture(detail_color, vec3(detail_coords, detail_color_indices.y)) * weight_map[1] +
+                       texture(detail_color, vec3(detail_coords, detail_color_indices.z)) * weight_map[2] +
+                       texture(detail_color, vec3(detail_coords, detail_color_indices.w)) * weight_map[3];
+        #else
+            colormap = texture(detail_color, vec3(base_tex_coords*detail_scale[instance_id][0], detail_color_indices.x)) * weight_map[0] +
+                        texture(detail_color, vec3(base_tex_coords*detail_scale[instance_id][1], detail_color_indices.y)) * weight_map[1] +
+                        texture(detail_color, vec3(base_tex_coords*detail_scale[instance_id][2], detail_color_indices.z)) * weight_map[2] +
+                        texture(detail_color, vec3(base_tex_coords*detail_scale[instance_id][3], detail_color_indices.w)) * weight_map[3];
+        #endif
         colormap.xyz = mix(colormap.xyz * tint, base_color, detail_fade);
-        colormap.xyz = mix(colormap.xyz,colormap.xyz*color_tint[instance_id].xyz,color_tint_alpha);
+        #ifndef TERRAIN
+            colormap.xyz = mix(colormap.xyz,colormap.xyz*color_tint[instance_id].xyz,color_tint_alpha);
+        #endif
         colormap.a = max(0.0,colormap.a); 
     #else
         #ifdef TANGENT
@@ -174,7 +224,7 @@ void main() {
         int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
         uvec4 data = texelFetch(ambient_grid_data, cell_id/4);
         guess = data[cell_id%4];
-        use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, guess);
+        use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, guess);
     } else {
         for(int i=0; i<6; ++i){
             ambient_cube_color[i] = vec3(0.0);
@@ -222,7 +272,24 @@ void main() {
                      spec_color * GammaCorrectFloat(spec_amount);
     #endif
     CALC_COLOR_ADJUST
-    CALC_HAZE
+    //CALC_HAZE
+    //AddHaze(color, ws_vertex, spec_cubemap);
+    if(!use_amb_cube){
+        vec3 fog_color = textureLod(spec_cubemap,ws_vertex,5.0).xyz;
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));
+    } else {
+        vec3 fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex);
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));        
+    }
+
+    #ifndef TERRAIN
+    //#ifdef EMISSIVE
+    if(color_tint[instance_id].r > 1.0){
+        color.xyz = colormap.xyz * color_tint[instance_id].xyz;
+    }
+    //#endif
+    #endif
+
     #ifdef ALPHA
         out_color = vec4(color,colormap.a);
     #else

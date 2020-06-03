@@ -119,7 +119,7 @@ class CampaignMenuData {
         case kLugaruLevelList:
             DrawTextAtlas("Data/Fonts/edosz.ttf", 68, kSmallLowercase, "Select Level", 
                           int(GetScreenWidth() * 0.5 - 400), int(GetScreenHeight() * 0.5 - 238), vec4(vec3(1.0f), 0.7f));
-            for(int i=0; i<23; ++i){
+            for(int i=0; i<=23; ++i){
                 string str = ""+(i+1);
                 if(Button(i, str)){
                     switch(i){

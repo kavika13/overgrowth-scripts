@@ -62,7 +62,15 @@ void main(void)
     float temp_wp = white_point;
     float temp_bp = black_point;
     float contrast = 1.0 / (temp_wp - temp_bp);
-    color = max(vec4(0.0), (texture(tex0, tex) - vec4(temp_bp)) * contrast);    
+    vec4 src_color = texture(tex0, tex);
+    for(int i=0; i<3; ++i){
+        src_color[i] = pow(src_color[i], 1.0/2.2);
+    }
+    color.xyz = max(vec3(0.0), (src_color.xyz - vec3(temp_bp)) * contrast);  
+    for(int i=0; i<3; ++i){
+        color[i] = pow(color[i], 2.2);
+    }
+    color.a = src_color.a;   
 #elif defined(ADD)
     color = texture(tex1, tex) + mix(texture(tex0, tex) , texture(tex2, tex), 0.75);
     vec3 overbright = max(vec3(0.0), color.xyz - vec3(1.0));

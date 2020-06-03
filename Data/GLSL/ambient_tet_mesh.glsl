@@ -59,13 +59,14 @@ vec4 GetBarycentricCoordinate( vec3 v0_,
 
 const uint NULL_TET = 4294967295u;
 
-bool GetAmbientCube(in vec3 pos, int num_light_probes, in usamplerBuffer tet_buf, out vec3 ambient_cube_color[6], uint guess) {
-    if(num_light_probes == 0){
+bool GetAmbientCube(in vec3 pos, int num_tetrahedra, in usamplerBuffer tet_buf, out vec3 ambient_cube_color[6], uint guess) {
+    if(num_tetrahedra == 0){
         return false;
     }
+    uint last_guess = guess;
     uint tet_guess = guess;
     int num_guess = 0;
-    const int kMaxGuess = 20;
+    const int kMaxGuess = 1000;
     while(tet_guess != NULL_TET && num_guess < kMaxGuess){
         ++num_guess;
         int index = int(tet_guess)*8;
@@ -102,21 +103,35 @@ bool GetAmbientCube(in vec3 pos, int num_light_probes, in usamplerBuffer tet_buf
                                      pos);
 
         uvec4 neighbors = texelFetch(tet_buf, index+2);     
-        if(bary_coords[0] < 0.0){
-            tet_guess = neighbors[0];     
-            continue; 
-        } 
-        if(bary_coords[1] < 0.0){
-            tet_guess = neighbors[1];     
-            continue; 
-        } 
-        if(bary_coords[2] < 0.0){
-            tet_guess = neighbors[2];     
-            continue; 
-        } 
-        if(bary_coords[3] < 0.0){
-            tet_guess = neighbors[3];     
-            continue; 
+        if(num_guess < kMaxGuess){
+            if(bary_coords[0] < 0.0){
+                if(last_guess != neighbors[0]){
+                    last_guess = tet_guess;
+                    tet_guess = neighbors[0];     
+                    continue; 
+                }
+            } 
+            if(bary_coords[1] < 0.0){
+                if(last_guess != neighbors[1]){
+                    last_guess = tet_guess;
+                    tet_guess = neighbors[1];     
+                    continue; 
+                }
+            } 
+            if(bary_coords[2] < 0.0){
+                if(last_guess != neighbors[2]){
+                    last_guess = tet_guess;
+                    tet_guess = neighbors[2];     
+                    continue; 
+                }
+            } 
+            if(bary_coords[3] < 0.0){
+                if(last_guess != neighbors[3]){
+                    last_guess = tet_guess;
+                    tet_guess = neighbors[3];     
+                    continue; 
+                }
+            }
         }
         if(true){
             // Reduce/eliminate contribution from probes inside of walls
@@ -150,7 +165,7 @@ bool GetAmbientCube(in vec3 pos, int num_light_probes, in usamplerBuffer tet_buf
                         uint array_index = offset/128u;
                         uint channel_index = (offset % 128u) / 32u;
                         uint val = (color[array_index][channel_index] >> (24u-(offset%32u))) % 256u;
-                        ambient_cube_color[face][channel] += float(val) / 255.0 * bary_coords[point];
+                        ambient_cube_color[face][channel] += float(val) / 255.0 * bary_coords[point] * 4.0;
                         offset += 8u;
                     }
                 }
