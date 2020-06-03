@@ -30,6 +30,6 @@ void main()
 	color += contrib*contrib.a*0.006;
 	
 	color /= total_alpha;
-	
+
 	gl_FragColor = color;
 }

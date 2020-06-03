@@ -87,6 +87,7 @@ void HandleAnimationEvent(string event, vec3 pos){
 	if(event == "leftstep" || event == "rightstep"){
 		this.MaterialEvent(event, world_pos);
 	}
+	//DebugDrawText(world_pos, event, _persistent);
 }
 
 vec3 GetTargetVelocity() {
@@ -209,6 +210,7 @@ void StartJump(vec3 target_velocity) {
 
 	flipped = false;
 	jump_launch = 1.0f;
+	flip_angle = 1.0f;
 
 	string sound = "Data/Sounds/Impact-Grass3.wav";
 	PlaySound(sound, this.position );
@@ -253,16 +255,14 @@ void HandleGroundMovementControls() {
 			if(flip_angle > 0.5f){
 				flip_angle -= 1.0f;
 			}
+			flip_vel = 0.0f;
+
 			roll_direction = normalize(this.GetFacing());
 			if(length_squared(target_velocity)>0.2f){
 				roll_direction = normalize(target_velocity);
 			}
 			vec3 up = vec3(0.0f,1.0f,0.0f);
 			flip_axis = normalize(cross(up,roll_direction));
-
-			if(abs(flip_vel)<0.1f){
-				flip_vel = -2.0f;
-			}
 
 			feet_moving = false;
 		}
@@ -281,7 +281,7 @@ void HandleGroundMovementControls() {
 	}
 
 	if(pre_jump){
-		if(pre_jump_time <= 0.0f){
+		if(pre_jump_time <= 0.0f && !flipping){
 			StartJump(target_velocity);
 		} else {
 			pre_jump_time -= time_step;
@@ -404,11 +404,21 @@ void HandleRoll() {
 								adjusted_vel * _roll_ground_speed,
 								0.05f);
 		}
+
+		target_flip_angle = flip_progress;
+		if(flip_progress < 0.8){
+			target_duck_amount = 1.0;
+		}
+		if(flip_progress < 0.95f){
+			duck_vel = 2.5f;
+		}
+	} else {
+		target_flip_angle = 1.0f;
 	}
 
-	flip_vel += (target_flip_angle - flip_angle) * time_step * _roll_accel;
-	flip_angle += flip_vel * time_step;
-	flip_vel *= _flip_vel_inertia;
+	float old_flip_angle = flip_angle;
+	flip_angle = mix(flip_angle, target_flip_angle, 0.2f);
+	flip_vel = (flip_angle - old_flip_angle)/time_step;
 
 	this.SetFlip(flip_axis, flip_angle*6.2832, flip_vel*6.2832);
 }
@@ -417,7 +427,7 @@ void HandleRoll() {
 void HandleMovementControls() {
 	if(on_ground){ 
 		target_tilt = vec3(0.0f);
-		if(!flipping){
+		if(!flipping || flip_progress > 0.7f){
 			HandleGroundControls();
 		}
 		HandleRoll();
@@ -448,9 +458,7 @@ void SetOnGround(bool _on_ground){
 
 void Land(vec3 vel) {
 	if(abs(flip_angle - 0.5f)<0.3f){
-		limp = true;
-		this.Ragdoll();
-		recovery_time = _ragdoll_recovery_time;
+		GoLimp();
 	}
 
 	if(!limp){
@@ -489,6 +497,10 @@ void HandleGroundCollision() {
 		this.position = sphere_col.adjusted_position-vec3(0,0.3,0);
 		this.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
 
+		if(sphere_col.NumContacts() != 0 && flipping && flip_progress > 0.1f){
+			GoLimp();	
+		}
+
 		//DebugDrawWireSphere(this.position, _leg_sphere_size, vec3(1,0,0), _delete_on_update);
 	
 		vec3 upper_pos = this.position+vec3(0,0.1,0);
@@ -506,12 +518,21 @@ void HandleGroundCollision() {
 				ground_normal = normalize(ground_normal);
 			}
 			this.position = sphere_col.position;
+
+			
+			if(flipping && flip_progress > 0.4f &&
+			   dot(this.GetFacing(),ground_normal) < -0.5f){
+				GoLimp();	
+			}
 		}
 		this.position.y += offset;
 	} else {
 		this.GetSlidingSphereCollision(this.position, _leg_sphere_size);
 		this.position = sphere_col.adjusted_position;
 		this.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
+		if(sphere_col.NumContacts() != 0 && flipping){
+			GoLimp();	
+		}
 	}
 
 //	DebugDrawWireSphere(this.position, _leg_sphere_size, vec3(1.0), _delete_on_update);
@@ -542,6 +563,12 @@ void HandleGroundCollision() {
 	//if(no_collide_time > _off_ground_delay) {
 	//	on_ground = false;
 	//}
+}
+
+void GoLimp() {
+	limp = true;
+	this.Ragdoll();
+	recovery_time = _ragdoll_recovery_time;
 }
 
 void update() {
@@ -599,9 +626,7 @@ void update() {
 	}
 
 	if(GetInputDown("z")){		
-		limp = true;
-		this.Ragdoll();
-		recovery_time = _ragdoll_recovery_time;
+		GoLimp();
 	} else {
 		if(limp == true && recovery_time < 0.0f){
 			this.UnRagdoll();
@@ -628,12 +653,14 @@ void HandleAnimation() {
 		this.SetBlendCoord("tall_coord",1.0f-duck_amount);
 		
 		if(on_ground){
-			if(flipping){
-				this.SetAnimation("Data/Animations/roll.xml");
-				com_offset = mix(vec3(0.0f,-0.5f,0.0f),com_offset,0.9f);
+			if(flipping && flip_progress < 0.8f){
+				this.SetAnimation("Data/Animations/roll.xml",7.0f);
+				float forwards_rollness = 1.0f-abs(dot(flip_axis,this.GetFacing()));
+				this.SetBlendCoord("forward_roll_coord",forwards_rollness);
+				//com_offset = mix(vec3(0.0f,-0.5f,0.0f),com_offset,0.9f);
 				this.SetIKEnabled(false);
 			} else {
-				com_offset *= 0.9f;
+				//com_offset *= 0.9f;
 				this.SetIKEnabled(true);
 				if(speed > _walk_threshold && feet_moving){
 					this.SetRotationFromFacing(flat_velocity);

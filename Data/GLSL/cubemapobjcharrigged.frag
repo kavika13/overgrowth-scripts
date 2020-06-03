@@ -28,9 +28,10 @@ void main()
 						       concat_bone3 * unrigged_normal.z);
 
 	// Get shadowed amount
-	vec3 shadow_tex = vec3(1.0);
-	shadow_tex.r = shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
-	
+	vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).xyz;
+	shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+	shadow_tex.g = 1.0;
+
 	// Get diffuse lighting
 	float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
 	
