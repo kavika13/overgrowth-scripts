@@ -13,6 +13,8 @@ vec3 target_tilt(0.0f);
 const float _tilt_inertia = 0.9f;
 
 const float _off_ground_delay = 0.1f;
+float jump_launch = 0.0f;
+float _jump_launch_decay = 2.0f;
 const float _jump_vel = 5.0f;
 const float _jump_fuel = 5.0f;
 const float _jump_fuel_burn = 10.0f;
@@ -23,10 +25,14 @@ const float _bumper_size = 0.5f;
 const float _jump_threshold_time = 0.1f;
 float air_time = 0.0f;
 
+bool pre_jump = false;
+float pre_jump_time;
+const float _pre_jump_delay = 0.04f;
+
 const float _run_speed = 8.0f;
 float max_speed = _run_speed;
 
-const float _tilt_transition_vel = 4.0f;
+const float _tilt_transition_vel = 8.0f;
 
 vec3 ground_normal(0,1,0);
 
@@ -43,6 +49,33 @@ float target_duck_amount = 0.0f;
 float duck_vel = 0.0f;
 const float _duck_accel = 120.0f;
 const float _duck_vel_inertia = 0.89f;
+
+float flip_angle = 1.0f;
+vec3 target_flip_axis;
+vec3 flip_axis;
+float flip_progress;
+bool flipping;
+bool flipped;
+const float _flip_speed = 2.5f; 
+float flip_vel;
+const float _flip_accel = 50.0f;
+const float _flip_vel_inertia = 0.89f;
+float target_flip_angle = 1.0f;
+float old_target_flip_angle = 0.0f;
+float target_flip_tuck = 0.0f;
+float flip_tuck = 0.0f;
+const float _flip_tuck_inertia = 0.7f;
+const float _flip_axis_inertia = 0.9f;
+
+const float _roll_speed = 2.0f;
+const float _roll_accel = 50.0f;
+const float _ragdoll_recovery_time = 1.0f;
+const float _roll_ground_speed = 12.0f;
+float recovery_time;
+vec3 roll_direction;
+
+vec3 com_offset;
+vec3 com_offset_vel;
 
 void EndAttack() {
 	attacking = false;
@@ -89,12 +122,42 @@ vec3 GetTargetVelocity() {
 void HandleAirControls() {
 	vec3 target_velocity = GetTargetVelocity();
 	
+	/*DebugDrawLine(this.position,
+				  this.position + this.GetFacing(),
+				  vec3(1.0f),
+				  _delete_on_update);
+*/
 	if(GetInputDown("jump")){
 		if(jetpack_fuel > 0.0 && this.velocity.y > 0.0) {
 			jetpack_fuel -= time_step * _jump_fuel_burn;
 			this.velocity.y += time_step * _jump_fuel_burn;
 		}
 	}
+
+	if(GetInputPressed("crouch")){
+		if(!flipping) {
+			flipping = true;
+			flip_progress = 0.0f;
+			flip_angle = flip_angle - floor(flip_angle);
+			if(flip_angle > 0.5f){
+				flip_angle -= 1.0f;
+			}
+			vec3 flip_dir = normalize(this.GetFacing());
+			if(length_squared(target_velocity)>0.2f){
+				flip_dir = normalize(target_velocity);
+			}
+			vec3 up = vec3(0.0f,1.0f,0.0f);
+			target_flip_axis = normalize(cross(up,flip_dir));
+
+			if(abs(flip_vel)<0.1f){
+				flip_axis = target_flip_axis;
+				flip_vel = -2.0f;
+			}
+		}
+	}
+
+	jump_launch -= _jump_launch_decay * time_step;
+	jump_launch = max(0.0f, jump_launch);
 	
 	this.velocity += time_step * target_velocity * _air_control;
 }
@@ -144,12 +207,17 @@ void StartJump(vec3 target_velocity) {
 
 	run_time = 0.0f;
 
+	flipped = false;
+	jump_launch = 1.0f;
+
 	string sound = "Data/Sounds/Impact-Grass3.wav";
 	PlaySound(sound, this.position );
 
 	if(length(target_velocity)>0.4f){
 		this.SetRotationFromFacing(target_velocity);
 	}
+
+	pre_jump = false;
 }
 
 vec3 WorldToGroundSpace(vec3 world_space_vec){
@@ -177,8 +245,47 @@ void HandleGroundMovementControls() {
 		target_duck_amount = 0.0f;
 	}
 	
-	if(GetInputDown("jump") && on_ground_time > _jump_threshold_time){
-		StartJump(target_velocity);
+	if(GetInputPressed("crouch") && length_squared(target_velocity)>0.2f){
+		if(!flipping) {
+			flipping = true;
+			flip_progress = 0.0f;
+			flip_angle = flip_angle - floor(flip_angle);
+			if(flip_angle > 0.5f){
+				flip_angle -= 1.0f;
+			}
+			roll_direction = normalize(this.GetFacing());
+			if(length_squared(target_velocity)>0.2f){
+				roll_direction = normalize(target_velocity);
+			}
+			vec3 up = vec3(0.0f,1.0f,0.0f);
+			flip_axis = normalize(cross(up,roll_direction));
+
+			if(abs(flip_vel)<0.1f){
+				flip_vel = -2.0f;
+			}
+
+			feet_moving = false;
+		}
+	}
+
+	if(GetInputDown("jump") && 
+	   on_ground_time > _jump_threshold_time && 
+	   !pre_jump)
+	{
+		pre_jump = true;
+		pre_jump_time = _pre_jump_delay;
+		//duck_amount = max(duck_amount,0.5f);
+		duck_vel = 30.0f;
+		vec3 target_jump_vel = GetJumpVelocity(target_velocity);
+		target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
+	}
+
+	if(pre_jump){
+		if(pre_jump_time <= 0.0f){
+			StartJump(target_velocity);
+		} else {
+			pre_jump_time -= time_step;
+		}
 	}
 
 	/*
@@ -227,18 +334,102 @@ void HandleGroundControls() {
 	HandleGroundMovementControls();
 }
 
+const float _flip_facing_inertia = 0.08f;
+
+void HandleFlip() {
+	if(flipping){
+		flip_progress += time_step * _flip_speed;
+		if(flip_progress > 0.5f){
+			flipped = true;
+		}
+		if(flip_progress > 1.0f){
+			flipping = false;
+		}
+	}
+	if(flipping){
+		vec3 facing = this.GetFacing();
+		vec3 target_facing = camera.GetFlatFacing();
+
+		facing = normalize(facing + target_facing * _flip_facing_inertia);
+
+		if(dot(facing, target_facing) < -0.8f){
+			vec3 break_axis = cross(vec3(0.0f,1.0f,0.0f),facing);
+			if(dot(break_axis,target_facing)<0.0f){
+				break_axis *= -1.0f;
+			}
+			facing = normalize(facing + break_axis * _flip_facing_inertia);
+		}
+
+		this.SetRotationFromFacing(facing);
+	}
+	target_flip_tuck = min(1.0f,max(0.0f,flip_vel));
+	if(flipping){
+		target_flip_tuck = max(sin(flip_progress*3.1417),target_flip_tuck);
+	}
+	flip_tuck = mix(target_flip_tuck,flip_tuck,_flip_tuck_inertia);
+	
+	flip_vel += (target_flip_angle - flip_angle) * time_step * _flip_accel;
+	flip_angle += flip_vel * time_step;
+	flip_vel *= _flip_vel_inertia;
+
+	flip_axis = normalize(flip_axis * _flip_axis_inertia +
+						  target_flip_axis * (1.0f - _flip_axis_inertia));
+	
+	if(dot(flip_axis, target_flip_axis) < -0.8f){
+		vec3 break_axis = cross(vec3(0.0f,1.0f,0.0f),flip_axis);
+		if(dot(break_axis,target_flip_axis)<0.0f){
+			break_axis *= -1.0f;
+		}
+		flip_axis = normalize(flip_axis * _flip_axis_inertia +
+						  break_axis * (1.0f - _flip_axis_inertia));
+	
+	}
+
+	this.SetFlip(flip_axis, flip_angle*6.2832, flip_vel*6.2832);
+}
+
+void HandleRoll() {
+	if(flipping){
+		flip_progress += time_step * _roll_speed;
+		if(flip_progress > 0.5f){
+			flipped = true;
+		}
+		if(flip_progress > 1.0f){
+			flipping = false;
+		}
+
+		if(flip_progress < 0.95f){
+			vec3 adjusted_vel = WorldToGroundSpace(roll_direction);
+			this.velocity = mix(this.velocity, 
+								adjusted_vel * _roll_ground_speed,
+								0.05f);
+		}
+	}
+
+	flip_vel += (target_flip_angle - flip_angle) * time_step * _roll_accel;
+	flip_angle += flip_vel * time_step;
+	flip_vel *= _flip_vel_inertia;
+
+	this.SetFlip(flip_axis, flip_angle*6.2832, flip_vel*6.2832);
+}
+
+
 void HandleMovementControls() {
 	if(on_ground){ 
-		HandleGroundControls();
 		target_tilt = vec3(0.0f);
+		if(!flipping){
+			HandleGroundControls();
+		}
+		HandleRoll();
 	} else {
 		HandleAirControls();
+		HandleFlip();
 		
 		target_tilt = vec3(this.velocity.x, 0, this.velocity.z)*2.0f;
-		if(abs(this.velocity.y)<_tilt_transition_vel){
+		if(abs(this.velocity.y)<_tilt_transition_vel && !flipped){
 			target_tilt *= pow(abs(this.velocity.y)/_tilt_transition_vel,0.5);
 		}
-		if(this.velocity.y<0.0f){
+		if(this.velocity.y<0.0f || flipped){
 			target_tilt *= -1.0f;
 		}
 	}
@@ -256,17 +447,35 @@ void SetOnGround(bool _on_ground){
 }
 
 void Land(vec3 vel) {
-	string sound = "Data/Sounds/Impact-Grass2.wav";
-	PlaySound(sound, this.position);
+	if(abs(flip_angle - 0.5f)<0.3f){
+		limp = true;
+		this.Ragdoll();
+		recovery_time = _ragdoll_recovery_time;
+	}
+
+	if(!limp){
+		string sound = "Data/Sounds/Impact-Grass2.wav";
+		PlaySound(sound, this.position);
+	}
 	SetOnGround(true);
 
+	
+	float land_speed = 10.0f;//min(30.0f,max(10.0f, -vel.y));
+	this.SetAnimation("Data/Animations/idle.xml",land_speed);
+	
 	duck_amount = 1.0;
 	target_duck_amount = 1.0;
-	duck_vel = 1.0;
+	duck_vel = land_speed * 0.3f;
+	if(GetInputDown("crouch")){
+		duck_vel = max(6.0f,duck_vel);
+	}
 
-	float land_speed = min(30.0f,max(10.0f, -vel.y));
-	this.SetAnimation("Data/Animations/idle.xml",land_speed);
 	feet_moving = false;
+
+	flip_angle = 1.0f;
+	flip_vel = 0.0f;
+	this.SetFlip(flip_axis, flip_angle*6.2832, 0.0f);
+	flipping = false;
 }
 
 const float offset = 0.05;
@@ -360,7 +569,7 @@ void update() {
 		air_time += time_step;
 	}
 
-	float whoosh_amount = length(this.velocity)*0.05f;
+	float whoosh_amount = length(this.velocity)*0.05f+abs(flip_vel)*0.2f;
 	float whoosh_pitch = min(2.0f,whoosh_amount*0.5f + 0.5f);
 	if(!on_ground){
 		whoosh_amount *= 1.5f;
@@ -384,17 +593,22 @@ void update() {
 			TimedSlowMotion(0.1f,0.7f);
 		}
 	}
-	
+
+	if(limp == true){
+		recovery_time -= time_step;
+	}
+
 	if(GetInputDown("z")){		
 		limp = true;
 		this.Ragdoll();
+		recovery_time = _ragdoll_recovery_time;
 	} else {
-		if(limp == true){
+		if(limp == true && recovery_time < 0.0f){
 			this.UnRagdoll();
 			this.GetSlidingSphereCollision(this.position, _leg_sphere_size);
 			this.position = sphere_col.adjusted_position;
+			limp = false;
 		}
-		limp = false;
 	}
 	
 	HandleGroundCollision();
@@ -414,20 +628,33 @@ void HandleAnimation() {
 		this.SetBlendCoord("tall_coord",1.0f-duck_amount);
 		
 		if(on_ground){
-			this.SetRotationFromFacing(flat_velocity);
-			if(speed > _walk_threshold && feet_moving){
-				this.SetAnimation("Data/Animations/movement.xml");
-				this.SetBlendCoord("speed_coord",speed);
-				this.SetBlendCoord("ground_speed",speed);
+			if(flipping){
+				this.SetAnimation("Data/Animations/roll.xml");
+				com_offset = mix(vec3(0.0f,-0.5f,0.0f),com_offset,0.9f);
+				this.SetIKEnabled(false);
 			} else {
-				this.SetAnimation("Data/Animations/idle.xml");
+				com_offset *= 0.9f;
+				this.SetIKEnabled(true);
+				if(speed > _walk_threshold && feet_moving){
+					this.SetRotationFromFacing(flat_velocity);
+					this.SetAnimation("Data/Animations/movement.xml");
+					this.SetBlendCoord("speed_coord",speed);
+					this.SetBlendCoord("ground_speed",speed);
+				} else {
+					this.SetAnimation("Data/Animations/idle.xml");
+					this.SetIKEnabled(true);
+				}
 			}
-			this.SetIKEnabled(true);
 		} else {
-			this.SetBlendCoord("up_coord",this.velocity.y*0.2f + 0.5f);
-			this.SetAnimation("Data/Animations/jump.xml", 20.0f);
+			float up_coord = this.velocity.y/_jump_vel + 0.5f;
+			up_coord = min(1.5f,up_coord)+jump_launch*0.5f;
+			this.SetBlendCoord("up_coord",up_coord);
+			this.SetBlendCoord("tuck_coord",flip_tuck);
+			this.SetAnimation("Data/Animations/jump.xml",20.0f);
 			this.SetIKEnabled(false);
 		}
+
+		this.SetCOMOffset(com_offset, com_offset_vel);
 	}
 }
 

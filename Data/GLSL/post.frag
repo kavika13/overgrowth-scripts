@@ -12,5 +12,7 @@ void main()
 	float far = 1000.0;
 	float distance = (near) / (far - depth * (far - near));*/
 
+	//color_map = vec3(dot(gl_LightSource[0].position.xyz,vec3(0,0,-1)));
+
 	gl_FragColor = vec4(color_map,1.0);
 }
