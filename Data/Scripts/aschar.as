@@ -3,6 +3,8 @@
 bool controlled = false; //True if controlled by a human player
 int num_frames; //How many timesteps passed since the last update
 
+enum AIEvent{_ragdolled, _activeblocked};
+
 vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz, float max_vert, float arc){
     vec3 rel_vec = end - start;
     vec3 rel_vec_flat = vec3(rel_vec.x, 0.0f, rel_vec.z);
@@ -46,9 +48,19 @@ void Collided(float impulse){
 }
 
 float block_stunned = 0.0f;
+int block_stunned_by_id = -1;
+
 int IsBlockStunned() {
+    /*if(controlled){
+        Print("Block stunned: "+block_stunned+"\n");
+    }*/
     return (block_stunned > 0.0f)?1:0;
 }
+
+int BlockStunnedBy() {
+    return block_stunned_by_id;
+}
+
 
 void MouseControlJumpTest() {
     vec3 start = camera.GetPos();
@@ -151,9 +163,13 @@ const float _spurt_delay_amount = 6.283185/_spurt_frequency;
 
 void Update(bool _controlled, int _num_frames) {
     /*DebugDrawWireSphere(this_mo.position,
-                        0.1f,
+                        _leg_sphere_size,
                         vec3(1.0f),
-                        _delete_on_update);*/
+                        _delete_on_update);
+    DebugDrawLine(this_mo.position,
+                  this_mo.position + this_mo.GetFacing(),
+                  vec3(1.0f),
+                  _delete_on_update);*/
     if(in_animation){        
         if(controlled){
             UpdateAirWhooshSound();
@@ -206,8 +222,9 @@ void Update(bool _controlled, int _num_frames) {
     }
 
     if(on_ground){
+        vec3 offset = this_mo.velocity - old_slide_vel;
         old_slide_vel = this_mo.velocity;
-        this_mo.velocity = new_slide_vel;
+        this_mo.velocity = new_slide_vel + offset;
     }
 
     controlled = _controlled;
@@ -236,6 +253,7 @@ void Update(bool _controlled, int _num_frames) {
         friction = max(0.01f, friction);
         friction = pow(mix(pow(friction,0.01), pow(new_friction,0.01), 0.05f),100);
         this_mo.velocity = mix(this_mo.velocity, old_slide_vel, pow(1.0f-friction, num_frames));
+        old_slide_vel = this_mo.velocity;
     }
 }
 
@@ -392,14 +410,26 @@ void HandleSpecialKeyPresses() {
             //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
             //this_mo.velocity = vec3(0.0f);
             //this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
-            int8 flags = _ANM_MOBILE;
+            /*int8 flags = _ANM_MOBILE;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
-            this_mo.StartAnimation("Data/Animations/r_throw.anm",20.0f,flags);
-            //mirrored_stance = !mirrored_stance;
+            int rand_val = rand()%4;
+            if(rand_val == 0){
+                this_mo.StartAnimation("Data/Animations/r_frontkick.xml",20.0f,flags);
+                mirrored_stance = !mirrored_stance;
+            } else if(rand_val == 1){
+                this_mo.StartAnimation("Data/Animations/r_thrustpunch.xml",20.0f,flags);
+                mirrored_stance = !mirrored_stance;
+            } else if(rand_val == 2){
+                this_mo.StartAnimation("Data/Animations/r_kneestrike.xml",20.0f,flags);
+                mirrored_stance = !mirrored_stance;
+            } else if(rand_val == 3){
+                this_mo.StartAnimation("Data/Animations/r_throw.anm",20.0f,flags);
+            }
+            this_mo.SetBlendCoord("attack_height_coord",RangedRandomFloat(-0.8,0.8));
             in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");
+            this_mo.SetAnimationCallback("void EndAnim()");*/
         }
         if(GetInputPressed("h")){
             context.PrintGlobalVars();
@@ -633,7 +663,7 @@ int active_block_flinch_layer = -1;
 void UpdateActiveBlock() {
     block_stunned = max(0.0f, block_stunned - time_step * num_frames);
     UpdateActiveBlockMechanics();
-    if(active_blocking && state == _movement_state){
+    if(active_blocking){
         if(active_block_flinch_layer == -1){
             active_block_flinch_layer = 
                 this_mo.AddLayer("Data/Animations/r_activeblockflinch.anm",10.0f,0);
@@ -650,7 +680,7 @@ float active_block_duration = 0.0f; // How much longer can the active block last
 float active_block_recharge = 0.0f; // How long until the active block recharges
 
 void UpdateActiveBlockMechanics() {
-    if(WantsToStartActiveBlock()){
+    if(WantsToStartActiveBlock() && state == _movement_state && on_ground && !flip_info.IsFlipping()){
         if(active_block_recharge <= 0.0f){
             active_blocking = true;
             active_block_duration = 0.2f;
@@ -769,6 +799,9 @@ void SetActiveRagdollFallPose() {
     float penetration_ratio = penetration / danger_radius;
     float protect_amount = min(1.0f,max(0.0f,penetration_ratio*4.0f-2.0));
     this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount); // How much to try to curl up into a ball
+    /*if(controlled){
+        Print("Protect amount: "+protect_amount+"\n");
+    }*/
 
     mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
     vec3 torso_vec = torso_transform.GetColumn(1);
@@ -821,7 +854,7 @@ void HandleRagdollRecovery() {
             WakeUp(_wake_fall);
         }
     } else {
-        if(WantsToRollFromRagdoll()){
+        if(WantsToRollFromRagdoll() && ragdoll_time > 0.2f){
             bool can_roll = CanRoll();
             if(!can_roll){
                 WakeUp(_wake_flip);
@@ -881,8 +914,10 @@ void SetRagdollType(int type) {
 }
 
 void Ragdoll(int type){
+    HandleAIEvent(_ragdolled);
     const float _ragdoll_recovery_time = 1.0f;
     recovery_time = _ragdoll_recovery_time;
+    ragdoll_time = 0.0f;
     
     if(state == _ragdoll_state){
         return;
@@ -897,29 +932,12 @@ void Ragdoll(int type){
     frozen = false;
     ragdoll_type = _RGDL_NO_TYPE;
     SetRagdollType(type);
+    in_animation = false;
 }
 
 void GoLimp() {
     Ragdoll(_RGDL_FALL);
 }
-
-void NotifySound(int created_by_id, vec3 pos) {
-    if(!listening){
-        return;
-    }
-    if(target_id == -1){
-        bool same_team = false;
-        character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(ReadCharacterID(created_by_id).char_path) == 1){
-            same_team = true;
-        }
-        if(!same_team){
-            target_id = created_by_id;
-            last_seen_target_position = pos;
-        }
-    }
-}
-
 
 // WasBlocked() is executed if this character's attack was blocked by a different character
 void WasBlocked() {
@@ -927,7 +945,8 @@ void WasBlocked() {
     if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
         mirrored_stance = !mirrored_stance;
     }
-    block_stunned = 0.4f;
+    block_stunned = 0.5f;
+    block_stunned_by_id = target_id;
 }
 
 const int _miss = 0;
@@ -954,12 +973,19 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id)
     }
 }
 
+void PrintVec3(vec3 vec){
+    Print("("+vec.x + ", " + vec.y + ", " + vec.z + ")");
+
+}
+
 int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(state == _ragdoll_state){
         return _miss;
     }
-    this_mo.position = pos;
+    MovementObject@ attacker = ReadCharacterID(attacker_id);
+    this_mo.position = attacker.position;
     this_mo.SetRotationFromFacing(dir);
+    this_mo.velocity = attacker.velocity;
     int8 flags = _ANM_MOBILE;
     if(attack_getter2.GetMirrored() == 0){
         flags = flags | _ANM_MIRRORED;
@@ -967,6 +993,7 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),10.0f,flags);
     SetState(_hit_reaction_state);
     hit_reaction_anim_set = true;
+    flip_info.EndFlip();
     if(!controlled){
         this_mo.PlaySoundGroupVoice("surprise", 0.3f);
         this_mo.PlaySoundGroupVoice("land_hit", 0.6f);
@@ -1008,7 +1035,7 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(length_squared(flat_dir)>0.0f){
         this_mo.SetRotationFromFacing(flat_dir);
     }
-    ActiveBlocked();
+    HandleAIEvent(_activeblocked);
     return _going_to_block;
 }
 
@@ -1101,7 +1128,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
 
     bool knocked_over = false;
     
-    if(block_health <= 0.0f || state == _attack_state || !on_ground || blood_health <= 0.0f || state == _ragdoll_state){
+    if(block_health <= 0.0f || flip_info.IsFlipping() || state == _attack_state || !on_ground || blood_health <= 0.0f || state == _ragdoll_state){
         HandleRagdollImpact(dir, pos);
         knocked_over = true;
         if(!controlled){
@@ -1563,8 +1590,14 @@ void UpdateGroundAttackControls() {
     }
     if(WantsToThrowEnemy()){
         throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_THROWABLE);
+        //Print("Throw id: "+throw_id+"\n");
     }
-    if(attack_id != -1){
+    if(throw_id != -1){
+        SetState(_attack_state);
+        attack_animation_set = false;
+        attacking_with_throw = true;
+        target_id = throw_id;
+    } else if(attack_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = false;
@@ -1572,25 +1605,23 @@ void UpdateGroundAttackControls() {
         if(!controlled){
             this_mo.PlaySoundGroupVoice("attack",0.0f);
         }
-    } else if(throw_id != -1){
-        SetState(_attack_state);
-        attack_animation_set = false;
-        attacking_with_throw = true;
-    }
+    } 
 }
 
 void UpdateAirAttackControls() {
+    int air_attack_id = -1;
     if(WantsToAttack()){
         int closest_id = GetClosestCharacterID(3.0f, _TC_ENEMY | _TC_CONSCIOUS);
-        target_id = closest_id;
+        air_attack_id = closest_id;
     }
-    if(target_id == -1){
+    if(air_attack_id == -1){
         return;
     }
     if(WantsToAttack() && !flip_info.IsFlipping() &&
         distance(this_mo.position + this_mo.velocity * 0.3f,
-                 ReadCharacterID(target_id).position + ReadCharacterID(target_id).velocity * 0.3f) <= _attack_range + range_extender)
+                 ReadCharacterID(air_attack_id).position + ReadCharacterID(air_attack_id).velocity * 0.3f) <= _attack_range + range_extender)
     {
+        target_id = air_attack_id;
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = false;
@@ -1647,7 +1678,8 @@ void UpdateMovementControls() {
                 HandleBumperCollision();
                 HandleStandingCollision();
                 this_mo.position = sphere_col.position;
-                this_mo.velocity = vec3(0.0f);
+                //this_mo.velocity = vec3(0.0f);
+                this_mo.velocity = GetTargetVelocity() * _true_max_speed * 0.2f;
                 feet_moving = false;
                 this_mo.MaterialEvent("land_soft", this_mo.position);
                 //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
@@ -1689,6 +1721,8 @@ const uint8 _TC_ENEMY = (1<<0);
 const uint8 _TC_CONSCIOUS = (1<<1);
 const uint8 _TC_THROWABLE = (1<<2);
 const uint8 _TC_NON_RAGDOLL = (1<<3);
+const uint8 _TC_ALLY = (1<<4);
+const uint8 _TC_IDLE = (1<<5);
 
 int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags){
     int num = characters.size();
@@ -1711,8 +1745,21 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags){
             continue;
         }
 
+        if(flags & _TC_ALLY != 0 && 
+           character_getter.OnSameTeam(char.char_path) == 0)
+        {
+            continue;
+        }
+        
+        if(flags & _TC_IDLE != 0 && 
+           char.QueryIntFunction("int IsIdle()") == 0)
+        {
+            continue;
+        }
+
         if(flags & _TC_THROWABLE != 0 && 
-           char.QueryIntFunction("int IsBlockStunned()") != 1)
+           (char.QueryIntFunction("int IsBlockStunned()") != 1 ||
+            char.QueryIntFunction("int BlockStunnedBy()") != this_mo.getID()))
         {
             continue;
         }
@@ -1749,10 +1796,6 @@ int GetClosestCharacterID(float range, uint8 flags){
     array<int> nearby_characters;
     GetCharactersInSphere(this_mo.position, range, nearby_characters);
     return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags);
-}
-
-void ClearTarget(){
-    target_id = -1;
 }
 
 // this is called when the character lands in a non-ragdoll mode
@@ -2162,6 +2205,7 @@ void UpdateAttacking() {
             if(target_id != -1){
                 MovementObject @char = ReadCharacterID(target_id);
                 char.velocity = this_mo.velocity;
+                //char.position = this_mo.position;
             }
             //ReadCharacter(target_id).position = this_mo.position;
             //ReadCharacter(target_id).position -= 
@@ -2316,7 +2360,7 @@ void UpdateAttacking() {
 
         string material_event = attack_getter.GetMaterialEvent();
         if(material_event.length() > 0){
-            Print(material_event);
+            //Print(material_event);
             this_mo.MaterialEvent(material_event,
                         this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
         }
@@ -3034,6 +3078,7 @@ void Reset() {
     this_mo.CleanBlood();
     ClearTemporaryDecals();
     blood_amount = _max_blood_amount;
+    ResetMind();
 }
 
 void UpdateAnimation() {

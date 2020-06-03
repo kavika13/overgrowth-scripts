@@ -5,7 +5,11 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
-uniform sampler2D tex5;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex5;
+#else
+    uniform sampler2DShadow tex5;
+#endif
 uniform sampler2D tex6;
 uniform sampler2D tex7;
 uniform sampler2D tex8;
@@ -26,6 +30,11 @@ uniform vec3 ws_light;
 varying vec3 tangent;
 varying vec3 ws_vertex;
 varying float alpha;
+
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+    #include "lighting.glsl"
+#endif
 
 #include "relativeskypos.glsl"
 #include "pseudoinstance.glsl"
@@ -53,4 +62,8 @@ void main()
 
     tc0 = gl_MultiTexCoord0.xy+vec2(0.0005)+ws_light.xz*0.0005;    
     tc1 = gl_MultiTexCoord3.xy*0.1;
+
+#ifndef BAKED_SHADOWS
+    SetCascadeShadowCoords(gl_Vertex, shadow_coords);
+#endif
 } 

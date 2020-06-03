@@ -2,7 +2,11 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform sampler2D tex4;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex4;
+#else
+    uniform sampler2DShadow tex4;
+#endif
 uniform sampler2DShadow tex5;
 uniform sampler2D tex6;
 uniform vec3 cam_pos;
@@ -12,13 +16,12 @@ uniform vec3 ws_light;
 varying vec3 ws_vertex;
 varying vec3 concat_bone1;
 varying vec3 concat_bone2;
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+#endif
 
 #include "lighting.glsl"
 #include "relativeskypos.glsl"
-
-float rand(vec2 co){
-    return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
-}
 
 void main()
 {    
@@ -33,43 +36,24 @@ void main()
                                concat_bone3 * unrigged_normal.z);
 
     // Get shadowed amount
+#ifdef BAKED_SHADOWS
     vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).xyz;
-    /*float shadow_amount = 0.0;
-    float offset = 40.0/2048.0;
-    for(int i=0; i<100; i++){
-        float random = (rand(gl_FragCoord.xy*i*3)-0.5)*offset;
-        float random2 = (rand(gl_FragCoord.xy*(i*3+1))-0.5)*offset;
-        float random3 = (rand(gl_FragCoord.xy*(i*3+2))-0.5)*offset*0.001;
-        shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(random,random2,-0.00001+random3,0.0)).r/100.0;
-    }
-    shadow_tex.r *= shadow_amount;*/
-
-    
-    /*float shadow_amount = 0.0;
-    for(int i=0; i<4; ++i){
-        float offset_scale = 0.005f;
-        vec4 offset = vec4((rand(gl_FragCoord.xy+vec2(i))-0.5)*offset_scale,
-                           (rand(gl_FragCoord.xy*2.0+vec2(i))-0.5)*offset_scale,
-                           (rand(gl_FragCoord.xy*3.0+vec2(i)))*-0.00001,
-                           0.0);
-        shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0) + offset).r * 0.25;
-    }
-    shadow_tex.r *= shadow_amount;*/
-    
     float offset = 2.0/512.0;
     float shadow_amount = 0.0;
     float z_bias = -0.00002;
+    //shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,z_bias,0.0)).r;
     shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,z_bias,0.0)).r * 0.2;
     shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset,offset*0.2,z_bias,0.0)).r * 0.2;
     shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset,offset*-0.2,z_bias,0.0)).r * 0.2;
     shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset*0.2,offset,z_bias,0.0)).r * 0.2;
     shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset*0.2,-offset,z_bias,0.0)).r * 0.2;
     shadow_tex.r *= shadow_amount;
-
-    //shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+#else
+    vec3 shadow_tex = vec3(1.0);
+    shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
+#endif
     shadow_tex.g = 1.0;
 
-    
     float blood_amount = min(texture2D(tex6,gl_TexCoord[1].xy).r*5.0, 1.0);
 
     // Get diffuse lighting

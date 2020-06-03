@@ -4,7 +4,11 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform sampler2D tex4;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex4;
+#else
+    uniform sampler2DShadow tex4;
+#endif
 uniform sampler2D tex5;
 uniform vec3 cam_pos;
 uniform mat3 test;
@@ -14,6 +18,9 @@ uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 varying vec3 tangent;
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+#endif
 
 #include "lighting.glsl"
 #include "relativeskypos.glsl"
@@ -39,7 +46,12 @@ void main()
                               base_bitangent * (normalmap.g*2.0-1.0));
         
         // Calculate diffuse lighting
-        vec3 shadow_tex = texture2D(tex4,gl_TexCoord[0].st).rgb;
+#ifdef BAKED_SHADOWS
+    vec3 shadow_tex = texture2D(tex4,gl_TexCoord[0].st).rgb;
+#else
+    vec3 shadow_tex = vec3(1.0);
+    shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
+#endif
         float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
         vec3 diffuse_color = GetDirectColor(NdotL);
 

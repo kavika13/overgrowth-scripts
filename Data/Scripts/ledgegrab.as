@@ -244,7 +244,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         weight_offset -= ledge_dir * 0.1f;
 
         weight_offset *= ik_mult;     
-   
+        weight_offset.y += height_offset * (1.0f-ik_mult);
         this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,transition_progress)); // Apply weight offset to torso
 
         for(int i=0; i<4; i++){
@@ -255,8 +255,9 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
             offset[i] += weight_offset;
         }
 
-        for(int i=0; i<4; ++i){
+        for(int i=0; i<4; ++i){  
             offset[i] *= ik_mult;
+            offset[i].y += height_offset * (1.0f-ik_mult);
         }
 
         //Print("IK mult: " + ik_mult + "\n"); 
@@ -274,6 +275,7 @@ float transition_progress;          // How far along the transition is (0-1)
 float leg_ik_mult;                  // How much we are allowing vertical leg IK displacement
 float ik_mult;
 bool ghost_movement;
+float height_offset;
 
 class LedgeInfo {
     bool on_ledge;                  // Grabbing ledge or not
@@ -284,7 +286,7 @@ class LedgeInfo {
     bool playing_animation;         // Are we currently playing an animation?
     bool allow_ik;
     vec3 disp_ledge_dir;
-    
+
     ShimmyAnimation shimmy_anim;    // Hand and foot animation class
 
     LedgeInfo() {    
@@ -357,12 +359,12 @@ class LedgeInfo {
         return sphere_col.position - vec3(0.0f, _height_under_ledge, 0.0f);
     }
 
-    void CheckLedges() {                            // Get info about the ledge if there is one,
+    void CheckLedges() {                                                        // Get info about the ledge if there is one,
         vec3 possible_ledge_dir;                                                // and grab on if not already grabbing
         
-        col.GetSlidingSphereCollision(this_mo.position,                 // Otherwise try to detect the wall by colliding an enlarged 
+        col.GetSlidingSphereCollision(this_mo.position,                         // Otherwise try to detect the wall by colliding an enlarged 
                                               _leg_sphere_size*1.5f);           // player sphere with the scene, and finding the closest 
-        if(sphere_col.NumContacts() == 0){                                  // collision
+        if(sphere_col.NumContacts() == 0){                                      // collision
             return;
         } else {
             float closest_dist = 0.0f;
@@ -521,6 +523,22 @@ class LedgeInfo {
             }
         }
 
+        /*if(this_mo.velocity.y > 2.0f && dot(GetTargetVelocity(),possible_ledge_dir) > 0.0f){
+            vec3 old_pos = this_mo.position;
+            vec3 ledge_pos = this_mo.position;
+            ledge_pos.y = ledge_height;
+            ledge_pos += possible_ledge_dir*_leg_sphere_size;
+            this_mo.position = ledge_pos;
+            this_mo.position += possible_ledge_dir*_leg_sphere_size;
+            this_mo.position.y += _leg_sphere_size;
+            this_mo.velocity.y = -1.0f;
+            target_duck_amount = 1.0f;
+            duck_amount = 1.0f;
+            climbed_up = true;
+            //DebugDrawLine(this_mo.position, ledge_pos, vec3(1.0f), _delete_on_update);
+            return;
+        }*/
+
         if(char_height > ledge_height - grab_height){                           // If ledge is within reach, grab it
             if(char_height < ledge_height - _base_grab_height){                 // If height difference requires the scramble grab, then
                 playing_animation = true;                                       // play the animation
@@ -543,6 +561,7 @@ class LedgeInfo {
             
             allow_ik = true;
             on_ledge = true;                                                    // Set up ledge grab starting conditions
+            height_offset = 0.0f;
             disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
             this_mo.velocity = vec3(0.0f);
@@ -567,6 +586,20 @@ class LedgeInfo {
     }
     
     void UpdateLedge() {
+        if(playing_animation){
+            if(this_mo.GetStatusKeyValue("cancel")>=1.0f && 
+               WantsToCancelAnimation())
+            {
+                EndClimbAnim();
+            }
+        }
+        if(playing_animation){
+            this_mo.position.y += height_offset * 0.02f;
+            height_offset *= 0.98f;
+            allow_ik = false;
+            target_duck_amount = 1.0f;
+        }
+
         if(allow_ik){
             ik_mult = min(1.0f, ik_mult + time_step * num_frames * 5.0f);
         } else {
@@ -651,7 +684,8 @@ class LedgeInfo {
                 this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
                 this_mo.position += ledge_dir * 0.7f;
             } else {
-                this_mo.position.y = target_height;
+                height_offset = target_height - this_mo.position.y;
+                //this_mo.position.y = target_height;
                 playing_animation = true;
                 allow_ik = false;
                 int flags = _ANM_SUPER_MOBILE;

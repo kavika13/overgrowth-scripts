@@ -159,6 +159,14 @@ class FlipInfo {
         }
     }
 
+    void EndFlip(){
+        flipping = false;
+        flip_angle = 1.0f;
+        flip_vel = 0.0f;
+        flip_progress = 0.0f;
+        this_mo.SetFlip(vec3(0.0f), 0.0f, 0.0f);
+    }
+
     void RotateTowardsCameraFacing() {
         if(flipping){
             vec3 facing = InterpDirections(camera.GetFlatFacing(),

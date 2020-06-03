@@ -2,7 +2,11 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform sampler2D tex4;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex4;
+#else
+    uniform sampler2DShadow tex4;
+#endif
 uniform sampler2DShadow tex5;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
@@ -13,6 +17,10 @@ uniform int y_stipple_offset;
 uniform int stipple_val;
 
 varying vec3 ws_vertex;
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+    #include "lighting.glsl"
+#endif
 
 #include "pseudoinstance.glsl"
 #include "shadowpack.glsl"
@@ -31,4 +39,7 @@ void main()
     tc1 = GetShadowCoords();
     //gl_FrontColor = gl_Color;
     gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
+#ifndef BAKED_SHADOWS
+    SetCascadeShadowCoords(transformed_vertex, shadow_coords);
+#endif
 } 

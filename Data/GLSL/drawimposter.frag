@@ -21,10 +21,6 @@ varying vec3 ws_vertex;
 #include "lighting.glsl"
 #include "relativeskypos.glsl"
 
-float rand(vec2 co){
-    return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
-}
-
 void main()
 {        
     if((rand(gl_FragCoord.xy)) >= fade){

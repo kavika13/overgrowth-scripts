@@ -12,6 +12,81 @@ const float _block_reflex_delay_min = 0.1f;
 const float _block_reflex_delay_max = 0.2f;
 float block_delay;
 bool going_to_block = false;
+float roll_after_ragdoll_delay;
+bool throw_after_active_block;
+
+int ally_id = -1;
+int escort_id = -1;
+
+void ResetMind() {
+    goal = _patrol;
+}
+
+int IsIdle() {
+    if(goal == _patrol){
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+void Notice(int character_id){
+    target_id = character_id;
+    last_seen_target_position = ReadCharacterID(character_id).position;
+    last_seen_target_velocity = ReadCharacterID(character_id).velocity;
+    SetGoal(_attack);
+}
+
+void NotifySound(int created_by_id, vec3 pos) {
+    if(!listening){
+        return;
+    }
+    if(goal == _patrol){
+        bool same_team = false;
+        character_getter.Load(this_mo.char_path);
+        if(character_getter.OnSameTeam(ReadCharacterID(created_by_id).char_path) == 1){
+            same_team = true;
+        }
+        if(!same_team){
+            Notice(created_by_id);
+        }
+    }
+}
+
+void HandleAIEvent(AIEvent event){
+    if(event == _ragdolled){
+        roll_after_ragdoll_delay = RangedRandomFloat(0.1f,1.0f);
+    }
+    if(event == _activeblocked){
+        throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.5f;
+        if(!throw_after_active_block){
+            ai_attacking = true;
+        }
+    }
+}
+
+enum AIGoal {_patrol, _attack, _get_help, _escort};
+AIGoal goal = _patrol;
+
+void SetGoal(AIGoal _goal){
+    goal = _goal;
+}
+
+enum MsgType {_escort_me = 0};
+
+void ReceiveMessage(int source_id, int _msg_type){
+    MsgType type = MsgType(_msg_type);
+    Print("Message received: Character " + source_id + " says \"");
+    if(type == _escort_me){
+        Print("Escort me!");
+    }
+    Print("\"\n");
+    
+    if(type == _escort_me && goal == _patrol){
+        SetGoal(_escort);
+        escort_id = source_id;
+    }
+}
 
 void UpdateBrain(){
     if(GetInputDown("c") && !GetInputDown("ctrl")){
@@ -21,8 +96,8 @@ void UpdateBrain(){
                 ai_attacking = true;
                 listening = true;
             } else {
+                SetGoal(_patrol);
                 ResetWaypointTarget();
-                ClearTarget();
                 listening = false;
             }
         }
@@ -30,19 +105,36 @@ void UpdateBrain(){
     } else {
         hostile_switchable = true;
     }
-    if(hostile && rand()%(150/num_frames)==0){
-        ai_attacking = !ai_attacking;
-    }
-    if(!hostile || target_id == -1){
+
+    if(goal == _patrol || goal == _escort){
         ai_attacking = false;
-    }
-    if(target_id == -1 && hostile){
-        int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
-        if(closest_id != -1){
-            last_seen_target_position = ReadCharacterID(closest_id).position;
-            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
+        if(hostile){
+            int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
+            if(closest_id != -1){
+                Notice(closest_id);
+            }
         }
-        target_id = closest_id;
+    } else if(goal == _attack){
+        MovementObject@ target = ReadCharacterID(target_id);
+        if(target.QueryIntFunction("int IsKnockedOut()") == 1){
+            SetGoal(_patrol);
+        }
+        if(rand()%(150/num_frames)==0){
+            ai_attacking = !ai_attacking;
+        }
+        if(temp_health < 0.5f){
+            ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
+            if(ally_id != -1){
+                //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
+                SetGoal(_get_help);
+            }
+        }
+    } else if(goal == _get_help){
+        MovementObject@ char = ReadCharacterID(ally_id);
+        if(distance_squared(this_mo.position, char.position) < 5.0f){
+            SetGoal(_attack);
+            char.ReceiveMessage(this_mo.getID(), int(_escort_me));
+        }
     }
     //HandleDebugRayDraw();
 }
@@ -78,10 +170,6 @@ void HandleDebugRayDraw() {
     }
 }
 
-void ActiveBlocked(){
-    //ai_attacking = true;
-}
-
 bool WantsToCrouch() {
     return false;
 }
@@ -94,9 +182,8 @@ bool WantsToDropItem() {
     return false;
 }
 
-
 bool WantsToThrowEnemy() {
-    return false;//return true;//ai_attacking && (rand()%3 == 0);
+    return throw_after_active_block;
 }
 
 bool WantsToRoll() {
@@ -112,10 +199,17 @@ bool WantsToAttack() {
 }
 
 bool WantsToRollFromRagdoll(){
-    return false;
+    if(ragdoll_time > roll_after_ragdoll_delay){
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool ShouldBlock(){
+    if(goal != _attack){
+        return false;
+    }
     if(active_block_recharge > 0.0f){
         return false;
     }
@@ -211,114 +305,93 @@ vec3 GetNextPathPoint() {
     }
     return next_point;
 }
+   
+vec3 GetPatrolMovement(){
+    vec3 target_velocity;
+    vec3 target_point = this_mo.position;
+    if(waypoint_target == -1){
+        old_waypoint_target = -1;
+        waypoint_target = this_mo.GetWaypointTarget();
+    }
+    if(waypoint_target != -1){
+        target_point = path_script_reader.GetPointPosition(waypoint_target);
+    }
+    if(xz_distance_squared(this_mo.position, target_point) < 1.0f){
+        int temp = waypoint_target;
+
+        waypoint_target = path_script_reader.GetOtherConnectedPoint(
+            waypoint_target, old_waypoint_target);
+        old_waypoint_target = temp;
+        
+        if(waypoint_target == -1){
+            waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
+        }
+    }
+    target_velocity = target_point - this_mo.position;
+    target_velocity.y = 0.0;
+    float dist = length(target_velocity);
+    float seek_dist = 1.0;
+    dist = max(0.0, dist-seek_dist);
+    target_velocity = normalize(target_velocity) * dist;
+    float target_speed = 0.2f;
+    if(length_squared(target_velocity) > target_speed){
+        target_velocity = normalize(target_velocity) * target_speed;
+    }
+    return target_velocity;
+}
+
+vec3 GetMovementToPoint(vec3 point){
+    // Get path to estimated target position
+    vec3 target_velocity;
+    vec3 target_point = point;
+    GetPath(target_point);
+    vec3 next_path_point = GetNextPathPoint();
+    if(next_path_point != vec3(0.0f)){
+        target_point = next_path_point;
+    }
     
+    // Set target velocity to approach target position
+    target_velocity = target_point - this_mo.position;
+    target_velocity.y = 0.0;
+    float dist = length(target_velocity);
+    float seek_dist = 1.0;
+    dist = max(0.0, dist-seek_dist);
+    target_velocity = normalize(target_velocity) * dist;
+    if(length_squared(target_velocity) > 1.0){
+        target_velocity = normalize(target_velocity);
+    }
+    return target_velocity;
+}
+
+vec3 GetAttackMovement() {
+    // Assume target is moving in a straight line at slowly-decreasing velocity
+    last_seen_target_position += last_seen_target_velocity * time_step * num_frames;
+    last_seen_target_velocity *= pow(0.995f, num_frames);
+
+    // If ray check is successful, update knowledge of target position and velocity
+    vec3 real_target_pos = ReadCharacterID(target_id).position;
+    vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+    if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
+        last_seen_target_position = real_target_pos;
+        last_seen_target_velocity = ReadCharacterID(target_id).velocity;
+    }
+
+    return GetMovementToPoint(last_seen_target_position);
+}
 
 int last_seen_sphere = -1;
-// Uses the position of the target character to calculate a target velocity (towards the target) that is used for movement calculations in aschar.as and aircontrol.as.
 vec3 GetTargetVelocity() {
-    if(target_id == -1){
-        vec3 target_velocity;
-        vec3 target_point = this_mo.position;
-        if(waypoint_target == -1){
-            old_waypoint_target = -1;
-            //waypoint_target = path_script_reader.GetNearestPoint(this_mo.position);
-            waypoint_target = this_mo.GetWaypointTarget();
-            //Print("Waypoint target: " + waypoint_target + "\n");
-        }
-        if(waypoint_target != -1){
-            target_point = path_script_reader.GetPointPosition(waypoint_target);
-        }
-        if(xz_distance_squared(this_mo.position, target_point) < 1.0f){
-            int temp = waypoint_target;
-
-            //Print("GetOtherConnectedPoint: "+waypoint_target+", " + old_waypoint_target + "\n");
-            waypoint_target = path_script_reader.GetOtherConnectedPoint(
-                waypoint_target, old_waypoint_target);
-            old_waypoint_target = temp;
-            
-            if(waypoint_target == -1){
-                waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
-                //Print("Wut\n");
-            }
-            //Print("Waypoint target: "+waypoint_target+"\n");
-            //Print("Old waypoint target: "+old_waypoint_target+"\n");
-        }
-        target_velocity = target_point - this_mo.position;
-        target_velocity.y = 0.0;
-        float dist = length(target_velocity);
-        float seek_dist = 1.0;
-        dist = max(0.0, dist-seek_dist);
-        target_velocity = normalize(target_velocity) * dist;
-        float target_speed = 0.2f;
-        if(length_squared(target_velocity) > target_speed){
-            target_velocity = normalize(target_velocity) * target_speed;
-        }
-        return target_velocity;
-    }
-    //if(distance_squared(this_mo.position, target.position) < 9.0f){
-        bool vis = false;
-        last_seen_target_position += last_seen_target_velocity * time_step * num_frames;
-        last_seen_target_velocity *= pow(0.995f, num_frames);
-        vec3 real_target_pos = ReadCharacterID(target_id).position;
-        //if(IsTargetInFOV(real_target_pos)){
-            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
-                last_seen_target_position = real_target_pos;
-                last_seen_target_velocity = ReadCharacterID(target_id).velocity;
-                vis = true;
-            }
-        //}
-
-        vec3 target_velocity;
-        /*if(last_seen_sphere != -1){
-            DebugDrawRemove(last_seen_sphere);
-        }
-        vec3 color;
-        if(vis){
-            color = vec3(0.0f,1.0f,0.0f);
-        } else {
-            color = vec3(1.0f,0.0f,0.0f);
-        }
-        last_seen_sphere = 
-            DebugDrawWireSphere(last_seen_target_position, 0.5f, color, _persistent);*/
-        vec3 target_point = last_seen_target_position;//ReadCharacterID(target_id).position;
-        
-        GetPath(target_point);
-        vec3 next_path_point = GetNextPathPoint();
-        if(next_path_point != vec3(0.0f)){
-            target_point = next_path_point;
-        }
-        //DrawPath();
-        
-        target_velocity = target_point - this_mo.position;
-        target_velocity.y = 0.0;
-        float dist = length(target_velocity);
-        float seek_dist = 1.0;
-        dist = max(0.0, dist-seek_dist);
-        target_velocity = normalize(target_velocity) * dist;
-        if(length_squared(target_velocity) > 1.0){
-            target_velocity = normalize(target_velocity);
-        }
-        return target_velocity;
-    /*}
-
-    NavPath temp = this_mo.GetPath(this_mo.position,
-                                   target.position);
-    int num_points = temp.NumPoints();
-    for(int i=0; i<num_points-1; i++){
-        DebugDrawLine(temp.GetPoint(i),
-                      temp.GetPoint(i+1),
-                      vec3(1.0f,1.0f,1.0f),
-                      _delete_on_update);
-    }
-        
-    if(num_points < 2){
-        return vec3(0.0f);
+    if(goal == _patrol){
+        return GetPatrolMovement();
+    } else if(goal == _attack){
+        return GetAttackMovement(); 
+    } else if(goal == _get_help){
+        return GetMovementToPoint(ReadCharacterID(ally_id).position); 
+    } else if(goal == _escort){
+        return GetMovementToPoint(ReadCharacterID(escort_id).position); 
     } else {
-        vec3 target_vel = (temp.GetPoint(1)-this_mo.position);
-        target_vel.y = 0.0f;
-        return normalize(target_vel);
-    }*/
+        return vec3(0.0f);
+    }
 }
 
 // Called from aschar.as, bool front tells if the character is standing still. 

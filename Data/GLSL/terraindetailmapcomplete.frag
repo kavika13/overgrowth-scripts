@@ -3,7 +3,11 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
-uniform sampler2D tex5;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex5;
+#else
+    uniform sampler2DShadow tex5;
+#endif
 uniform sampler2D tex6;
 uniform sampler2D tex7;
 uniform sampler2D tex8;
@@ -25,6 +29,10 @@ uniform float extra_ao;
 varying vec3 tangent;
 varying vec3 ws_vertex;
 varying float alpha;
+
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+#endif
 
 #include "lighting.glsl"
 #include "texturepack.glsl"
@@ -63,7 +71,20 @@ void main()
     vec3 ws_normal = ws_from_ns * normalmap.xyz;
 
     // Get diffuse lighting
+#ifdef BAKED_SHADOWS
     vec3 shadow_tex = texture2D(tex5,tc0).rgb;
+#else
+    vec3 shadow_tex = vec3(1.0);
+    /*float shadow_amount = 0.0;
+    float offset = 0.0007;
+    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(0.0,0.0,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset,offset*0.2,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset,offset*-0.2,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset*0.2,offset,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset*0.2,-offset,0.0,0.0)).r * 0.2;
+    shadow_tex.r = shadow_amount;*/
+    shadow_tex.r = GetCascadeShadow(tex5, shadow_coords, length(ws_vertex));
+#endif
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
     vec3 diffuse_color = GetDirectColor(NdotL);
     
@@ -119,5 +140,18 @@ void main()
     color.r *= abs(tex_co.x * 0.25 - int(tex_co.x * 0.25));
     color.g *= abs(tex_co.y * 0.25 - int(tex_co.y * 0.25));
 */
+    /*if(index == 0){
+        color = vec3(1.0,0.0,0.0);
+    }
+    if(index == 1){
+        color = vec3(0.0,1.0,0.0);
+    }
+    if(index == 2){
+        color = vec3(0.0,0.0,1.0);
+    }
+    if(index == 3){
+        color = vec3(1.0,1.0,0.0);
+    }*/
+    //color = vec3(shadow_tex.r);
     gl_FragColor = vec4(color,alpha);
 }

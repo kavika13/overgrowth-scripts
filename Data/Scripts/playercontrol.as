@@ -3,6 +3,9 @@
 float throw_key_time;
 bool listening = false;
 
+void NotifySound(int created_by_id, vec3 pos) {
+}
+
 void UpdateBrain(){
     if(GetInputDown("grab")){
         throw_key_time += time_step * num_frames;
@@ -11,7 +14,17 @@ void UpdateBrain(){
     }
 }
 
-void ActiveBlocked(){
+void ResetMind() {
+}
+
+int IsIdle() {
+    return 0;
+}
+
+void HandleAIEvent(AIEvent event){
+}
+
+void ReceiveMessage(int source, int msg_type){
 }
 
 bool WantsToCrouch() {
@@ -68,7 +81,7 @@ bool WantsToDropItem() {
 
 bool WantsToStartActiveBlock(){
     if(!controlled) return false;
-    return GetInputDown("grab");
+    return GetInputPressed("grab");
 }
 
 bool WantsToJumpOffWall() {

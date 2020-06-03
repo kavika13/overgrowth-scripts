@@ -2,7 +2,11 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform sampler2D tex4;
+#ifdef BAKED_SHADOWS
+    uniform sampler2D tex4;
+#else
+    uniform sampler2DShadow tex4;
+#endif
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
@@ -10,16 +14,14 @@ uniform float fade;
 uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
-varying vec3 rel_pos;
+#ifndef BAKED_SHADOWS
+    varying vec4 shadow_coords[4];
+#endif
 
 #include "pseudoinstance.glsl"
 #include "lighting.glsl"
 #include "texturepack.glsl"
 #include "relativeskypos.glsl"
-
-float rand(vec2 co){
-    return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
-}
 
 void main()
 {            
@@ -33,7 +35,12 @@ void main()
     ws_normal = normalize(ws_normal);
 
     // Get diffuse lighting
+#ifdef BAKED_SHADOWS
     vec3 shadow_tex = texture2D(tex4,tc1).rgb;
+#else
+    vec3 shadow_tex = vec3(1.0);
+    shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
+#endif
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
     vec3 diffuse_color = GetDirectColor(NdotL);
     diffuse_color += LookupCubemapSimple(ws_normal, tex3) *

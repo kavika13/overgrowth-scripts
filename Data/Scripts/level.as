@@ -27,16 +27,24 @@ void UpdateTimerDisplay() {
 
 void Update() {
     gui.Update();
-     /*if(GetInputPressed("g") && !GetInputDown("ctrl")){
+    if(has_gui){
+        string callback = gui.GetCallback(gui_id);
+        while(callback != ""){
+            Print("AS Callback: "+callback+"\n");
+            if(callback == "ok" || callback == "cancel"){
+                gui.RemoveGUI(gui_id);
+                has_gui = false;
+                break;
+            }
+            callback = gui.GetCallback(gui_id);
+        }
+    }
+    if(GetInputPressed("g") && !GetInputDown("ctrl")){
         gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
         has_gui = true;
         UpdateTimerDisplay();
-    } 
+    }  /*
     if(GetInputPressed("l")){
-        if(has_gui){
-            gui.RemoveGUI(gui_id);
-            has_gui = false;
-        }
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }*/
     if(GetInputPressed("l")){
