@@ -48,6 +48,8 @@ void Reset(){
     ResetLevel();
 }
 
+int hotspot_image_layer = -1;
+
 void ReceiveMessage(string msg) {
     if(msg == "reset"){
         Reset();
@@ -58,6 +60,14 @@ void ReceiveMessage(string msg) {
             has_display_text = false;
         }
     }
+	if(msg == "clearhud"){
+	
+	HUDImage @display_image = hud.GetImage(hotspot_image_layer);
+	
+	hotspot_image_layer = -1;
+	display_image.color.a = 0.0f;
+	}
+    
 }
 
 void ReceiveMessage2(string msg, string msg2) {
@@ -73,6 +83,10 @@ void ReceiveMessage2(string msg, string msg2) {
     } else if(msg == "displaygui"){
         gui_id = gui.AddGUI("displaygui_call",msg2,220,250,0);
         has_gui = true;
+    } else if(msg == "displayhud"){
+		if(hotspot_image_layer == -1){
+		hotspot_image_layer = hud.AddImage(msg2, vec3(700,200,0));
+		}
     }
 }
 
@@ -244,7 +258,12 @@ void UpdateVersusUI(){
     }
 }
 
+int versus_help_text_id = -1;
+int sp_help_text_id = -1;
+
 void Update() {
+
+
     bool versus_mode = !GetSplitscreen() && GetNumCharacters() == 2 && ReadCharacter(0).controlled && ReadCharacter(1).controlled;
     if(versus_mode){
         game_type = _versus;
@@ -253,6 +272,25 @@ void Update() {
         game_type = _normal;
     }
     
+    if(versus_mode && versus_help_text_id == -1){
+        versus_help_text_id = gui.AddGUI("helptext","versusdirections.html",600,200,_GG_IGNORES_MOUSE);    
+        gui.MoveTo(versus_help_text_id, 0, GetScreenHeight() - 140);
+    } 
+    if(!versus_mode && versus_help_text_id != -1){
+        gui.RemoveGUI(versus_help_text_id);
+        versus_help_text_id = -1;
+    }
+
+    bool sp_mode = !versus_mode && GetPlayerCharacterID() != -1;
+    if(sp_mode && sp_help_text_id == -1){
+        sp_help_text_id = gui.AddGUI("helptext","spdirections.html",650,200,_GG_IGNORES_MOUSE);    
+        gui.MoveTo(sp_help_text_id, 0, GetScreenHeight() - 160);
+    } 
+    if(!sp_mode && sp_help_text_id != -1){
+        gui.RemoveGUI(sp_help_text_id);
+        sp_help_text_id = -1;
+    }
+
     if(has_gui){
         SetGrabMouse(false);
         string callback = gui.GetCallback(gui_id);
@@ -315,6 +353,8 @@ void Update() {
         VictoryCheckVersus();
         UpdateMusicVersus();
     }
+    
+
 }
 
 const float _max_anim_frames_per_second = 100.0f;
@@ -359,7 +399,7 @@ void IncrementScoreLeft(){
         left_score_marks[score_left].scale_mult = 2.0f;
     }
     if(score_left < 4){
-        PlaySound("Data/Sounds/versus/fight_win.wav");
+        PlaySoundGroup("Data/Sounds/versus/fight_win1.xml");
     }
     ++score_left;
 }
@@ -370,7 +410,7 @@ void IncrementScoreRight() {
         right_score_marks[score_right].scale_mult = 2.0f;
     }
     if(score_right < 4){
-        PlaySound("Data/Sounds/versus/fight_win.wav");
+        PlaySoundGroup("Data/Sounds/versus/fight_win2.xml");
     }
     ++score_right;
 }
@@ -458,7 +498,7 @@ void VictoryCheckVersus() {
                         Reset();
                     }
                 } else {        
-                    PlaySound("Data/Sounds/versus/fight_lose.wav");              
+                    PlaySoundGroup("Data/Sounds/versus/fight_lose1.xml");              
                     Reset();
                 }
             }

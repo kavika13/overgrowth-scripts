@@ -350,6 +350,10 @@ void ApplyLevelBoundaries(){
 void Update(int _num_frames) {
     num_frames = _num_frames;
     ApplyLevelBoundaries();
+
+    if(!this_mo.controlled && knocked_out == _awake && distance_squared(camera.GetPos(), this_mo.position) > 100.0f){
+        MakeParticle("Data/Particles/rayspark.xml",this_mo.position,vec3(0.0f,500.0f,0.0f));
+    } 
     /*if(holding_weapon){
         if(target_id != -1){
             MovementObject@ char = ReadCharacterID(target_id);
