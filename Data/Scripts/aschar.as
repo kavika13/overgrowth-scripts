@@ -47,7 +47,6 @@ int state;
 
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
-bool attacking_with_throw;
 
 // running and movement
 const float _run_threshold = 0.8f; // when character is moving faster than this, it runs
@@ -124,20 +123,6 @@ void WasBlocked() {
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	attack_getter2.Load(attack_path);
 
-	if(type == "grabbed"){
-		if(limp){
-			return 0;
-		}
-		this_mo.position = pos;
-		this_mo.SetRotationFromFacing(dir);
-		int8 flags = _ANM_MOBILE;
-		if(attack_getter2.GetMirrored() == 0){
-			flags = flags | _ANM_MIRRORED;
-		}
-		this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),1000.0f,flags);
-		SetState(_hit_reaction_state);
-		hit_reaction_anim_set = true;
-	}
 	if(type == "attackblocked")
 	{
 		string sound = "Data/Sounds/hit/hit_normal.xml";
@@ -243,13 +228,6 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 void HandleAnimationEvent(string event, vec3 world_pos){
 	//Print("Angelscript received event: "+event+"\n");
 	if(event == "golimp"){
-		if(attack_getter2.IsThrow() == 1){
-			temp_health -= attack_getter2.GetDamage();
-			if(temp_health <= 0.0f && knocked_out==0){
-				knocked_out = 1;
-				TimedSlowMotion(0.1f,1.0f, 0.05f);
-			}
-		}
 		GoLimp();
 	}
 	
@@ -478,7 +456,7 @@ float GetTempHealth() {
 
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
-	if(WantsToAttack()||WantsToThrowEnemy()){
+	if(WantsToAttack()){
 		TargetClosest();
 	}
 	if(target_id == -1){
@@ -488,15 +466,6 @@ void UpdateGroundAttackControls() {
 		SetState(_attack_state);
 		//Print("Starting attack\n");
 		attack_animation_set = false;
-		attacking_with_throw = false;
-		/*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
-			TimedSlowMotion(0.2f,0.4f, 0.15f);
-		}*/
-	} else if(WantsToThrowEnemy() && distance(this_mo.position,this_mo.ReadCharacter(target_id).position) <= 1.6f){
-		SetState(_attack_state);
-		//Print("Starting attack\n");
-		attack_animation_set = false;
-		attacking_with_throw = true;
 		/*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
 			TimedSlowMotion(0.2f,0.4f, 0.15f);
 		}*/
@@ -835,19 +804,10 @@ void UpdateAttacking() {
 	} else {
 		ApplyPhysics();
 	}
-	if(attack_animation_set){
-		if(attack_getter.IsThrow() == 0){
-			this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
-														   direction,
-														   1.0-pow(0.9f,num_frames)));
-		} else {
-			this_mo.ReadCharacter(target_id).velocity = this_mo.velocity;
-			//this_mo.ReadCharacter(target_id).position = this_mo.position;
-			//this_mo.ReadCharacter(target_id).position -= 
-			//	this_mo.ReadCharacter(target_id).GetFacing() * 0.2f;
-			//this_mo.ReadCharacter(target_id).SetRotationFromFacing(this_mo.GetFacing());
-		}
-	}
+	this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
+												   direction,
+												   1.0-pow(0.9f,num_frames)));
+
 	vec3 right_direction;
 	right_direction.x = direction.z;
 	right_direction.z = -direction.x;
@@ -886,21 +846,16 @@ void UpdateAttacking() {
 	if(!attack_animation_set){
 		// Defined in playercontrol.as and enemycontrol.as. Boolean front tells if the character is standing still, and if it's true a front kick may be performed.
 		// ChooseAttack() sets the value of the curr_attack variable.
+		ChooseAttack(front);
 		string attack_path;
-		if(attacking_with_throw){
-			attack_path="Data/Attacks/throw.xml";
-		} else {
-			ChooseAttack(front);
-			attack_path;
-			if(curr_attack == "stationary"){
-				attack_path = character_getter.GetAttackPath("stationary");
-			} else if(curr_attack == "moving"){
-				attack_path = character_getter.GetAttackPath("moving");
-			} else if(curr_attack == "low"){
-				attack_path = character_getter.GetAttackPath("low");
-			} else if(curr_attack == "air"){
-				attack_path = character_getter.GetAttackPath("air");
-			}
+		if(curr_attack == "stationary"){
+			attack_path = character_getter.GetAttackPath("stationary");
+		} else if(curr_attack == "moving"){
+			attack_path = character_getter.GetAttackPath("moving");
+		} else if(curr_attack == "low"){
+			attack_path = character_getter.GetAttackPath("low");
+		} else if(curr_attack == "air"){
+			attack_path = character_getter.GetAttackPath("air");
 		}
 		attack_getter.Load(attack_path);
 		if(attack_getter.GetSpecial() == "legcannon"){	
@@ -934,35 +889,19 @@ void UpdateAttacking() {
 		} else {
 			mirror = mirrored_stance;
 		}
-
-		int8 flags = 0;
 		if(attack_getter.GetMobile() == 1){
-			flags = flags | _ANM_MOBILE;
-		}
-		if(mirror){
-			flags = flags | _ANM_MIRRORED;
-		}
-		if(attack_getter.GetFlipFacing() == 1){
-			flags = flags | _ANM_FLIP_FACING;
-		}
-
-
-		string anim_path;
-		if(attack_getter.IsThrow() == 0){
-			anim_path = attack_getter.GetUnblockedAnimPath();
-		} else {
-			anim_path = attack_getter.GetThrowAnimPath();
-			int hit = this_mo.ReadCharacter(target_id).WasHit(
-				"grabbed", attack_getter.GetPath(), direction, this_mo.position);		
-			if(hit == 0){
-				EndAttack();
-				return;
+			if(mirror){
+				this_mo.StartMirroredMobileAnimation(attack_getter.GetUnblockedAnimPath());
+			} else {
+				this_mo.StartMobileAnimation(attack_getter.GetUnblockedAnimPath());
 			}
-			this_mo.SetRotationFromFacing(direction);
+		} else {
+			if(mirror){
+				this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
+			} else {
+				this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
+			}
 		}
-
-		this_mo.StartAnimation(anim_path, 20.0f, flags);
-
 		string material_event = attack_getter.GetMaterialEvent();
 		if(material_event.length() > 0){
 			Print(material_event);
@@ -1010,16 +949,16 @@ void UpdateHitReaction() {
 			}
 			block_string += "block";
 			if(mirrored_stance){
-				this_mo.StartAnimation(character_getter.GetAnimPath(block_string),40.0f, _ANM_MIRRORED);
+				this_mo.StartMirroredAnimation(character_getter.GetAnimPath(block_string),40.0f);
 			} else {
 				this_mo.StartAnimation(character_getter.GetAnimPath(block_string),40.0f);
 			}
 		} else if(hit_reaction_event == "attackimpact") {
 			if(reaction_getter.GetMirrored() == 0){
-				this_mo.StartAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE);
+				this_mo.StartMobileAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f);
 				mirrored_stance = false;
 			} else {
-				this_mo.StartAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE|_ANM_MIRRORED);
+				this_mo.StartMobileMirroredAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f);
 				mirrored_stance = true;
 			}
 		}
@@ -1041,7 +980,7 @@ void SetState(int _state) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
@@ -1084,7 +1023,7 @@ void WakeUp(int how) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
@@ -1098,7 +1037,7 @@ void WakeUp(int how) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
@@ -1314,13 +1253,6 @@ void HandleActiveBlock() {
 
 void HandleCollisionsBetweenTwoCharacters(int which){
 	if(this_mo.position == this_mo.ReadCharacter(which).position){
-		return;
-	}
-
-	if(state == _attack_state && attack_getter.IsThrow() == 1){
-		return;
-	}
-	if(state == _hit_reaction_state && attack_getter2.IsThrow() == 1){
 		return;
 	}
 
@@ -1563,7 +1495,7 @@ void UpdateAnimation() {
 				if(!mirrored_stance){
 					this_mo.SetAnimation(character_getter.GetAnimPath("idle"));
 				} else {
-					this_mo.SetAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+					this_mo.SetMirroredAnimation(character_getter.GetAnimPath("idle"));
 				}
 				this_mo.SetIKEnabled(true);
 			}
