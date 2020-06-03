@@ -75,7 +75,7 @@ void Update() {
         target_rotation2 = rotation2;
         vec3 vel;
         camera.SetVelocity(vel); 
-        UpdateListener(camera.GetPos(),vel,camera.GetFacing(),camera.GetUpVector());            
+        UpdateListener(co.position,vel,camera.GetFacing(),camera.GetUpVector());            
         float lens = camera_animation_reader.GetLens();
         float angle = (2.0f * atan(16.0f/lens)) / 3.1415f * 180.0f;
         //Print(""+lens+"   "+angle+"\n");
@@ -172,9 +172,10 @@ void Update() {
         camera.SetDistance(0);
         camera.SetVelocity(co.velocity); 
         camera.SetFOV(90.0f);
-
-        UpdateListener(camera.GetPos(),vel,camera.GetFacing(),camera.GetUpVector());        
-    
+        
         camera.CalcFacing();
+        camera.CalcUp();
+
+        UpdateListener(co.position,vel,camera.GetFacing(),camera.GetUpVector());
     }
 }
