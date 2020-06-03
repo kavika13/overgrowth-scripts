@@ -99,7 +99,7 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 }
 
 void HandleAnimationEvent(string event, vec3 pos){
-	Print("Angelscript received event: "+event+"\n");
+	//Print("Angelscript received event: "+event+"\n");
 	vec3 world_pos = pos+this_mo.position;
 	if(event == "leftstep" || event == "rightstep"){
 		this_mo.MaterialEvent(event, world_pos);
@@ -678,11 +678,12 @@ void UpdateHitReaction() {
 void SetState(int _state) {
 	state = _state;
 	if(state == _ground_state){
+		Print("Setting state to ground state");
 		//this_mo.StartAnimation("Data/Animations/kipup.anm");
 		if(!mirrored_stance){
-			this_mo.SetAnimation("Data/Animations/r_idle.anm");
+			this_mo.StartAnimation("Data/Animations/r_idle.anm");
 		} else {
-			this_mo.SetMirroredAnimation("Data/Animations/r_idle.anm");
+			this_mo.StartMirroredAnimation("Data/Animations/r_idle.anm");
 		}
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
@@ -703,6 +704,11 @@ void WakeUp(int how) {
 	HandleStandingCollision();
 	this_mo.position = sphere_col.position;
 
+	// No standing up animations yet
+	if(how == _wake_stand){
+		how = _wake_fall;
+	}
+
 	limp = false;
 	duck_amount = 1.0f;
 	duck_vel = 0.0f;
@@ -715,9 +721,9 @@ void WakeUp(int how) {
 		SetOnGround(true);
 		flip_info.Land();
 		if(!mirrored_stance){
-			this_mo.SetAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartAnimation("Data/Animations/r_idle.xml");
 		} else {
-			this_mo.SetMirroredAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartMirroredAnimation("Data/Animations/r_idle.xml");
 		}
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
@@ -729,9 +735,9 @@ void WakeUp(int how) {
 		SetOnGround(true);
 		flip_info.Land();
 		if(!mirrored_stance){
-			this_mo.SetAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartAnimation("Data/Animations/r_idle.xml");
 		} else {
-			this_mo.SetMirroredAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartMirroredAnimation("Data/Animations/r_idle.xml");
 		}
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);

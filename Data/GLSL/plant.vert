@@ -1,3 +1,5 @@
+#pragma use_tangent
+
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
