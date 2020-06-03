@@ -3,7 +3,7 @@
 bool controlled = false; //True if controlled by a human player
 int num_frames; //How many timesteps passed since the last update
 
-enum AIEvent{_ragdolled, _activeblocked};
+enum AIEvent{_ragdolled, _activeblocked, _thrown};
 
 vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz, float max_vert, float arc){
     vec3 rel_vec = end - start;
@@ -161,15 +161,42 @@ const float _spurt_frequency = 7.0f;
 float spurt_sound_delay = 0.0f;
 const float _spurt_delay_amount = 6.283185/_spurt_frequency;
 
+void UpdateCutThroatEffect() {
+    if(blood_delay <= 0){
+        if(rand()%16 == 0){
+            this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+        }
+        if(rand()%32 == 0){
+            //this_mo.CreateBloodDrip("rightarm", 0, vec3(1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+            //this_mo.CreateBloodDrip("leftarm", 0, vec3(-1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+        }
+        
+        vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+        vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
+        vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
+        mat4 head_transform = this_mo.GetAvgIKChainTransform("head");
+        head_transform.SetColumn(3, vec3(0.0f));
+        float blood_force = sin(time*_spurt_frequency)*0.5f+0.5f;
+        uint32 id = MakeParticle("Data/Particles/blooddrop.xml",bleed_pos,(head_transform*vec3(0.0f,blood_amount*blood_force,0.0f)+this_mo.velocity));
+        if(last_blood_particle_id != 0){
+            ConnectParticles(last_blood_particle_id, id);
+        }
+        last_blood_particle_id = id;
+        blood_delay = 2;
+    }
+    blood_amount -= time_step * num_frames * 0.5f;
+    spurt_sound_delay -= time_step * num_frames;
+    if(spurt_sound_delay <= 0.0f){
+        spurt_sound_delay += _spurt_delay_amount;
+        vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+        vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
+        vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
+        PlaySoundGroup("Data/Sounds/Blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
+    }
+    -- blood_delay;
+}
+
 void Update(bool _controlled, int _num_frames) {
-    /*DebugDrawWireSphere(this_mo.position,
-                        _leg_sphere_size,
-                        vec3(1.0f),
-                        _delete_on_update);
-    DebugDrawLine(this_mo.position,
-                  this_mo.position + this_mo.GetFacing(),
-                  vec3(1.0f),
-                  _delete_on_update);*/
     if(in_animation){        
         if(controlled){
             UpdateAirWhooshSound();
@@ -177,40 +204,9 @@ void Update(bool _controlled, int _num_frames) {
         }
         HandleCollisions();
         return;
-    }
+    }    
     if(cut_throat && blood_amount > 0.0f){
-        if(blood_delay <= 0){
-            if(rand()%16 == 0){
-                this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
-            }
-            if(rand()%32 == 0){
-                //this_mo.CreateBloodDrip("rightarm", 0, vec3(1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
-                //this_mo.CreateBloodDrip("leftarm", 0, vec3(-1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
-            }
-            
-            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
-            vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
-            mat4 head_transform = this_mo.GetAvgIKChainTransform("head");
-            head_transform.SetColumn(3, vec3(0.0f));
-            float blood_force = sin(time*_spurt_frequency)*0.5f+0.5f;
-            uint32 id = MakeParticle("Data/Particles/blooddrop.xml",bleed_pos,(head_transform*vec3(0.0f,blood_amount*blood_force,0.0f)+this_mo.velocity));
-            if(last_blood_particle_id != 0){
-                ConnectParticles(last_blood_particle_id, id);
-            }
-            last_blood_particle_id = id;
-            blood_delay = 2;
-        }
-        blood_amount -= time_step * num_frames * 0.5f;
-        spurt_sound_delay -= time_step * num_frames;
-        if(spurt_sound_delay <= 0.0f){
-            spurt_sound_delay += _spurt_delay_amount;
-            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
-            vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
-            PlaySoundGroup("Data/Sounds/Blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
-        }
-        -- blood_delay;
+        UpdateCutThroatEffect();
     }
     if(cut_torso && blood_amount > 0.0f){
         if(blood_delay <= 0){
@@ -430,6 +426,14 @@ void HandleSpecialKeyPresses() {
             this_mo.SetBlendCoord("attack_height_coord",RangedRandomFloat(-0.8,0.8));
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
+            int8 flags = _ANM_MOBILE;
+            if(mirrored_stance){
+                flags = flags | _ANM_MIRRORED;
+            }
+            //mirrored_stance = !mirrored_stance;
+            this_mo.StartAnimation("Data/Animations/r_dodgebacklow.anm",20.0f,flags);
+            in_animation = true;
+            this_mo.SetAnimationCallback("void EndAnim()");
         }
         if(GetInputPressed("h")){
             context.PrintGlobalVars();
@@ -472,7 +476,7 @@ void UpdateState() {
     UpdateBlink();
     UpdateEyeLook();
 
-    UpdateActiveBlock();
+    UpdateActiveBlockAndDodge();
     RegenerateHealth();
 
     trying_to_get_weapon = max(0,trying_to_get_weapon-1);
@@ -500,6 +504,9 @@ void UpdateState() {
         UpdateAttacking();
         HandleCollisions();
     } else if(state == _hit_reaction_state){
+        if(active_block_anim && hit_reaction_time > 0.1f){
+            UpdateGroundAttackControls();
+        }
         UpdateHitReaction();
         HandleAccelTilt();
         HandleCollisions();
@@ -657,12 +664,15 @@ void UpdateBlink() {
     this_mo.SetMorphTargetWeight("wink_l",blink_amount,1.0f);
 }
 
+vec3 dodge_dir;
+bool active_dodging = false;
 bool active_blocking = false;
 int active_block_flinch_layer = -1;
 
-void UpdateActiveBlock() {
+void UpdateActiveBlockAndDodge() {
     block_stunned = max(0.0f, block_stunned - time_step * num_frames);
     UpdateActiveBlockMechanics();
+    UpdateActiveDodgeMechanics();
     if(active_blocking){
         if(active_block_flinch_layer == -1){
             active_block_flinch_layer = 
@@ -679,8 +689,26 @@ void UpdateActiveBlock() {
 float active_block_duration = 0.0f; // How much longer can the active block last
 float active_block_recharge = 0.0f; // How long until the active block recharges
 
+float active_dodge_duration = 0.0f; // How much longer can the active dodge last
+float active_dodge_recharge = 0.0f; // How long until the active dodge recharges
+
+bool CanBlock(){
+    if(state == _movement_state || 
+      (state == _hit_reaction_state && !hit_reaction_thrown) ||
+      (state == _attack_state && block_stunned > 0.0f)){
+        if(!on_ground || flip_info.IsFlipping()){
+            return false;
+        } else {
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
 void UpdateActiveBlockMechanics() {
-    if(WantsToStartActiveBlock() && state == _movement_state && on_ground && !flip_info.IsFlipping()){
+    bool can_block = CanBlock();
+    if(WantsToStartActiveBlock() && can_block){
         if(active_block_recharge <= 0.0f){
             active_blocking = true;
             active_block_duration = 0.2f;
@@ -695,6 +723,28 @@ void UpdateActiveBlockMechanics() {
     } else {
         if(active_block_recharge > 0.0f){
             active_block_recharge -= time_step * num_frames;
+        }
+    }
+}
+
+void UpdateActiveDodgeMechanics() {
+    bool can_dodge = CanBlock();
+    if(WantsToDodge() && can_dodge){
+        if(active_dodge_recharge <= 0.0f){
+            active_dodging = true;
+            active_dodge_duration = 0.2f;
+            dodge_dir = GetTargetVelocity();
+        }
+        active_dodge_recharge = 0.2f;
+    } 
+    if(active_dodging){
+        active_dodge_duration -= time_step * num_frames;
+        if(active_dodge_duration <= 0.0f){
+            active_dodging = false;
+        }
+    } else {
+        if(active_dodge_recharge > 0.0f){
+            active_dodge_recharge -= time_step * num_frames;
         }
     }
 }
@@ -939,12 +989,16 @@ void GoLimp() {
     Ragdoll(_RGDL_FALL);
 }
 
-// WasBlocked() is executed if this character's attack was blocked by a different character
-void WasBlocked() {
+void SwitchToBlockedAnim() {
     this_mo.SwapAnimation(attack_getter.GetBlockedAnimPath());
     if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
         mirrored_stance = !mirrored_stance;
     }
+}
+
+// WasBlocked() is executed if this character's attack was blocked by a different character
+void WasBlocked() {
+    SwitchToBlockedAnim();
     block_stunned = 0.5f;
     block_stunned_by_id = target_id;
 }
@@ -983,21 +1037,29 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
         return _miss;
     }
     MovementObject@ attacker = ReadCharacterID(attacker_id);
-    this_mo.position = attacker.position;
-    this_mo.SetRotationFromFacing(dir);
-    this_mo.velocity = attacker.velocity;
+    vec3 offset(attacker.position.x - this_mo.position.x,
+                0.0f,
+                attacker.position.z - this_mo.position.z);
+    float dir_rotation = atan2(dir.z, dir.x);
+    vec3 facing = this_mo.GetFacing();
+    float cur_rotation = atan2(facing.z, facing.x);
+    float rot_offset = cur_rotation - dir_rotation;
+    this_mo.velocity.x = attacker.velocity.x;
+    this_mo.velocity.z = attacker.velocity.z;
     int8 flags = _ANM_MOBILE;
+    mirrored_stance = false;
     if(attack_getter2.GetMirrored() == 0){
         flags = flags | _ANM_MIRRORED;
+        mirrored_stance = true;
     }
-    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),10.0f,flags);
+    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),5.0f,flags);
+    this_mo.AddAnimationOffset(offset);
+    this_mo.AddAnimationRotOffset(rot_offset);
+    HandleAIEvent(_thrown);
     SetState(_hit_reaction_state);
     hit_reaction_anim_set = true;
+    hit_reaction_thrown = true;
     flip_info.EndFlip();
-    if(!controlled){
-        this_mo.PlaySoundGroupVoice("surprise", 0.3f);
-        this_mo.PlaySoundGroupVoice("land_hit", 0.6f);
-    }
     return _hit;
 }
 
@@ -1013,9 +1075,19 @@ int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     return _block_impact;
 }
 
+int IsDodging(){
+    return (state == _hit_reaction_state && hit_reaction_dodge)?1:0;
+}
+
 int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
-    if(state != _movement_state || !on_ground || flip_info.IsFlipping() ||
-       !active_blocking || attack_getter2.GetUnblockable() != 0)
+    if(active_dodging){
+        if(HandleDodge(dodge_dir, attacker_id)){
+            return _miss;
+        }
+    }
+
+    if(!on_ground || flip_info.IsFlipping() || !active_blocking || 
+        attack_getter2.GetUnblockable() != 0)
     {
         return _miss;
     }
@@ -1027,8 +1099,8 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
 
     reaction_getter.Load(attack_getter2.GetReactionPath());
     SetState(_hit_reaction_state);
-    hit_reaction_anim_set = false;
     hit_reaction_event = "blockprepare";
+    active_block_anim = true;
 
     vec3 flat_dir(dir.x, 0.0f, dir.z);
     flat_dir = normalize(flat_dir) * -1;
@@ -1048,6 +1120,9 @@ int IsDucking(){
 }
 
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
+    if(state == _hit_reaction_state && hit_reaction_dodge){
+        return _miss;
+    }
     if(target_id == -1){
         target_id = attacker_id;
     }
@@ -1105,8 +1180,8 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
             int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
             int stab_type = attack_getter2.GetStabDirType();
             Print("Weapon id: "+attack_weapon_id);
-            this_mo.ReadItem(attack_weapon_id);
-            mat4 trans = item_object_getter.GetPhysicsTransform();
+            ItemObject@ item_obj = ReadItem(attack_weapon_id);
+            mat4 trans = item_obj.GetPhysicsTransform();
             mat4 trans_rotate = trans;
             trans_rotate.SetColumn(3, vec3(0.0f));
             vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
@@ -1186,7 +1261,6 @@ void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
     
     reaction_getter.Load(attack_getter2.GetReactionPath());
     SetState(_hit_reaction_state);
-    hit_reaction_anim_set = false;
 
     hit_reaction_event = "attackimpact";
 
@@ -1195,6 +1269,59 @@ void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
     if(length_squared(flat_dir)>0.0f){
         this_mo.SetRotationFromFacing(flat_dir);
     }
+}
+
+bool HandleDodge(const vec3&in dir, int attacker_id){
+
+    vec3 face_dir = ReadCharacterID(attacker_id).position - this_mo.position;
+    face_dir.y = 0.0;
+    face_dir = normalize(face_dir);
+    if(dot(face_dir, dodge_dir) > 0.85f){
+        return false;
+    }
+
+    vec3 right_face_dir = vec3(face_dir.z, 0.0f, -face_dir.x);
+    vec3 right_dir = vec3(dir.z, 0.0f, -dir.x);
+
+    string anim_path;
+    if(attack_getter2.GetHeight() == _high){
+        anim_path = "Data/Animations/r_dodgebackhigh.anm";
+    } else if(attack_getter2.GetHeight() == _medium){
+        anim_path = "Data/Animations/r_dodgebackmid.anm";
+    } else if(attack_getter2.GetHeight() == _low){
+        anim_path = "Data/Animations/r_dodgebacklow.anm";
+    }        
+    this_mo.SetRotationFromFacing(dir * -1.0f);
+    /*if(dot(dir,right_face_dir) > 0.85f || (dot(dir,face_dir)>0.0f && dot(dir,right_face_dir)>0.0f)){
+        if(!mirrored_stance){
+            anim_path = "Data/Animations/r_dodgeleft.anm";
+        } else {
+            anim_path = "Data/Animations/r_dodgeright.anm";
+        }
+        this_mo.SetRotationFromFacing(right_dir*-1.0f);
+    }
+    if(dot(dir,right_face_dir) < -0.85f || (dot(dir,face_dir)>0.0f && dot(dir,right_face_dir) <= 0.0f)){
+        if(mirrored_stance){
+            anim_path = "Data/Animations/r_dodgeleft.anm";
+        } else {
+            anim_path = "Data/Animations/r_dodgeright.anm";
+        }
+        this_mo.SetRotationFromFacing(right_dir*1.0f);
+    }*/
+
+    SetState(_hit_reaction_state);
+    hit_reaction_anim_set = true;
+    hit_reaction_dodge = true;
+
+    int8 flags = _ANM_MOBILE;
+    if(mirrored_stance){
+        flags = flags | _ANM_MIRRORED;
+    }
+    this_mo.StartAnimation(anim_path,10.0f,flags);
+    this_mo.SetAnimationCallback("void EndHitReaction()");
+    TimedSlowMotion(0.1f,0.4f, 0.15f);
+    target_id = attacker_id;
+    return true;
 }
 
 void EndAttack() {
@@ -1258,6 +1385,8 @@ string hit_reaction_event;
 
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
+bool hit_reaction_dodge = false;
+bool hit_reaction_thrown = false;
 bool attacking_with_throw;
 
 const float _attack_range = 1.6f;
@@ -1306,21 +1435,29 @@ void HandleAnimationEvent(string event, vec3 world_pos){
     //DebugDrawText(world_pos, event, _persistent);
 }
 
+void AttachWeapon(int which){
+    ItemObject@ item_obj = ReadItem(which);
+    vec3 pos = item_obj.GetPhysicsPosition();
+    string sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
+    PlaySoundGroup(sound, pos,0.5f);
+    //item_object_getter.SceneMaterialEvent("weapon_metal_pickup", item_object_getter.GetPhysicsPosition());
+    holding_weapon = true;
+    this_mo.weapon_id = which;
+    range_extender = item_obj.GetRangeExtender();
+    this_mo.AttachItem(which);
+}
+
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
     if(event == "grabitem" && !holding_weapon)
     {
         Print("Grabbing item");
-        int num_items = this_mo.GetNumItems();
+        int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
-            this_mo.ReadItem(i);
-            vec3 pos = item_object_getter.GetPhysicsPosition();
+            ItemObject@ item_obj = ReadItem(i);
+            vec3 pos = item_obj.GetPhysicsPosition();
             vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
             if(distance(hand_pos, pos)<0.9f){ 
-                holding_weapon = true;
-                this_mo.weapon_id = i;
-                range_extender = 0.0f;
-                range_extender = item_object_getter.GetRangeExtender();
-                this_mo.AttachItem(i);
+                AttachWeapon(i);
                 if(pickup_layer != -1){
                     this_mo.RemoveLayer(pickup_layer, 4.0f);
                     pickup_layer = -1;
@@ -1382,9 +1519,17 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
     {
         attack_event = true;
     }
+    if(event == "attackblocked" && feinting){
+        string sound = "Data/Sounds/weapon_foley/swoosh/weapon_whoos_big.xml";
+        this_mo.PlaySoundGroupAttached(sound,this_mo.position);
+        return;
+    }
+    if(event == "blockprepare"){
+        can_feint = false;
+    }
     if(attack_event == true && target_id != -1){
         vec3 target_pos = ReadCharacterID(target_id).position;
-        if(distance(this_mo.position, target_pos) < _attack_range + range_extender){
+        if(event == "blockprepare" || distance(this_mo.position, target_pos) < _attack_range + range_extender){
             vec3 facing = this_mo.GetFacing();
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 dir = normalize(target_pos - this_mo.position);
@@ -1542,6 +1687,14 @@ void MoveIKTarget(string str, vec3 offset) {
 
 void draw() {
     this_mo.DrawBody();
+    /*DebugDrawWireSphere(this_mo.position,
+                        _leg_sphere_size,
+                        vec3(1.0f),
+                        _delete_on_draw);
+    DebugDrawLine(this_mo.position,
+                  this_mo.position + this_mo.GetFacing(),
+                  vec3(1.0f),
+                  _delete_on_draw);*/
     /*mat4 transform = this_mo.GetAvgIKChainTransform("head");
     mat4 transform_offset;
     transform_offset.SetRotationX(-70);
@@ -1572,6 +1725,9 @@ float GetTempHealth() {
     return temp_health;
 }
 
+bool feinting;
+bool can_feint;
+
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
     const float range = _attack_range + range_extender - _leg_sphere_size;
@@ -1590,17 +1746,20 @@ void UpdateGroundAttackControls() {
     }
     if(WantsToThrowEnemy()){
         throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_THROWABLE);
-        //Print("Throw id: "+throw_id+"\n");
     }
     if(throw_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = true;
+        can_feint = false;
+        feinting = false;
         target_id = throw_id;
     } else if(attack_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = false;
+        can_feint = true;
+        feinting = false;
         target_id = attack_id;
         if(!controlled){
             this_mo.PlaySoundGroupVoice("attack",0.0f);
@@ -1623,6 +1782,8 @@ void UpdateAirAttackControls() {
     {
         target_id = air_attack_id;
         SetState(_attack_state);
+        can_feint = false;
+        feinting = false;
         attack_animation_set = false;
         attacking_with_throw = false;
     }
@@ -2179,7 +2340,7 @@ void UpdateAttacking() {
     }
 
     vec3 direction;
-    if(target_id != -1){
+    if(target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsDodging()") == 0){
         direction = ReadCharacterID(target_id).position - this_mo.position;
     } else {
         direction = this_mo.GetFacing();
@@ -2201,10 +2362,15 @@ void UpdateAttacking() {
             this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                            direction,
                                                            1.0-pow(attack_facing_inertia,num_frames)));
+            if(WantsToFeint() && can_feint){
+                SwitchToBlockedAnim();
+                feinting = true;
+            }
         } else {
             if(target_id != -1){
                 MovementObject @char = ReadCharacterID(target_id);
-                char.velocity = this_mo.velocity;
+                char.velocity.x = this_mo.velocity.x;
+                char.velocity.z = this_mo.velocity.z;
                 //char.position = this_mo.position;
             }
             //ReadCharacter(target_id).position = this_mo.position;
@@ -2379,6 +2545,8 @@ void UpdateAttacking() {
     }*/
 }
 
+float hit_reaction_time;
+
 // the animations referred here are mostly blocks, and they're defined in the character-specific XML files.
 void UpdateHitReaction() {
     if(!hit_reaction_anim_set){
@@ -2420,13 +2588,21 @@ void UpdateHitReaction() {
         }
         this_mo.SetAnimationCallback("void EndHitReaction()");
         hit_reaction_anim_set = true;
-        this_mo.SetFlip(vec3(1.0f,0.0f,0.0f),0.0f,0.0f);
     }
     this_mo.velocity *= pow(0.95f,num_frames);
-    if(this_mo.GetStatusKeyValue("cancel")>=1.0f && WantsToCancelAnimation()){
+    if(this_mo.GetStatusKeyValue("cancel")>=1.0f && WantsToCancelAnimation() && hit_reaction_time > 0.1f){
         EndHitReaction();
     }
+    if(this_mo.GetStatusKeyValue("escape")>=1.0f && WantsToCounterThrow()){
+        this_mo.SwapAnimation("Data/Animations/r_throwncounter.anm");
+        string sound = "Data/Sounds/weapon_foley/swoosh/weapon_whoos_big.xml";
+        this_mo.PlaySoundGroupAttached(sound,this_mo.position);
+        TimedSlowMotion(0.1f,0.3f, 0.1f);
+    }
+    hit_reaction_time += time_step * num_frames;
 }
+
+bool active_block_anim = false;
 
 void SetState(int _state) {
     state = _state;
@@ -2452,6 +2628,14 @@ void SetState(int _state) {
     }
     if(state != _attack_state){
         curr_attack = "";
+    }
+    if(state == _hit_reaction_state){
+        active_block_anim = false;
+        hit_reaction_time = 0.0f;
+        hit_reaction_anim_set = false;
+        hit_reaction_thrown = false;
+        hit_reaction_dodge = false;
+        this_mo.SetFlip(vec3(1.0f,0.0f,0.0f),0.0f,0.0f);
     }
 }
 
@@ -2558,7 +2742,7 @@ bool CanRoll() {
 int count = 0;
 
 void EndGetUp(){
-    state = _movement_state;
+    SetState(_movement_state);
     duck_amount = 1.0f;
     duck_vel = 0.0f;
     target_duck_amount = 1.0f;
@@ -2682,8 +2866,8 @@ void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.weapon_id);
-        this_mo.ReadItem(this_mo.weapon_id);
-        item_object_getter.ActivatePhysics();
+        ItemObject@ item_obj = ReadItem(this_mo.weapon_id);
+        item_obj.ActivatePhysics();
         holding_weapon = false;
         range_extender = 0.0f;
     }
@@ -2699,20 +2883,19 @@ int pickup_layer_attempts = 0;
 
 void HandlePickUp() {
     if(WantsToPickUpItem() && knocked_out == _awake){
-        int num_items = this_mo.GetNumItems();
+        int num_items = GetNumItems();
         
         if(!holding_weapon){
             for(int i=0; i<num_items; i++){
-                this_mo.ReadItem(i);
-                vec3 pos = item_object_getter.GetPhysicsPosition();
+                ItemObject@ item_obj = ReadItem(i);
+                if(item_obj.IsHeld()){
+                    continue;
+                }
+                vec3 pos = item_obj.GetPhysicsPosition();
                 vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
                 if(distance(hand_pos, pos)<0.9f){ 
                     if(flip_info.IsFlipping()){
-                        holding_weapon = true;
-                        this_mo.weapon_id = i;
-                        range_extender = 0.0f;
-                        range_extender = item_object_getter.GetRangeExtender();
-                        this_mo.AttachItem(i);
+                        AttachWeapon(i);
                     } else {
                         if(pickup_layer == -1){
                             pickup_layer = this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
@@ -2725,8 +2908,11 @@ void HandlePickUp() {
         }
         if(!holding_weapon){
             for(int i=0; i<num_items; i++){
-                this_mo.ReadItem(i);
-                vec3 pos = item_object_getter.GetPhysicsPosition();
+                ItemObject@ item_obj = ReadItem(i);
+                if(item_obj.IsHeld()){
+                    continue;
+                }
+                vec3 pos = item_obj.GetPhysicsPosition();
                 if(distance_squared(this_mo.position, pos)<4.0f){ 
                     vec3 flat_dir = pos-this_mo.position;
                     flat_dir.y = 0.0f;
@@ -2743,18 +2929,6 @@ void HandlePickUp() {
         }
         if(holding_weapon){
             this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
-            /*this_mo.ReadItem(weapon_id);
-            vec3 pos = item_object_getter.GetPhysicsPosition();
-            mat4 transform = this_mo.GetIKTargetTransform("rightarm");
-            mat4 transform_rot = transform;
-            transform_rot.SetTranslationPart(vec3(0.0f));
-            mat4 new_transform;
-            new_transform.SetColumn(0, transform.GetColumn(0));
-            new_transform.SetColumn(1, transform.GetColumn(2)*-1.0f);
-            new_transform.SetColumn(2, transform.GetColumn(1));
-            new_transform.SetTranslationPart(
-                transform.GetTranslationPart() + transform_rot * vec3(0.03f,0.15f,0.09f));
-            item_object_getter.SetPhysicsTransform(new_transform);*/
         }
     } else {
         if(pickup_layer != -1){
@@ -2778,14 +2952,14 @@ vec3 ragdoll_cam_pos;
 vec3 cam_pos_offset;
 
 void ApplyCameraControls() {
+    if(QueryLevelIntFunction("int HasFocus()")==0){   
+        SetGrabMouse(true);
+        target_rotation -= GetLookXAxis();
+        target_rotation2 -= GetLookYAxis();    
+    }
     const float _camera_rotation_inertia = 0.5f;
     const float _cam_follow_distance = 2.0f;
     const float _cam_collision_radius = 0.15f;
-
-    SetGrabMouse(true);
-
-    target_rotation -= GetLookXAxis();
-    target_rotation2 -= GetLookYAxis();    
 
     target_rotation2 = max(-90,min(50,target_rotation2));
 
@@ -3303,7 +3477,7 @@ void MovementState_UpdateIKTargets() {
     }
 
     /*vec3 item_pos;
-    int num_items = this_mo.GetNumItems();
+    int num_items = GetNumItems();
     for(int i=0; i<num_items; i++){
         this_mo.ReadItem(i);
         vec3 pos = item_object_getter.GetPhysicsPosition();

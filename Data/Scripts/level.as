@@ -25,13 +25,29 @@ void UpdateTimerDisplay() {
     gui.CallFunction(gui_id, str);
 }
 
+int HasFocus(){
+    return has_gui?1:0;
+}
+
+void Reset(){
+    time = 0.0f;
+    ResetLevel();
+}
+
 void Update() {
     gui.Update();
     if(has_gui){
+        SetGrabMouse(false);
         string callback = gui.GetCallback(gui_id);
         while(callback != ""){
             Print("AS Callback: "+callback+"\n");
-            if(callback == "ok" || callback == "cancel"){
+            if(callback == "retry"){
+                gui.RemoveGUI(gui_id);
+                has_gui = false;
+                Reset();
+                break;
+            }
+            if(callback == "continue"){
                 gui.RemoveGUI(gui_id);
                 has_gui = false;
                 break;
@@ -48,12 +64,12 @@ void Update() {
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }*/
     if(GetInputPressed("l")){
-        ResetLevel();
+        Reset();
     }
     
     time += time_step;
 
-    VictoryCheck();
+    //VictoryCheck();
     UpdateMusic();
 }
 
@@ -76,7 +92,7 @@ void VictoryCheck() {
     if(victory || failure){
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
-            ResetLevel();
+            Reset();
         }
     } else {
         reset_timer = _reset_delay;
@@ -154,7 +170,7 @@ int ThreatsPossible() {
 void HotspotEnter(string str, MovementObject @mo) {
     Print("Enter hotspot: "+str+"\n");
     if(str == "Stop"){
-        ResetLevel();
+        Reset();
     }
 }
 

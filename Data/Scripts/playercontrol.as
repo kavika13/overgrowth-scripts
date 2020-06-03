@@ -84,6 +84,16 @@ bool WantsToStartActiveBlock(){
     return GetInputPressed("grab");
 }
 
+bool WantsToFeint(){
+    if(!controlled) return false;
+    return GetInputDown("grab");
+}
+
+bool WantsToCounterThrow(){
+    if(!controlled) return false;
+    return GetInputDown("grab");
+}
+
 bool WantsToJumpOffWall() {
     if(!controlled) return false;
     return GetInputPressed("jump");
@@ -97,6 +107,21 @@ bool WantsToFlipOffWall() {
 bool WantsToAccelerateJump() {
     if(!controlled) return false;
     return GetInputDown("jump");
+}
+
+bool WantsToDodge() {
+    if(!controlled) return false;
+
+    bool movement_key_down = false;
+    if(GetInputDown("move_up") ||
+       GetInputDown("move_left") ||
+       GetInputDown("move_down") ||
+       GetInputDown("move_right"))
+    {
+        movement_key_down = true;
+    }
+
+    return movement_key_down;
 }
 
 bool WantsToCancelAnimation() {
