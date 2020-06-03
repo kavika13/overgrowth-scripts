@@ -8,6 +8,10 @@ uniform float wetness;
 varying mat3 tangent_to_world;
 varying vec3 vertex_pos;
 varying vec3 light_pos;
+varying vec3 ws_vertex;
+
+#include "lighting.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {    
@@ -47,6 +51,8 @@ void main()
     float fresnel = 1.0;// - dot(normalize(vertex_pos), vec3(0,0,-1))*0.8;
     color = diffuse_color * colormap.xyz + spec_color * fresnel;
     
+    AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
+
     //    colormap.a = 1.0;
     //color = colormap.xyz;
 

@@ -1,58 +1,34 @@
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex2;
-uniform samplerCube tex3;
-uniform sampler2D tex4;
-#ifdef BAKED_SHADOWS
-    uniform sampler2D tex5;
-#else
-    uniform sampler2DShadow tex5;
-#endif
-uniform sampler2D tex6;
-uniform sampler2D tex7;
-uniform sampler2D tex8;
-uniform sampler2D tex9;
-uniform sampler2D tex10;
-uniform sampler2D tex11;
-uniform sampler2D tex12;
-uniform sampler2D tex13;
-uniform sampler2D tex14;
-uniform vec3 avg_color0;
-uniform vec3 avg_color1;
-uniform vec3 avg_color2;
-uniform vec3 avg_color3;
-uniform vec3 cam_pos;
-uniform int weight_component;
-uniform vec3 ws_light;
-uniform float extra_ao;
+#include "object_shared.glsl"
+#include "object_frag.glsl"
 
+#define warp_tex tex14
+uniform sampler2D tex14;
+UNIFORM_COMMON_TEXTURES
+UNIFORM_DETAIL4_TEXTURES
+
+UNIFORM_AVG_COLOR4
+UNIFORM_LIGHT_DIR
+UNIFORM_EXTRA_AO
+
+VARYING_REL_POS
 varying vec3 tangent;
-varying vec3 ws_vertex;
 varying float alpha;
 
 #ifndef BAKED_SHADOWS
     varying vec4 shadow_coords[4];
 #endif
 
-#include "lighting.glsl"
-#include "texturepack.glsl"
-#include "relativeskypos.glsl"
-
 void main()
 {        
-    vec2 test_offset = (texture2D(tex14,tc0*200.0).xy-0.5)*0.001;
-    //test_offset = vec2(0.0);
-    
-    // Get weights
-    vec4 weight_map = texture2D(tex0,tc0+test_offset);
-    weight_map[3] = 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]);
 
-    // Get fade
-    float detail_fade_distance = 200.0;
-    float detail_fade = min(1.0,max(0.0,length(ws_vertex)/detail_fade_distance));
+    vec2 test_offset = (texture2D(warp_tex,tc0*200.0).xy-0.5)*0.001;
+    
+    vec4 weight_map = GetWeightMap(weight_tex,tc0+test_offset);
+
+    CALC_DETAIL_FADE
 
     // Get normal
-    vec3 base_normalmap = texture2D(tex4,tc0).xyz;
+    vec3 base_normalmap = texture2D(normal_tex,tc0).xyz;
     vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
     vec3 base_bitangent = normalize(cross(tangent,base_normal));
     vec3 base_tangent = normalize(cross(base_normal,base_bitangent));
@@ -70,42 +46,17 @@ void main()
     
     vec3 ws_normal = ws_from_ns * normalmap.xyz;
 
-    // Get diffuse lighting
-#ifdef BAKED_SHADOWS
-    vec3 shadow_tex = texture2D(tex5,tc0).rgb;
-#else
-    vec3 shadow_tex = vec3(1.0);
-    /*float shadow_amount = 0.0;
-    float offset = 0.0007;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(0.0,0.0,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset,offset*0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset,offset*-0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset*0.2,offset,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset*0.2,-offset,0.0,0.0)).r * 0.2;
-    shadow_tex.r = shadow_amount;*/
-    shadow_tex.r = GetCascadeShadow(tex5, shadow_coords, length(ws_vertex));
-#endif
-    float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
-    vec3 diffuse_color = GetDirectColor(NdotL);
-    
-    diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
-                     GetAmbientContrib(shadow_tex.g);
-    
-    // Get spec lighting
-    vec3 ws_H = normalize(normalize(ws_vertex*-1.0) + ws_light);
-    float spec = min(1.0, pow(max(0.0,dot(ws_normal,ws_H)),10.0) * shadow_tex.r);
-    vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
-    
-    vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
-    spec_color += LookupCubemapSimple(spec_map_vec, tex2) *
-                  GetAmbientContrib(shadow_tex.g);
+    #define shadow_tex_coords tc0
+    CALC_SHADOWED
+    CALC_DIFFUSE_LIGHTING
+    CALC_SPECULAR_LIGHTING(1.0)
     
     // Get tint
     vec3 average_color = avg_color0 * weight_map[0] +
                          avg_color1 * weight_map[1] +
                          avg_color2 * weight_map[2] +
                          avg_color3 * weight_map[3];
-    vec3 terrain_color = texture2D(tex1,tc0+test_offset).xyz;
+    vec3 terrain_color = texture2D(color_tex,tc0+test_offset).xyz;
     average_color = max(average_color, vec3(0.01));
     vec3 tint = terrain_color / average_color;
 
@@ -114,44 +65,13 @@ void main()
                     texture2D(tex8,tc1) * weight_map[1] +
                     texture2D(tex10,tc1) * weight_map[2] +
                     texture2D(tex12,tc1) * weight_map[3];
-    colormap.xyz = mix(colormap.xyz,average_color,detail_fade);
+    colormap.xyz = mix(colormap.xyz,average_color,detail_fade) * tint;
     colormap.a = max(0.0,colormap.a);
 
     // Put it all together
-    vec3 color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
-    color *= BalanceAmbient(NdotL);
-    color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
-    AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
-    color *= Exposure();
-
-    //color = NdotL * 0.5f;
-
-    //color = weight_map;
-    //color = texture2D(tex14,tc1).xyz;
-/*
-    vec2 tex_co = tc1 * 900.0;
-
-    color = vec3(int(abs(int(tex_co.x)%2)+abs(int(tex_co.y)%2))%2);
-    color = vec3(int(abs(int(tex_co.x)%2)+abs(int(tex_co.y)%2))%2);
-
-    color *= 0.5;
-    color += 0.5;
-    
-    color.r *= abs(tex_co.x * 0.25 - int(tex_co.x * 0.25));
-    color.g *= abs(tex_co.y * 0.25 - int(tex_co.y * 0.25));
-*/
-    /*if(index == 0){
-        color = vec3(1.0,0.0,0.0);
-    }
-    if(index == 1){
-        color = vec3(0.0,1.0,0.0);
-    }
-    if(index == 2){
-        color = vec3(0.0,0.0,1.0);
-    }
-    if(index == 3){
-        color = vec3(1.0,1.0,0.0);
-    }*/
-    //color = vec3(shadow_tex.r);
-    gl_FragColor = vec4(color,alpha);
+    CALC_COMBINED_COLOR
+    CALC_COLOR_ADJUST
+    CALC_HAZE
+    CALC_EXPOSURE
+    CALC_FINAL_UNIVERSAL(alpha)
 }

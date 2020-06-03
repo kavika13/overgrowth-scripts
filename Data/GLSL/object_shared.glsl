@@ -1,3 +1,6 @@
+void object_shared(){} // This is just here to make sure it gets added to include paths
+#include "lighting.glsl"
+
 #ifndef BAKED_SHADOWS
     #define VARYING_SHADOW \
         varying vec4 shadow_coords[4];
@@ -11,6 +14,7 @@
 varying vec3 ws_vertex;
 
 #define VARYING_TAN_TO_WORLD \
-varying vec3 tangent_to_world1; \
-varying vec3 tangent_to_world2; \
-varying vec3 tangent_to_world3;
+varying mat3 tangent_to_world;
+
+#define UNIFORM_LIGHT_DIR \
+uniform vec3 ws_light;

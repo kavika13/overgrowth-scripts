@@ -1,33 +1,13 @@
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex2;
-uniform samplerCube tex3;
-#ifdef BAKED_SHADOWS
-    #ifdef SHADOW_CATCHER
-        uniform sampler2D tex4;
-    #endif
-#else
-    uniform sampler2DShadow tex4;
-#endif
-uniform sampler2DShadow tex5;
-uniform sampler2D tex6;
-uniform sampler2D tex7;
-uniform vec3 cam_pos;
-uniform mat4 shadowmat;
-uniform vec3 ws_light;
-#ifndef SHADOW_CATCHER
-    uniform float in_light;
-#endif
-//uniform mat4 bones[64];
+#include "object_vert.glsl"
+#include "object_shared.glsl"
 
-varying vec3 vertex_pos;
-varying vec3 ws_vertex;
+UNIFORM_REL_POS
+uniform mat4 shadowmat;
+
+VARYING_REL_POS
+VARYING_SHADOW
 varying vec3 concat_bone1;
 varying vec3 concat_bone2;
-#ifndef BAKED_SHADOWS
-    varying vec4 shadow_coords[4];
-    #include "lighting.glsl"
-#endif
 
 void main()
 {    
@@ -43,15 +23,13 @@ void main()
     concat_bone2 = concat_bone[1].xyz;
 
     vec4 transformed_vertex = concat_bone * gl_Vertex;
-    ws_vertex = transformed_vertex.xyz - cam_pos;
-    vertex_pos = transformed_vertex.xyz;
+    CALC_REL_POS
  
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-    gl_TexCoord[1] = gl_MultiTexCoord0 + gl_MultiTexCoord5;
+
+    gl_TexCoord[0].xy = gl_MultiTexCoord0.xy;
+    gl_TexCoord[0].zw = gl_MultiTexCoord0.xy + gl_MultiTexCoord5.xy;
+    gl_TexCoord[1] = gl_MultiTexCoord6;
     gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
-    gl_TexCoord[3] = gl_MultiTexCoord6;
-#ifndef BAKED_SHADOWS
-    SetCascadeShadowCoords(transformed_vertex, shadow_coords);
-#endif
+    CALC_CASCADE_TEX_COORDS
 } 

@@ -1,13 +1,9 @@
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex2;
-uniform samplerCube tex3;
-uniform sampler2D tex4;
-uniform float wetness;
+uniform vec3 cam_pos;
 
 varying mat3 tangent_to_world;
 varying vec3 vertex_pos;
 varying vec3 light_pos;
+varying vec3 ws_vertex;
 
 #include "transposemat3.glsl"
 
@@ -24,6 +20,8 @@ void main()
     
     light_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz;
   
+    ws_vertex = gl_Vertex.xyz - cam_pos;
+
     gl_Position = ftransform();
     gl_TexCoord[0] = gl_MultiTexCoord0;
     gl_TexCoord[1] = gl_MultiTexCoord3;

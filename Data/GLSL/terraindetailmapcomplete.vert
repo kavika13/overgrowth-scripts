@@ -1,45 +1,15 @@
+#include "object_vert.glsl"
+#include "object_shared.glsl"
+
 #pragma use_tangent
 
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex2;
-uniform samplerCube tex3;
-uniform sampler2D tex4;
-#ifdef BAKED_SHADOWS
-    uniform sampler2D tex5;
-#else
-    uniform sampler2DShadow tex5;
-#endif
-uniform sampler2D tex6;
-uniform sampler2D tex7;
-uniform sampler2D tex8;
-uniform sampler2D tex9;
-uniform sampler2D tex10;
-uniform sampler2D tex11;
-uniform sampler2D tex12;
-uniform sampler2D tex13;
-uniform sampler2D tex14;
-uniform vec3 cam_pos;
-uniform vec3 avg_color0;
-uniform vec3 avg_color1;
-uniform vec3 avg_color2;
-uniform vec3 avg_color3;
-uniform int weight_component;
-uniform vec3 ws_light;
+UNIFORM_REL_POS
+UNIFORM_LIGHT_DIR
 
+VARYING_REL_POS
 varying vec3 tangent;
-varying vec3 ws_vertex;
 varying float alpha;
-
-#ifndef BAKED_SHADOWS
-    varying vec4 shadow_coords[4];
-    #include "lighting.glsl"
-#endif
-
-#include "relativeskypos.glsl"
-#include "pseudoinstance.glsl"
-#include "transposemat3.glsl"
-#include "texturepack.glsl"
+VARYING_SHADOW
 
 const float terrain_size = 500.0;
 const float fade_distance = 50.0;
@@ -60,10 +30,9 @@ void main()
 
     alpha = max(0.0,alpha);
 
-    tc0 = gl_MultiTexCoord0.xy+vec2(0.0005)+ws_light.xz*0.0005;    
+    tc0 = gl_MultiTexCoord0.xy+TERRAIN_LIGHT_OFFSET;    
     tc1 = gl_MultiTexCoord3.xy*0.1;
 
-#ifndef BAKED_SHADOWS
-    SetCascadeShadowCoords(gl_Vertex, shadow_coords);
-#endif
+    vec4 transformed_vertex = gl_Vertex;
+    CALC_CASCADE_TEX_COORDS
 } 

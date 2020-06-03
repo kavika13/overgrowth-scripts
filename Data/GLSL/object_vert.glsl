@@ -1,3 +1,5 @@
+void object_vert(){} // This is just here to make sure it gets added to include paths
+
 #include "pseudoinstance.glsl"
 #include "shadowpack.glsl"
 #include "texturepack.glsl"
@@ -10,12 +12,9 @@ uniform vec3 cam_pos;
 ws_vertex = transformed_vertex.xyz - cam_pos;
 
 #define CALC_TAN_TO_WORLD \
-mat3 obj2worldmat3 = GetPseudoInstanceMat3(); \
-mat3 tan_to_obj = mat3(gl_MultiTexCoord1.xyz, gl_MultiTexCoord2.xyz, gl_Normal); \
-mat3 tangent_to_world = obj2worldmat3 * tan_to_obj; \
-tangent_to_world1 = normalize(tangent_to_world[0]); \
-tangent_to_world2 = normalize(tangent_to_world[1]); \
-tangent_to_world3 = normalize(tangent_to_world[2]);
+mat3 obj2worldmat3 = GetPseudoInstanceMat3Normalized(); \
+mat3 tan_to_obj = mat3(gl_MultiTexCoord1.xyz, gl_MultiTexCoord2.xyz, normalize(gl_Normal)); \
+tangent_to_world = obj2worldmat3 * tan_to_obj;
 
 #define CALC_TRANSFORMED_VERTEX \
 mat4 obj2world = GetPseudoInstanceMat4(); \
@@ -26,3 +25,5 @@ gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex; \
 tc0 = gl_MultiTexCoord0.xy;\
 tc1 = GetShadowCoords();\
 CALC_CASCADE_TEX_COORDS
+
+#define TERRAIN_LIGHT_OFFSET vec2(0.0005)+ws_light.xz*0.0005

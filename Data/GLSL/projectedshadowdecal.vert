@@ -3,9 +3,11 @@ uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2D tex5;
 uniform vec3 ws_light;
+uniform vec3 cam_pos;
 
 varying vec4 ProjShadow;
 varying vec3 normal;
+varying vec3 ws_vertex;
 
 #include "pseudoinstance.glsl"
 
@@ -18,6 +20,8 @@ void main()
 
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
     normal = gl_Normal;
+
+    ws_vertex = transformed_vertex.xyz - cam_pos;
 
     gl_TexCoord[0] = gl_MultiTexCoord0;
     gl_TexCoord[1] = gl_MultiTexCoord3;
