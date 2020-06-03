@@ -88,11 +88,10 @@ class FlipInfo {
         } else {
             axis = flip_info.target_flip_axis;
         }
-
-        quaternion rotation = this_mo.GetAvgRotation();
+        quaternion rotation(this_mo.GetAvgRotationVec4());
         vec3 facing = Mult(rotation,vec3(0,0,1));
         vec3 up = Mult(rotation,vec3(0,1,0));
-
+        
         vec3 going_up_vec = normalize(cross(axis,up));
         bool going_up = going_up_vec.y > 0.0f;
 

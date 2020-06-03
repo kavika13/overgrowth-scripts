@@ -248,7 +248,7 @@ void UpdateCutThroatEffect() {
         vec3 head_pos = this_mo.GetAvgIKChainPos("head");
         vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
         vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
-        PlaySoundGroup("Data/Sounds/Blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
+        PlaySoundGroup("Data/Sounds/blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
     }
     -- blood_delay;
 }
