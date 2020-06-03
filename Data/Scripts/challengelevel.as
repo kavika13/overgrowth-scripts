@@ -466,7 +466,7 @@ void Update() {
     }
     challenge_end_gui.Update();
     time += time_step;
-    //VictoryCheckNormal();
+    VictoryCheckNormal();
 }
 
 int NumUnvisitedMustVisitTriggers() {

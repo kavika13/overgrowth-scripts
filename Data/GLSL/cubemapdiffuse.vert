@@ -12,7 +12,6 @@ void main()
     normal = normalize(gl_NormalMatrix * gl_Normal);  
     mat3 obj2worldmat3 = GetPseudoInstanceMat3();
     world_normal = obj2worldmat3 * normal;
-    world_normal.xy *= -1.0;
    
     mat4 obj2worldmat4 = GetPseudoInstanceMat4();
     vec3 transformed_vertex = (obj2worldmat4 * gl_ModelViewMatrix * gl_Vertex).xyz;

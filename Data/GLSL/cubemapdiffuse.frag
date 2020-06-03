@@ -1,7 +1,9 @@
+#extension GL_ARB_shader_texture_lod : require
+
 #include "object_shared.glsl"
 #include "object_frag.glsl"
 
-uniform samplerCube diffuse_cubemap;
+uniform samplerCube spec_cubemap;
 uniform vec4 emission;
 uniform vec3 cam_pos;
 
@@ -16,7 +18,7 @@ void main()
     float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
     vec3 color = GetDirectColor(NdotL);
 
-    color += textureCube(diffuse_cubemap,world_normal).xyz * GetAmbientContrib(1.0);
+    color += textureCubeLod(spec_cubemap,world_normal,5.0).xyz * GetAmbientContrib(1.0);
     
     color *= BalanceAmbient(NdotL);
     color *= gl_Color.xyz;

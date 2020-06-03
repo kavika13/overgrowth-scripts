@@ -223,8 +223,6 @@ class FlipInfo {
             flip_tuck = 0.0f;
             this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
         } else {
-            //flip_tuck = 1.0f;
-            flip_progress = 0.0f;
             target_flip_angle = 1.0f;
         }
     }
@@ -244,6 +242,7 @@ class FlipInfo {
 
         roll_direction = GetFlipDir(target_velocity);
         flip_axis = AxisFromDir(roll_direction);
+        target_flip_axis = AxisFromDir(roll_direction);
 
         start_roll_angle = atan2(roll_direction.z, roll_direction.x);
         vec3 roll_facing = this_mo.GetFacing();

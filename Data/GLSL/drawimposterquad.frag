@@ -46,7 +46,7 @@ void main()
     ws_normal = normalize(ws_normal);
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
     vec3 diffuse_color = GetDirectColor(NdotL);
-    vec3 ambient = LookupCubemapSimple(ws_normal, tex4) *
+    vec3 ambient = LookupCubemapSimpleLod(ws_normal, tex4, 5.0) *
                      GetAmbientContrib(shadow_tex.g);
     diffuse_color += ambient;
 
@@ -63,7 +63,7 @@ void main()
     color *= BalanceAmbient(NdotL);
     
     color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
-    AddHaze(color, TransformRelPosForSky(ws_vertex), tex4);
+    AddHaze(color, ws_vertex, tex4);
 
     color *= Exposure();
 

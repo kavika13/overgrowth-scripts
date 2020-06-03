@@ -22,7 +22,7 @@ void main()
     vec3 color = GetDirectColor(NdotL);
     
     // Add ambient lighting to baked texture
-    color += LookupCubemapSimple(normal_vec, tex3) * GetAmbientContrib(shadow_tex.g);
+    color += LookupCubemapSimpleLod(normal_vec, tex3, 5.0) * GetAmbientContrib(shadow_tex.g);
 
     // Combine diffuse color with baked texture
     color *= texture2D(tex0,gl_TexCoord[0].xy).xyz;

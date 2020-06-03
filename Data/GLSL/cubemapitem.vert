@@ -3,7 +3,6 @@
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
-uniform samplerCube tex3;
 #ifdef BAKED_SHADOWS
     uniform sampler2D tex4;
 #else

@@ -27,11 +27,11 @@ void Update() {
     }
     
     camera.SetInterpSteps(1);
-    if(GetInputPressed(controller_id, "o") && GetInputDown(controller_id, "ctrl")){
+    /*if(GetInputPressed(controller_id, "o") && GetInputDown(controller_id, "ctrl")){
         camera_animation_reader.AttachTo("Data/Animations/test.canm");
         co.LoadParallaxScene("Data/Textures/twisted_paths.png",
                           "Data/Models/twisted_paths.obj");
-    }
+    }*/
     if(camera_animation_reader.valid()){
         vec3 pos = camera_animation_reader.GetPosition();
         pos = vec3(pos.x, pos.z, -pos.y);

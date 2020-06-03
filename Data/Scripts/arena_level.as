@@ -210,10 +210,10 @@ void SetPlaceholderPreviews() {
         if(params.HasParam("Name")){
             string name_str = params.GetString("Name");
             if("character_spawn" == name_str){
-                SetSpawnPointPreview(obj,"Data/Objects/IGF_Characters/IGF_Guard.xml");
+                SetSpawnPointPreview(obj,level.GetPath("spawn_preview"));
             }
             if("weapon_spawn" == name_str){
-                SetSpawnPointPreview(obj,"Data/Objects/Weapons/DogWeapons/DogBroadSword.xml");
+                SetSpawnPointPreview(obj,level.GetPath("weap_preview"));
             }
         }
     }
@@ -236,7 +236,7 @@ void DrawGUI() {
     float display_time = time;
 
     {   HUDImage @image = hud.AddImage();
-        image.SetImageFromPath("Data/Textures/diffuse.tga");
+        image.SetImageFromPath(level.GetPath("diffuse_tex"));
         float stretch = GetScreenHeight() / image.GetHeight();
         image.position.x = GetScreenWidth() * 0.4f - 200;
         image.position.y = ((1.0-visible) * GetScreenHeight() * -1.2);
@@ -314,15 +314,15 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
     int rnd = rand()%2+1;
     switch(rnd){
     case 0: 
-        actor_path = "Data/Objects/IGF_Characters/IGF_RabbitCivActor.xml"; 
+        actor_path = level.GetPath("char_civ"); 
         break;
     case 1: 
         fur_channel = 1;
-        actor_path = "Data/Objects/IGF_Characters/IGF_GuardActor.xml"; 
+        actor_path = level.GetPath("char_guard"); 
         break;
     case 2: 
         fur_channel = 0;
-        actor_path = "Data/Objects/characters/raider_rabbit_actor.xml"; 
+        actor_path = level.GetPath("char_raider"); 
         break;
     }
     // Spawn actor
@@ -363,7 +363,7 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
     params.SetFloat("Damage Resistance", mix(RangedRandomFloat(0.6f,0.8f), RangedRandomFloat(0.9f,1.1f), difficulty));
     params.SetInt("Left handed", (rand()%5==0)?1:0);
     if(rand()%2==0){
-        params.SetString("Unarmed Stance Override", "Data/Animations/r_idle2.xml");
+        params.SetString("Unarmed Stance Override", level.GetPath("alt_stance_anim"));
     }
     char_obj.UpdateScriptParams();
 
@@ -424,7 +424,7 @@ void SetUpLevel(float initial_difficulty){
         if(i != player_id){
             CreateEnemy(obj, initial_difficulty-0.5f, character_spawns[i].team);
         } else {
-            Object@ char_obj = SpawnObjectAtSpawnPoint(obj,"Data/Objects/IGF_Characters/pale_turner_actor.xml");
+            Object@ char_obj = SpawnObjectAtSpawnPoint(obj, level.GetPath("char_player"));
             char_obj.SetPlayer(true);
             ScriptParams@ char_params = char_obj.GetScriptParams();
             int team = character_spawns[i].team;
@@ -458,10 +458,10 @@ void SetUpLevel(float initial_difficulty){
             rnd = 0;
         }
         switch(rnd){
-        case 0: weap_str = "Data/Items/DogWeapons/DogKnife.xml"; break;
-        case 1: weap_str = "Data/Items/DogWeapons/DogBroadSword.xml"; break;
-        case 2: weap_str = "Data/Items/DogWeapons/DogSword.xml"; break;
-        case 3: weap_str = "Data/Items/DogWeapons/DogSpear.xml"; break;
+        case 0: weap_str = level.GetPath("weap_knife"); break;
+        case 1: weap_str = level.GetPath("weap_big_sword"); break;
+        case 2: weap_str = level.GetPath("weap_sword"); break;
+        case 3: weap_str = level.GetPath("weap_spear"); break;
         }
 
         int num_chars = GetNumCharacters();
@@ -538,7 +538,7 @@ void SetUpLevel(float initial_difficulty){
     // Audience size increases exponentially based on difficulty
     audience_size = (rand()%1000+100)*pow(4.0f,initial_difficulty)*0.1f;
     if(audience_sound_handle == -1){
-        audience_sound_handle = PlaySoundLoop("Data/Sounds/crowd/crowd_arena_general_1.wav",0.0f);
+        audience_sound_handle = PlaySoundLoop(level.GetPath("crowd_sound"),0.0f);
     }
     level_outcome = kUnknown;
     int num_scores = 4;
@@ -903,7 +903,7 @@ void VictoryCheck() {
 void UpdateIngameText(string str) {
     TextCanvasTexture @text = level.GetTextElement(ingame_text_id);
     text.ClearTextCanvas();
-    string font_str = "Data/UI/arena/images/arabtype.ttf";
+    string font_str = level.GetPath("font");
     TextStyle style;
     style.font_face_id = GetFontFaceID(font_str, 48);
 
@@ -921,7 +921,7 @@ void UpdateIngameText(string str) {
 void SetIntroText() {
     TextCanvasTexture @text = level.GetTextElement(main_text_id);
     text.ClearTextCanvas();
-    string font_str = "Data/UI/arena/images/arabtype.ttf";
+    string font_str = level.GetPath("font");
     TextStyle small_style, big_style;
     small_style.font_face_id = GetFontFaceID(font_str, 48);
     big_style.font_face_id = GetFontFaceID(font_str, 72);
@@ -961,7 +961,7 @@ void SetIntroText() {
 void SetWinText(int new_fans, int total_fans, float excitement_level) {
     TextCanvasTexture @text = level.GetTextElement(main_text_id);
     text.ClearTextCanvas();
-    string font_str = "Data/UI/arena/images/arabtype.ttf";
+    string font_str = level.GetPath("font");
     TextStyle small_style, big_style;
     small_style.font_face_id = GetFontFaceID(font_str, 48);
     big_style.font_face_id = GetFontFaceID(font_str, 72);
@@ -1001,7 +1001,7 @@ void SetWinText(int new_fans, int total_fans, float excitement_level) {
 void SetLoseText(int new_fans, float excitement_level) {
     TextCanvasTexture @text = level.GetTextElement(main_text_id);
     text.ClearTextCanvas();
-    string font_str = "Data/UI/arena/images/arabtype.ttf";
+    string font_str = level.GetPath("font");
     TextStyle small_style, big_style;
     small_style.font_face_id = GetFontFaceID(font_str, 48);
     big_style.font_face_id = GetFontFaceID(font_str, 72);

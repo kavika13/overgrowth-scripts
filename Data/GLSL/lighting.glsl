@@ -1,6 +1,8 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
+#extension GL_ARB_shader_texture_lod : require
+
 float GetDirectContribSimple( float amount ) {
     return amount * gl_LightSource[0].diffuse.a;
 }
@@ -45,6 +47,7 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset*0.2,-offset,0.0,0.0)).r * 0.2;
     shadow_tex.r = shadow_amount;*/
     int index = 0;
+    /*
     if(dist > 20.0/2.8284){
         index = 1;
     }
@@ -52,6 +55,15 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
         index = 2;
     }
     if(dist > 250.0/2.8284){
+        index = 3;
+    }*/
+    if(length(sc[0].xy-vec2(0.5)) > 0.5){
+        index = 1;
+    }    
+    if(length(sc[1].xy-vec2(0.5)) > 0.5){
+        index = 2;
+    }    
+    if(length(sc[2].xy-vec2(0.5)) > 0.5){
         index = 3;
     }
     vec4 shadow_coord = sc[index];
@@ -140,7 +152,6 @@ vec3 LookupCubemap(const mat3 obj2world_mat3,
                    const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = obj2world_mat3 * vec;
-    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
 }
 
@@ -148,15 +159,19 @@ vec3 LookupCubemapMat4(const mat4 obj2world,
                    const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = (obj2world * vec4(vec,0.0)).xyz;
-    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
 }
 
 vec3 LookupCubemapSimple(const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = vec;
-    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
+}
+
+vec3 LookupCubemapSimpleLod(const vec3 vec, 
+                   const samplerCube cube_map, float lod) {
+    vec3 world_space_vec = vec;
+    return textureCubeLod(cube_map,world_space_vec,lod).xyz;
 }
 
 float GetAmbientMultiplier() {
@@ -204,7 +219,7 @@ float GetHazeAmount( in vec3 relative_position ) {
 void AddHaze( inout vec3 color, 
               in vec3 relative_position,
               in samplerCube fog_cube ) { 
-    vec3 fog_color = textureCube(fog_cube,relative_position).xyz;
+    vec3 fog_color = textureCubeLod(fog_cube,relative_position,5.0).xyz;
     color = mix(color, fog_color, GetHazeAmount(relative_position));
 }
 

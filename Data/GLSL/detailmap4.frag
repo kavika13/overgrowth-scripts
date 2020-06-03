@@ -81,4 +81,6 @@ void main()
     CALC_HAZE
     CALC_EXPOSURE
     CALC_FINAL
+    //gl_FragColor.xyz = texture2D(shadow_sampler,shadow_tex_coords).rgb;
+    //gl_FragColor.xyz = vec3(0.0);
 }
