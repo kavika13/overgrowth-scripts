@@ -25,6 +25,12 @@ vec3 UnpackObjNormal(const vec4 normalmap) {
 	nm.z = 0.5 * y + 0.5*/
 }
 
+vec3 UnpackObjNormalV3(const vec3 normalmap) {
+	return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
+}
+
+
+
 vec3 PackObjNormal(const vec3 normal) {
 	return vec3(0.5,-0.5,0.5)*normal.xzy + vec3(0.5,0.5,0.5);
 	

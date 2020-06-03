@@ -1117,13 +1117,13 @@ void UpdateRagDoll() {
 bool testing_mocap = false;
 void TestMocap(){
 	//this_mo.SetAnimation("Data/Animations/mocapsit.anm");
-	this_mo.SetAnimation(character_getter.GetAnimPath("idle"));
+	this_mo.SetAnimation("Data/Animations/r_bow.anm");
 	this_mo.SetAnimationCallback("void EndTestMocap()");
 	testing_mocap = true;
 	this_mo.velocity = vec3(0.0f);
-	this_mo.position += vec3(0.0f,-0.1f,0.0f);
-	this_mo.position = vec3(16.23, 109.45, 11.71);
-	this_mo.SetRotationFromFacing(vec3(0.0f,0.0f,1.0f));
+	//this_mo.position += vec3(0.0f,-0.1f,0.0f);
+	//this_mo.position = vec3(16.23, 109.45, 11.71);
+	//this_mo.SetRotationFromFacing(vec3(0.0f,0.0f,1.0f));
 }
 
 void EndTestMocap() {
@@ -1306,7 +1306,6 @@ void update(bool _controlled, int _num_frames) {
 	this_mo.SetMorphTargetWeight("sniff",sin(time*20)*0.5+0.5,1.0f);*/
 
 	if(testing_mocap) {
-		this_mo.cam_rotation += 0.05f * num_frames;
 		return;
 	}
 	controlled = _controlled;
@@ -1411,16 +1410,16 @@ void update(bool _controlled, int _num_frames) {
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
-	/*
-	if(GetInputPressed("c")){
+	
+	if(GetInputPressed("b")){
 		// if you were looking for the controls to change if the AI is hostile or not, look at enemycontrol.as
-		if(state == _movement_state){
+		/*if(state == _movement_state){
 			SetState(_ground_state);
 		} else {
 			SetState(_movement_state);
-		}
-//		TestMocap();
-	}*/
+		}*/
+		TestMocap();
+	}
 
 	if(!controlled){
 		HandleCollisionsBetweenCharacters();
