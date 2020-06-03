@@ -1,3 +1,5 @@
+#version 150
+
 #pragma transparent
 uniform vec3 light_pos;
 

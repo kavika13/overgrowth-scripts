@@ -1,3 +1,4 @@
+#version 150
 #pragma blendmode_add
 #extension GL_ARB_texture_rectangle : enable
 

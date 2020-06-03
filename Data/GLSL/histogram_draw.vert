@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2D tex0;
 uniform mat4 mvp;
 uniform int num_buckets;

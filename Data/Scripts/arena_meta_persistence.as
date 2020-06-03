@@ -1059,8 +1059,15 @@ class GlobalArenaData {
         JSONValue set_world_node = action_clause["set_world_node"];
         if( set_world_node.type() != JSONnullValue )
         {
-            Log( info, "Setting next world_node to " + world_node_id );
-            queued_world_node_id = set_world_node.asString();
+            if( set_world_node_to == "" )
+            {
+                Log( info, "Setting next world_node to " + world_node_id );
+                queued_world_node_id = set_world_node.asString();
+            }
+            else
+            {
+                Log( error, "Previously set world node to " + set_world_node_to + " won't set again" );
+            }
         }
         
         JSONValue add_states = action_clause["add_states"];
@@ -1324,9 +1331,19 @@ class GlobalArenaData {
         }
     }
 
+    string set_world_node_to;
+
+    void ResetDuplicateWarnings()
+    {
+        set_world_node_to = "";
+    }
+
     void ResolveWorldNode( bool top_level = true )
     {
         JSONValue character = getCurrentCharacter();
+
+        ResetDuplicateWarnings();
+
         if( queued_world_node_id != "" )
         {
             world_node_id = queued_world_node_id;

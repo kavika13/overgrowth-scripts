@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2D tex0;
 uniform vec4 emission;
 varying vec3 normal;

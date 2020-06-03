@@ -102,38 +102,36 @@ bool GetAmbientCube(in vec3 pos, int num_tetrahedra, in usamplerBuffer tet_buf, 
                                      points[2], points[3], 
                                      pos);
 
-        uvec4 neighbors = texelFetch(tet_buf, index+2);     
+        uvec4 neighbors = texelFetch(tet_buf, index+2);  
+        bool val = false;
         if(num_guess < kMaxGuess){
             if(bary_coords[0] < 0.0){
                 if(last_guess != neighbors[0]){
                     last_guess = tet_guess;
                     tet_guess = neighbors[0];     
-                    continue; 
+                    val = true;
                 }
-            } 
-            if(bary_coords[1] < 0.0){
+            } else if(!val && bary_coords[1] < 0.0){
                 if(last_guess != neighbors[1]){
                     last_guess = tet_guess;
                     tet_guess = neighbors[1];     
-                    continue; 
+                    val = true;
                 }
-            } 
-            if(bary_coords[2] < 0.0){
+            } else if(!val && bary_coords[2] < 0.0){
                 if(last_guess != neighbors[2]){
                     last_guess = tet_guess;
-                    tet_guess = neighbors[2];     
-                    continue; 
+                    tet_guess = neighbors[2];    
+                    val = true;
                 }
-            } 
-            if(bary_coords[3] < 0.0){
+            } else if(!val && bary_coords[3] < 0.0){
                 if(last_guess != neighbors[3]){
                     last_guess = tet_guess;
-                    tet_guess = neighbors[3];     
-                    continue; 
+                    tet_guess = neighbors[3];    
+                    val = true;
                 }
             }
         }
-        if(true){
+        if(!val){
             // Reduce/eliminate contribution from probes inside of walls
             // This loop is unrolled because otherwise there is a problem on Intel cards
             if((tet_point_bits2[2]&1u) == 0u){
@@ -162,8 +160,8 @@ bool GetAmbientCube(in vec3 pos, int num_tetrahedra, in usamplerBuffer tet_buf, 
             for(int point=0; point<4; ++point){
                 for(int face=0; face<6; ++face){
                     for(int channel=0; channel<3; ++channel){
-                        uint array_index = offset/128u;
-                        uint channel_index = (offset % 128u) / 32u;
+                        int array_index = int(offset/128u);
+                        int channel_index = int((offset % 128u) / 32u);
                         uint val = (color[array_index][channel_index] >> (24u-(offset%32u))) % 256u;
                         ambient_cube_color[face][channel] += float(val) / 255.0 * bary_coords[point] * 4.0;
                         offset += 8u;

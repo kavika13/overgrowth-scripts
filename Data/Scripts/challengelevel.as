@@ -1,5 +1,6 @@
 #include "ui_effects.as"
 #include "threatcheck.as"
+#include "music_load.as"
 
 bool reset_allowed = true;
 float time = 0.0f;
@@ -8,6 +9,8 @@ string level_name;
 int in_victory_trigger = 0;
 const float _reset_delay = 4.0f;
 float reset_timer = _reset_delay;
+
+MusicLoad ml("Data/Music/challengelevel.xml");
 
 void Init(string p_level_name) {
     challenge_end_gui.Init();

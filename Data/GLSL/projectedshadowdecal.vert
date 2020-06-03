@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2DShadow tex0;
 uniform samplerCube tex3;
 uniform sampler2D tex4;

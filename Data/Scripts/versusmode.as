@@ -1,4 +1,7 @@
 #include "ui_effects.as"
+#include "music_load.as"
+
+MusicLoad ml("Data/Music/challengelevel.xml");
 
 int controller_id = 0;
 float time = 0.0f;

@@ -1125,6 +1125,10 @@ class Dialogue {
             params.AddIntCheckbox("No Save", true);
             obj.SetCopyable(false);
             obj.SetDeletable(false);
+            obj.SetSelectable(true);
+            obj.SetTranslatable(true);
+            obj.SetScalable(true);
+            obj.SetRotatable(true);
             break;}
         case kCharacter: {
             if(se.spawned_id == -1){
@@ -1141,6 +1145,8 @@ class Dialogue {
             obj.SetCopyable(false);
             obj.SetDeletable(false);
             obj.SetScalable(false);
+            obj.SetSelectable(true);
+            obj.SetTranslatable(true);
             break; }
         case kHeadTarget: {
             if(se.spawned_id == -1){
@@ -1159,6 +1165,9 @@ class Dialogue {
             obj.SetCopyable(false);
             obj.SetDeletable(false);
             obj.SetRotatable(false);
+            obj.SetSelectable(true);
+            obj.SetTranslatable(true);
+            obj.SetScalable(true);
             break; }
         case kChestTarget: {
             if(se.spawned_id == -1){
@@ -1177,6 +1186,9 @@ class Dialogue {
             obj.SetCopyable(false);
             obj.SetDeletable(false);
             obj.SetRotatable(false);
+            obj.SetSelectable(true);
+            obj.SetTranslatable(true);
+            obj.SetScalable(true);
             break; }
         case kEyeTarget: {           
             if(se.spawned_id == -1){
@@ -1195,6 +1207,9 @@ class Dialogue {
             obj.SetCopyable(false);
             obj.SetDeletable(false);
             obj.SetRotatable(false);
+            obj.SetSelectable(true);
+            obj.SetTranslatable(true);
+            obj.SetScalable(true);
             break; }
         }
     }

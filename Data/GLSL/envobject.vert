@@ -101,7 +101,7 @@ in vec2 tex_coord_attrib;
     out vec3 ws_vertex;
     out vec4 shadow_coords[4];
     out vec3 world_vert;
-    #define TERRAIN_LIGHT_OFFSET vec2(0.0005)+ws_light.xz*0.0005
+    #define TERRAIN_LIGHT_OFFSET vec2(0.0);//vec2(0.0005)+ws_light.xz*0.0005
 #elif defined(ITEM)    
     #ifndef DEPTH_ONLY
     out vec3 ws_vertex;
@@ -119,7 +119,7 @@ in vec2 tex_coord_attrib;
     const float fade_distance = 50.0;
     const float fade_mult = 1.0 / fade_distance;
 
-    #define TERRAIN_LIGHT_OFFSET vec2(0.0005)+ws_light.xz*0.0005
+    #define TERRAIN_LIGHT_OFFSET vec2(0.0);//vec2(0.0005)+ws_light.xz*0.0005
 #elif defined(CHARACTER)
     out vec2 fur_tex_coord;
     #ifndef DEPTH_ONLY
@@ -128,6 +128,7 @@ in vec2 tex_coord_attrib;
     out vec2 tex_coord;
     out vec2 morphed_tex_coord;
     out vec3 world_vert;
+    out vec3 orig_vert;
     out vec3 vel;
     #endif
 #else
@@ -141,10 +142,25 @@ in vec2 tex_coord_attrib;
     #endif
 #endif
 
+const float water_height = 26.0;
+const float refract_amount = 0.6;
+
+void ApplyWaterRefraction(inout vec3 vert){
+    /*if(vert.y < water_height){
+        vert.y = water_height + (vert.y - water_height) * refract_amount;
+    }*/
+/*
+    if(vert.y > water_height){
+        vert.y = water_height + (vert.y - water_height) / refract_amount;
+    }*/
+}
+
 void main() {    
     #ifdef PARTICLE
-        gl_Position = mvp * vec4(vertex_attrib, 1.0);    
-        world_vert = vertex_attrib;
+        vec3 transformed_vertex = vertex_attrib;
+        ApplyWaterRefraction(transformed_vertex);
+        gl_Position = mvp * vec4(transformed_vertex, 1.0);    
+        world_vert = transformed_vertex;
         tex_coord = tex_coord_attrib;    
         tangent_to_world3 = normalize(normal_attrib * -1.0);
         tangent_to_world1 = normalize(tangent_attrib);
@@ -163,17 +179,20 @@ void main() {
         mat3 tan_to_obj = mat3(tangent_attrib, bitangent_attrib, normal_attrib);
         tangent_to_world = obj2worldmat3 * tan_to_obj;
 
-        world_vert = transformed_vertex.xyz;
-        ws_vertex = transformed_vertex.xyz - cam_pos;
          
         vec4 aux = texcoords2[int(index)];
 
         float embed = aux.z;
         float height_scale = aux.a;
-        transformed_vertex.y -= max(embed,length(ws_vertex)/max_distance)*height*height_scale;
+        transformed_vertex.y -= max(embed,length(transformed_vertex.xyz - cam_pos)/max_distance)*height*height_scale;
         #ifdef PLANT
             transformed_vertex += obj2world * vec4(vertex_offset,0.0);
         #endif
+        vec3 temp = transformed_vertex.xyz;
+        ApplyWaterRefraction(temp);
+        transformed_vertex.xyz = temp;
+        world_vert = transformed_vertex.xyz;
+        ws_vertex = transformed_vertex.xyz - cam_pos;
         gl_Position = projection_view_mat * transformed_vertex;
 
         frag_tex_coords = tex_coord_attrib;
@@ -197,8 +216,11 @@ void main() {
             vel = (new_vel - old_vel).xyz;
         #endif
     #elif defined(TERRAIN)
+        vec3 transformed_vertex = vertex_attrib;
+        ApplyWaterRefraction(transformed_vertex);
+
         frag_tangent = tangent_attrib;    
-        world_vert = vertex_attrib;      
+        world_vert = transformed_vertex;      
         alpha = min(1.0,(terrain_size-vertex_attrib.x)*fade_mult)*
                 min(1.0,(vertex_attrib.x+500.0)*fade_mult)*
                 min(1.0,(terrain_size-vertex_attrib.z)*fade_mult)*
@@ -207,7 +229,7 @@ void main() {
         frag_tex_coords.xy = tex_coord_attrib+TERRAIN_LIGHT_OFFSET;    
         frag_tex_coords.zw = detail_tex_coord*0.1;
 
-        gl_Position = mvp * vec4(vertex_attrib, 1.0);
+        gl_Position = mvp * vec4(transformed_vertex, 1.0);
     #elif defined(CHARACTER)    
         mat4 concat_bone;
         concat_bone[0] = vec4(transform_mat_column_a[0], transform_mat_column_b[0], transform_mat_column_c[0], 0.0);
@@ -216,10 +238,12 @@ void main() {
         concat_bone[3] = vec4(transform_mat_column_a[3], transform_mat_column_b[3], transform_mat_column_c[3], 1.0);
         // Set up varyings to pass bone matrix to fragment shader
         vec3 transformed_vertex = (concat_bone * vec4(vertex_attrib, 1.0)).xyz;
+        ApplyWaterRefraction(transformed_vertex);
 
         gl_Position = mvp * vec4(transformed_vertex, 1.0);
 
         #ifndef DEPTH_ONLY
+            orig_vert = vertex_attrib;
             world_vert = transformed_vertex;
             concat_bone1 = concat_bone[0].xyz;
             concat_bone2 = concat_bone[1].xyz;
@@ -242,6 +266,9 @@ void main() {
             vec3 vertex_offset = CalcVertexOffset(transformed_vertex, plant_stability_attrib.r, time, plant_shake);
             transformed_vertex.xyz += model_rotation_mat[instance_id] * vertex_offset;
         #endif
+        vec3 temp = transformed_vertex.xyz;
+        ApplyWaterRefraction(temp);
+        transformed_vertex.xyz = temp;
         gl_Position = projection_view_mat * transformed_vertex;    
         frag_tex_coords = tex_coord_attrib;
         #ifdef SCROLL_MEDIUM

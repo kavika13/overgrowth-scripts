@@ -702,6 +702,7 @@ class LedgeInfo {
             ghost_movement = false;
 
             this_mo.MaterialEvent("edge_grab", this_mo.position + ledge_dir * _leg_sphere_size);
+			AchievementEvent("edge_grab");
             HandleAIEvent(_grabbed_ledge);
         }
 
@@ -712,6 +713,7 @@ class LedgeInfo {
         if(ghost_movement){
             on_ledge = false;    
             climbed_up = true;
+			AchievementEvent("climbed_up");
             jump_info.hit_wall = false;
             this_mo.velocity = vec3(0.0f);
         }

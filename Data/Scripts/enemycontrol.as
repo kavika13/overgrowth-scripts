@@ -335,7 +335,7 @@ void HandleAIEvent(AIEvent event){
         }
         } break;
     case _damaged:
-        if(goal == _patrol){
+        if(goal == _patrol && combat_allowed){
             Print("Damaged!\n");
             nav_target = this_mo.position;
             SetGoal(_investigate);

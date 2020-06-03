@@ -2,10 +2,14 @@
 #include "arena_meta_persistence.as"
 #include "ui_tools.as"
 #include "utility/ticker.as"
+#include "music_load.as"
+
+MusicLoad ml("Data/Music/arena.xml");
 
 // enum for the statemachine (Someday I'll write something to make this easier )
 enum ArenaGUIState {
     agsInvalidState,
+    agsLoadingLevel,
     agsMainMenu,
     agsSelectProfile,
     agsNewProfile,
@@ -1941,6 +1945,7 @@ class ArenaGUI : AHGUI::GUI {
         {
             JSONValue arena_instance = global_data.getArenaInstance(global_data.arena_instance_id);      
             this_ui.SendCallback( arena_instance["level"].asString() );
+            currentState = agsLoadingLevel;
         }
         else if( world_map_node["type"].asString() == "end_game" )
         {
@@ -2304,7 +2309,8 @@ bool HasFocus(){
 }
 
 void Initialize( ) {
-
+    PlaySong("sub-arena-loop");
+    PlaySegment("menu");
 }
 
 void Dispose() {

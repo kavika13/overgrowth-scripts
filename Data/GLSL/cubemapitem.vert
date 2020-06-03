@@ -1,3 +1,4 @@
+#version 150
 #pragma use_tangent
 
 uniform sampler2D tex0;

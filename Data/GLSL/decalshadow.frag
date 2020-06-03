@@ -1,3 +1,5 @@
+#version 150
+
 #pragma transparent
 
 uniform sampler2D tex4;

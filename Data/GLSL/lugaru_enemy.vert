@@ -1,3 +1,5 @@
+#version 150
+
 #pragma use_tangent
 #include "object_vert.glsl"
 #include "object_shared.glsl"
