@@ -31,8 +31,13 @@ const float _tilt_transition_vel = 8.0f;
 vec3 ground_normal(0,1,0);
 
 bool feet_moving = false;
+float getting_up_time;
 
 int run_phase = 1;
+
+const int _movement_state = 0;
+const int _ground_state = 1; 
+int state;
 
 const float _run_threshold = 0.8f;
 const float _walk_threshold = 0.6f;
@@ -389,6 +394,7 @@ void HandleGroundCollision() {
 }
 
 void GoLimp() {
+	SetState(_movement_state);
 	limp = true;
 	this_mo.Ragdoll();
 	recovery_time = _ragdoll_recovery_time;
@@ -441,11 +447,21 @@ void UpdateAttacking() {
 	}
 }
 
+void SetState(int _state) {
+	state = _state;
+	if(state == _ground_state){
+		getting_up_time = 0.0f;	
+	}
+}
+
 const int _wake_stand = 0;
 const int _wake_flip = 1;
 const int _wake_roll = 2;
+const int _wake_fall = 3;
+
 
 void WakeUp(int how) {
+	SetState(_movement_state);
 	this_mo.UnRagdoll();
 	
 	HandleBumperCollision();
@@ -457,6 +473,10 @@ void WakeUp(int how) {
 	duck_vel = 0.0f;
 	target_duck_amount = 1.0f;
 	if(how == _wake_stand){
+		SetOnGround(true);
+		flip_info.Land();
+		SetState(_ground_state);
+	} else if(how == _wake_fall){
 		SetOnGround(true);
 		flip_info.Land();
 		this_mo.StartAnimation("Data/Animations/idle.xml");
@@ -479,6 +499,30 @@ void WakeUp(int how) {
 	}
 }
 
+bool CanRoll() {
+	vec3 sphere_center = this_mo.position;
+	float radius = 1.0f;
+	this_mo.GetSlidingSphereCollision(sphere_center, radius);
+	bool can_roll = true;
+	vec3 roll_point;
+	if(sphere_col.NumContacts() == 0){
+		can_roll = false;
+	} else {
+		can_roll = false;
+		roll_point = sphere_col.GetContact(0).position;
+		for(int i=0; i<sphere_col.NumContacts(); i++){
+			const CollisionPoint contact = sphere_col.GetContact(i);
+			if(contact.position.y < roll_point.y){
+				roll_point = contact.position;
+			}
+			if(contact.normal.y > 0.5f){
+				can_roll = true;
+			}
+		}
+	}
+	return can_roll;
+}
+
 void UpdateRagDoll() {
 	if(GetInputDown("z")){		
 		GoLimp();
@@ -486,29 +530,15 @@ void UpdateRagDoll() {
 	if(limp == true){
 		recovery_time -= time_step;
 		if(recovery_time < 0.0f){
-			WakeUp(_wake_stand);
+			bool can_roll = CanRoll();
+			if(can_roll){
+				WakeUp(_wake_stand);
+			} else {
+				WakeUp(_wake_fall);
+			}
 		} else {
 			if(WantsToRollFromRagdoll()){
-				vec3 sphere_center = this_mo.position;
-				float radius = 1.0f;
-				this_mo.GetSlidingSphereCollision(sphere_center, radius);
-				bool can_roll = true;
-				vec3 roll_point;
-				if(sphere_col.NumContacts() == 0){
-					can_roll = false;
-				} else {
-					can_roll = false;
-					roll_point = sphere_col.GetContact(0).position;
-					for(int i=0; i<sphere_col.NumContacts(); i++){
-						const CollisionPoint contact = sphere_col.GetContact(i);
-						if(contact.position.y < roll_point.y){
-							roll_point = contact.position;
-						}
-						if(contact.normal.y > 0.5f){
-							can_roll = true;
-						}
-					}
-				}
+				bool can_roll = CanRoll();
 				if(!can_roll){
 					WakeUp(_wake_flip);
 				} else {
@@ -540,6 +570,46 @@ void EndTestMocap() {
 
 int count = 0;
 
+void EndGetUp(){
+	state = _movement_state;
+	duck_amount = 1.0f;
+	duck_vel = 0.0f;
+	target_duck_amount = 1.0f;
+}
+
+void HandleGroundStateCollision() {
+	HandleBumperCollision();
+	HandleStandingCollision();
+	this_mo.position = sphere_col.position;
+	if(sphere_col.NumContacts() == 0){
+		this_mo.position.y -= 0.1f;
+	}
+	for(int i=0; i<sphere_col.NumContacts(); i++){
+		const CollisionPoint contact = sphere_col.GetContact(i);
+		if(distance(contact.position, this_mo.position)<=_leg_sphere_size+0.01f){
+			ground_normal = ground_normal * 0.9f +
+							contact.normal * 0.1f;
+			ground_normal = normalize(ground_normal);
+		}
+	}
+}
+
+void Nothing() {
+}
+
+void UpdateGroundState() {
+	this_mo.velocity = vec3(0.0f);
+	
+	/*this_mo.SetAnimation("Data/Animations/onback.anm");
+	this_mo.SetAnimationCallback("void Nothing()");
+	this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel;
+	*/
+	this_mo.SetAnimation("Data/Animations/kipup.anm");
+	this_mo.SetAnimationCallback("void EndGetUp()");
+	HandleGroundStateCollision();
+	getting_up_time += time_step;
+}
+
 void update(bool _controlled) {
 	if(testing_mocap) {
 		this_mo.cam_rotation += 0.05f;
@@ -548,19 +618,26 @@ void update(bool _controlled) {
 	controlled = _controlled;
 
 	UpdateAirWhooshSound();
-	UpdateRagDoll();
-	UpdateDuckAmount();
-	UpdateGroundAndAirTime();
-
-	if(!attacking){ 
-		UpdateMovementControls();
-		UpdateAnimation();
-		ApplyPhysics();
-	} else {
-		UpdateAttacking();
+	UpdateRagDoll();	
+	if(limp){
+		return;
 	}
-	
-	HandleGroundCollision();
+	if(state == _movement_state){
+		UpdateDuckAmount();
+		UpdateGroundAndAirTime();
+
+		if(!attacking){ 
+			UpdateMovementControls();
+			UpdateAnimation();
+			ApplyPhysics();
+		} else {
+			UpdateAttacking();
+		}
+		
+		HandleGroundCollision();
+	} else if(state == _ground_state){
+		UpdateGroundState();
+	}
 
 	if(GetInputPressed("x")){
 		NavPath temp = this_mo.GetPath(this_mo.position,
@@ -575,48 +652,19 @@ void update(bool _controlled) {
 	}
 
 	if(GetInputPressed("c")){
+		if(state == _movement_state){
+			SetState(_ground_state);
+		} else {
+			SetState(_movement_state);
+		}
 //		TestMocap();
 	}
-
-	/*count++;
-	if(count % 300 == 0){
-		Print(""+this_mo.position.x + ", "+
-			     this_mo.position.y + ", "+
-				 this_mo.position.z + "\n");
-	}*/
-/*
-	vec3 dimensions(1.0f,1.0f,1.0f);
-	this_mo.GetSlidingScaledSphereCollision(this_mo.position,
-							  1.0f,
-							  dimensions);
-
-	DebugDrawWireScaledSphere(this_mo.position,
-						1.0f,
-						dimensions,
-						vec3(1.0f,0.0f,0.0f),
-						_delete_on_update);
-
-	vec3 slid = sphere_col.adjusted_position;
-	vec3 new_pos = ApplyScaledSphereSlide(this_mo.position,
-									1.0f,
-									dimensions);
-	DebugDrawWireScaledSphere(new_pos,
-						1.0f,
-						dimensions,
-						vec3(1.0f,1.0f,1.0f),
-						_delete_on_update);*/
-
-	//this_mo.velocity += (new_pos-this_mo.position)/time_step;
-	//this_mo.position = new_pos;
 }
 
 void init() {
 }
 
 void UpdateAnimation() {
-	//this_mo.SetAnimation("Data/Animations/onback.anm");
-	//return;
-
 	vec3 flat_velocity = vec3(this_mo.velocity.x,0,this_mo.velocity.z);
 
 	float run_amount, walk_amount, idle_amount;
@@ -722,33 +770,27 @@ void SetLimbTargetOffset(string name){
 	vec3 offset = GetLimbTargetOffset(pos, anim_pos);
 	this_mo.SetIKTargetOffset(name,offset);
 }
-
-void UpdateIKTargets() {
-	/*vec3 offset = vec3(0.0f,0.0f,0.0f);
+void GroundState_UpdateIKTargets() {
+	vec3 offset = vec3(0.0f,0.0f,0.0f);
 
 	SetLimbTargetOffset("left_leg");
 	SetLimbTargetOffset("right_leg");
 	SetLimbTargetOffset("leftarm");
 	SetLimbTargetOffset("rightarm");
-
-	vec3 com = this_mo.position;
-	vec3 com_offset = GetLimbTargetOffset(com, com);
-	this_mo.SetIKTargetOffset("full_body",vec3(0.0f));//com_offset-offset);
-
-	//this_mo.SetIKTargetOffset("left_leg",vec3(0.0f));
-	//this_mo.SetIKTargetOffset("right_leg",vec3(0.0f));
-	//this_mo.SetIKTargetOffset("leftarm",vec3(0.0f));
-	//this_mo.SetIKTargetOffset("rightarm",vec3(0.0f));
-
+	this_mo.SetIKTargetOffset("full_body", vec3(0.0f));
+	
 	vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
 
 	float x_amount = ground_normal.y;
 	float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
 	float angle = atan2(y_amount, x_amount);
-	this_mo.SetFlip(axis,-angle,0.0f);
 
-	return;
-*/
+	angle *= max(0.0f,1.0f - getting_up_time * 1.5f);
+
+	this_mo.SetFlip(axis,-angle,0.0f);
+}
+
+void MovementState_UpdateIKTargets() {
 	if(!on_ground){
 		jump_info.UpdateIKTargets();
 	} else {
@@ -768,6 +810,14 @@ void UpdateIKTargets() {
 		float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
 		offset_height = mix(offset_height, curr_offset_height, 0.1f);
 		this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height,0.0f));
+	}
+}
+
+void UpdateIKTargets() {
+	if(state == _ground_state){
+		GroundState_UpdateIKTargets();
+	} else {
+		MovementState_UpdateIKTargets();
 	}
 }
 
