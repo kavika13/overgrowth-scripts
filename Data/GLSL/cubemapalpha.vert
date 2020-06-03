@@ -2,6 +2,7 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
+uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform float in_light;
 
@@ -13,6 +14,8 @@ varying vec3 rel_pos;
 #include "transposemat3.glsl"
 #include "relativeskypos.glsl"
 #include "pseudoinstance.glsl"
+#include "texturepack.glsl"
+#include "shadowpack.glsl"
 
 void main()
 {	
@@ -36,5 +39,6 @@ void main()
 	
 	//gl_Position = vec4((gl_MultiTexCoord0.st - vec2(0.5)) * vec2(2.0),0.0,1.0);
 	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
+	tc0 = gl_MultiTexCoord0.xy;
+	tc1 = GetShadowCoords();
 } 

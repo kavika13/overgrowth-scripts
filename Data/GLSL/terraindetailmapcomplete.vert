@@ -23,10 +23,15 @@ varying vec3 tangent;
 varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
+varying float alpha;
 
 #include "relativeskypos.glsl"
 #include "pseudoinstance.glsl"
 #include "transposemat3.glsl"
+
+const float terrain_size = 500.0;
+const float fade_distance = 50.0;
+const float fade_mult = 1.0 / fade_distance;
 
 void main()
 {	
@@ -48,6 +53,12 @@ void main()
 	
 	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
 	
+	//alpha = min(1.0,(gl_Vertex.x+500.0)*0.01);
+	alpha = min(1.0,(terrain_size-gl_Vertex.x)*fade_mult)*
+			min(1.0,(gl_Vertex.x+500.0)*fade_mult)*
+			min(1.0,(terrain_size-gl_Vertex.z)*fade_mult)*
+			min(1.0,(gl_Vertex.z+500.0)*fade_mult);
+
 	gl_TexCoord[0] = gl_MultiTexCoord0;	
 	gl_TexCoord[1] = gl_MultiTexCoord3*0.1;
 } 

@@ -23,6 +23,7 @@ varying vec3 tangent;
 varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
+varying float alpha;
 
 #include "lighting.glsl"
 #include "texturepack.glsl"
@@ -38,6 +39,7 @@ void main()
 	vec3 average_color = vec3(0.0);
 	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[0].xy).rgb;
 	
+	weight_map[3] = 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]);
 	float total_weight = weight_map[0] +
 						 weight_map[1] +
 						 weight_map[2] +
@@ -71,7 +73,7 @@ void main()
 	vec3 spec_color;
 	vec3 spec_map_vec;
 
-	float fade_distance = 50.0;
+	float fade_distance = 100.0;
 	float fade = min(1.0,max(0.0,length(rel_pos)/fade_distance));
 
 	vec3 normalmap = (texture2D(tex7,gl_TexCoord[1].xy) * weight_map[0] +
@@ -79,8 +81,10 @@ void main()
 					 texture2D(tex11,gl_TexCoord[1].xy) * weight_map[2] +
 					 texture2D(tex13,gl_TexCoord[1].xy) * weight_map[3]).xyz;
 	normalmap *= inv_total_weight;
-
-	vec3 normal = to_normal * UnpackTanNormal(texture2D(tex7,gl_TexCoord[1].xy));
+	normalmap = UnpackTanNormal(vec4(normalmap,1.0));
+	normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),fade);
+	
+	vec3 normal = to_normal * normalmap;
 	NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
 	diffuse_color = GetDirectColor(NdotL);
 	
@@ -110,5 +114,7 @@ void main()
 
 	color *= Exposure();
 
-	gl_FragColor = vec4(color,1.0);
+	//color = weight_map.xyz;
+
+	gl_FragColor = vec4(color,alpha);
 }

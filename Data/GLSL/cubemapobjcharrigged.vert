@@ -29,11 +29,11 @@ void main()
 	concat_bone += bones[int(gl_MultiTexCoord6.z)]*gl_MultiTexCoord5.z;
 	concat_bone += bones[int(gl_MultiTexCoord6.a)]*gl_MultiTexCoord5.a;
 */
-	concat_bone[0] = gl_MultiTexCoord1;
-	concat_bone[1] = gl_MultiTexCoord2;
-	concat_bone[2] = gl_MultiTexCoord4;
-	concat_bone[3] = gl_MultiTexCoord5;
-
+	concat_bone[0] = vec4(gl_MultiTexCoord1[0],gl_MultiTexCoord2[0],gl_MultiTexCoord4[0],0.0);
+	concat_bone[1] = vec4(gl_MultiTexCoord1[1],gl_MultiTexCoord2[1],gl_MultiTexCoord4[1],0.0);
+	concat_bone[2] = vec4(gl_MultiTexCoord1[2],gl_MultiTexCoord2[2],gl_MultiTexCoord4[2],0.0);
+	concat_bone[3] = vec4(gl_MultiTexCoord1[3],gl_MultiTexCoord2[3],gl_MultiTexCoord4[3],1.0);
+	
 	/*concat_bone[0] = vec4(1.0,0.0,0.0,0.0);
 	concat_bone[1] = vec4(0.0,1.0,0.0,0.0);
 	concat_bone[2] = vec4(0.0,0.0,1.0,0.0);
