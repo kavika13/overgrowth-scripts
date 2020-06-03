@@ -22,7 +22,7 @@ void main()
 {	
 	vec3 color;
 	
-	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[1].xy).rgb;
+	vec3 shadow_tex = vec3(1.0);//texture2D(tex5,gl_TexCoord[1].xy).rgb;
 	
 	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
 	

@@ -23,21 +23,31 @@ void main()
 {	
 	mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
 
-	/*mat4 concat_bone;
-	concat_bone = bones[int(gl_MultiTexCoord6.x)]*gl_MultiTexCoord5.x;
+	mat4 concat_bone;
+	/*concat_bone = bones[int(gl_MultiTexCoord6.x)]*gl_MultiTexCoord5.x;
 	concat_bone += bones[int(gl_MultiTexCoord6.y)]*gl_MultiTexCoord5.y;
 	concat_bone += bones[int(gl_MultiTexCoord6.z)]*gl_MultiTexCoord5.z;
 	concat_bone += bones[int(gl_MultiTexCoord6.a)]*gl_MultiTexCoord5.a;
+*/
+	concat_bone[0] = gl_MultiTexCoord1;
+	concat_bone[1] = gl_MultiTexCoord2;
+	concat_bone[2] = gl_MultiTexCoord4;
+	concat_bone[3] = gl_MultiTexCoord5;
 
+	/*concat_bone[0] = vec4(1.0,0.0,0.0,0.0);
+	concat_bone[1] = vec4(0.0,1.0,0.0,0.0);
+	concat_bone[2] = vec4(0.0,0.0,1.0,0.0);
+	concat_bone[3] = vec4(0.0,0.0,0.0,1.0);
+*/
 	concat_bone1 = concat_bone[0].xyz;
 	concat_bone2 = concat_bone[1].xyz;
-	concat_bone3 = concat_bone[2].xyz;*/
-
+	concat_bone3 = concat_bone[2].xyz;
+/*
 	concat_bone1 = vec3(1.0,0.0,0.0);
 	concat_bone2 = vec3(0.0,1.0,0.0);
-	concat_bone3 = vec3(0.0,0.0,1.0);
+	concat_bone3 = vec3(0.0,0.0,1.0);*/
 
-	vec3 eyeSpaceVert = (gl_ModelViewMatrix/* * concat_bone */* gl_Vertex).xyz;
+	vec3 eyeSpaceVert = (gl_ModelViewMatrix * concat_bone * gl_Vertex).xyz;
 	vertex_pos = normalize(transpose_normal_matrix * eyeSpaceVert);
 	
 	mat3 light_to_world = mat3(obj2world[0].xyz,obj2world[1].xyz,obj2world[2].xyz) * transposeMat3(gl_NormalMatrix);	
@@ -50,7 +60,7 @@ void main()
 
 	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
  
-	gl_Position = gl_ModelViewProjectionMatrix /** concat_bone*/ * gl_Vertex;
+	gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
 	gl_TexCoord[0] = gl_MultiTexCoord0;
 	gl_TexCoord[1] = gl_MultiTexCoord3;
 } 

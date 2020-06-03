@@ -33,7 +33,7 @@ void main()
 	float NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
 	float back_NdotL = 0.5-dot(light_pos, vec3(0.0,0.0,1.0))*0.5;
 
-	NdotL = GetDirectContrib(light_pos, light_pos,shadow_tex.r);
+	NdotL = GetDirectContrib((normal+light_pos)*0.5, light_pos,shadow_tex.r);
 	//back_NdotL = 1.0;
 
 	vec3 diffuse_color = GetDirectColor(NdotL);
@@ -60,12 +60,12 @@ void main()
 	fixed_world_light.y *= -1.0;
 	//float backlit = max(0.0,dot(fixed_world_light,normalize(rel_pos)));
 	float backlit = (dot(fixed_world_light,normalize(rel_pos))+1.0)*0.5;
-	vec3 backlit_color = back_NdotL * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * 0.6 * texture2D(tex6,gl_TexCoord[0].xy).xyz * shadow_tex.r;
+	vec3 backlit_color = back_NdotL * max(0.0,(1.0-NdotL)) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * 0.6 * texture2D(tex6,gl_TexCoord[0].xy).xyz * shadow_tex.r;
 
 	color += backlit*backlit_color;
 
 	
-	color = mix(backlit_color, color, 1.0-backlit);
+	//color = mix(backlit_color, color, 1.0-backlit);
 	
 	vec3 diffuse_map_vec = tangent_to_world*normal;
 	color += colormap.xyz * LookupCubemap(obj2world, diffuse_map_vec, tex4) *
@@ -76,6 +76,7 @@ void main()
 	
 	//color = vec3(gl_TexCoord[1]);
 	//color = vec3(shadow_tex.g);
+	//color = vec3(NdotL);
 	
 	color *= Exposure();
 
