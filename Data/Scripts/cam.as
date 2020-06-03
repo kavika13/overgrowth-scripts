@@ -19,6 +19,8 @@ void Update() {
         return;
     }
     
+    camera.SetInterpSteps(1);
+
     if(GetInputPressed("v") && !GetInputDown("ctrl")){
         vec3 sprite_pos = co.position + camera.GetFacing()*4.0f+vec3(0.0f,1.0f,0.0f);
         MakeParticle("Data/Particles/bigfire.xml",sprite_pos,vec3(0.0f));

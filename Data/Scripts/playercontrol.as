@@ -1,6 +1,7 @@
 #include "aschar.as"
 
 float throw_key_time;
+bool listening = false;
 
 void UpdateBrain(){
     if(GetInputDown("grab")){

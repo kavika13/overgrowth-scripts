@@ -1,6 +1,7 @@
 #include "aschar.as"
 
-bool hostile = false;
+bool hostile = true;
+bool listening = true;
 bool ai_attacking = false;
 bool hostile_switchable = true;
 int waypoint_target = -1;
@@ -193,6 +194,10 @@ vec3 GetTargetVelocity() {
                 waypoint_target, old_waypoint_target);
             old_waypoint_target = temp;
             
+            if(waypoint_target == -1){
+                waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
+                //Print("Wut\n");
+            }
             //Print("Waypoint target: "+waypoint_target+"\n");
             //Print("Old waypoint target: "+old_waypoint_target+"\n");
         }
@@ -202,7 +207,7 @@ vec3 GetTargetVelocity() {
         float seek_dist = 1.0;
         dist = max(0.0, dist-seek_dist);
         target_velocity = normalize(target_velocity) * dist;
-        float target_speed = 1.0f;//0.2f;
+        float target_speed = 0.2f;
         if(length_squared(target_velocity) > target_speed){
             target_velocity = normalize(target_velocity) * target_speed;
         }
@@ -213,14 +218,14 @@ vec3 GetTargetVelocity() {
         last_seen_target_position += last_seen_target_velocity * time_step * num_frames;
         last_seen_target_velocity *= pow(0.995f, num_frames);
         vec3 real_target_pos = this_mo.ReadCharacterID(target_id).position;
-        if(IsTargetInFOV(real_target_pos)){
+        //if(IsTargetInFOV(real_target_pos)){
             vec3 head_pos = this_mo.GetAvgIKChainPos("head");
             if(this_mo.ReadCharacterID(target_id).VisibilityCheck(head_pos)){
                 last_seen_target_position = real_target_pos;
                 last_seen_target_velocity = this_mo.ReadCharacterID(target_id).velocity;
                 vis = true;
             }
-        }
+        //}
 
         vec3 target_velocity;
         /*if(last_seen_sphere != -1){
@@ -241,7 +246,7 @@ vec3 GetTargetVelocity() {
         if(next_path_point != vec3(0.0f)){
             target_point = next_path_point;
         }
-        DrawPath();
+        //DrawPath();
         
         target_velocity = target_point - this_mo.position;
         target_velocity.y = 0.0;

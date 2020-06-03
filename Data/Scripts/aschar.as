@@ -112,6 +112,25 @@ void MouseControlJumpTest() {
     }
 }
 
+const float _reset_delay = 4.0f;
+float reset_timer = _reset_delay;
+void VictoryCheck() {
+    if(ThreatsRemaining() <= 0){
+        reset_timer -= time_step * num_frames;
+        if(reset_timer <= 0.0f){
+            this_mo.ResetLevel();
+            reset_timer = _reset_delay;
+        }
+    }
+    if(knocked_out != _awake){
+        reset_timer -= time_step * num_frames;
+        if(reset_timer <= 0.0f){
+            this_mo.ResetLevel();
+            reset_timer = _reset_delay;
+        }
+    }
+}
+
 void Update(bool _controlled, int _num_frames) {
     controlled = _controlled;
     num_frames = _num_frames;
@@ -119,6 +138,10 @@ void Update(bool _controlled, int _num_frames) {
 
     if(!controlled && on_ground){
         //MouseControlJumpTest();
+    }
+
+    if(controlled){
+        VictoryCheck();
     }
 
 
@@ -216,6 +239,10 @@ void HandleSpecialKeyPresses() {
     }
 
     if(controlled){
+        if(GetInputPressed("l")){
+            //this_mo.LoadLevel("Data/Levels/DesertFort_IGF.xml");
+            this_mo.ResetLevel();
+        }
         if(GetInputPressed("v")){
             string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
@@ -686,8 +713,6 @@ void Ragdoll(int type){
 void GoLimp() {
     Ragdoll(_RGDL_FALL);
 }
-
-bool listening = false;
 
 void NotifySound(int created_by_id, vec3 pos) {
     if(!listening){
@@ -1316,6 +1341,23 @@ bool IsTargetInFOV(const vec3&in target_pos){
     return true;
 }
 
+int ThreatsRemaining() {
+    int num = this_mo.GetNumCharacters();
+    int num_threats = 0;
+    for(int i=0; i<num; ++i){
+        vec3 target_pos = this_mo.ReadCharacter(i).position;
+        if(this_mo.position == target_pos){
+            continue;
+        }
+        if(this_mo.ReadCharacter(i).IsKnockedOut() == _awake &&
+           character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
+        {
+            ++num_threats;
+        }
+    }
+    return num_threats;
+}
+
 void TargetClosest(){
     int num = this_mo.GetNumCharacters();
     int closest_id = -1;
@@ -1326,7 +1368,7 @@ void TargetClosest(){
         if(this_mo.position == target_pos){
             continue;
         }
-        if(this_mo.ReadCharacter(i).IsKnockedOut() != 0){
+        if(this_mo.ReadCharacter(i).IsKnockedOut() != _awake){
             continue;
         }
         if(target_id != this_mo.ReadCharacter(i).getID()){
@@ -1418,6 +1460,46 @@ vec3 HandleBumperCollision(){
     return (sphere_col.adjusted_position - sphere_col.position);
 }
 
+vec3 HandlePiecewiseBumperCollision(vec3 old_pos){
+    vec3 new_pos = this_mo.position; 
+    vec3 old_new_pos = new_pos;
+    old_pos.y += 0.3f;
+    new_pos.y += 0.3f;
+    vec3 offset;
+    vec3 test_pos = mix(old_pos, new_pos, 0.25f);
+    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    offset = sphere_col.adjusted_position - sphere_col.position;
+    new_pos += offset/0.25f;
+    test_pos = mix(old_pos, new_pos, 0.5f);
+    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    offset = sphere_col.adjusted_position - sphere_col.position;
+    new_pos += offset/0.5f;
+    test_pos = mix(old_pos, new_pos, 0.75f);
+    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    offset = sphere_col.adjusted_position - sphere_col.position;
+    new_pos += offset/0.75f;
+    test_pos = mix(old_pos, new_pos, 1.0f);
+    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    offset = sphere_col.adjusted_position - sphere_col.position;
+    new_pos += offset/1.0f;
+    new_pos.y -= 0.3f;
+    this_mo.position = new_pos;
+    return new_pos - old_new_pos;
+}
+
+vec3 HandleSweptBumperCollision(vec3 old_pos){
+    vec3 new_pos = this_mo.position; 
+    old_pos.y += 0.3f;
+    new_pos.y += 0.3f;
+    vec3 slide = col.GetSlidingCapsuleCollision(old_pos, new_pos, _bumper_size);
+    vec3 offset = slide - new_pos;
+    slide.y -= 0.3f;
+    // the value of sphere_col.adjusted_position variable was set by the GetSlidingSphereCollision() called on the previous line.
+    this_mo.position = slide;
+    return offset;
+}
+
+
 bool HandleStandingCollision() {
     vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
     vec3 lower_pos = this_mo.position+vec3(0,-0.2f,0);
@@ -1488,7 +1570,7 @@ void HandleGroundCollision() {
             this_mo.position += offset/num_frames;
             this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
             this_mo.position = sphere_col.adjusted_position;
-            this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / (time_step);
+            this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / (time_step * num_frames);
             offset += (sphere_col.adjusted_position - sphere_col.position) * (num_frames);
             for(int i=0; i<sphere_col.NumContacts(); i++){
                 const CollisionPoint contact = sphere_col.GetContact(i);
@@ -2097,10 +2179,11 @@ void ApplyCameraControls() {
 
     target_rotation2 = max(-90,min(50,target_rotation2));
 
-    cam_rotation = cam_rotation * _camera_rotation_inertia + 
-               target_rotation * (1.0f - _camera_rotation_inertia);
-    cam_rotation2 = cam_rotation2 * _camera_rotation_inertia + 
-               target_rotation2 * (1.0f - _camera_rotation_inertia);
+    float inertia = pow(_camera_rotation_inertia, num_frames);
+    cam_rotation = cam_rotation * inertia + 
+               target_rotation * (1.0f - inertia);
+    cam_rotation2 = cam_rotation2 * inertia + 
+               target_rotation2 * (1.0f - inertia);
 
     mat4 rotationY_mat,rotationX_mat;
     rotationY_mat.SetRotationY(cam_rotation*3.1415f/180.0f);
@@ -2170,6 +2253,8 @@ void ApplyCameraControls() {
 
     camera.SetDistance(new_follow_distance);
     UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+
+    camera.SetInterpSteps(num_frames);
 }
 
 void SwitchCharacter(string path){
@@ -2179,7 +2264,6 @@ void SwitchCharacter(string path){
     this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
     SetState(_movement_state);
 }
-
 
 void init(string character_path) {
     this_mo.char_path = character_path;
@@ -2192,6 +2276,20 @@ void init(string character_path) {
         last_col_pos = this_mo.position;
     }
     SetState(_movement_state);
+}
+
+void ScriptSwap() {
+    last_col_pos = this_mo.position;
+    this_mo.position.y += 0.5f;
+}
+
+void Reset() {
+    if(state == _ragdoll_state){
+        this_mo.UnRagdoll();
+        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+    }
+    this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
+    this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
 }
 
 void UpdateAnimation() {
