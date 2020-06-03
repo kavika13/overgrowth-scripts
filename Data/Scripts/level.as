@@ -202,6 +202,9 @@ void Update() {
                 }
                 break;
             }
+            if(callback == "media_mode"){
+                SetMediaMode(true);  
+            }
             if(callback == "settings"){
                 gui.RemoveGUI(gui_id);
                 OpenSettings(context);
@@ -213,7 +216,7 @@ void Update() {
         LeaveTelemetryZone();
     }
     if(!has_gui && GetInputDown(controller_id, "esc") && GetPlayerCharacterID() == -1){
-        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,270,0);
+        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,290,0);
         has_gui = true;
     }
     if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){

@@ -89,6 +89,9 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_ve
 		vec2 start_normal = decal.normal.xy;
 		vec2 size_normal = decal.normal.zw;
 
+        //We need to normalize as the normals somtimes isn't 1unit long
+        vec3 decal_ws_normal = normalize((decal.transform * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+
 		vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
 
 		// we must supply texture gradients here since we have non-uniform control flow
@@ -111,20 +114,23 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_ve
 
 #endif  // DECAL_NORMALS
 
-		if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-            
-		} else {
-			colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a);
+        if( abs(dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0f)/1.0f)) > 0.85f )
+        {
+            if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
+                
+            } else {
+                colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a);
 #ifdef DECAL_NORMALS
 
-			vec3 decal_tan = normalize(cross(ws_normal, (decal.transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
-			vec3 decal_bitan = cross(ws_normal, decal_tan);
-			vec3 new_normal = vec3(0);
-			new_normal += ws_normal * (decal_normal.b*2.0-1.0);
-			new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
-			new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
-			ws_normal = normalize(mix(ws_normal, new_normal, decal_color.a));
+                vec3 decal_tan = normalize(cross(ws_normal, (decal.transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
+                vec3 decal_bitan = cross(ws_normal, decal_tan);
+                vec3 new_normal = vec3(0);
+                new_normal += ws_normal * (decal_normal.b*2.0-1.0);
+                new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
+                new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
+                ws_normal = normalize(mix(ws_normal, new_normal, decal_color.a));
 #endif  // DECAL_NORMALS
-		}
+            }
+        }
 	}
 }
