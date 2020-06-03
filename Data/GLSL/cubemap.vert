@@ -28,7 +28,7 @@ void main()
 	vec4 transformed_vertex = obj2world * gl_Vertex;
 	ws_vertex = transformed_vertex.xyz - cam_pos;
 	
-	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * transformed_vertex;
+	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
 	
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
