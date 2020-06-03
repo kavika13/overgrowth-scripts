@@ -738,6 +738,7 @@ void HandleSpecialKeyPresses() {
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
             SwapWeaponHands();
+            //CheckPossibleAttacks();
         }
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
@@ -2181,7 +2182,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     float sharp_damage = attack_getter2.GetSharpDamage();
 
     bool can_passive_block = true;
-    if(startled ||
+    if((startled && !this_mo.controlled) ||
        block_health <= 0.0f || 
        flip_info.IsFlipping() || 
        state == _attack_state || 
@@ -2522,9 +2523,6 @@ int primary_weapon_slot = _held_right;
 int secondary_weapon_slot = _held_left;
 const int _num_weap_slots = 6;
 array<int> weapon_slots;
-
-vec3 last_seen_target_position;
-vec3 last_seen_target_velocity;
 
 //int event_counter = 99999;
 
@@ -3931,6 +3929,25 @@ bool IsAttackMirrored(){
     return mirrored;
 }
 
+void CheckPossibleAttack(string &in attack_str) {
+    attack_getter.Load(character_getter.GetAttackPath(attack_str));
+    string anim_path = attack_getter.GetUnblockedAnimPath();
+    float impact_time = GetAnimationEventTime(anim_path, "attackimpact");
+    Print(attack_str + ": " + character_getter.GetAttackPath(attack_str) + "( " + impact_time + ")\n");
+    //DebugText("impact_time", "Attack impact_time: "+impact_time, 1.0f);
+}
+
+void CheckPossibleAttacks() {
+    CheckPossibleAttack("low");
+    CheckPossibleAttack("moving_low");
+    CheckPossibleAttack("stationary");
+    CheckPossibleAttack("moving");
+    CheckPossibleAttack("stationary_close");
+    CheckPossibleAttack("moving_close");
+}
+
+float attack_predictability = 0.0f;
+
 void LoadAppropriateAttack(bool mirrored) {
     // Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
     bool front = length_squared(GetTargetVelocity())<0.1f;
@@ -3947,6 +3964,7 @@ void LoadAppropriateAttack(bool mirrored) {
             ducking_enemy = true;
         }
     }
+    
     string attack_path;
     if(attacking_with_throw != 0){
         if(attacking_with_throw == 1){
@@ -3961,7 +3979,6 @@ void LoadAppropriateAttack(bool mirrored) {
         }
     } else {
         ChooseAttack(front);
-        attack_path;
         if(curr_attack == "moving" && ragdoll_enemy){
             attack_path = character_getter.GetAttackPath("moving_low");
         } else if(curr_attack == "stationary" ||
@@ -4131,6 +4148,10 @@ void UpdateAttacking() {
         string anim_path;
         if(attack_getter.IsThrow() == 0){
             anim_path = attack_getter.GetUnblockedAnimPath();
+            attack_predictability = this_mo.CheckAttackHistory(attack_getter.GetPath());
+            this_mo.AddToAttackHistory(attack_getter.GetPath());
+            //Print("Updating attack history\n"); 
+            //DebugText("test", "Attack predictability: "+attack_predictability, 1.0f);
         } else {
             anim_path = attack_getter.GetThrowAnimPath();
             int hit = _miss;
@@ -5778,7 +5799,7 @@ void SetParameters() {
     for(int i=0; i<_num_weap_slots; ++i){
         weapon_slots[i] = -1;       
     }
-    Print("Resizing weapon slots to "+_num_weap_slots+"\n");
+    //Print("Resizing weapon slots to "+_num_weap_slots+"\n");
 
     params.AddIntSlider("Lives",1,"min:1,max:4");
     p_lives = max(1, params.GetFloat("Lives"));
