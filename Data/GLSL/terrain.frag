@@ -47,10 +47,10 @@ void main() {
                            base_bitangent,
                            base_normal);
 
-    vec4 normalmap = (texture(tex7 ,tc1) * weight_map[0] +
-                      texture(tex9 ,tc1) * weight_map[1] +
-                      texture(tex11,tc1) * weight_map[2] +
-                      texture(tex13,tc1) * weight_map[3]);
+    vec4 normalmap = (texture(detail_normal_0,tc1) * weight_map[0] +
+                      texture(detail_normal_1,tc1) * weight_map[1] +
+                      texture(detail_normal_2,tc1) * weight_map[2] +
+                      texture(detail_normal_3,tc1) * weight_map[3]);
     normalmap.xyz = UnpackTanNormal(normalmap);
     normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),detail_fade);
     
@@ -93,10 +93,10 @@ void main() {
     vec3 tint = terrain_color / average_color;
 
     // Get colormap
-    vec4 colormap = texture(tex6,tc1) * weight_map[0] +
-                    texture(tex8,tc1) * weight_map[1] +
-                    texture(tex10,tc1) * weight_map[2] +
-                    texture(tex12,tc1) * weight_map[3];
+    vec4 colormap = texture(detail_color_0,tc1) * weight_map[0] +
+                    texture(detail_color_1,tc1) * weight_map[1] +
+                    texture(detail_color_2,tc1) * weight_map[2] +
+                    texture(detail_color_3,tc1) * weight_map[3];
     colormap.xyz = mix(colormap.xyz,average_color,detail_fade) * tint;
     colormap.a = max(0.0,colormap.a);
 
