@@ -29,7 +29,7 @@ void UpdateTimerDisplay() {
     }
     str += secs;
     str += "\")";
-    gui.CallFunction(gui_id, str);
+    gui.Execute(gui_id, str);
 }
 
 int HasFocus(){
@@ -61,7 +61,7 @@ void ReceiveMessage2(string msg, string msg2) {
             gui.RemoveGUI(display_text_id);
         }
         display_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
-        gui.CallFunction(display_text_id,"SetText(\""+msg2+"\")");
+        gui.Execute(display_text_id,"SetText(\""+msg2+"\")");
         has_display_text = true;
     } else if(msg == "loadlevel"){
         LoadLevel(msg2);
@@ -94,11 +94,17 @@ void Update() {
                 LoadLevel("mainmenu");
                 break;
             }
+            if(callback == "settings"){
+                gui.RemoveGUI(gui_id);
+                gui_id = gui.AddGUI("gamemenu","settings\\settings.html",600,600,0);
+                has_gui = true;
+                break;
+            }
             callback = gui.GetCallback(gui_id);
         }
     }
     if(!has_gui && GetInputDown(controller_id, "esc") && GetPlayerCharacterID() == -1){
-        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,250,0);
+        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,270,0);
         has_gui = true;
     }
     /*if(GetInputPressed("l")){
@@ -184,10 +190,10 @@ void VictoryCheck() {
                 has_gui = true;
                 UpdateTimerDisplay();
                 if(victory){
-                    gui.CallFunction(gui_id,"SetText(\"You beat the level!\")");
+                    gui.Execute(gui_id,"SetText(\"You beat the level!\")");
                 }
                 if(failure){
-                    gui.CallFunction(gui_id,"SetText(\"You were defeated.\")");
+                    gui.Execute(gui_id,"SetText(\"You were defeated.\")");
                 }
                 reset_allowed = false;
             }
