@@ -6,7 +6,7 @@ uniform sampler2D tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
-uniform mat4 bones[64];
+//uniform mat4 bones[64];
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
