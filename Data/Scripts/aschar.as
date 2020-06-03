@@ -614,6 +614,9 @@ void init() {
 }
 
 void UpdateAnimation() {
+	//this_mo.SetAnimation("Data/Animations/onback.anm");
+	//return;
+
 	vec3 flat_velocity = vec3(this_mo.velocity.x,0,this_mo.velocity.z);
 
 	float run_amount, walk_amount, idle_amount;
@@ -682,7 +685,70 @@ vec3 GetLegTargetOffset(vec3 initial_pos){
 
 float offset_height = 0.0f;
 
+
+vec3 GetLimbTargetOffset(vec3 initial_pos, vec3 anim_pos){
+	/*DebugDrawLine(initial_pos + vec3(0.0f,0.0f,0.0f),
+				  initial_pos + vec3(0.0f,_check_down,0.0f),
+				  vec3(1.0f),
+				  _delete_on_draw);
+	*/
+	this_mo.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
+								    initial_pos + vec3(0.0f,_check_down,0.0f),
+								    0.05f);
+
+	if(sphere_col.NumContacts() == 0){
+		return vec3(0.0f);
+	}
+
+	float target_y_pos = sphere_col.position.y;
+	float height = anim_pos.y + 0.8f;// _leg_sphere_size;
+	target_y_pos += height;
+	/*DebugDrawWireSphere(sphere_col.position,
+				  0.05f,
+				  vec3(1.0f),
+				  _delete_on_draw);
+	*/
+	float offset_amount = target_y_pos - initial_pos.y;
+	//offset_amount /= max(0.0f,height)+1.0f;
+
+	//offset_amount = max(-0.15f,min(0.15f,offset_amount));
+
+	return vec3(0.0,offset_amount, 0.0f);
+}
+
+void SetLimbTargetOffset(string name){
+	vec3 pos = this_mo.GetIKTargetPosition(name);
+	vec3 anim_pos = this_mo.GetIKTargetAnimPosition(name);
+	vec3 offset = GetLimbTargetOffset(pos, anim_pos);
+	this_mo.SetIKTargetOffset(name,offset);
+}
+
 void UpdateIKTargets() {
+	/*vec3 offset = vec3(0.0f,0.0f,0.0f);
+
+	SetLimbTargetOffset("left_leg");
+	SetLimbTargetOffset("right_leg");
+	SetLimbTargetOffset("leftarm");
+	SetLimbTargetOffset("rightarm");
+
+	vec3 com = this_mo.position;
+	vec3 com_offset = GetLimbTargetOffset(com, com);
+	this_mo.SetIKTargetOffset("full_body",vec3(0.0f));//com_offset-offset);
+
+	//this_mo.SetIKTargetOffset("left_leg",vec3(0.0f));
+	//this_mo.SetIKTargetOffset("right_leg",vec3(0.0f));
+	//this_mo.SetIKTargetOffset("leftarm",vec3(0.0f));
+	//this_mo.SetIKTargetOffset("rightarm",vec3(0.0f));
+
+	vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
+
+	float x_amount = ground_normal.y;
+	float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
+	float angle = atan2(y_amount, x_amount);
+	this_mo.SetFlip(axis,-angle,0.0f);
+
+	return;
+*/
 	if(!on_ground){
 		jump_info.UpdateIKTargets();
 	} else {
