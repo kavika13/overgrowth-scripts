@@ -93,7 +93,7 @@ void main()
                          avg_color3 * weight_map[3];
     vec3 terrain_color = texture2D(tex0,tc0).xyz;
     average_color = max(average_color, vec3(0.01));
-    vec3 tint = terrain_color / average_color * color_tint;
+    vec3 tint = terrain_color / average_color * mix(vec3(1.0),color_tint,normalmap.a);
 
     // Get colormap
     vec4 colormap = texture2D(tex6,tc2) * weight_map[0] +

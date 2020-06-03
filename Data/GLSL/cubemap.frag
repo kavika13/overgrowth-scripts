@@ -55,7 +55,7 @@ void main()
     // Put it all together
     vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
     
-    vec3 color = diffuse_color * colormap.xyz  * color_tint + spec_color * GammaCorrectFloat(colormap.a);
+    vec3 color = diffuse_color * colormap.xyz  * mix(vec3(1.0),color_tint,normalmap.a) + spec_color * GammaCorrectFloat(colormap.a);
     
     color *= BalanceAmbient(NdotL);
     

@@ -13,7 +13,7 @@ void main()
     
     if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
         gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
-        gl_TexCoord[0].z<0.0 || gl_TexCoord[0].z>1.0) {
+        gl_TexCoord[0].z<-1.0 || gl_TexCoord[0].z>1.0) {
         discard;
     }
     
@@ -42,6 +42,7 @@ void main()
     float fresnel = 1.0;// - dot(normalize(vertex_pos), vec3(0,0,-1))*0.8;
     color = diffuse_color * colormap.xyz + spec_color * fresnel;
     
+    //    colormap.a = 1.0;
     //color = colormap.xyz;
     
     gl_FragColor = vec4(color,colormap.a);

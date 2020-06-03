@@ -399,7 +399,11 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/rabbot.xml");
         }
         if(GetInputPressed("b")){
-            this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
+            for(int i=0; i<5; ++i){
+                MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
+                    vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
+            }
+            //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
             /*this_mo.StartAnimation("Data/Animations/r_bigdogswordattackover.anm",4.0f,_ANM_MOBILE);
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
@@ -1012,7 +1016,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         for(int i=0; i<10; ++i){
             MakeParticle("Data/Particles/bloodcloud.xml",pos,
                 vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
-         }for(int i=0; i<10; ++i){
+         }for(int i=0; i<5; ++i){
             MakeParticle("Data/Particles/bloodsplat.xml",pos,
                 vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
         }
