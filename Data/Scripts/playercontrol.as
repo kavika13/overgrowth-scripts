@@ -3,7 +3,7 @@
 float throw_key_time;
 bool listening = false;
 
-void NotifySound(int created_by_id, vec3 pos) {
+void NotifySound(int created_by_id, float max_dist, vec3 pos) {
 }
 
 void UpdateBrain(){

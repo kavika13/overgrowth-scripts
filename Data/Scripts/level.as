@@ -76,6 +76,14 @@ void Update() {
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
+    if(GetInputDown("x")){  
+        int num_items = GetNumItems();
+        for(int i=0; i<num_items; i++){
+            ItemObject@ item_obj = ReadItem(i);
+            item_obj.CleanBlood();
+        }
+    }
+    
     time += time_step;
 
     SetAnimUpdateFreqs();

@@ -58,6 +58,7 @@ void main()
     };
     float blood_amount, wetblood;
     ReadBloodTex(tex6, tc0, blood_amount, wetblood);
+    //blood_amount *= 0.6f;
     // Get normal
     vec4 normalmap = texture2D(tex1,tc0);
     vec3 os_normal = UnpackObjNormal(normalmap);

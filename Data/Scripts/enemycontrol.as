@@ -1,5 +1,7 @@
 #include "aschar.as"
 
+float startle_time;
+
 bool hostile = true;
 bool listening = true;
 bool ai_attacking = false;
@@ -10,6 +12,8 @@ const float _view_distance = 90.0f;
 const float _throw_counter_probability = 0.2f;
 bool will_throw_counter;
 
+float target_attack_range = 0.0f;
+float strafe_vel = 0.0f;
 const float _block_reflex_delay_min = 0.1f;
 const float _block_reflex_delay_max = 0.2f;
 float block_delay;
@@ -41,12 +45,16 @@ void Notice(int character_id){
     target_id = character_id;
     last_seen_target_position = ReadCharacterID(character_id).position;
     last_seen_target_velocity = ReadCharacterID(character_id).velocity;
+    if(goal == _patrol){
+        startled = true;
+        startle_time = 1.0f;
+    }
     if(goal == _patrol || goal == _escort){
         SetGoal(_attack);
     }
 }
 
-void NotifySound(int created_by_id, vec3 pos) {
+void NotifySound(int created_by_id, float max_dist, vec3 pos) {
     if(!listening){
         return;
     }
@@ -115,6 +123,15 @@ void UpdateBrain(){
         hostile_switchable = true;
     }
 
+    if(startled){
+        ai_attacking = false;
+        startle_time -= time_step * num_frames;
+        if(startle_time <= 0.0f){
+            startled = false;
+        }
+        return;
+    }
+
     if(!holding_weapon){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
@@ -161,6 +178,12 @@ void UpdateBrain(){
         }
         if(rand()%(150/num_frames)==0){
             ai_attacking = !ai_attacking;
+        }
+        if(rand()%(150/num_frames)==0){
+            target_attack_range = RangedRandomFloat(0.0f, 3.0f);
+        }
+        if(rand()%(150/num_frames)==0){
+            strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
         }
         if(temp_health < 0.5f){
             ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
@@ -269,13 +292,9 @@ bool WantsToRollFromRagdoll(){
 }
 
 bool ShouldBlock(){
-    if(goal != _attack){
-        return false;
-    }
-    if(active_block_recharge > 0.0f){
-        return false;
-    }
-    if(target_id == -1 || !hostile){
+    if(goal != _attack || startled || active_block_recharge > 0.0f || 
+       target_id == -1 || !hostile)
+    {
         return false;
     }
     MovementObject @char = ReadCharacterID(target_id);
@@ -402,7 +421,7 @@ vec3 GetPatrolMovement(){
     return target_velocity;
 }
 
-vec3 GetMovementToPoint(vec3 point, float slow_radius){
+vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist){
     // Get path to estimated target position
     vec3 target_velocity;
     vec3 target_point = point;
@@ -411,7 +430,10 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius){
     if(next_path_point != vec3(0.0f)){
         target_point = next_path_point;
     }
-    
+
+    if(distance_squared(target_point, point) < 0.1f){
+        target_point += normalize(this_mo.position - target_point) * target_dist;
+    } 
     // Set target velocity to approach target position
     target_velocity = target_point - this_mo.position;
     target_velocity.y = 0.0;
@@ -438,7 +460,21 @@ vec3 GetAttackMovement() {
         last_seen_target_velocity = ReadCharacterID(target_id).velocity;
     }
 
-    return GetMovementToPoint(last_seen_target_position, 1.0f);
+    float temp_target_attack_range;
+
+    vec3 move_vel = GetMovementToPoint(last_seen_target_position, max(0.2f,1.0f-target_attack_range), target_attack_range);
+    if(length_squared(move_vel) < 1.0f){
+        vec3 rel_dir = last_seen_target_position - this_mo.position;
+        rel_dir.y = 0.0f;
+        rel_dir = normalize(rel_dir);
+        vec3 right_dir(rel_dir.z, 0.0f, -rel_dir.x);
+        move_vel += right_dir * strafe_vel;
+        if(length_squared(move_vel) > 1.0f){
+            move_vel = normalize(move_vel);
+        }
+    }
+    return move_vel;
+    
 }
 
 
@@ -456,19 +492,21 @@ void MouseControlPathTest() {
 
 int last_seen_sphere = -1;
 vec3 GetTargetVelocity() {
-    if(goal == _patrol){
+    if(startled){
+        return vec3(0.0f);
+    } else if(goal == _patrol){
         return GetPatrolMovement();
     } else if(goal == _attack){
         return GetAttackMovement(); 
     } else if(goal == _get_help){
-        return GetMovementToPoint(ReadCharacterID(ally_id).position, 1.0f); 
+        return GetMovementToPoint(ReadCharacterID(ally_id).position, 1.0f, 0.0f); 
     } else if(goal == _get_weapon){
         vec3 pos = ReadItemID(weapon_target_id).GetPhysicsPosition();
-        return GetMovementToPoint(pos, 0.0f); 
+        return GetMovementToPoint(pos, 0.0f, 0.0f); 
     } else if(goal == _escort){
-        return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 
+        return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f, 0.0f); 
     } else if(goal == _navigate){
-        return GetMovementToPoint(nav_target, 1.0f); 
+        return GetMovementToPoint(nav_target, 1.0f, 0.0f); 
     } else {
         return vec3(0.0f);
     }
