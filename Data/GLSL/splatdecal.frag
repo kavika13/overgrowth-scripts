@@ -11,6 +11,12 @@ void main()
 {    
     vec3 color;
     
+    if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
+        gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
+        gl_TexCoord[0].z<0.0 || gl_TexCoord[0].z>1.0) {
+        discard;
+    }
+    
     vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
     vec3 normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
 
@@ -29,7 +35,7 @@ void main()
     vec3 spec_map_vec = reflect(vertex_pos,normal);
     spec_map_vec = tangent_to_world * spec_map_vec;
     spec_map_vec.y *= -1.0;
-    spec_color += textureCube(tex2,spec_map_vec).xyz * 0.1;
+    spec_color += textureCube(tex2,spec_map_vec).xyz * 0.01;
     
     vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
     

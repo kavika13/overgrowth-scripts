@@ -4,6 +4,7 @@ uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2DShadow tex5;
+uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;

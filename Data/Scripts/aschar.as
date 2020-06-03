@@ -134,7 +134,7 @@ void MouseControlJumpTest() {
 const float _reset_delay = 4.0f;
 float reset_timer = _reset_delay;
 void VictoryCheck() {
-    if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
+    /*if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
         reset_timer -= time_step * num_frames;
         if(reset_timer <= 0.0f){
             this_mo.ResetLevel();
@@ -147,7 +147,7 @@ void VictoryCheck() {
             this_mo.ResetLevel();
             reset_timer = _reset_delay;
         }
-    }
+    }*/
 }
 
 
@@ -167,8 +167,51 @@ void UpdateMusic() {
 vec3 old_slide_vel;
 vec3 new_slide_vel;
 float friction = 1.0f;
+uint32 last_blood_particle_id = 0;
+int blood_delay = 0;
+bool cut_throat = false;
+const float _max_blood_amount = 10.0f;
+float blood_amount = _max_blood_amount;
+const float _spurt_frequency = 7.0f;
+float spurt_sound_delay = 0.0f;
+const float _spurt_delay_amount = 6.283185/_spurt_frequency;
 
 void Update(bool _controlled, int _num_frames) {
+    if(cut_throat && blood_amount > 0.0f){
+        if(blood_delay <= 0){
+            if(rand()%16 == 0){
+                this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+            }
+            if(rand()%32 == 0){
+                this_mo.CreateBloodDrip("rightarm", 0, vec3(1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+                this_mo.CreateBloodDrip("leftarm", 0, vec3(-1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+            }
+            
+            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+            vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
+            vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
+            mat4 head_transform = this_mo.GetAvgIKChainTransform("head");
+            head_transform.SetColumn(3, vec3(0.0f));
+            float blood_force = sin(time*_spurt_frequency)*0.5f+0.5f;
+            uint32 id = MakeParticle("Data/Particles/blooddrop.xml",bleed_pos,(head_transform*vec3(0.0f,blood_amount*blood_force,0.0f)+this_mo.velocity));
+            if(last_blood_particle_id != 0){
+                ConnectParticles(last_blood_particle_id, id);
+            }
+            last_blood_particle_id = id;
+            blood_delay = 2;
+        }
+        blood_amount -= time_step * num_frames * 0.5f;
+        spurt_sound_delay -= time_step * num_frames;
+        if(spurt_sound_delay <= 0.0f){
+            spurt_sound_delay += _spurt_delay_amount;
+            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+            vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
+            vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
+            PlaySoundGroup("Data/Sounds/Blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
+        }
+        -- blood_delay;
+    }
+
     if(on_ground){
         old_slide_vel = this_mo.velocity;
         this_mo.velocity = new_slide_vel;
@@ -176,7 +219,7 @@ void Update(bool _controlled, int _num_frames) {
 
     controlled = _controlled;
     num_frames = _num_frames;
-    time += time_step;
+    time += time_step * num_frames;
 
     if(!controlled && on_ground){
         //MouseControlJumpTest();
@@ -278,6 +321,30 @@ void HandleSpecialKeyPresses() {
         }
         Ragdoll(_RGDL_INJURED);
     }
+    if(GetInputDown(",")){                
+        if(!cut_throat){
+            string sound = "Data/Sounds/hit/hit_splatter.xml";
+            PlaySoundGroup(sound, this_mo.position);
+
+            spurt_sound_delay = _spurt_delay_amount*0.24f;
+            cut_throat = true;
+            blood_amount = _max_blood_amount;
+            last_blood_particle_id = 0;
+            knocked_out = _dead;
+            Ragdoll(_RGDL_INJURED);
+            
+            mat4 head_transform = this_mo.GetAvgIKChainTransform("head");
+            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+            vec3 torso_pos = this_mo.GetAvgIKChainPos("torso");
+            vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
+            head_transform.SetColumn(3, vec3(0.0f));
+            float blood_force = sin(time*7.0f)*0.5f+0.5f;
+            for(int i=0; i<10; ++i){
+                vec3 mist_vel = vec3(RangedRandomFloat(-5.0f,5.0f),RangedRandomFloat(0.0f,5.0f), 0.0f);
+                MakeParticle("Data/Particles/bloodcloud.xml",bleed_pos,(head_transform*mist_vel+this_mo.velocity));
+            } 
+        }
+    }
     if(GetInputDown("m")){        
         Ragdoll(_RGDL_LIMP);
     }
@@ -287,6 +354,9 @@ void HandleSpecialKeyPresses() {
         temp_health = 1.0f;
         permanent_health = 1.0f;
         recovery_time = 0.0f;
+        cut_throat = false;
+        this_mo.CleanBlood();
+        ClearTemporaryDecals();
     }
 
     if(controlled){
@@ -452,6 +522,10 @@ vec3 target_eye_dir; // Direction eyes want to look
 float eye_delay = 0.0f; // How much time until the next eye dir adjustment
 
 void UpdateEyeLook(){
+    if(knocked_out != _awake){
+        return;
+    }
+
     const float _eye_inertia = 0.85f;
     const float _eye_min_delay = 0.5f; //Minimum time before changing eye direction
     const float _eye_max_delay = 2.0f; //Maximum time before changing eye direction
@@ -501,8 +575,7 @@ void UpdateBlink() {
     const float _blink_min_delay = 1.0f;
     const float _blink_max_delay = 5.0f;
 
-    bool unconscious = (state != _ragdoll_state && ragdoll_type == _RGDL_LIMP);
-    if(!unconscious){
+    if(knocked_out == _awake){
         if(blink_delay < 0.0f){
             blink_delay = RangedRandomFloat(_blink_min_delay,
                                             _blink_max_delay);
@@ -520,8 +593,8 @@ void UpdateBlink() {
             blink_amount = 0.0f;
         }
         blink_delay -= time_step * num_frames;
-    } else {
-        blink_amount = mix(blink_amount, 1.0f, 0.1f);
+    } else if(knocked_out == _unconscious){
+        blink_amount = mix(blink_amount, 0.7f, 0.1f);
     }
     this_mo.SetMorphTargetWeight("wink_r",blink_amount,1.0f);
     this_mo.SetMorphTargetWeight("wink_l",blink_amount,1.0f);
@@ -2610,6 +2683,8 @@ void Reset() {
     }
     this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
     this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
+    this_mo.CleanBlood();
+    ClearTemporaryDecals();
 }
 
 void UpdateAnimation() {

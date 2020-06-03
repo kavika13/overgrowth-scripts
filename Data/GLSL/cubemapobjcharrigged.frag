@@ -4,6 +4,7 @@ uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2DShadow tex5;
+uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;
@@ -44,8 +45,9 @@ void main()
     shadow_tex.r *= shadow_amount;*/
 
     shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
-
     shadow_tex.g = 1.0;
+    
+    float blood_amount = min(texture2D(tex6,gl_TexCoord[1].xy).r*5.0, 1.0);
 
     // Get diffuse lighting
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
@@ -62,10 +64,13 @@ void main()
     
     vec3 spec_map_vec = reflect(ws_vertex, ws_normal);
     spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.25 *
-                  GetAmbientContrib(shadow_tex.g);
+                  GetAmbientContrib(shadow_tex.g) * (1.0 - blood_amount);
 
     // Put it all together
     vec4 colormap = texture2D(tex0,gl_TexCoord[1].xy);
+    colormap = mix(colormap, vec4(0.1,0.0,0.0,1.0), blood_amount);
+    //colormap.xyz *= 1.0-blood_amount*0.3;
+    //colormap.a = mix(colormap.a, 1.0, blood_amount);
     vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
     
     color *= BalanceAmbient(NdotL);
