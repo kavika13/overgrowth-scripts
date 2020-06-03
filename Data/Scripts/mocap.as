@@ -29,3 +29,9 @@ mat4 GetCorrection(vec3 dir1, vec3 dir2){
 	mat4 mat = Mat4FromQuaternion(quat);
 	return mat;
 }
+
+mat4 GetRot(mat4 old_rot) {
+	mat4 trans;
+	trans.SetRotationX(30.0f * M_PI / 180.0f);
+	return trans * old_rot;// * trans;
+}
