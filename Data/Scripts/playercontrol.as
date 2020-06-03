@@ -22,20 +22,25 @@ ItemKeyState item_key_state = _iks_nothing;
 void AIMovementObjectDeleted(int id) {
 }
 
+float last_noticed_time;
+
 void UpdateBrain(const Timestep &in ts){
+    startled = false;    
     if(GetInputDown(this_mo.controller_id, "grab")){
         grab_key_time += ts.step();
     } else {
         grab_key_time = 0.0f;
     }
 
-    array<int> characters;
-    GetVisibleCharacters(0, characters);
-    for(uint i=0; i<characters.size(); ++i){
-        situation.Notice(characters[i]);
+    if(time > last_noticed_time + 0.2f){
+        array<int> characters;
+        GetVisibleCharacters(0, characters);
+        for(uint i=0; i<characters.size(); ++i){
+            situation.Notice(characters[i]);
+        }
+        last_noticed_time = time;
     }
 
-    situation.Update();
     force_look_target_id = situation.GetForceLookTarget();
 
     if(!GetInputDown(this_mo.controller_id, "drop")){

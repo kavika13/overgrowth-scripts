@@ -20,6 +20,8 @@ class KnownChar {
     float interest;
     int knocked_out;
     vec3 last_known_position;
+    vec3 last_known_velocity;
+    float last_seen_time;
 };
 
 class KnownItem {
@@ -52,17 +54,21 @@ class Situation {
                 }
             }
             if(already_known == -1){
+                already_known = known_chars.size();
                 KnownChar kc;
                 kc.id = id;
-                kc.interest = 1.0f;
-                MovementObject@ char = ReadCharacterID(id);
-                kc.friendly = this_mo.OnSameTeam(char);
-                kc.knocked_out = char.GetIntVar("knocked_out");
                 known_chars.push_back(kc);
                 //Print("New char seen\n");
             } else {
                 //Print("Char already seen\n");
             }
+            known_chars[already_known].interest = 1.0f;
+            MovementObject@ char = ReadCharacterID(known_chars[already_known].id);
+            known_chars[already_known].friendly = this_mo.OnSameTeam(char);
+            known_chars[already_known].knocked_out = char.GetIntVar("knocked_out");
+            known_chars[already_known].last_seen_time = time;
+            known_chars[already_known].last_known_position = char.position;
+            known_chars[already_known].last_known_velocity = char.velocity;
         } else if(type == _item_object){
             for(uint i=0; i<known_items.size(); ++i){
                 if(known_items[i].id == id){
@@ -109,9 +115,6 @@ class Situation {
                 return;
             }
         }
-    }
-
-    void Update() {
     }
 
     void GetLookTarget(LookTarget& lt){

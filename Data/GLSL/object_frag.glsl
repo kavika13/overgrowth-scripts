@@ -169,7 +169,7 @@ float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(200
 spec *= 5.0; \
 vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * 0.3; \
 vec3 spec_map_vec = reflect(ws_vertex, ws_normal); \
-spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.25 * \
+spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.2 * \
     GetAmbientContrib(shadow_tex.g) * max(0.0,(1.0 - blood_amount * 2.0));
 
 #define CALC_STIPPLE_FADE \

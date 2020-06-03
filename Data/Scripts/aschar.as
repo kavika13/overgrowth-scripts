@@ -93,7 +93,10 @@ float p_muscle;
 float p_ear_size;
 int p_lives;
 
+const bool draw_skeleton_lines = false;
+
 float roll_ik_fade = 0.0f;
+float flip_ik_fade = 0.0f;
 
 float offset_height = 0.0f;
 
@@ -126,7 +129,6 @@ vec3 tilt(0.0f);
 
 float stance_move_fade = 0.0f;
 float stance_move_fade_val = 0.0f;
-vec3 head_dir;
     
 float head_look_opac;
 float choke_look_time = 0.0f;
@@ -134,7 +136,6 @@ float choke_look_time = 0.0f;
 int force_look_target_id = -1;
 vec3 random_look_dir;
 float random_look_delay = 0.0f;
-float look_inertia;
 LookTarget look_target;
 
 vec3 head_vel;
@@ -238,11 +239,11 @@ const float _roll_accel = 50.0f;
 const float _roll_ground_speed = 12.0f;
 vec3 roll_direction;
 
-float leg_cannon_flip;
+vec3 flip_modifier_axis;
+float flip_modifier_rotation;
+vec3 tilt_modifier;
 
-// center of mass offset that will eventually be used for animation, but is probably used yet.
-vec3 com_offset;
-vec3 com_offset_vel;
+float leg_cannon_flip;
 
 bool mirrored_stance = false;
 
@@ -956,15 +957,139 @@ void ApplyBoneInflation() {
     SetIKChainElementInflate("rightarm",5,max(0.6f, 1.0f + max(fat*0.5f,muscle)));
 }
 
+array<BoneTransform> skeleton_bind_transforms;
+array<BoneTransform> inv_skeleton_bind_transforms;
+array<int> ik_chain_elements;
+enum IKLabel {kLeftArmIK, kRightArmIK, kLeftLegIK, kRightLegIK, 
+              kHeadIK, kLeftEarIK, kRightEarIK, kTorsoIK, 
+              kTailIK, kNumIK };
+array<int> ik_chain_start_index;
+array<int> ik_chain_length;
+array<float> ik_chain_bone_lengths;
+array<int> bone_children;
+array<int> bone_children_index;
+array<vec3> convex_hull_points;
+array<int> convex_hull_points_index;
+
+void CacheSkeletonInfo() {
+    Print("Caching skeleton info\n");
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    int num_bones = skeleton.NumBones();
+    skeleton_bind_transforms.resize(num_bones);
+    inv_skeleton_bind_transforms.resize(num_bones);
+    for(int i=0; i<num_bones; ++i){
+        skeleton_bind_transforms[i] = BoneTransform(skeleton.GetBindMatrix(i));
+        inv_skeleton_bind_transforms[i] = invert(skeleton_bind_transforms[i]);
+    }
+
+    ik_chain_elements.resize(0);
+    ik_chain_bone_lengths.resize(0);
+    ik_chain_start_index.resize(kNumIK);
+    ik_chain_length.resize(kNumIK);
+    for(int i=0; i<kNumIK; ++i) {
+        string bone_label;
+        switch(i){
+            case kLeftArmIK: bone_label = "leftarm"; break;
+            case kRightArmIK: bone_label = "rightarm"; break;
+            case kLeftLegIK: bone_label = "left_leg"; break;
+            case kRightLegIK: bone_label = "right_leg"; break;
+            case kHeadIK: bone_label = "head"; break;
+            case kLeftEarIK: bone_label = "leftear"; break;
+            case kRightEarIK: bone_label = "rightear"; break;
+            case kTorsoIK: bone_label = "torso"; break;
+            case kTailIK: bone_label = "tail"; break;
+        }
+        int bone = skeleton.IKBoneStart(bone_label);
+        ik_chain_length[i] = skeleton.IKBoneLength(bone_label);
+        ik_chain_start_index[i] = ik_chain_elements.size();
+        int count = 0;
+        while(bone != -1 && count < ik_chain_length[i]){
+            ik_chain_bone_lengths.push_back(distance(skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)), skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1))));
+            ik_chain_elements.push_back(bone);
+            bone = skeleton.GetParent(bone);
+            ++count;
+        }
+    }
+    ik_chain_start_index.push_back(ik_chain_elements.size());
+    bone_children.resize(0);
+    bone_children_index.resize(num_bones);
+    for(int bone=0; bone<num_bones; ++bone){
+        bone_children_index[bone] = bone_children.size();
+        for(int i=0; i<num_bones; ++i){
+            int temp_bone = i;
+            while(skeleton.GetParent(temp_bone) != -1 && skeleton.GetParent(temp_bone) != bone){
+                temp_bone = skeleton.GetParent(temp_bone);
+            }
+            if(skeleton.GetParent(temp_bone) == bone){
+                bone_children.push_back(i);
+            }
+        }
+    }
+    bone_children_index.push_back(bone_children.size());
+
+    convex_hull_points.resize(0);
+    convex_hull_points_index.resize(num_bones);
+    for(int bone=0; bone<num_bones; ++bone){
+        convex_hull_points_index[bone] = convex_hull_points.size();
+        array<float> @hull_points = skeleton.GetConvexHullPoints(bone);
+        for(int i=0, len=hull_points.size(); i<len; i+=3){
+            convex_hull_points.push_back(vec3(hull_points[i], hull_points[i+1], hull_points[i+2]));
+        }
+    }
+    convex_hull_points_index.push_back(convex_hull_points.size());
+
+    key_masses.resize(kNumKeys);
+    root_bone.resize(kNumKeys);
+    for(int j=0; j<2; ++j){
+        int bone = skeleton.IKBoneStart(j==0?"left_leg":"right_leg");
+        for(int i=0, len=skeleton.IKBoneLength(j==0?"left_leg":"right_leg"); i<len; ++i){
+            key_masses[kLeftLegKey+j] += skeleton.GetBoneMass(bone);
+            if(i<len-1){
+                bone = skeleton.GetParent(bone);
+            }
+        }
+        root_bone[kLeftLegKey+j] = bone;
+    }
+    for(int j=0; j<2; ++j){
+        int bone = skeleton.IKBoneStart(j==0?"leftarm":"rightarm");
+        for(int i=0, len=skeleton.IKBoneLength(j==0?"leftarm":"rightarm"); i<len; ++i){
+            key_masses[kLeftArmKey+j] += skeleton.GetBoneMass(bone);
+            if(i<len-1){
+                bone = skeleton.GetParent(bone);
+            }
+        }
+        root_bone[kLeftArmKey+j] = bone;
+    }
+    {
+        int bone = skeleton.IKBoneStart("torso");
+        for(int i=0, len=skeleton.IKBoneLength("torso"); i<len; ++i){
+            key_masses[kChestKey] += skeleton.GetBoneMass(bone);
+            if(i<len-1){
+                bone = skeleton.GetParent(bone);
+            }
+        }
+        root_bone[kChestKey] = bone;
+    }
+    {
+        int bone = skeleton.IKBoneStart("head");
+        for(int i=0, len=skeleton.IKBoneLength("head"); i<len; ++i){
+            key_masses[kHeadKey] += skeleton.GetBoneMass(bone);
+            if(i<len-1){
+                bone = skeleton.GetParent(bone);
+            }
+        }
+        root_bone[kHeadKey] = bone;
+    }
+}
+
 float vision_check_time = 0.0f;
 void UpdateVision() {
     // Get list of objects in character view frustum
-    mat4 transform = this_mo.rigged_object().GetAvgIKChainTransform("head");
-    mat4 transform_offset;
-    transform_offset.SetRotationX(-70);
-    transform.SetRotationPart(transform.GetRotationPart()*transform_offset);
+    BoneTransform transform = this_mo.rigged_object().GetFrameMatrix(ik_chain_elements[ik_chain_start_index[kHeadIK]]);
+    transform.rotation = transform.rotation * quaternion(vec4(1,0,0,-70/180.0f*3.1417f));
     array<int> visible_objects;
-    GetObjectsInHull("Data/Models/fov.obj", transform, visible_objects);
+    GetObjectsInHull("Data/Models/fov.obj", transform.GetMat4(), visible_objects);
     for(int i=0, len=visible_objects.size(); i<len; ++i){
         int id = visible_objects[i];
         if(ReadObjectFromID(id).GetType() == _item_object){
@@ -995,13 +1120,13 @@ void UpdateVision() {
                     total_line_length += line_length;
                 }
             }
-            vec3 hit = col.GetRayCollision(transform.GetTranslationPart(), check_point);
+            vec3 hit = col.GetRayCollision(transform.origin, check_point);
             bool draw_vision_lines = false;
             if(draw_vision_lines){
                 if(hit == check_point){
-                    DebugDrawLine(transform.GetTranslationPart(), check_point, vec3(0.0f,1.0f,0.0f), _fade);
+                    DebugDrawLine(transform.origin, check_point, vec3(0.0f,1.0f,0.0f), _fade);
                 } else {
-                    DebugDrawLine(transform.GetTranslationPart(), hit, vec3(1.0f,0.0f,0.0f), _fade);                
+                    DebugDrawLine(transform.origin, hit, vec3(1.0f,0.0f,0.0f), _fade);                
                 }
             }
             if(hit == check_point){
@@ -1011,7 +1136,205 @@ void UpdateVision() {
     }
 }
 
+void CheckForNANPosAndVel(int num){
+    if(this_mo.position != this_mo.position){
+        Print("Invalid position at "+num+"\n");
+        Breakpoint(0);
+    }
+    if(this_mo.velocity != this_mo.velocity){
+        Print("Invalid velocity at "+num+"\n");
+        Breakpoint(0);
+    }
+}
+
+void CheckForNANVec3(const vec3 &in vec, int num){
+    if(vec != vec){
+        Print("Invalid vec3 at "+num+"\n");
+        Breakpoint(0);
+    }
+}
+
+void DisplayMatrixUpdate(){
+    //if(!animated){
+    //    Print("Testing ragdoll!\n");
+    //}
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    float scale = rigged_object.GetCharScale();
+    int chest_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+    BoneTransform world_chest = BoneTransform(rigged_object.GetDisplayBoneMatrix(chest_bone)) * inv_skeleton_bind_transforms[chest_bone];
+    vec3 breathe_dir = world_chest.rotation * normalize(vec3(0,0,1));
+    vec3 breathe_front = world_chest.rotation * normalize(vec3(0,1,0));
+    vec3 breathe_side = world_chest.rotation * normalize(vec3(1,0,0));
+    for(int i=0; i<2; ++i){
+        int collar_bone = ik_chain_elements[ik_chain_start_index[kLeftArmIK+i]+5];
+        BoneTransform collar = BoneTransform(rigged_object.GetDisplayBoneMatrix(collar_bone)) * inv_skeleton_bind_transforms[collar_bone];
+        collar.origin += breathe_dir * breath_amount * 0.01f * scale;
+        collar.origin += breathe_front * breath_amount * 0.01f * scale;
+        collar = collar * skeleton_bind_transforms[collar_bone];
+        rigged_object.SetDisplayBoneMatrix(collar_bone, collar.GetMat4());
+
+        int shoulder_bone = ik_chain_elements[ik_chain_start_index[kLeftArmIK+i]+4];
+        BoneTransform shoulder = BoneTransform(rigged_object.GetDisplayBoneMatrix(shoulder_bone)) * inv_skeleton_bind_transforms[shoulder_bone];
+        shoulder.origin += breathe_dir * breath_amount * 0.002f * scale;
+        shoulder = shoulder * skeleton_bind_transforms[shoulder_bone];
+        rigged_object.SetDisplayBoneMatrix(shoulder_bone, shoulder.GetMat4());
+    }
+
+    //collarbone += breathe_dir * breath_amount * 0.01f * scale;
+    //ribs += breathe_dir * breath_amount *  0.01f * scale;
+    //ribs += world_chest.rotation * normalize(vec3(0,1,0.5)) * breath_amount * 0.01f * scale;
+    //stomach += breathe_dir * breath_amount *  0.01f * scale;
+
+    world_chest.origin += breathe_dir * breath_amount * 0.01f * scale;
+    world_chest.origin += breathe_front * breath_amount * 0.01f * scale;
+    world_chest.rotation = quaternion(vec4(breathe_side.x, breathe_side.y, breathe_side.z, breath_amount * 0.05f)) * world_chest.rotation;
+    world_chest = world_chest * skeleton_bind_transforms[chest_bone];
+    rigged_object.SetDisplayBoneMatrix(chest_bone, world_chest.GetMat4());
+
+    int abdomen_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]+1];
+    BoneTransform abdomen = BoneTransform(rigged_object.GetDisplayBoneMatrix(abdomen_bone)) * inv_skeleton_bind_transforms[abdomen_bone];
+    abdomen.origin += breathe_dir * breath_amount * 0.008f * scale;
+    abdomen.origin += breathe_front * breath_amount * 0.005f * scale;
+    abdomen.rotation = quaternion(vec4(breathe_side.x, breathe_side.y, breathe_side.z, breath_amount * -0.02f)) * abdomen.rotation;
+    abdomen = abdomen * skeleton_bind_transforms[abdomen_bone];
+    rigged_object.SetDisplayBoneMatrix(abdomen_bone, abdomen.GetMat4());
+
+
+    int neck_bone = ik_chain_elements[ik_chain_start_index[kHeadIK]+1];
+    BoneTransform neck = BoneTransform(rigged_object.GetDisplayBoneMatrix(neck_bone)) * inv_skeleton_bind_transforms[neck_bone];
+    neck.origin += breathe_dir * breath_amount * 0.005f * scale;
+    neck = neck * skeleton_bind_transforms[neck_bone];
+    rigged_object.SetDisplayBoneMatrix(neck_bone, neck.GetMat4());
+        
+}
+
+/*
+array<vec3> cloth_points;
+array<vec3> old_cloth_points;
+array<vec3> temp_cloth_points;
+
+void UpdateCloth(const Timestep &in ts) {
+    if(cloth_points.size() == 0){
+        cloth_points.resize(100);
+        int index = 0;
+        for(int i=0; i<10; ++i){
+            for(int j=0;j<10;++j){
+                cloth_points[index] = 0.0f;
+                ++index;
+            }
+        }
+    }
+    old_cloth_points.resize(100);
+    temp_cloth_points.resize(100);
+
+    // Apply velocity and store old cloth points
+    for(int i=0; i<100; ++i){
+        vec3 vel = cloth_points[i]-old_cloth_points[i];
+        if(length_squared(vel)>1.0f){
+            vel = normalize(vel);
+        }
+        temp_cloth_points[i] = cloth_points[i] + vel*0.99f;
+        temp_cloth_points[i].y -= 0.001f;
+        old_cloth_points[i] = cloth_points[i];
+        cloth_points[i] = temp_cloth_points[i];
+        temp_cloth_points[i] = 0.0f;
+    }
+
+    { // Enforce distance constraints
+        int index=0;
+        for(int i=0; i<100; ++i){
+            temp_cloth_points[i] = 0.0f;
+        }
+        for(int i=0; i<10; ++i){
+            for(int j=0;j<10;++j){
+                if(j!=9){
+                    float dist = distance(cloth_points[index], cloth_points[index+1]);
+                    vec3 dir = normalize(cloth_points[index+1] - cloth_points[index]);
+                    temp_cloth_points[index+1] += dir * (0.1f-dist)*0.5f;
+                    temp_cloth_points[index] -= dir * (0.1f-dist)*0.5f;
+                }
+                if(i!=9){
+                    float dist = distance(cloth_points[index], cloth_points[index+10]);
+                    vec3 dir = normalize(cloth_points[index+10] - cloth_points[index]);
+                    DebugText("dist","dist: "+dist, 0.5f);
+                    temp_cloth_points[index+10] += dir * (0.1f-dist)*0.5f;
+                    temp_cloth_points[index] -= dir * (0.1f-dist)*0.5f;
+                }
+                ++index;
+            }
+        }
+        for(int i=0; i<100; ++i){
+            temp_cloth_points[i] *= 0.5f;
+        }
+        for(int i=0; i<100; ++i){
+            vec3 temp_point = cloth_points[i];
+            temp_point -= this_mo.position;
+            temp_point.x *= 4.0f;
+            temp_point.z *= 4.0f;
+            if(length_squared(temp_point) < 1.0f){
+                vec3 temp_old_point = cloth_points[i];
+                temp_old_point -= this_mo.position;
+                temp_old_point.x *= 4.0f;
+                temp_old_point.z *= 4.0f;
+
+                for(int j=0; j<10; ++j){
+                    vec3 new_temp_point = mix(temp_old_point, temp_point, j/9.0f);
+                    if(length_squared(new_temp_point) < 1.0f){
+                        temp_point = normalize(temp_point);
+                        temp_point.x *= 0.25f;
+                        temp_point.z *= 0.25f;
+                        temp_point += this_mo.position;
+                        break;
+                    }
+                }
+                temp_cloth_points[i] += temp_point - cloth_points[i];
+            }
+        }
+        for(int i=0; i<100; ++i){
+            cloth_points[i] += temp_cloth_points[i];// * 0.5f;
+        }
+    }
+
+    DebugText("Cloth point", "Cloth point: "+cloth_points[0], 1.0f);
+
+    {
+        vec3 facing = this_mo.GetFacing();
+        vec3 right =  vec3(facing.z, 0, -facing.x);
+        int index = 0;
+        for(int i=0; i<10; ++i){
+            for(int j=0;j<10;++j){
+                if(j==9){
+                    cloth_points[index] = this_mo.position + right*(0.1f*i-0.45f)+vec3(0,j*0.1f,0) - this_mo.GetFacing()*0.2f;
+                }
+                ++index;
+            }
+        }
+        DebugDrawWireScaledSphere(this_mo.position,1.0f,vec3(0.25f,1.0f,0.25f), vec3(1.0f),_delete_on_update);
+    }
+
+    int index=0;
+    for(int i=0; i<10; ++i){
+        for(int j=0;j<10;++j){
+            if(j!=9){
+                DebugDrawLine(cloth_points[index], cloth_points[index+1],vec3(1.0f), _delete_on_update);
+            }
+            if(i!=9){
+                DebugDrawLine(cloth_points[index], cloth_points[index+10],vec3(1.0f), _delete_on_update);
+            }
+            ++index;
+        }
+    }
+}*/
+
+float breath_amount = 0.0f;
+float breath_time = 0.0f;
+float breath_speed = 0.9f;
+array<float> resting_mouth_pose;
+array<float> target_resting_mouth_pose;
+float resting_mouth_pose_time = 0.0f;
+
 void Update(int num_frames) {
+    CheckForNANPosAndVel(1);
     Timestep ts(time_step, num_frames);    
     time += ts.step();
 
@@ -1026,22 +1349,62 @@ void Update(int num_frames) {
     } else {
         test_talking_amount = max(test_talking_amount - ts.step() * 5.0f, 0.0f);
     }
+
+    if(resting_mouth_pose.size() == 0){
+        resting_mouth_pose.resize(4);
+        target_resting_mouth_pose.resize(4);
+        for(int i=0; i<4; ++i){
+            resting_mouth_pose[i] = 0.0f;
+            target_resting_mouth_pose[i] = 0.0f;
+        }
+    }
+    if(knocked_out == _awake && resting_mouth_pose_time < time){
+        resting_mouth_pose_time = time + RangedRandomFloat(0.2f,1.0f);
+        for(int i=0; i<4; ++i){
+            target_resting_mouth_pose[i] = max(0.0f, RangedRandomFloat(-8.0f,1.0f))*0.2f;
+        }
+    }
+    for(int i=0; i<4; ++i){
+        resting_mouth_pose[i] = mix(target_resting_mouth_pose[i], resting_mouth_pose[i], pow(0.97f, num_frames));
+    }
+
     float talk_speed_mult = 1.5f;
-    this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f*talk_speed_mult)+sin(time*13.0f))*0.25f+0.5f, 0.7f*test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("ah",max(resting_mouth_pose[0], (sin(time*22.0f*talk_speed_mult)*0.5f+0.5f)*0.3f*test_talking_amount), 1.0f);
+    this_mo.rigged_object().SetMorphTargetWeight("oh",max(resting_mouth_pose[1], ((sin(time*6.0f*talk_speed_mult)+sin(time*13.0f))*0.25f+0.5f)*0.7f*test_talking_amount), 1.0f);
+    this_mo.rigged_object().SetMorphTargetWeight("w",max(resting_mouth_pose[2], (sin(time*15.0f*talk_speed_mult)*0.5f+0.5f)*0.3f*test_talking_amount), 1.0f);
+    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",max(resting_mouth_pose[3], max(injured_mouth_open, (sin(time*12.0f*talk_speed_mult)*0.5f+0.5f)*0.3f*test_talking_amount)), 1.0f);
+
+    /*if(this_mo.controlled){
+        DebugText("breath_speed","breath_speed: "+breath_speed, 0.5f);
+    }*/
+
+    if(knocked_out != _dead){
+        float speed_ratio = length(this_mo.velocity)/max_speed;
+        if(idle_type == _combat){
+            speed_ratio = mix(speed_ratio,1.0f,0.5f);
+        }
+        float target_breath_speed = 0.9f+4.0f*speed_ratio;
+        float breath_inertia = mix(0.999f, 0.99f, speed_ratio);
+        breath_speed = min(5.0f, mix(target_breath_speed, breath_speed, pow(breath_inertia, num_frames)));
+        breath_time += ts.step() * breath_speed;
+        breath_amount = (sin(breath_time)*0.5f+0.5f)* 1.0f*mix(0.5f,1.0f,breath_speed/5.0f);
+    }
     
+    CheckForNANPosAndVel(2);
     // Cinematic posing
     if(dialogue_control){
         on_ground = true;
         this_mo.position = dialogue_position;
-        this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
-        this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
+        tilt_modifier = vec3(0.0f,1.0f,0.0f);
+        flip_modifier_rotation = 0.0f;
         this_mo.SetAnimation(dialogue_anim, 3.0f, 0);
         idle_stance_amount = 0.2f;
+
+        torso_look = normalize(dialogue_torso_target-this_mo.rigged_object().GetAvgIKChainPos("torso"))*dialogue_torso_control;
+        head_look = normalize(dialogue_head_target-this_mo.rigged_object().GetAvgIKChainPos("head"))*dialogue_head_control;
+        eye_look_target = dialogue_eye_dir;
+
         UpdateBlink(ts);
-        UpdateEyeLook(ts);
         HandleFootStance(ts);
         {
             vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("torso");
@@ -1065,6 +1428,7 @@ void Update(int num_frames) {
         }
         return;
     }
+    CheckForNANPosAndVel(3);
 
     bool display_player_state = false;
     if(this_mo.controlled && display_player_state){
@@ -1085,6 +1449,7 @@ void Update(int num_frames) {
             //DebugText("weapon_label","Weapon Label: "+item.GetLabel(),0.5f);
         }
     }
+    CheckForNANPosAndVel(4);
     if(weapon_slots[primary_weapon_slot] == -1 && weapon_slots[secondary_weapon_slot] != -1){
         SwapWeaponHands();
     }
@@ -1100,6 +1465,7 @@ void Update(int num_frames) {
         mirrored_stance = left_handed;
     }
 
+    CheckForNANPosAndVel(5);
     // Set close coord so that long stances (like swords) don't penetrate other characters
     float close_amount = 0.0f;
     if(target_id != -1 && weapon_slots[primary_weapon_slot] != -1){
@@ -1125,6 +1491,7 @@ void Update(int num_frames) {
         ApplyLevelBoundaries();
     }
 
+    CheckForNANPosAndVel(6);
     // Simplified loop for testing out animations
     if(in_animation){        
         if(this_mo.controlled){
@@ -1141,6 +1508,7 @@ void Update(int num_frames) {
         return;
     }    
     
+    CheckForNANPosAndVel(7);
     if(being_executed == FINISHING_THROAT_CUT){
         int other_id = tether_id;
         CutThroat();
@@ -1153,6 +1521,7 @@ void Update(int num_frames) {
     if(cut_throat && blood_amount > 0.0f){
         UpdateCutThroatEffect(ts);
     }
+
     if(cut_torso && blood_amount > 0.0f){
         if(blood_delay <= 0){
             this_mo.rigged_object().CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
@@ -1161,6 +1530,7 @@ void Update(int num_frames) {
         blood_amount -= ts.step() * 0.5f;
         -- blood_delay;
     }
+    CheckForNANPosAndVel(8);
 
     if(on_ground){
         push_velocity *= pow(0.9f, ts.frames());
@@ -1199,6 +1569,7 @@ void Update(int num_frames) {
             foot[i].old_pos += (old_slide_vel - new_slide_vel) * ts.step();
         }
     }
+    CheckForNANPosAndVel(9);
 }
 
 void JumpTest(const vec3&in initial_pos, 
@@ -1328,7 +1699,6 @@ void SwapWeaponHands() {
     sheathe_layer_id = this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_heldweaponswap.anm",8.0f,flags);
 }
 
-
 // Convert byte colors to float colors (255,0,0) to (1.0f,0.0f,0.0f)
 vec3 FloatTintFromByte(const vec3 &in tint){
     vec3 float_tint;
@@ -1375,34 +1745,54 @@ void RandomizeColors() {
     }
 }
 
+string ctrl_key = "ctrl";
+string ragdoll_key = "z";
+string injured_ragdoll_key = "n";
+string cut_throat_key = ",";
+string limp_ragdoll_key = "m";
+string recover_key = "x";
+string path_key = "p";
+string scream_key = "v";
+string lightning_key = "f";
+string combat_rabbit_key = "1";
+string civ_rabbit_key = "2";
+string cat_key = "3";
+string rat_key = "4";
+string wolf_key = "5";
+string dog_key = "6";
+string rabbot_key = "7";
+string misc_key = "b";
 
 void HandleSpecialKeyPresses() {
-    if(GetInputDown(this_mo.controller_id, "z") && !GetInputDown(this_mo.controller_id, "ctrl")){
+    if(!DebugKeysEnabled()){
+        return;
+    }
+    if(GetInputDown(this_mo.controller_id, ragdoll_key) && !GetInputDown(this_mo.controller_id, ctrl_key)){
         GoLimp();
     }
-    if(GetInputDown(this_mo.controller_id, "n")){                
+    if(GetInputDown(this_mo.controller_id, injured_ragdoll_key)){                
         if(state != _ragdoll_state){
             string sound = "Data/Sounds/hit/hit_hard.xml";
             PlaySoundGroup(sound, this_mo.position);
         }
         Ragdoll(_RGDL_INJURED);
     }
-    if(GetInputPressed(this_mo.controller_id, ",")){   
+    if(GetInputPressed(this_mo.controller_id, cut_throat_key)){   
         CutThroat();
     }
-    if(GetInputDown(this_mo.controller_id, "m")){        
+    if(GetInputDown(this_mo.controller_id, limp_ragdoll_key)){        
         Ragdoll(_RGDL_LIMP);
     }
-    if(GetInputDown(this_mo.controller_id, "x")){      
+    if(GetInputDown(this_mo.controller_id, recover_key)){      
         Recover();
     }
 
     if(this_mo.controlled){
-        if(GetInputDown(this_mo.controller_id, "v")){
+        if(GetInputDown(this_mo.controller_id, scream_key)){
             string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
         }
-        if(GetInputPressed(this_mo.controller_id, "f")){
+        if(GetInputPressed(this_mo.controller_id, lightning_key)){
             int num_chars = GetNumCharacters();
             for(int i=0; i<num_chars; ++i){
                 MovementObject @char = ReadCharacter(i);
@@ -1430,7 +1820,7 @@ void HandleSpecialKeyPresses() {
                              "recovery_time = 2.0f;");
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "1")){ 
+        if(GetInputPressed(this_mo.controller_id, combat_rabbit_key)){ 
             int rand_int = rand()%3;
             switch(rand_int){
             case 0:
@@ -1444,7 +1834,7 @@ void HandleSpecialKeyPresses() {
                 break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "2")){
+        if(GetInputPressed(this_mo.controller_id, civ_rabbit_key)){
             int rand_int = rand()%8;
             switch(rand_int){
             case 0: 
@@ -1464,7 +1854,7 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/pale_rabbit_civ.xml"); break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "3")){
+        if(GetInputPressed(this_mo.controller_id, cat_key)){
             int rand_int = rand()%4;
             switch(rand_int){
             case 0: 
@@ -1477,7 +1867,7 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/striped_cat.xml"); break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "4")){
+        if(GetInputPressed(this_mo.controller_id, rat_key)){
             int rand_int = rand()%3;
             switch(rand_int){
             case 0: 
@@ -1488,7 +1878,7 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/female_rat.xml"); break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "5")){
+        if(GetInputPressed(this_mo.controller_id, wolf_key)){
             int rand_int = rand()%6;
             switch(rand_int){
             case 0: 
@@ -1497,7 +1887,7 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/male_wolf.xml"); break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "6")){
+        if(GetInputPressed(this_mo.controller_id, dog_key)){
             int rand_int = rand()%4;
             switch(rand_int){
             case 0: 
@@ -1510,10 +1900,10 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/lt_dog_male_2.xml"); break;
             }
         }
-        if(GetInputPressed(this_mo.controller_id, "7")){
+        if(GetInputPressed(this_mo.controller_id, rabbot_key)){
             SwitchCharacter("Data/Characters/rabbot.xml");
         }
-        if(GetInputPressed(this_mo.controller_id, "b")){
+        if(GetInputPressed(this_mo.controller_id, misc_key)){
             /*
             int8 flags = _ANM_FROM_START;
             if(mirrored_stance){
@@ -1549,11 +1939,8 @@ void HandleSpecialKeyPresses() {
             
             //CheckPossibleAttacks();
         }
-        if(GetInputPressed(this_mo.controller_id, "h")){
-            context.PrintGlobalVars();
-        } 
     }
-    if(GetInputPressed(this_mo.controller_id, "p") && target_id != -1){
+    if(GetInputPressed(this_mo.controller_id, path_key) && target_id != -1){
         Print("Getting path");
         NavPath temp = GetPath(this_mo.position,
                                ReadCharacterID(target_id).position);
@@ -1722,9 +2109,9 @@ void UpdatePlantAvoid() {
 
 void UpdateState(const Timestep &in ts) {
     cam_pos_offset = vec3(0.0f);
+    UpdateEyeLookTarget();
     UpdateHeadLook(ts);
     UpdateBlink(ts);
-    UpdateEyeLook(ts);
 
     UpdatePlantAvoid();
     UpdateActiveBlockAndDodge(ts);
@@ -1920,66 +2307,60 @@ void UpdateTilt(const Timestep &in ts) {
     const float _tilt_inertia = 0.9f;
     tilt = tilt * pow(_tilt_inertia,ts.frames()) +
            target_tilt * (1.0f - pow(_tilt_inertia,ts.frames()));
-    this_mo.SetTilt(tilt);
+    tilt_modifier = tilt;
 }
 
+vec3 run_eye_look_target;
+vec3 eye_look_target;
+vec3 random_look_target;
 
-
-vec3 GetTargetHeadDir(const Timestep &in ts) {
-    bool look_at_target = false;
-    vec3 target_dir;
-    vec3 target_head_dir;
+void UpdateEyeLookTarget() {
     if(tethered == _TETHERED_REARCHOKED){
-        if(choke_look_time <= 0.0f){
-            target_head_dir = vec3(RangedRandomFloat(-1.0f, 1.0f),
-                                   RangedRandomFloat(-0.2f, 0.2f),
-                                   RangedRandomFloat(-1.0f, 1.0f));
-            choke_look_time = RangedRandomFloat(0.1f,0.3f);
-            look_inertia = 0.8f;
-            if(rand()%4 == 0){
-                this_mo.MaterialEvent("choke_move", this_mo.position, RangedRandomFloat(0.0f,1.0f));
-            }
+        // Look around randomly if being choked
+        if(time >= choke_look_time){
+            vec3 dir = vec3(RangedRandomFloat(-1.0f, 1.0f),
+                            RangedRandomFloat(-0.2f, 0.2f),
+                            RangedRandomFloat(-1.0f, 1.0f));
+            eye_look_target = this_mo.position + dir * 100.0f;
+            choke_look_time = time + RangedRandomFloat(0.1f,0.3f);
         }
-        choke_look_time = max(0.0f, choke_look_time - ts.step());
     } else if(trying_to_get_weapon != 0){
-        look_inertia = 0.8f;
-        target_head_dir = normalize(get_weapon_pos - this_mo.rigged_object().GetAvgIKChainPos("head"));
+        // Look at weapon if trying to get it
+        eye_look_target = get_weapon_pos;
     } else {
+        // Look at throw target
         if(throw_knife_layer_id != -1 && target_id != -1){
             force_look_target_id = target_id;
         }
         if(force_look_target_id != -1){
             vec3 target_pos = ReadCharacterID(force_look_target_id).rigged_object().GetAvgIKChainPos("head");
-            look_at_target = true;
-            target_dir = normalize(target_pos - this_mo.rigged_object().GetAvgIKChainPos("head"));
-        }
-        if(look_at_target){
-            target_head_dir = target_dir;
-            look_inertia = 0.8f;
+            eye_look_target = target_pos;
         } else if(this_mo.controlled){
             vec3 dir_flat = camera.GetFacing();
-            dir_flat.y = 0.0f;
-            target_head_dir = mix(dir_flat, normalize(dir_flat), 0.5f);
-            target_head_dir.y = camera.GetFacing().y * 0.4f;
-            if(!on_ground){
-                target_head_dir = mix(target_head_dir, this_mo.GetFacing(), 0.5f);
-            }
-            target_head_dir = normalize(target_head_dir);
-            look_inertia = 0.8f;
+            eye_look_target = this_mo.position + camera.GetFacing() * 100.0f;
         } else {
             if(look_target.type == _none){
-                target_head_dir = random_look_dir;
+                eye_look_target = random_look_target;
             } else if(look_target.type == _character){
                 vec3 target_pos = ReadCharacterID(look_target.id).rigged_object().GetAvgIKChainPos("head");
-                target_head_dir = normalize(target_pos - this_mo.rigged_object().GetAvgIKChainPos("head"));
+                eye_look_target = target_pos;
             }
-            look_inertia = 0.9f;
         }
     }
 
-    random_look_delay -= ts.step();
-    if(random_look_delay <= 0.0f){
-        random_look_delay = RangedRandomFloat(0.8f,2.0f);
+    if(state == _movement_state && stance_move_fade != 1.0f){
+        if(on_ground && length_squared(GetTargetVelocity())>0.0f){// && sin(time*3.0f)+sin(time*2.3f)>0.0f){
+            eye_look_target = run_eye_look_target;
+        } else if(!on_ground){
+            vec3 vel_facing = this_mo.velocity + this_mo.GetFacing() * 2.0f;
+            eye_look_target.x = this_mo.position.x + vel_facing.x * 30.0f;
+            eye_look_target.z = this_mo.position.z + vel_facing.z * 30.0f;
+            eye_look_target.y = this_mo.position.y + vel_facing.y * 5.0f;
+        }
+    }
+
+    if(time >= random_look_delay){
+        random_look_delay = time + RangedRandomFloat(0.8f,2.0f);
         vec3 rand_dir;
         do {
             rand_dir = vec3(RangedRandomFloat(-1.0f,1.0f),
@@ -1993,19 +2374,22 @@ vec3 GetTargetHeadDir(const Timestep &in ts) {
         rand_dir.y += RangedRandomFloat(-0.3f,0.3f);
         random_look_dir = normalize(rand_dir);
         random_look_dir = mix(this_mo.GetFacing(), random_look_dir, 0.5f);
+        random_look_target = this_mo.position + random_look_dir * 100.0f;
         situation.GetLookTarget(look_target);
     }
-
-    return target_head_dir;
 }
 
+vec3 head_look;
+vec3 torso_look;
+
 void UpdateHeadLook(const Timestep &in ts) {
-    vec3 target_head_dir = GetTargetHeadDir(ts);
+    vec3 head_eye_dir = normalize(eye_look_target - this_mo.rigged_object().GetAvgIKChainPos("head")); //GetTargetHeadDir(ts);
+    vec3 head_dir = head_eye_dir;
+
     const bool _draw_gaze_line = false;
     if(_draw_gaze_line){
         vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
-        DebugDrawLine(head_pos, head_pos + target_head_dir, vec3(1.0f,0.0f,0.0f), _fade);
-        DebugDrawLine(head_pos, head_pos + head_dir, vec3(0.0f,1.0f,0.0f), _fade);
+        DebugDrawLine(head_pos, head_pos + head_dir, vec3(1.0f,0.0f,0.0f), _fade);
     }
 
     float target_head_look_opac = 1.0f;
@@ -2015,13 +2399,18 @@ void UpdateHeadLook(const Timestep &in ts) {
         target_head_look_opac = 0.0f;
     }
 
-    head_look_opac = mix(target_head_look_opac, head_look_opac, pow(0.95f, ts.frames()));
-    head_dir = head_dir + head_vel * ts.step();
-    vec3 target_head_vel = normalize(mix(target_head_dir, head_dir, look_inertia)) - head_dir;
-    head_vel = mix(target_head_vel * 50.0f, head_vel, 0.7f);
-    //head_dir = normalize(mix(target_head_dir, head_dir, look_inertia));
-    //head_look_opac = 0.0f;
-    this_mo.rigged_object().SetIKTargetOffset("head",head_dir * head_look_opac);
+    head_look_opac = target_head_look_opac;
+    head_look_opac *= max(0.0f, (1.0f - flip_ik_fade));
+    head_look = head_dir * head_look_opac;
+
+    if((state != _movement_state && state != _attack_state) || flip_info.IsFlipping()){
+        head_look = vec3(0.0f);
+    }
+
+    if(block_flinch_spring.value > 0.1f){
+        head_look *= min(1.0f, 1.0f - block_flinch_spring.value*0.5f);
+    }
+    
     if(!stance_move){
         stance_move_fade_val = mix(stance_move_fade,stance_move_fade_val,pow(0.9f,ts.frames()));
     } else {
@@ -2033,8 +2422,8 @@ void UpdateHeadLook(const Timestep &in ts) {
     vec3 flat_head_dir = head_dir;
     flat_head_dir.y = 0.0f;
     flat_head_dir = normalize(flat_head_dir);
-    float torso_control = min(0.0,dot(flat_head_dir, this_mo.GetFacing()))+1.0f;
-    torso_control *= max(0.3f,stance_move_fade_val);
+    float torso_control = 1.0f;
+    torso_control *= max(0.35f,stance_move_fade_val);
     torso_control = min(head_look_opac, torso_control);
     if(IsLayerAttacking()){
         layer_attacking_fade = mix(1.0f, layer_attacking_fade, pow(0.9f, ts.frames()));
@@ -2042,7 +2431,7 @@ void UpdateHeadLook(const Timestep &in ts) {
         layer_attacking_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, ts.frames()));
     }
     torso_control *= (1.0f - layer_attacking_fade);
-    torso_control *= (1.0f - duck_amount);
+    torso_control *= (1.0f - duck_amount * 0.5f);
     
     if(throw_knife_layer_id != -1){
         layer_throwing_fade = mix(1.0f, layer_attacking_fade, pow(0.9f, ts.frames()));
@@ -2050,13 +2439,13 @@ void UpdateHeadLook(const Timestep &in ts) {
         layer_throwing_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, ts.frames()));
     }
     torso_control = mix(torso_control,0.5f,layer_throwing_fade);
-    //torso_control = 0.0f;
-    if(ledge_info.on_ledge){
+    if(ledge_info.on_ledge || !on_ground || state != _movement_state){
         torso_control = 0.0f;
     }
-    this_mo.rigged_object().SetIKTargetOffset("torso",head_dir*torso_control);
+
+    torso_look = head_dir*torso_control;
+
     stance_move_fade = max(0.0f, stance_move_fade - ts.step());
-    //Print("stance_move_fade: "+stance_move_fade+"\n");
 }
 
 void SetEyeLookDir(const vec3 &in eye_dir) {
@@ -2086,30 +2475,184 @@ void SetEyeLookDir(const vec3 &in eye_dir) {
     this_mo.rigged_object().SetMorphTargetWeight("look_b_l",max(0.0f,-left_front),1.0f);
 }
 
-void UpdateEyeLook(const Timestep &in ts){
+enum WhichEye {
+    kLeftEye,
+    kRightEye
+}
+
+bool GetEyeDir(WhichEye which_eye, const string &in morph_label, vec3 &out start, vec3 &out end) {
+    if(character_getter.GetMorphMetaPoints(morph_label, start, end)){
+        if(which_eye == kLeftEye){
+            start.x *= -1.0f;
+            end.x *= -1.0f;
+        }
+        Skeleton @skeleton = this_mo.rigged_object().skeleton();
+        BoneTransform test = skeleton_bind_transforms[skeleton.IKBoneStart("head")];
+        float temp;
+        vec3 model_center = this_mo.rigged_object().GetModelCenter();
+        temp = start.z;
+        start.z = -start.y;
+        start.y = temp;
+        temp = end.z;
+        end.z = -end.y;
+        end.y = temp;
+        start -= model_center;
+        end -= model_center;
+        start = test * start;
+        end = test * end;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+array<int> debug_eye_lines;
+vec3 eye_offset;
+float eye_offset_time = 0.0f;
+
+void UpdateEyeLook(){
+    // Clear debug lines
+    for(int i=0, len=debug_eye_lines.size(); i<len; ++i){
+        DebugDrawRemove(debug_eye_lines[i]);
+    }
+    debug_eye_lines.resize(0);
+
     if(knocked_out != _awake){
         return;
     }
 
-    const float _eye_inertia = 0.85f;
-    const float _eye_min_delay = 0.5f; //Minimum time before changing eye direction
-    const float _eye_max_delay = 2.0f; //Maximum time before changing eye direction
+    vec3 target_pos = eye_look_target;// vec3(sin(time*1.4f),1.0f+sin(time*1.2f),1.0f);
+    BoneTransform head_mat = this_mo.rigged_object().GetFrameMatrix(ik_chain_elements[ik_chain_start_index[kHeadIK]]);
+    vec3 temp_target_pos = normalize(invert(head_mat) * target_pos);
+    
+    string species = character_getter.GetTag("species");
+    vec3 base_start, base_end;
+    WhichEye which_eye = kRightEye;
+    bool valid = GetEyeDir(kRightEye, "look_c", base_start, base_end);
+    if(valid){
+        eye_dir = 0;
+        if(species == "rabbit" || species == "rat"){
+            /*float right_eye_dot = dot(base_end-base_start, temp_target_pos-base_start);
+            GetEyeDir(kLeftEye, "look_c", base_start, base_end);
+            float left_eye_dot = dot(base_end-base_start, temp_target_pos-base_start);
+            if(left_eye_dot > right_eye_dot){
+                which_eye = kLeftEye;
+            }*/
+            if((invert(head_mat) * camera.GetPos()).x<0.0f){
+                which_eye = kLeftEye;
+            }
+            GetEyeDir(which_eye, "look_c", base_start, base_end);
+        }
 
-    if(eye_delay <= 0.0f){
-        eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
-        target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);    
-        normalize(target_eye_dir);
-        if(dialogue_control){
-            target_eye_dir = normalize(mix(target_eye_dir, dialogue_eye_dir, 0.7f));
+        //debug_eye_lines.push_back(DebugDrawLine(head_mat * base_start, target_pos, 1.0f, vec3(1.0f), _fade));
+        //debug_eye_lines.push_back(DebugDrawLine(head_mat * base_start, head_mat * temp_target_pos, 1.0f, vec3(1.0f), _fade));
+        //debug_eye_lines.push_back(DebugDrawLine(head_mat * base_start, head_mat * base_end, 1.0f, vec3(1.0f), _fade));
+        
+        vec3 start1, end1, start2, end2;
+        {
+            GetEyeDir(which_eye, "look_u", start1, end1);
+            GetEyeDir(which_eye, "look_d", start2, end2);
+            vec3 normal = normalize(cross(end2-base_start, end1-base_start));
+            vec3 test_targ = temp_target_pos - normal * dot(normal, temp_target_pos);
+            vec3 neutral_dir = normalize(base_end - base_start);
+            vec3 normal2 = normalize(cross(normal, neutral_dir));
+            float up_angle = asin(dot(normalize(end1-start1), normal2));
+            float down_angle = asin(dot(normalize(end2-start2), normal2));
+            float targ_angle = asin(dot(normalize(test_targ-base_start), normal2));
+            if(targ_angle > 0.0f){
+                eye_dir.y = min(1.0f, targ_angle / up_angle);
+            } else {
+                eye_dir.y = -min(1.0f, targ_angle / down_angle);            
+            }
+        }
+        if(species == "rabbit" || species == "rat"){
+            GetEyeDir(which_eye, "look_f", start1, end1);
+            GetEyeDir(which_eye, "look_b", start2, end2);
+            vec3 normal = normalize(cross(end2-base_start, end1-base_start));
+            vec3 test_targ = temp_target_pos - normal * dot(normal, temp_target_pos);
+            vec3 neutral_dir = normalize(base_end - base_start);
+            vec3 normal2 = normalize(cross(normal, neutral_dir));
+            float front_angle = asin(dot(normalize(end1-start1), normal2));
+            float back_angle = asin(dot(normalize(end2-start2), normal2));
+            float targ_angle = asin(dot(normalize(test_targ-base_start), normal2));
+            if(targ_angle > 0.0f){
+                eye_dir.z = min(1.0f, targ_angle / front_angle);
+            } else {
+                eye_dir.z = -min(1.0f, targ_angle / back_angle);            
+            }
+        } else {
+            GetEyeDir(which_eye, "look_l", start1, end1);
+            GetEyeDir(which_eye, "look_r", start2, end2);
+            vec3 normal = normalize(cross(end2-base_start, end1-base_start));
+            vec3 test_targ = temp_target_pos - normal * dot(normal, temp_target_pos);
+            vec3 neutral_dir = normalize(base_end - base_start);
+            vec3 normal2 = normalize(cross(normal, neutral_dir));
+            float front_angle = asin(dot(normalize(end1-start1), normal2));
+            float back_angle = asin(dot(normalize(end2-start2), normal2));
+            float targ_angle = asin(dot(normalize(test_targ-base_start), normal2));
+            if(targ_angle > 0.0f){
+                eye_dir.x = -min(1.0f, targ_angle / front_angle);
+            } else {
+                eye_dir.x = min(1.0f, targ_angle / back_angle);            
+            }
+        }
+
+        bool draw_eye_line = false;
+        if(draw_eye_line) {
+            vec3 base_start, base_end;
+            GetEyeDir(which_eye, "look_c", base_start, base_end);
+            vec3 offset_start, offset_end;
+            vec3 start, end;
+            if(eye_dir.y > 0.0f){
+                GetEyeDir(which_eye, "look_u", start, end);
+                offset_start += (start-base_start)*eye_dir.y;
+                offset_end += (end-base_end)*eye_dir.y;
+            }
+            if(eye_dir.y < 0.0f){
+                GetEyeDir(which_eye, "look_d", start, end);
+                offset_start += (start-base_start)*-eye_dir.y;
+                offset_end += (end-base_end)*-eye_dir.y;
+            }
+            if(species == "rabbit" || species == "rat"){
+                if(eye_dir.z < 0.0f){
+                    GetEyeDir(which_eye, "look_b", start, end);
+                    offset_start += (start-base_start)*-eye_dir.z;
+                    offset_end += (end-base_end)*-eye_dir.z;
+                }
+                if(eye_dir.z > 0.0f){
+                    GetEyeDir(which_eye, "look_f", start, end);
+                    offset_start += (start-base_start)*eye_dir.z;
+                    offset_end += (end-base_end)*eye_dir.z;
+                }
+            } else {
+                if(eye_dir.x < 0.0f){
+                    GetEyeDir(which_eye, "look_l", start, end);
+                    offset_start += (start-base_start)*-eye_dir.x;
+                    offset_end += (end-base_end)*-eye_dir.x;
+                }
+                if(eye_dir.x > 0.0f){
+                    GetEyeDir(which_eye, "look_r", start, end);
+                    offset_start += (start-base_start)*eye_dir.x;
+                    offset_end += (end-base_end)*eye_dir.x;
+                }
+            }
+            debug_eye_lines.push_back(DebugDrawLine(head_mat * (base_start + offset_start), head_mat * (base_end+offset_end), 1.0f, vec3(1.0f), _fade));
         }
     }
-    eye_delay -= ts.step();
-    eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
 
-    SetEyeLookDir(eye_dir);
+    if(eye_offset_time < time){
+        eye_offset = vec3(RangedRandomFloat(-0.2f,0.2f),
+                        RangedRandomFloat(-0.2f,0.2f),
+                        RangedRandomFloat(-0.2f,0.2f));
+        eye_offset_time = time + RangedRandomFloat(0.2f,1.0f);
+    }
+
+    SetEyeLookDir(eye_dir + eye_offset);
 }
+
+float last_resting_blink_change = 0.0f;
+float resting_blink = 0.0f;
+float target_resting_blink = 0.0f;
 
 void UpdateBlink(const Timestep &in ts) {
     const float _blink_speed = 5.0f;
@@ -2134,35 +2677,72 @@ void UpdateBlink(const Timestep &in ts) {
             blink_amount = 0.0f;
         }
         blink_delay -= ts.step();
+        if(last_resting_blink_change < time) {
+            target_resting_blink = RangedRandomFloat(0.8f,1.0f);
+            last_resting_blink_change = time + RangedRandomFloat(0.4f,0.7f);
+        }
+        resting_blink = mix(target_resting_blink, resting_blink, pow(0.9f, ts.frames()));
     } else if(knocked_out == _unconscious){
         blink_amount = mix(blink_amount, 0.7f, 0.1f);
     }
     float final_blink = 1.0f-((1.0f-blink_amount) * blink_mult);
+    final_blink = 1.0f - (1.0f - final_blink) * resting_blink;
     this_mo.rigged_object().SetMorphTargetWeight("wink_r",final_blink,1.0f);
     this_mo.rigged_object().SetMorphTargetWeight("wink_l",final_blink,1.0f);
 }
 
-void UpdateActiveBlockAndDodge(const Timestep &in ts) {
-    if(tethered != _TETHERED_FREE){
-        return;
+class Spring {
+    float value, target_value, velocity, damping, stiffness;
+    Spring(float _damping, float _stiffness){
+        damping = _damping;
+        stiffness = _stiffness;
+        target_value = 0.0f;
+        value = 0.0f;
+        velocity = 0.0f;
     }
+    void Update(const Timestep &in ts) {
+        velocity += (target_value - value) * ts.step() * stiffness;
+        value += velocity * ts.step();
+        velocity *= pow(damping, ts.frames());
+    }
+}
+
+Spring block_flinch_spring(0.9f, 0.9f);
+
+void UpdateActiveBlockAndDodge(const Timestep &in ts) {
     block_stunned = max(0.0f, block_stunned - ts.step());
-    UpdateActiveBlockMechanics(ts);
-    UpdateActiveDodgeMechanics(ts);
-    if(active_blocking){
+
+    if(tethered == _TETHERED_FREE){
+        UpdateActiveBlockMechanics(ts);
+        UpdateActiveDodgeMechanics(ts);
+    }
+    if(active_block_time > time - 0.3f){
+        block_flinch_spring.stiffness = 300.0f;
+        block_flinch_spring.target_value = 1.0f;
+        block_flinch_spring.damping = 0.8f;
+    } else {
+        block_flinch_spring.stiffness = 150.0f;
+        block_flinch_spring.damping = 0.86f;
+        block_flinch_spring.target_value = 0.0f;
+    }
+    block_flinch_spring.Update(ts);
+    //block_flinch_spring.value = sin(time);
+    if(abs(block_flinch_spring.value) < 0.01f && abs(block_flinch_spring.velocity) < 0.01f){
+        if(active_block_flinch_layer != -1){
+            this_mo.rigged_object().anim_client().RemoveLayer(active_block_flinch_layer, 4.0f);
+            active_block_flinch_layer = -1;
+        }
+    } else {
         if(active_block_flinch_layer == -1 && state != _hit_reaction_state) {            
             int8 flags = 0;
             if(mirrored_stance){
                 flags |= _ANM_MIRRORED;
             }
-            active_block_flinch_layer = 
-                this_mo.rigged_object().anim_client().AddLayer(character_getter.GetAnimPath("blockflinch"),10.0f,flags);
+            active_block_flinch_layer = this_mo.rigged_object().anim_client().AddLayer(character_getter.GetAnimPath("blockflinch"),10.0f,flags);
         }
-    } else {
-        if(active_block_flinch_layer != -1){
-            this_mo.rigged_object().anim_client().RemoveLayer(active_block_flinch_layer, 4.0f);
-            active_block_flinch_layer = -1;
-        } 
+    }
+    if(active_block_flinch_layer != -1) {            
+        this_mo.rigged_object().anim_client().SetLayerOpacity(active_block_flinch_layer, block_flinch_spring.value);
     }
 }
 
@@ -2186,10 +2766,13 @@ bool CanBlock(){
     }
 }
 
+float active_block_time = -10.0f;
+
 void UpdateActiveBlockMechanics(const Timestep &in ts) {
     bool can_block = CanBlock();
     if(WantsToStartActiveBlock(ts) && can_block){
         if(active_block_recharge <= 0.0f){
+            active_block_time = time;
             active_blocking = true;
             active_block_duration = 0.2f;
         }
@@ -2335,6 +2918,10 @@ void SetActiveRagdollFallPose() {
     float ragdoll_strength = length(this_mo.rigged_object().GetAvgVelocity())*0.1f;
     ragdoll_strength = min(0.8f, ragdoll_strength);
     ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+    if(knocked_out != _awake){
+        // Strength fades the longer character is unconscious
+        ragdoll_strength *= max(0.0f, 1.0f-(the_time - knocked_out_time));
+    }
     this_mo.rigged_object().SetRagdollStrength(ragdoll_strength);
 
     float penetration = length(danger_vec);
@@ -2369,8 +2956,7 @@ void SetActiveRagdollInjuredPose(){
     injured_mouth_open = mix(injured_mouth_open, 
                              sin(time*4.0f)*0.5f+sin(time*6.3f)*0.5f, 
                              ragdoll_strength);
-    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",injured_mouth_open,1.0f);
-
+    
     if(ragdoll_time > time_until_death){
         ragdoll_type = _RGDL_LIMP;
         no_freeze = false;
@@ -2514,6 +3100,9 @@ void LayerRemoved(int id) {
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
 // Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id, float attack_damage_mult, float attack_knockback_mult) {
+    if(attack_path == ""){
+        return _invalid;
+    }
     attack_getter2.Load(attack_path);
 
     if(knife_layer_id != -1){
@@ -2955,7 +3544,6 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     
     // Apply damage to passive block health 
     float block_damage = attack_getter2.GetBlockDamage() * p_damage_multiplier * attack_damage_mult;
-    Print("block_damage: "+block_damage+"\n");
     block_health -= block_damage;
     if(state == _attack_state && blockable_weapon_attack && has_blocking_weapon){
         block_health -= block_damage * 0.5f; // Extra block damage if attacking when hit
@@ -3059,6 +3647,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             string sound = "Data/Sounds/hit/hit_normal.xml";
             PlaySoundGroup(sound, pos, sound_priority);        
         }
+        AISound(pos, LOUD_SOUND_AI);
     } else {
         string sound;
         if(weapon_slots[primary_weapon_slot] != -1 && can_passive_block){
@@ -3077,6 +3666,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
             PlaySoundGroup(sound, pos, sound_priority);  
         }
+        AISound(pos, QUIET_SOUND_AI);
         if(RangedRandomFloat(0.0f,1.0f) < drop_weapon_probability){
             HandleWeaponCollision(attacker_id);
             int item_id = DropWeapon();
@@ -3309,14 +3899,7 @@ void ReceiveMessage(string msg){
         token = token_iter.GetToken(msg);
         blink_mult = atof(token);
 
-        mat4 head_mat = this_mo.rigged_object().GetAvgIKChainTransform("head");
-        vec3 head_pos = head_mat * vec3(0,0,0);
-        //quaternion head_rot = invert(QuaternionFromMat4(head_mat));
-        //pos = Mult(head_rot, normalize(pos - head_pos));
-        pos = invert(head_mat.GetRotationPart()) * normalize(pos-head_pos);
-
-        dialogue_eye_dir = vec3(pos.x, pos.z, pos.y);
-        target_eye_dir = dialogue_eye_dir;
+        dialogue_eye_dir = pos;
     } else if(token == "set_rotation"){ // params: float rotation
         // Get params     
         token_iter.FindNextToken(msg);
@@ -3628,25 +4211,27 @@ void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos
         //this_mo.rigged_object().MaterialDecalAtBone("step", "right_leg");
         this_mo.MaterialParticleAtBone("step","right_leg");
     }
-    
-    if(event == "leftstep" || event == "rightstep" ||
-       event == "leftwallstep" || event == "rightwallstep" ||
-       event == "leftrunstep" || event == "rightrunstep" ||
-       event == "leftwalkstep" || event == "rightwalkstep" ||
-       event == "leftcrouchwalkstep" || event == "rightcrouchwalkstep")
-    {
-        this_mo.MaterialEvent(event, world_pos);
-    }
 
     if(event == "leftwallstep" || event == "rightwallstep" ||
        event == "leftrunstep" || event == "rightrunstep")
     {
-        AISound(world_pos, LOUD_SOUND_AI);
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("leftcrouchwalkstep", world_pos);
+            AISound(world_pos, QUIET_SOUND_AI);
+        } else {
+            this_mo.MaterialEvent(event, world_pos);
+            AISound(world_pos, LOUD_SOUND_AI);
+        }
     } else if(event == "leftcrouchwalkstep" || event == "rightcrouchwalkstep" ||
-       event == "leftwalkstep" || event == "rightwalkstep" ||
-       event == "leftstep" || event == "rightstep")
+              event == "leftwalkstep" || event == "rightwalkstep" ||
+              event == "leftstep" || event == "rightstep")
     {
-        AISound(world_pos, QUIET_SOUND_AI);
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent(event, world_pos, 0.3f);
+        } else {
+            this_mo.MaterialEvent(event, world_pos);
+            AISound(world_pos, QUIET_SOUND_AI);
+        }
     } 
 }
 
@@ -3681,8 +4266,8 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
 
     bool attack_event = false;
     if(event == "attackblocked" ||
-        event == "attackimpact" ||
-        event == "blockprepare")
+       event == "attackimpact" ||
+       event == "blockprepare")
     {
         attack_event = true;
     }
@@ -3782,7 +4367,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
     if(WantsToCrouch()){
         target_duck_amount = 1.0f;
         if(stance_move){
-            target_duck_amount = mix(1.0f, 0.3f, min(1.0f,length(this_mo.velocity)/5.0f));
+            target_duck_amount = mix(1.0f, 0.3f, min(1.0f,sqrt(this_mo.velocity.x*this_mo.velocity.x + this_mo.velocity.z*this_mo.velocity.z)/5.0f));
         }
     } else {
         target_duck_amount = 0.0f;
@@ -3804,6 +4389,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             // flip_info handles actions in the air, including jump flips
             if(!flip_info.IsFlipping()){
                 flip_info.StartRoll(target_velocity);
+                breath_speed += 1.0f;
             }
         }
 
@@ -3819,15 +4405,16 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             vec3 target_jump_vel = jump_info.GetJumpVelocity(target_velocity);
             target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
         }
-
         // Preparing for the jump
         if(pre_jump){
             if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
                 if(TargetedJump()){
                     jump_info.StartJump(GetTargetJumpVelocity(), true);
+                    breath_speed += 2.0f;
                 } else {
                     float speed_mult = min(1.0f, length(this_mo.velocity)/max_speed + 0.2f);
                     jump_info.StartJump(target_velocity * speed_mult, false);
+                    breath_speed += 2.0f;
                 }
                 HandleAIEvent(_jumped);
                 SetOnGround(false);
@@ -3837,7 +4424,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             }
         }
     }
-
+    
     vec3 flat_ground_normal = ground_normal;
     flat_ground_normal.y = 0.0f;
     float flat_ground_length = length(flat_ground_normal);
@@ -3847,6 +4434,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             target_velocity -= dot(target_velocity, flat_ground_normal) * flat_ground_normal;
         }
     }
+    
     if(flat_ground_length > 0.6f){
         if(this_mo.controlled && dot(this_mo.velocity, flat_ground_normal)>-0.8f){
             target_velocity -= dot(target_velocity, flat_ground_normal) * flat_ground_normal;
@@ -3857,6 +4445,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             target_velocity = normalize(target_velocity);
         }
     }
+    
 
     vec3 adjusted_vel = WorldToGroundSpace(target_velocity);
 
@@ -3869,18 +4458,23 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
         //}
     }
     float curr_speed = length(this_mo.velocity);
-
+    
     max_speed *= 1.0 - adjusted_vel.y;
     max_speed = max(curr_speed * 0.98f, max_speed);
     max_speed = min(max_speed, true_max_speed);
 
     float speed = _walk_accel * run_phase;
-    speed = mix(speed,speed*_duck_speed_mult,duck_amount);
+    if(character_getter.GetTag("species") == "cat"){
+        speed = mix(speed,speed*_duck_speed_mult,duck_amount*0.5f);
+    } else {
+        speed = mix(speed,speed*_duck_speed_mult,duck_amount);
+    }
     if(in_plant > 0.0f){
         speed *= mix(1.0f,mix(0.3f, 0.6f, duck_amount),in_plant);
     }
-
+    
     this_mo.velocity += adjusted_vel * ts.step() * speed;
+    
 }
 
 // Draws a sphere on the position of the bone's IK target. Useful for understanding what the IK targets do, or are supposed to do.
@@ -3905,7 +4499,9 @@ void MoveIKTarget(string str, vec3 offset) {
 }
 
 void draw() {
-    this_mo.rigged_object().Draw();
+    if(!draw_skeleton_lines){
+        this_mo.rigged_object().Draw();
+    }
 }
 
 void ForceApplied(vec3 force) {
@@ -3979,6 +4575,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
             AchievementEvent("player_counter_attacked");
         }
         SetState(_attack_state);
+        breath_speed += 2.0f;
         attack_animation_set = false;
         attacking_with_throw = 1;
         can_feint = false;
@@ -3992,6 +4589,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
             AchievementEvent("player_sneak_attacked");
         }
         SetState(_attack_state);
+        breath_speed += 2.0f;
         attack_animation_set = false;
         attacking_with_throw = 2;
         can_feint = false;
@@ -4012,6 +4610,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
         if(this_mo.controlled){
             AchievementEvent("player_attacked");
         }
+        breath_speed += 2.0f;
         LoadAppropriateAttack(false);
         if(attack_getter.GetAsLayer() == 1){
             if(mirrored_stance && state == _movement_state){
@@ -4045,6 +4644,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
             if(this_mo.controlled){
                 AchievementEvent("player_attacked");
             }
+            breath_speed += 2.0f;
             SetState(_attack_state);
             attack_animation_set = false;
         }
@@ -4284,15 +4884,18 @@ int GetClosestCharacterInArray(vec3 pos, array<int> &in characters, float range)
     return closest_id;
 }
 
+const string fov_path = "Data/Models/fov.obj";
+const string head_string = "head";
+array<int> nearby_characters;    
 void GetVisibleCharacters(uint16 flags, array<int> &visible_characters){
-    mat4 transform = this_mo.rigged_object().GetAvgIKChainTransform("head");
+    nearby_characters.resize(0);
+    mat4 transform = this_mo.rigged_object().GetAvgIKChainTransform(head_string);
     mat4 transform_offset;
     transform_offset.SetRotationX(-70);
     transform.SetRotationPart(transform.GetRotationPart()*transform_offset);
-    array<int> nearby_characters;
-    GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
-    //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _fade);
-    vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
+    GetCharactersInHull(fov_path, transform, nearby_characters);
+    //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _delete_on_update);
+    vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos(head_string);
     for(uint i=0; i<nearby_characters.size(); ++i){
         if(this_mo.getID() != nearby_characters[i] &&
            ReadCharacterID(nearby_characters[i]).VisibilityCheck(head_pos))
@@ -4300,14 +4903,6 @@ void GetVisibleCharacters(uint16 flags, array<int> &visible_characters){
             visible_characters.push_back(nearby_characters[i]);
         }
     }
-}
-
-int GetClosestVisibleCharacterID(uint16 flags){
-    array<int> visible_characters;
-    GetVisibleCharacters(flags, visible_characters);
-    array<int> matching_characters;
-    GetMatchingCharactersInArray(visible_characters, matching_characters, flags);
-    return GetClosestCharacterInArray(this_mo.position, matching_characters, 0.0f);
 }
 
 int GetClosestCharacterID(float range, uint16 flags){
@@ -4336,11 +4931,19 @@ void Land(vec3 vel, const Timestep &in ts) {
         float slide_amount = 1.0f - (dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal)));
         //Print("Slide amount: "+slide_amount+"\n");
         //Print("Slide vel: "+slide_amount*length(this_mo.velocity)+"\n");
-        this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 1.0f);
-        AISound(this_mo.position, 5.0f);
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 0.5f);
+            AISound(this_mo.position, QUIET_SOUND_AI);
+        } else {
+            this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 1.0f);
+            AISound(this_mo.position, LOUD_SOUND_AI);
+        }
         if(slide_amount > 0.0f){
             float slide_vel = slide_amount*length(this_mo.velocity);
             float vol = min(1.0f,slide_amount * slide_vel * 0.2f);
+            if(character_getter.GetTag("species") == "cat"){
+                vol *= 0.5f;
+            }
             if(vol > 0.2f){
                 this_mo.MaterialEvent("slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), vol);
             }
@@ -4349,7 +4952,12 @@ void Land(vec3 vel, const Timestep &in ts) {
         target_duck_amount = 1.0;
         duck_vel = land_speed * 0.3f;
     } else {
-        this_mo.MaterialEvent("land_soft", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("land_soft", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 0.5f);
+        } else {
+            this_mo.MaterialEvent("land_soft", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
+            AISound(this_mo.position, QUIET_SOUND_AI);
+        }
     }
 
     if(WantsToCrouch()){
@@ -4526,6 +5134,7 @@ void HandleGroundCollisions(const Timestep &in ts) {
         vec3 scale;
         float size;
         GetCollisionSphere(offset, scale, size);
+        offset.y += 0.1f;
         if(scale.y > 1.0f){
             offset.y += size*(scale.y - 1.0f);
             scale.y = 1.0f;
@@ -4676,6 +5285,9 @@ void HandleAirCollisions(const Timestep &in ts) {
             }
         }
     }
+    if(this_mo.velocity.y < 0.0f && old_vel.y >= 0.0f){
+        this_mo.velocity.y = 0.0f;
+    }
 }
 
 
@@ -4726,12 +5338,14 @@ void HandleCollisions(const Timestep &in ts) {
     }
     last_col_pos = this_mo.position;
 
+    // Flatten velocity against previous velocity
     if(dot(initial_vel, this_mo.velocity) < 0.0f){                              // If velocity is in opposite direction from old velocity,
         vec3 initial_dir = normalize(initial_vel);                              // flatten it against plane with normal of old velocity
         float wrong_dist = -dot(initial_dir, this_mo.velocity);
         this_mo.velocity += initial_dir * wrong_dist;
     }
 
+    // Collisions should not increase speed
     if(length_squared(initial_vel) < length_squared(this_mo.velocity)){         // If speed is greater than before collision, set it to the
         this_mo.velocity = normalize(this_mo.velocity)*length(initial_vel);     // old speed
     }
@@ -4993,7 +5607,8 @@ void UpdateAttacking(const Timestep &in ts) {
             leg_cannon_target_flip = -1.4f;
         }
         leg_cannon_flip = mix(leg_cannon_flip, leg_cannon_target_flip, 0.1f);
-        this_mo.SetFlip(right_direction,leg_cannon_flip,0.0f);
+        flip_modifier_axis = right_direction;
+        flip_modifier_rotation = leg_cannon_flip;
     }
 
     if(attack_animation_set &&
@@ -5079,8 +5694,7 @@ void UpdateAttacking(const Timestep &in ts) {
         string material_event = attack_getter.GetMaterialEvent();
         if(material_event.length() > 0){
             //Print(material_event);
-            this_mo.MaterialEvent(material_event,
-                        this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+            this_mo.MaterialEvent(material_event, this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
         }
         if(attack_getter.GetSwapStance() != 0){
             mirrored_stance = !mirrored_stance;
@@ -5159,7 +5773,7 @@ void PlayStandAnimation(bool blocked) {
         if(wake_up_torso_front.y < 0){
             this_mo.SetAnimation("Data/Animations/r_standfromfront.anm", 20.0f, flags);
         } else {
-            this_mo.SetAnimation("Data/Animations/r_standfromback.anm", 20.0f, flags);
+            this_mo.SetAnimation("Data/Animations/r_standfromback2.anm", 20.0f, flags);
         }
     } else {
         this_mo.SetAnimation("Data/Animations/r_blockfrontfromground.anm", 200.0f, flags);
@@ -5169,9 +5783,21 @@ void PlayStandAnimation(bool blocked) {
     getting_up_time = 0.0f;  
 }
 
+array<mat4> ragdoll_pose;
+float unragdoll_time = 0.0f;
+
 void SetState(int _state) {
     if(state == _ragdoll_state && _state != _ragdoll_state){
+        unragdoll_time = time - time_step;
         this_mo.UnRagdoll();
+        ResetSecondaryAnimation();
+        Skeleton @skeleton = this_mo.rigged_object().skeleton();
+        ragdoll_pose.resize(skeleton.NumBones());
+        for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+            if(skeleton.HasPhysics(i)){
+                ragdoll_pose[i] = skeleton.GetBoneTransform(i);
+            }
+        }
     }
     state = _state;
     if(state == _movement_state){
@@ -5188,7 +5814,7 @@ void SetState(int _state) {
         hit_reaction_anim_set = false;
         hit_reaction_thrown = false;
         hit_reaction_dodge = false;
-        this_mo.SetFlip(vec3(1.0f,0.0f,0.0f),0.0f,0.0f);
+        flip_modifier_rotation = 0.0f;
     }
 }
 
@@ -5215,9 +5841,9 @@ void WakeUp(int how) {
         PlayStandAnimation(how == _wake_block_stand);
         ragdoll_cam_recover_speed = 2.0f;
         if(how != _wake_block_stand){
-            this_mo.rigged_object().SetRagdollFadeSpeed(4.0f); 
+            ragdoll_fade_speed = 1.0f;
         } else {
-            this_mo.rigged_object().SetRagdollFadeSpeed(40.0f); 
+            ragdoll_fade_speed = 40.0f;
         }
         target_duck_amount = 0.0f;
     } else if(how == _wake_fall){
@@ -5225,7 +5851,7 @@ void WakeUp(int how) {
         flip_info.Land();
         ApplyIdle(5.0f, true);
         ragdoll_cam_recover_speed = 10.0f;
-        this_mo.rigged_object().SetRagdollFadeSpeed(10.0f);
+        ragdoll_fade_speed = 4.0f;
     } else if (how == _wake_flip) {
         SetOnGround(false);
         jump_info.StartFall();
@@ -5233,7 +5859,7 @@ void WakeUp(int how) {
         flip_info.FlipRecover();
         this_mo.SetCharAnimation("jump", 5.0f, _ANM_FROM_START);
         ragdoll_cam_recover_speed = 100.0f;
-        this_mo.rigged_object().SetRagdollFadeSpeed(10.0f);
+        ragdoll_fade_speed = 4.0f;
     } else if (how == _wake_roll) {
         SetOnGround(true);
         flip_info.Land();
@@ -5245,7 +5871,7 @@ void WakeUp(int how) {
         }
         flip_info.StartRoll(roll_dir);
         ragdoll_cam_recover_speed = 10.0f;
-        this_mo.rigged_object().SetRagdollFadeSpeed(10.0f);
+        ragdoll_fade_speed = 2.0f;
     }
 }
 
@@ -5385,8 +6011,10 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
             vec3 other_push = dir * 0.5f / (time_step) * 0.15f;
             push_velocity -= other_push;
             other.Execute("push_velocity += vec3("+other_push.x+","+other_push.y+","+other_push.z+");");
+            other.Execute("MindReceiveMessage(\"collided "+this_mo.GetID()+"\");");
         }    
     }
+    MindReceiveMessage("collided "+other.GetID());
 }
 
 void UpdatePrimaryWeapon(){
@@ -5788,7 +6416,6 @@ void HandlePickUp() {
         }
     }
 }
-
 
 array<int> GetPlayerCharacterIDs() {
     array<int> ids;
@@ -6200,14 +6827,23 @@ void ApplyCameraCones(vec3 cam_pos){
 
 
 bool NeedsCombatPose() {
+    if(startled){
+        return false;
+    }
+
     const float _combat_pose_dist_threshold = 5.0f;
     const float _combat_pose_dist_threshold_2 =  _combat_pose_dist_threshold * _combat_pose_dist_threshold;
 
     for(uint i=0; i<situation.known_chars.size(); ++i){
-        if(!situation.known_chars[i].friendly && situation.known_chars[i].knocked_out == _awake){
+        if(!situation.known_chars[i].friendly && 
+            situation.known_chars[i].knocked_out == _awake && 
+            situation.known_chars[i].last_seen_time > time - 1.0f)
+        {
             MovementObject@ char = ReadCharacterID(situation.known_chars[i].id);
-            if((char.GetIntVar("knocked_out") == _awake)/* &&
-               distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2*/){
+            if((char.GetIntVar("knocked_out") == _awake) &&
+               distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2  && 
+               char.QueryIntFunction("int IsUnaware()")!=1)
+            {
                 return true;
             }
         }
@@ -6216,12 +6852,25 @@ bool NeedsCombatPose() {
     return false;
 }
 
+void ResetLayers() {
+    active_block_flinch_layer = -1;
+    sheathe_layer_id = -1;
+    ragdoll_layer_catchfallfront = -1;
+    ragdoll_layer_fetal = -1;
+    knife_layer_id = -1;
+    throw_knife_layer_id = -1;
+    pickup_layer = -1;
+}
+
 void SwitchCharacter(string path){
     DropWeapon();
     this_mo.DetachAllItems();
     this_mo.char_path = path;
     character_getter.Load(this_mo.char_path);
     this_mo.RecreateRiggedObject(this_mo.char_path);
+    ResetLayers();
+    ResetSecondaryAnimation();
+    CacheSkeletonInfo();
     ApplyIdle(5.0f, true);
     SetState(_movement_state);
     Recover();
@@ -6233,6 +6882,7 @@ void Init(string character_path) {
     this_mo.char_path = character_path;
     character_getter.Load(this_mo.char_path);
     this_mo.RecreateRiggedObject(this_mo.char_path);
+    ResetLayers();
     for(int i=0; i<5; ++i){
         HandleBumperCollision();
         HandleStandingCollision();
@@ -6240,6 +6890,7 @@ void Init(string character_path) {
         last_col_pos = this_mo.position;
     }
     SetState(_movement_state);
+    PostReset();
 }
 
 void ScriptSwap() {
@@ -6255,16 +6906,28 @@ void Reset() {
         this_mo.UnRagdoll();
         ApplyIdle(5.0f,true);
         ragdoll_cam_recover_speed = 1000.0f;
-        this_mo.rigged_object().SetRagdollFadeSpeed(1000.0f);
+        ragdoll_fade_speed = 1000.0f;
     }
-    this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
-    this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
+    tilt_modifier = vec3(0.0f,1.0f,0.0f);
+    flip_modifier_rotation = 0.0f;
     this_mo.rigged_object().CleanBlood();
     ClearTemporaryDecals();
     blood_amount = _max_blood_amount;
     ResetMind();
     reset_no_collide = the_time;
     SetTetherID(-1);
+}
+
+void PostReset() {
+    CacheSkeletonInfo();
+    weapon_slots.resize(_num_weap_slots);
+    for(int i=0; i<_num_weap_slots; ++i){
+        weapon_slots[i] = -1;       
+    }
+    if(body_bob_freq == 0.0f){
+        body_bob_freq = RangedRandomFloat(0.9f,1.1f);
+        body_bob_time_offset = RangedRandomFloat(0.0f,100.0f);
+    }
 }
 
 void StartFootStance() {
@@ -6367,6 +7030,12 @@ void UpdateAnimation(const Timestep &in ts) {
     this_mo.rigged_object().anim_client().SetBlendCoord("threat_coord",threat_amount);
     idle_stance = false;
 
+    if(flip_info.IsFlipping()){
+        flip_ik_fade = min(flip_ik_fade + 5.0f * ts.step(), 1.1f);
+    } else {
+        flip_ik_fade = max(flip_ik_fade - 3.0f * ts.step(), 0.0f);
+    }
+
     if(on_ground){
         // rolling on the ground
         if(flip_info.UseRollAnimation()){
@@ -6374,7 +7043,7 @@ void UpdateAnimation(const Timestep &in ts) {
             if(!mirrored_stance){
                 flags |= _ANM_MIRRORED;
             }
-            this_mo.SetCharAnimation("roll",7.0f,flags);
+            this_mo.SetCharAnimation("roll",4.0f,flags);
             float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
             this_mo.rigged_object().anim_client().SetBlendCoord("forward_roll_coord",forwards_rollness);
             this_mo.rigged_object().ik_enabled = false;
@@ -6418,9 +7087,57 @@ void UpdateAnimation(const Timestep &in ts) {
             }
 
             if(speed > _walk_threshold && feet_moving && !stance_move){
-                this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
+                vec3 facing = this_mo.GetFacing();
+                float angle = -atan2(-facing.z, facing.x);
+
+                vec3 target_look = normalize(GetTargetVelocity() + normalize(flat_velocity) * 0.1f);
+                float target_look_angle = -atan2(-target_look.z, target_look.x);
+
+                if(target_look_angle > angle + 3.1417f){
+                    target_look_angle -= 3.1417f*2.0f;
+                } else if(target_look_angle < angle - 3.1417f){
+                    target_look_angle += 3.1417f*2.0f;
+                }
+
+                float look_max = 3.1417f*0.6f;
+                if(abs(angle - target_look_angle) < look_max){
+                    target_look_angle = target_look_angle;
+                } else if(angle < target_look_angle){
+                    target_look_angle = angle + look_max;
+                } else if(angle > target_look_angle){
+                    target_look_angle = angle - look_max;
+                }
+
+                vec3 target_facing = normalize(flat_velocity);
+                float target_angle = -atan2(-target_facing.z, target_facing.x);
+                if(dot(this_mo.GetFacing(), target_look) < 0.0f){
+                    target_angle = target_look_angle;
+                }
+
+                if(target_angle > angle + 3.1417f){
+                    target_angle -= 3.1417f*2.0f;
+                } else if(target_angle < angle - 3.1417f){
+                    target_angle += 3.1417f*2.0f;
+                }
+
+                float turn_speed = ts.step() * 10.0f;
+
+                if(abs(angle - target_angle) < turn_speed){
+                    angle = target_angle;
+                } else if(angle < target_angle){
+                    angle += turn_speed;
+                } else if(angle > target_angle){
+                    angle -= turn_speed;
+                }
+       
+                run_eye_look_target = this_mo.position + vec3(cos(target_look_angle), 0.0f, sin(target_look_angle)) * 100.0f;
+
+                vec3 new_facing(cos(angle), 0.0f, sin(angle));
+                this_mo.SetRotationFromFacing(new_facing);
+                /*this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                                normalize(flat_velocity),
                                                                1.0 - pow(0.8f, ts.frames())));
+                */
                 int8 flags = 0;
                 if(left_handed){
                     flags |= _ANM_MIRRORED;
@@ -6495,14 +7212,12 @@ void UpdateAnimation(const Timestep &in ts) {
     }
 
     if(idle_stance){
-        idle_stance_amount = mix(idle_stance_amount, 1.0f, pow(0.94f, ts.frames()));
+        idle_stance_amount = mix(1.0f, idle_stance_amount, pow(0.94f, ts.frames()));
     } else {
-        idle_stance_amount = mix(idle_stance_amount, 0.0f, pow(0.98f, ts.frames()));
+        idle_stance_amount = mix(0.0f, idle_stance_amount, pow(0.98f, ts.frames()));
     }
 
     old_use_foot_plants = use_foot_plants;
-    // center of mass offset
-    this_mo.SetCOMOffset(com_offset, com_offset_vel);
 }
     
 vec3 GetLegTargetOffset(vec3 initial_pos, vec3 anim_pos){
@@ -6575,168 +7290,1924 @@ void SetLimbTargetOffset(string name){
     this_mo.rigged_object().SetIKTargetOffset(name,offset+vec3(0.0f,-0.15f,0.0f));
 }
 
-void GroundState_UpdateIKTargets() {
-    vec3 offset = vec3(0.0f,0.0f,0.0f);
+array<int> debug_lines;
 
-    SetLimbTargetOffset("left_leg");
-    SetLimbTargetOffset("right_leg");
-    SetLimbTargetOffset("leftarm");
-    SetLimbTargetOffset("rightarm");
-    this_mo.rigged_object().SetIKTargetOffset("full_body", vec3(0.0f,-0.05f,0.0f));
-    //this_mo.rigged_object().SetIKTargetOffset("full_body", ground_normal * 0.05);
-    
-    vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
-
-    float x_amount = ground_normal.y;
-    float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
-    float angle = atan2(y_amount, x_amount);
-
-    getting_up_time = 0.0f;
-    angle *= min(1.0f,max(0.0f,1.0f - (getting_up_time-0.3f) * 2.0f));
-    this_mo.SetFlip(axis,-angle,0.0f);
+vec3 GetRagdollPoseCenterOfMass(){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    int num_bones = skeleton.NumBones();
+    vec3 com;
+    float total_mass = 0.0f;
+    for(int i=0; i<num_bones; ++i){
+        mat4 transform = ragdoll_pose[i];
+        float bone_mass = skeleton.GetBoneMass(i);
+        com += transform.GetTranslationPart() * bone_mass;
+        total_mass += bone_mass;
+    }
+    if(total_mass != 0.0f){
+        com /= total_mass;
+    }
+    return com;
 }
 
-int IsOnGround() {
-    if(on_ground){
-        return 1;
-    } else {
-        return 0;
+mat4 GetFrameAverageMatrix() {
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    int num_bones = skeleton.NumBones();
+    mat4 total_transform;
+    float total_mass = 0.0f;
+    for(int i=0; i<num_bones; ++i){
+        float bone_mass = skeleton.GetBoneMass(i);
+        mat4 transform = rigged_object.GetFrameMatrix(i).GetMat4();
+        for(int i=0; i<16; ++i){
+            total_transform[i] += bone_mass * transform[i];
+        }
+        total_mass += bone_mass;
+    }
+    if(total_mass != 0.0f){
+        for(int i=0; i<16; ++i){
+            total_transform[i] /= total_mass;
+        }
+    }
+    return total_transform;
+}
+
+
+mat4 GetFrameAverageDeltaMatrix() {
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    int num_bones = skeleton.NumBones();
+    mat4 total_transform;
+    float total_mass = 0.0f;
+    for(int i=0; i<num_bones; ++i){
+        float bone_mass = skeleton.GetBoneMass(i);
+        mat4 transform = (rigged_object.GetFrameMatrix(i) * inv_skeleton_bind_transforms[i]).GetMat4();
+        for(int i=0; i<16; ++i){
+            total_transform[i] += bone_mass * transform[i];
+        }
+        total_mass += bone_mass;
+    }
+    if(total_mass != 0.0f){
+        for(int i=0; i<16; ++i){
+            total_transform[i] /= total_mass;
+        }
+    }
+    return total_transform;
+}
+
+void RotateBonesToMatchVec(vec3 a, vec3 c, int bone, int bone2, float weight) {
+    vec3 b = mix(a,c,1.0f-weight);
+
+    BoneTransform mat = this_mo.rigged_object().GetFrameMatrix(bone);
+    mat.origin = (a+b)*0.5f;
+    quaternion rot = mat.rotation;
+    vec3 dir = rot * vec3(0,0,1);
+    GetRotationBetweenVectors(dir, b - a, rot);
+    mat.rotation = rot * mat.rotation;
+    this_mo.rigged_object().SetFrameMatrix(bone, mat);
+
+    mat = this_mo.rigged_object().GetFrameMatrix(bone2);
+    mat.origin = (b+c)*0.5f;
+    mat.rotation = rot * mat.rotation;
+    this_mo.rigged_object().SetFrameMatrix(bone2, mat);
+}
+
+void DrawLeg(bool right, const BoneTransform &in hip_transform, const BoneTransform &in foot_transform, int num_frames) {
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    int ik_chain_start = ik_chain_start_index[kLeftLegIK+(right?1:0)];
+
+    // Get important joint positions
+    vec3 foot_tip, foot_base, ankle, knee, hip;
+    foot_tip = rigged_object.GetTransformedBonePoint(ik_chain_elements[ik_chain_start+0], 1);
+    foot_base = rigged_object.GetTransformedBonePoint(ik_chain_elements[ik_chain_start+0], 0);
+    ankle = rigged_object.GetTransformedBonePoint(ik_chain_elements[ik_chain_start+1], 0);
+    knee = rigged_object.GetTransformedBonePoint(ik_chain_elements[ik_chain_start+3], 0);
+    hip = rigged_object.GetTransformedBonePoint(ik_chain_elements[ik_chain_start+5], 0);
+
+    vec3 old_foot_dir = foot_tip - foot_base;
+    float upper_foot_length = ik_chain_bone_lengths[ik_chain_start+1];
+    float lower_leg_length = (ik_chain_bone_lengths[ik_chain_start+2]+ik_chain_bone_lengths[ik_chain_start+3]);
+    float upper_leg_length = (ik_chain_bone_lengths[ik_chain_start+4]+ik_chain_bone_lengths[ik_chain_start+5]);
+    
+    float lower_leg_weight = ik_chain_bone_lengths[ik_chain_start+2] / lower_leg_length;
+    float upper_leg_weight = ik_chain_bone_lengths[ik_chain_start+4] / upper_leg_length;
+
+    vec3 old_hip = hip;
+    float old_length = distance(foot_base, old_hip);
+    
+    // New hip position based on key hip transform
+    hip = hip_transform * skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[ik_chain_start+5], 0));
+
+    // New foot_base position based on key foot transform
+    vec3 ik_target = foot_transform * skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[ik_chain_start+0], 0));
+    
+    quaternion rotate;
+    GetRotationBetweenVectors(foot_base - old_hip, ik_target - hip, rotate);
+    mat3 rotate_mat = Mat3FromQuaternion(rotate);
+    knee = rotate_mat * (knee-old_hip)+hip;
+    ankle = rotate_mat * (ankle-old_hip)+hip;
+    foot_base = rotate_mat * (foot_base-old_hip)+hip;
+    float new_length = distance(ik_target, hip);
+    float weight = new_length / old_length;
+    knee = mix(hip, knee, weight);
+    ankle = mix(hip, ankle, weight);
+    foot_base = mix(hip, foot_base, weight);
+    foot_tip = foot_transform * skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[ik_chain_start+0], 1));
+    
+    int num_iterations = 2;
+    for(int i=0; i<num_iterations; ++i){
+        knee = hip + normalize(knee - hip) * upper_leg_length;
+        ankle = foot_base + normalize(ankle - foot_base) * upper_foot_length;
+        vec3 knee_ankle_vec = normalize(knee - ankle);
+        vec3 mid = (knee + ankle) * 0.5f;
+        ankle = mid - knee_ankle_vec * 0.5f * lower_leg_length;
+        knee = mid + knee_ankle_vec * 0.5f * lower_leg_length;
+    }
+    if(draw_skeleton_lines){
+        debug_lines.push_back(DebugDrawLine(foot_tip, foot_base, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(foot_base, ankle, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(ankle, knee, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(knee, hip, vec3(1.0f), _fade));
+    }
+
+    rigged_object.SetFrameMatrix(ik_chain_elements[ik_chain_start+0], foot_transform * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start+0]]);
+
+    rigged_object.RotateBoneToMatchVec(foot_base, foot_tip, ik_chain_elements[ik_chain_start+0]);
+    rigged_object.RotateBoneToMatchVec(ankle, foot_base, ik_chain_elements[ik_chain_start+1]);
+    rigged_object.RotateBonesToMatchVec(knee, ankle, ik_chain_elements[ik_chain_start+3], ik_chain_elements[ik_chain_start+2], lower_leg_weight);
+    rigged_object.RotateBonesToMatchVec(hip, knee, ik_chain_elements[ik_chain_start+5], ik_chain_elements[ik_chain_start+4], upper_leg_weight);
+}
+
+int GetNumBoneChildren(int bone){
+    return bone_children_index[bone+1] - bone_children_index[bone];
+}
+
+int GetBoneChild(int bone, int which_child){
+    return bone_children[bone_children_index[bone]+which_child];
+}
+
+array<vec3> temp_old_weap_points;
+array<vec3> old_weap_points;
+array<vec3> weap_points;
+void DrawWeapon(int num_frames, quaternion &out weap_rotation, vec3 &out weap_old_mid, vec3 &out weap_new_mid) {
+    int primary_weapon_id = weapon_slots[primary_weapon_slot];
+    if(primary_weapon_id != -1){
+        ItemObject@ item_obj = ReadItemID(primary_weapon_id);
+        int num_lines = item_obj.GetNumLines();
+        if(num_lines > 0){
+            mat4 transform = item_obj.GetPhysicsTransform();
+            vec3 start = transform * item_obj.GetLineStart(0);
+            vec3 end = transform * item_obj.GetLineEnd(num_lines-1);
+            //debug_lines.push_back(DebugDrawLine(start, end, vec3(1.0f), _fade));
+            if(old_weap_points.size() == 0){
+                temp_old_weap_points.resize(2);
+                old_weap_points.resize(2);
+                weap_points.resize(2);  
+                weap_points[0] = start;
+                weap_points[1] = end;
+                for(int i=0; i<2; ++i){
+                    old_weap_points[i] = weap_points[i];
+                    temp_old_weap_points[i] = weap_points[i];
+                }              
+            }
+            for(int i=0; i<2; ++i){
+                temp_old_weap_points[i] = weap_points[i];
+            }
+            for(int i=0; i<2; ++i){
+                weap_points[i] += (weap_points[i] - old_weap_points[i]) * 0.9f;
+            }
+            weap_points[0] = mix(start, weap_points[0], 0.99f);
+            weap_points[1] = mix(end, weap_points[1], 0.99f);
+            weap_new_mid = (weap_points[0] + weap_points[1])*0.5f;
+            vec3 dir = normalize(weap_points[1] - weap_points[0]);
+            float weap_length = distance(start,end);
+            weap_points[0] = weap_new_mid - weap_length*dir*0.5f;
+            weap_points[1] = weap_new_mid + weap_length*dir*0.5f;
+            weap_old_mid = (start+end)*0.5f;
+            GetRotationBetweenVectors(end-start, dir, weap_rotation);
+            debug_lines.push_back(DebugDrawLine(weap_points[0], weap_points[1], vec3(1.0f), _fade));
+            for(int i=0; i<2; ++i){
+                old_weap_points[i] = temp_old_weap_points[i];
+            }
+        }
     }
 }
 
-void MovementState_UpdateIKTargets(const Timestep &in ts) {
-    if(!on_ground){
-        jump_info.UpdateIKTargets();
-    } else {
-        vec3 tilt_offset = tilt * -0.005f;
-        float left_ik_weight = this_mo.rigged_object().GetIKWeight("left_leg");
-        float right_ik_weight = this_mo.rigged_object().GetIKWeight("right_leg");
+// Verlet integration for arm physics
+array<vec3> temp_old_arm_points;
+array<vec3> old_arm_points;
+array<vec3> arm_points;
+enum ChainPointLabels {kHandPoint, kWristPoint, kElbowPoint, kShoulderPoint, kCollarTipPoint, kCollarPoint, kNumArmPoints};
 
-        vec3 left_leg = this_mo.rigged_object().GetIKTargetPosition("left_leg");
-        vec3 right_leg = this_mo.rigged_object().GetIKTargetPosition("right_leg");
-        vec3 left_leg_anim = this_mo.rigged_object().GetIKTargetAnimPosition("left_leg");
-        vec3 right_leg_anim = this_mo.rigged_object().GetIKTargetAnimPosition("right_leg");
+vec3 GetChainPoint(int chain_element, int bone_end){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    return skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[chain_element], bone_end));
+}
+
+void DrawArms(const BoneTransform &in chest_transform, const BoneTransform &in l_hand_transform, const BoneTransform &in r_hand_transform, int num_frames){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    // Get relative chest transformation
+    int chest_bone = skeleton.IKBoneStart("torso");
+    BoneTransform chest_frame_matrix = rigged_object.GetFrameMatrix(chest_bone);
+    BoneTransform chest_bind_matrix = skeleton_bind_transforms[chest_bone];
+    BoneTransform rel_mat = chest_transform * invert(chest_frame_matrix * chest_bind_matrix);
+
+    // Get points in arm IK chain transformed by chest
+    array<float> upper_arm_length;
+    array<float> upper_arm_weight;
+    array<float> lower_arm_length;
+    array<float> lower_arm_weight;
+    array<vec3> chain_points;
+    chain_points.resize(kNumArmPoints * 2);
+    upper_arm_length.resize(2);
+    upper_arm_weight.resize(2);
+    lower_arm_length.resize(2);
+    lower_arm_weight.resize(2);
+
+    //BoneTransform left_hand = l_hand_transform * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kLeftArmIK]]];
+    //BoneTransform right_hand = r_hand_transform * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kRightArmIK]]];
+
+    //DebugDrawWireSphere(right_hand.origin, 0.1f, vec3(1.0f), _fade);
+    //DebugDrawWireSphere(left_hand.origin, 0.1f, vec3(1.0f), _fade);
+    //DebugDrawLine(left_hand.origin, right_hand.origin, vec3(1.0f), _fade);
+
+    for(int right=0; right<2; ++right){
+        int chain_start = ik_chain_start_index[kLeftArmIK+right];
+        vec3 hand = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 1);
+        vec3 wrist = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 0);
+        vec3 elbow = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+2], 0);
+        vec3 shoulder = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+4], 0);
+        vec3 collar_tip = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+5], 1);
+        vec3 collar = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+5], 0);
+
+        // Get more metrics about arm lengths
+        upper_arm_length[right] = distance(elbow, shoulder);
+        lower_arm_length[right] = distance(wrist, elbow);
+        
+        vec3 mid_low_arm = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+1], 0);
+        vec3 mid_up_arm = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+3], 0);
+
+        lower_arm_weight[right] = distance(elbow, mid_low_arm) / distance(wrist, elbow);
+        upper_arm_weight[right] = distance(shoulder, mid_up_arm) / distance(shoulder, elbow);
 
 
-        vec3 foot_apart = right_leg - left_leg;
-        foot_apart.y = 0.0f;
-        float bring_feet_together = min(0.4f,max(0.0f,1.0f-ground_normal.y)*2.0f);
+        BoneTransform world_chest = key_transforms[kChestKey] * inv_skeleton_bind_transforms[ik_chain_start_index[kTorsoIK]];
+        vec3 breathe_dir = world_chest.rotation * normalize(vec3(0,-0.3,1));
+        float scale = this_mo.rigged_object().GetCharScale();
+        shoulder += breathe_dir * breath_amount *  0.005f * scale;
 
-        float two_feet_on_ground;
-        if(left_ik_weight > right_ik_weight){
-            two_feet_on_ground = right_ik_weight / left_ik_weight;
-        } else if(right_ik_weight > left_ik_weight){
-            two_feet_on_ground = left_ik_weight / right_ik_weight;
-        } else {
-            two_feet_on_ground = 1.0f;
+        { // Apply traditional IK
+            vec3 old_wrist = wrist;
+            vec3 old_shoulder = shoulder;
+            BoneTransform hand_transform = right==1?r_hand_transform:l_hand_transform;
+        
+            hand = hand_transform * GetChainPoint(chain_start+0, 1);
+            wrist = hand_transform * GetChainPoint(chain_start+0, 0);
+            shoulder = rel_mat * shoulder;
+
+            // Rotate arm to match new IK pos
+            quaternion rotation;
+            GetRotationBetweenVectors(old_wrist - old_shoulder, wrist - shoulder, rotation);
+            elbow = shoulder + Mult(rotation, elbow-old_shoulder);
+
+            // Scale to put elbow in approximately the right place
+            float old_length = distance(old_wrist, old_shoulder);
+            float new_length = distance(wrist, shoulder);
+            elbow = shoulder + (elbow - shoulder) * (new_length / old_length);
+
+            // Enforce arm lengths to finalize elbow position
+            const int iterations = 2;
+            for(int i=0; i<iterations; ++i){
+                vec3 offset;
+                offset += (shoulder + normalize(elbow-shoulder) * upper_arm_length[right]) - elbow;
+                offset += (wrist + normalize(elbow-wrist) * lower_arm_length[right]) - elbow;
+                elbow += offset;
+            }
         }
 
-        bring_feet_together *= two_feet_on_ground;
+        collar_tip = rel_mat * collar_tip;
+        collar = rel_mat * collar;
 
-        vec3 left_leg_offset = foot_apart * bring_feet_together * 0.5f;
-        vec3 right_leg_offset = foot_apart * bring_feet_together * -0.5f;
+        int points_offset = kNumArmPoints * right;
+        chain_points[kHandPoint+points_offset] = hand;
+        chain_points[kWristPoint+points_offset] = wrist;
+        chain_points[kElbowPoint+points_offset] = elbow;
+        chain_points[kShoulderPoint+points_offset] = shoulder;
+        chain_points[kCollarTipPoint+points_offset] = collar_tip;
+        chain_points[kCollarPoint+points_offset] = collar;
+    }
 
-        vec3 l_foot_offset;
-        vec3 r_foot_offset;
+    old_arm_points.resize(6);
+    temp_old_arm_points.resize(6);
+    if(arm_points.size()!=6){ // Initialize arm physics particles
+        arm_points.push_back(chain_points[kShoulderPoint]);
+        arm_points.push_back(chain_points[kElbowPoint]);
+        arm_points.push_back(chain_points[kWristPoint]);
+        arm_points.push_back(chain_points[kShoulderPoint+kNumArmPoints]);
+        arm_points.push_back(chain_points[kElbowPoint+kNumArmPoints]);
+        arm_points.push_back(chain_points[kWristPoint+kNumArmPoints]);
+        for(int i=0, len=arm_points.size(); i<len; ++i){
+            old_arm_points[i] = arm_points[i];
+            temp_old_arm_points[i] = arm_points[i];
+        }
+    } else { // Simulate arm physics
+        for(int i=0; i<6; ++i){
+            temp_old_arm_points[i] = arm_points[i];
+        }
+       for(int right=0; right<2; ++right){
+           int start = right*3;
 
-        l_foot_offset = foot[0].pos;
-        r_foot_offset = foot[1].pos;
+            float arm_drag = 0.92f;
+            // Determine how loose the arms should be
+            float arm_loose = 1.0f-length(this_mo.velocity)/max_speed;
+            if(idle_type == _combat){
+                arm_loose = 0.0f;
+            }
+            if(!on_ground){
+                arm_loose = 0.7f;
+            }
+            if(flip_info.IsFlipping()){
+                arm_loose = 0.0f;
+            }
+            arm_loose = max(0.0f, arm_loose - threat_amount);
+            float arm_stiffness = mix(0.9f, 0.97f, arm_loose);
+            float shoulder_stiffness = arm_stiffness;
+            float elbow_stiffness = arm_stiffness;
 
-        l_foot_offset.y = 0.0f;
-        r_foot_offset.y = 0.0f;
-
-        left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset,left_leg_anim);
-        right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset,right_leg_anim);
-        
-        l_foot_offset.y += foot[0].height;
-        r_foot_offset.y += foot[1].height;
-        
-        this_mo.rigged_object().SetIKTargetOffset("left_leg",left_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + l_foot_offset);
-        this_mo.rigged_object().SetIKTargetOffset("right_leg",right_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + r_foot_offset);
+            vec3 shoulder = chain_points[kShoulderPoint + kNumArmPoints*right];
+            vec3 elbow = chain_points[kElbowPoint + kNumArmPoints*right];
+            vec3 wrist = chain_points[kWristPoint + kNumArmPoints*right];
+            arm_points[start+0] = shoulder;
+            { // Apply arm velocity
+                vec3 full_vel_offset = this_mo.velocity * time_step * num_frames;
+                vec3 vel_offset = ((arm_points[start+1] - old_arm_points[start+1]) - full_vel_offset) * pow(arm_drag, num_frames) + full_vel_offset;
+                arm_points[start+1] += vel_offset;
+                vel_offset = ((arm_points[start+2] - old_arm_points[start+2]) - full_vel_offset) * pow(arm_drag, num_frames) + full_vel_offset;
+                arm_points[start+2] += vel_offset;
+            }
+            quaternion rotation;
+            { // Apply linear force towards target positions
+                arm_points[start+1] += (elbow - arm_points[start+1]) * (1.0f - pow(shoulder_stiffness, num_frames));
+                GetRotationBetweenVectors(elbow-shoulder, arm_points[start+1]-shoulder, rotation);
+                vec3 rotated_tip = Mult(rotation, wrist-elbow)+elbow;
+                arm_points[start+2] += (rotated_tip - arm_points[start+2]) * (1.0f - pow(elbow_stiffness, num_frames));
+            }
+            float softness_override = rigged_object.GetStatusKeyValue(right==1?"rightarm_blend":"leftarm_blend");
+            //softness_override = mix(softness_override, 1.0f, min(1.0f, flip_ik_fade));
+            if(ledge_info.on_ledge){
+                softness_override = 1.0f;
+            }
+            { // Blend with original position to override physics
+                arm_points[start+0] = mix(arm_points[start+0], shoulder, softness_override);
+                arm_points[start+1] = mix(arm_points[start+1], elbow, softness_override);
+                arm_points[start+2] = mix(arm_points[start+2], wrist, softness_override);
+            }
             
-        if(tethered == _TETHERED_DRAGBODY){
-            MovementObject@ char = ReadCharacterID(tether_id);
-            vec3 target = char.rigged_object().GetIKChainPos(drag_body_part,drag_body_part_id);
+            { // Enforce constraints
+                // Get hinge joint info
+                int chain_start = ik_chain_start_index[kLeftArmIK+right];
+                BoneTransform elbow_mat = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+3]);
+                vec3 elbow_axis = Mult(rotation, elbow_mat.rotation * vec3(1,0,0));
+                vec3 elbow_front = Mult(rotation, elbow_mat.rotation * vec3(0,1,0));
+                vec3 shoulder_offset, elbow_offset, wrist_offset;
 
-            vec3 offset;
-            if(weapon_slots[_held_left] != -1 || weapon_slots[_held_right] != -1){
-                if(weapon_slots[_held_left] == -1){
-                    offset = target - this_mo.rigged_object().GetIKTargetPosition("leftarm");
-                } else if(weapon_slots[_held_right] == -1){
-                    offset = target - this_mo.rigged_object().GetIKTargetPosition("rightarm");
-                } 
-                offset.y += 0.1f;
-                vec3 facing = this_mo.GetFacing();
-                vec3 right = vec3(facing.z, 0.0f, -facing.x);
-                if(weapon_slots[_held_left] == -1){
-                    offset += right * 0.05f;
-                } else if(weapon_slots[_held_right] == -1){
-                    offset -= right * 0.05f;
-                } 
-            } else {
-                offset = target - ((this_mo.rigged_object().GetIKTargetPosition("leftarm") + this_mo.rigged_object().GetIKTargetPosition("rightarm"))*0.5f);
-            }
-            if(offset.y < -0.05f){
-                offset.y = -0.05f;
-            }
+                for(int i=0; i<1; ++i){
+                    float iter_strength = 0.75f * (1.0f - softness_override);
 
-            if(weapon_slots[_held_left] == -1){
-                this_mo.rigged_object().SetIKTargetOffset("leftarm",offset * drag_strength_mult);
+                    // Distance constraints
+                    elbow_offset = (shoulder + normalize(arm_points[start+1]-shoulder) * upper_arm_length[right]) - arm_points[start+1];
+                    vec3 mid = (arm_points[start+1] + arm_points[start+2])*0.5f;
+                    vec3 dir = normalize(arm_points[start+1] - arm_points[start+2]);
+                    wrist_offset = (mid - dir * lower_arm_length[right] * 0.5f) - arm_points[start+2];
+                    elbow_offset += (mid + dir * lower_arm_length[right] * 0.5f) - arm_points[start+1];
+
+                    // Hinge constraints
+                    vec3 offset;
+                    offset += elbow_axis * dot(elbow_axis, arm_points[start+2]-arm_points[start+1]);
+                    float front_amount = dot(elbow_front, arm_points[start+2]-arm_points[start+1]);
+                    if(front_amount < 0.0f){
+                        offset += elbow_front * front_amount;        
+                    }
+                    elbow_offset += offset * 0.5f;
+                    wrist_offset -= offset * 0.5f;
+
+                    // Apply scaled correction vectors
+                    arm_points[start+1] += elbow_offset * iter_strength;
+                    arm_points[start+2] += wrist_offset * iter_strength;
+                }
             }
-            if(weapon_slots[_held_right] == -1){
-                this_mo.rigged_object().SetIKTargetOffset("rightarm",offset * drag_strength_mult);
-            }
-        } else {
-            this_mo.rigged_object().SetIKTargetOffset("leftarm",vec3(0.0f,0.0f,0.0f));
-            this_mo.rigged_object().SetIKTargetOffset("rightarm",vec3(0.0f,0.0f,0.0f));
+        }
+        /*{ // Apply arm physics to actual elbow, hand and wrist positions
+            int point_offset = kNumArmPoints;
+            vec3 hand = chain_points[kHandPoint+point_offset];
+            vec3 wrist = chain_points[kWristPoint+point_offset];
+            vec3 elbow = chain_points[kElbowPoint+point_offset];
+            int start = 3;
+            quaternion hand_rotation;
+            GetRotationBetweenVectors(elbow-wrist, arm_points[start+1]-arm_points[start+2], hand_rotation);
+            
+            vec3 hand_offset = hand-wrist;
+            elbow = arm_points[start+1];
+            wrist = arm_points[start+2];
+            hand = wrist + Mult(hand_rotation, hand_offset);
+
+            BoneTransform temp_r_hand_transform;
+            temp_r_hand_transform.origin = (wrist+hand) * 0.5f;
+            temp_r_hand_transform.rotation = hand_rotation * right_hand.rotation;
+            BoneTransform temp_l_hand_transform = temp_r_hand_transform*invert(right_hand)*left_hand;
+            vec3 offset = temp_l_hand_transform.origin - arm_points[2];
+            arm_points[2] += offset * 0.5f;
+            //arm_points[5] -= offset * 0.5f;
+        }*/
+        for(int i=0; i<6; ++i){
+            old_arm_points[i] = temp_old_arm_points[i];
+        }
+    }
+
+    for(int right=0; right<2; ++right){
+        int chain_start = ik_chain_start_index[kLeftArmIK+right];
+        int point_offset = right * kNumArmPoints;
+        vec3 hand = chain_points[kHandPoint+point_offset];
+        vec3 wrist = chain_points[kWristPoint+point_offset];
+        vec3 elbow = chain_points[kElbowPoint+point_offset];
+        vec3 shoulder = chain_points[kShoulderPoint+point_offset];
+        vec3 collar_tip = chain_points[kCollarTipPoint+point_offset];
+        vec3 collar = chain_points[kCollarPoint+point_offset];
+
+        { // Apply arm physics to actual elbow, hand and wrist positions
+            int start = right*3;
+            quaternion hand_rotation;
+            GetRotationBetweenVectors(elbow-wrist, arm_points[start+1]-arm_points[start+2], hand_rotation);
+            
+            vec3 hand_offset = hand-wrist;
+            elbow = arm_points[start+1];
+            wrist = arm_points[start+2];
+            hand = wrist + Mult(hand_rotation, hand_offset);
         }
 
-        vec3 body_offset(0.0f);
-        if(idle_stance_amount > 0.0f){
-            float body_bob_time = time + body_bob_time_offset;
-            body_offset.y = sin(body_bob_time*4.0f*body_bob_freq)*0.02f*idle_stance_amount;
-            body_offset.x = sin(body_bob_time*2.0f*body_bob_freq)*0.02f*idle_stance_amount;
-            body_offset.z = sin(body_bob_time*1.5f*body_bob_freq)*0.02f*idle_stance_amount;
+        if(draw_skeleton_lines){
+            debug_lines.push_back(DebugDrawLine(hand, wrist, vec3(1.0f), _fade));
+            debug_lines.push_back(DebugDrawLine(wrist, elbow, vec3(1.0f), _fade));
+            debug_lines.push_back(DebugDrawLine(elbow, shoulder, vec3(1.0f), _fade));
+            debug_lines.push_back(DebugDrawLine(collar, shoulder, vec3(1.0f), _fade));
         }
 
-        //float curr_avg_offset_height = min(0.0f,
-        //                          min(left_leg_offset.y, right_leg_offset.y));
-        float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;
-        float min_offset_height = min(0.0f, min(left_leg_offset.y, right_leg_offset.y));
-        float mix_amount = 1.0f;//min(1.0f,length(this_mo.velocity));
-        float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
-        offset_height = mix(offset_height, curr_offset_height, 1.0f-(pow(0.9f,ts.frames())));
-        vec3 height_offset = vec3(0.0f,offset_height*(1.0f-roll_ik_fade)-0.1f*roll_ik_fade,0.0f);
-        this_mo.rigged_object().SetIKTargetOffset("full_body",tilt_offset + height_offset + body_offset);
+        BoneTransform old_hand_matrix = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+0]);
 
+        for(int i=4, len=ik_chain_length[kLeftArmIK+right]; i<len; ++i){
+            rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+i], rel_mat * rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+i]));
+        }
+
+        rigged_object.RotateBoneToMatchVec(collar, collar_tip, ik_chain_elements[chain_start+5]);
+        rigged_object.RotateBoneToMatchVec(shoulder, mix(shoulder, elbow, upper_arm_weight[right]), ik_chain_elements[chain_start+4]);
+        rigged_object.RotateBoneToMatchVec(mix(shoulder, elbow, upper_arm_weight[right]), elbow, ik_chain_elements[chain_start+3]);
+        rigged_object.RotateBoneToMatchVec(elbow, mix(elbow, wrist, lower_arm_weight[right]), ik_chain_elements[chain_start+2]);
+        rigged_object.RotateBoneToMatchVec(mix(elbow, wrist, lower_arm_weight[right]), wrist, ik_chain_elements[chain_start+1]);
+        BoneTransform hand_transform = right==1?r_hand_transform:l_hand_transform;
+        rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+0], hand_transform * inv_skeleton_bind_transforms[ik_chain_elements[chain_start+0]]);
+        rigged_object.RotateBoneToMatchVec(wrist, hand, ik_chain_elements[chain_start+0]);
+        
+        BoneTransform hand_rel = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+0]) * invert(old_hand_matrix);
+
+        // Apply hand rotation to child bones (like fingers)
+        for(int i=0, len=GetNumBoneChildren(ik_chain_elements[chain_start+0]); i<len; ++i){
+            int child = GetBoneChild(ik_chain_elements[chain_start+0], i);
+            rigged_object.SetFrameMatrix(child, hand_rel * rigged_object.GetFrameMatrix(child));
+        }
+    }
+}
+
+array<vec3> temp_old_ear_points;
+array<vec3> old_ear_points;
+array<vec3> ear_points;
+
+array<float> target_ear_rotation;
+array<float> ear_rotation;
+array<float> ear_rotation_time;
+
+void DrawEar(bool right, const BoneTransform &in head_transform, int num_frames){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    int chain_start = ik_chain_start_index[kLeftEarIK+(right?1:0)];
+
+    vec3 tip, middle, base;
+    tip = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 1);
+    middle = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 0);
+    base = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+1], 0);
+
+    if(ear_rotation.size()==0){
+        ear_rotation.resize(2);
+        ear_rotation_time.resize(2);
+        target_ear_rotation.resize(2);
+        for(int i=0; i<2; ++i){
+            target_ear_rotation[i] = 0.0f;
+            ear_rotation[i] = 0.0f;
+            ear_rotation_time[i] = 0.0f;
+        }
+    } else {
+        int which = right?1:0;
+        if(ear_rotation_time[which] < time){
+            target_ear_rotation[which] = RangedRandomFloat(-0.4f, 0.8f);
+            ear_rotation_time[which] = time+RangedRandomFloat(0.7f, 4.0f);
+        }
+        ear_rotation[which] = mix(target_ear_rotation[which], ear_rotation[which], pow(0.9f,num_frames));
+    }
+
+    bool ear_rotate_test = true;
+    if(ear_rotate_test){
+        vec3 head_up = head_transform.rotation * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kHeadIK]]].rotation * vec3(0,0,1);
+        vec3 head_dir = head_transform.rotation * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kHeadIK]]].rotation * vec3(0,1,0);
+        vec3 head_right = cross(head_dir, head_up);
+        //float ear_back_amount = 2.5f;
+        //float ear_twist_amount = 3.0f * (right?-1.0f:1.0f);
+        float ear_back_amount = 0.0f;
+        float ear_twist_amount = ear_rotation[right?1:0];
+        if(right){
+            ear_twist_amount *= -1.0f;
+        }
+        if(character_getter.GetTag("species") != "rabbit"){
+            ear_twist_amount *= 0.3f;
+        }
+        BoneTransform ear_back_mat;
+        vec3 ear_right = normalize(cross(head_dir, middle-base));
+        ear_back_mat.rotation = quaternion(vec4(ear_right, ear_back_amount));
+        BoneTransform ear_twist_mat;
+        ear_twist_mat.rotation = quaternion(vec4(ear_back_mat.rotation*normalize(middle-base), ear_twist_amount));
+        BoneTransform base_offset;
+        base_offset.origin = base;
+        BoneTransform ear_transform = base_offset * ear_twist_mat * ear_back_mat * invert(base_offset);
+        BoneTransform tip_ear_transform = base_offset * ear_twist_mat * ear_twist_mat * ear_back_mat * invert(base_offset);
+        rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+0], tip_ear_transform * rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+0]));
+        rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+1], ear_transform * rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+1]));
+
+        tip = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 1);
+        middle = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 0);
+    }
+
+    float low_dist = distance(base, middle);
+    float high_dist = distance(middle, tip);
+
+    old_ear_points.resize(6);
+    temp_old_ear_points.resize(6);
+    if(ear_points.size()!=6){
+        ear_points.push_back(base);
+        ear_points.push_back(middle);
+        ear_points.push_back(tip);
+        for(int i=0, len=ear_points.size(); i<len; ++i){
+            old_ear_points[i] = ear_points[i];
+            temp_old_ear_points[i] = ear_points[i];
+        }
+    } else {
+        int start = right?3:0;
+
+        for(int i=0; i<3; ++i){
+            temp_old_ear_points[start+i] = ear_points[start+i];
+        }
+
+        float ear_damping = 0.95f;
+        float low_ear_rotation_damping = 0.9f;
+        float up_ear_rotation_damping = 0.92f;
+
+        ear_points[start+0] = base;
+        vec3 vel_offset = this_mo.velocity * time_step * num_frames;
+        ear_points[start+1] += (((ear_points[start+1] - old_ear_points[start+1]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
+        ear_points[start+2] += (((ear_points[start+2] - old_ear_points[start+2]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
+         quaternion rotation;
+        GetRotationBetweenVectors(middle-base, ear_points[start+1]-base, rotation);
+        vec3 rotated_tip = Mult(rotation, tip-middle)+ear_points[start+1];
+        ear_points[start+2] += (rotated_tip - ear_points[start+2]) * (1.0f - pow(up_ear_rotation_damping, num_frames));
+        ear_points[start+1] += (middle - ear_points[start+1]) * (1.0f - pow(low_ear_rotation_damping, num_frames));
+       
+        for(int i=0; i<3; ++i){
+            ear_points[start+1] = base + normalize(ear_points[start+1]-base) * low_dist;
+            vec3 mid = (ear_points[start+1] + ear_points[start+2])*0.5f;
+            vec3 dir = normalize(ear_points[start+1] - ear_points[start+2]);
+            ear_points[start+2] = mid - dir * high_dist * 0.5f;
+            ear_points[start+1] = mid + dir * high_dist * 0.5f;
+        }
+
+        if(flip_info.IsFlipping() && on_ground){
+            col.GetSweptSphereCollision(ear_points[start+0], ear_points[start+1], 0.03f);
+            ear_points[start+1] = sphere_col.adjusted_position;
+            col.GetSweptSphereCollision(ear_points[start+1], ear_points[start+2], 0.03f);
+            ear_points[start+2] = sphere_col.adjusted_position;
+        }
+
+        //debug_lines.push_back(DebugDrawLine(ear_points[start+0], ear_points[start+1], vec3(1.0f), _fade));
+        //debug_lines.push_back(DebugDrawLine(ear_points[start+1], ear_points[start+2], vec3(1.0f), _fade));
+        rigged_object.RotateBoneToMatchVec(ear_points[start+0], ear_points[start+1], ik_chain_elements[chain_start+1]);
+        rigged_object.RotateBoneToMatchVec(ear_points[start+1], ear_points[start+2], ik_chain_elements[chain_start+0]);
+        middle = ear_points[start+1];
+        tip = ear_points[start+2];
+    
+        for(int i=0; i<3; ++i){
+            old_ear_points[start+i] = temp_old_ear_points[start+i];
+        }
+    }
+    
+    if(draw_skeleton_lines){
+        debug_lines.push_back(DebugDrawLine(tip, middle, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(middle, base, vec3(1.0f), _fade));
+    }
+}
+
+void ResetSecondaryAnimation() {
+    ear_rotation.resize(0);
+    tail_points.resize(0);
+    arm_points.resize(0);
+    ear_points.resize(0);
+    old_foot_offset.resize(0);
+    old_foot_rotate.resize(0);
+    weap_points.resize(0);
+}
+
+
+array<vec3> temp_old_tail_points;
+array<vec3> old_tail_points;
+array<vec3> tail_points;
+array<vec3> tail_correction;
+array<float> tail_section_length;
+
+void DrawTail(int num_frames){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    if(ik_chain_length[kTailIK]==0){
+        return; // This character has no tail!
+    }
+
+    int chain_start = ik_chain_start_index[kTailIK];
+    int chain_length = ik_chain_length[kTailIK];
+
+    // Tail wag behavior
+    bool wag_tail = false;
+    if(wag_tail){
+        float wag_freq = 5.0f;
+        vec3 tail_root = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 0);
+        int hip_bone = skeleton.GetParent(ik_chain_elements[chain_start+chain_length-1]);
+        vec3 axis = rigged_object.GetFrameMatrix(hip_bone).rotation * vec3(0,0,1);
+        quaternion rotation(vec4(axis.x,axis.y,axis.z,sin(time*wag_freq)));
+        for(int i=0, len=chain_length; i<len; ++i){
+            BoneTransform mat = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+i]);
+            mat.origin -= tail_root;
+            mat = rotation * mat;
+            mat.origin += tail_root;
+            rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+i], mat);
+        }
+    }
+
+    bool ambient_tail = false;
+    if(ambient_tail){
+        vec3 tail_root = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 0);
+        int hip_bone = skeleton.GetParent(ik_chain_elements[chain_start+chain_length-1]);
+        vec3 axis = rigged_object.GetFrameMatrix(hip_bone).rotation * vec3(0,0,1);
+        quaternion rotation(vec4(axis.x,axis.y,axis.z,(sin(time)+sin(time*1.3))*0.2f));
+        for(int i=0, len=chain_length; i<len; ++i){
+            BoneTransform mat = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+i]);
+            mat.origin -= tail_root;
+            mat = rotation * mat;
+            mat.origin += tail_root;
+            rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+i], mat);
+        }
+    }
+
+    bool twitch_tail_tip = false;
+    if(twitch_tail_tip){
+        float wag_freq = 5.0f;
+        vec3 tail_root = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+0], 0);
+        int hip_bone = skeleton.GetParent(ik_chain_elements[chain_start+chain_length-1]);
+        vec3 axis = rigged_object.GetFrameMatrix(hip_bone).rotation * vec3(0,0,1);
+        quaternion rotation(vec4(axis.x,axis.y,axis.z,sin(time*wag_freq)));
+        for(int i=0; i<1; ++i){
+            BoneTransform mat = rigged_object.GetFrameMatrix(ik_chain_elements[chain_start+i]);
+            mat.origin -= tail_root;
+            mat = rotation * mat;
+            mat.origin += tail_root;
+            rigged_object.SetFrameMatrix(ik_chain_elements[chain_start+i], mat);
+        }
+    }
+
+    tail_section_length.resize(chain_length);
+    tail_correction.resize(chain_length+1);
+    old_tail_points.resize(chain_length+1);
+    temp_old_tail_points.resize(chain_length+1);
+    if(tail_points.size()==0){
+        tail_points.resize(chain_length+1);
+        for(int i=0; i<chain_length; ++i){
+            tail_points[i] = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+i], 1);
+            old_tail_points[i] = tail_points[i];
+            temp_old_tail_points[i] = tail_points[i];
+        }
+        tail_points[chain_length] = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 0);
+        for(int i=0; i<chain_length; ++i){
+            tail_section_length[i] = distance(tail_points[i], tail_points[i+1]); 
+        }
+    } else {
+        tail_points[chain_length] = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 0);
+        for(int i=0; i<chain_length+1; ++i){
+            temp_old_tail_points[i] = tail_points[i];
+        }
+        for(int i=0; i<chain_length; ++i){
+            tail_points[i] += (tail_points[i] - old_tail_points[i]) * 0.95f;
+        }
+        for(int i=0; i<chain_length; ++i){
+            tail_points[i].y -= time_step * num_frames * 0.1f;
+        }
+        tail_correction[chain_length-1] += (rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 1) - tail_points[chain_length-1])  * (1.0f - pow(0.9f, num_frames));
+        for(int i=chain_length-2; i>=0; --i){
+            vec3 offset = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+i], 1) - rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+i+1], 1);
+            quaternion rotation;
+            GetRotationBetweenVectors(rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+i+1], 1) - rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+i+1], 0), tail_points[i+1]-tail_points[i+2], rotation);
+            tail_correction[i] = ((tail_points[i+1]+Mult(rotation, offset)) - tail_points[i]) * (0.2f) * 0.5f;
+            tail_correction[i+1] -= tail_correction[i];
+        }
+        for(int i=chain_length-1; i>=0; --i){
+            tail_points[i] += tail_correction[i];
+        }      
+
+        for(int j=0, len=max(5, num_frames*1.5); j<len; ++j){
+            for(int i=0; i<chain_length+1; ++i){
+                tail_correction[i] = vec3(0.0f);
+            }
+            for(int i=0; i<chain_length; ++i){
+                vec3 mid = (tail_points[i] + tail_points[i+1])*0.5f;
+                vec3 dir = normalize(tail_points[i]-tail_points[i+1]);
+                tail_correction[i] += (mid + dir*tail_section_length[i]*0.5f - tail_points[i])*0.75f;
+                tail_correction[i+1] += (mid - dir*tail_section_length[i]*0.5f - tail_points[i+1])*0.25f;
+            }
+            for(int i=chain_length-1; i>=0; --i){
+                tail_points[i] += tail_correction[i] * min(1.0f, (0.5f + j*0.125f));
+            }
+        }
+
+        for(int i=chain_length-1; i>=0; --i){
+            col.GetSweptSphereCollision(tail_points[i+1], tail_points[i], 0.03f);
+            tail_points[i] = sphere_col.adjusted_position;
+        } 
+
+        for(int i=0; i<chain_length+1; ++i){
+            old_tail_points[i] = temp_old_tail_points[i];
+        }
+    }
+
+
+    for(int i=0; i<chain_length; ++i){
+        rigged_object.RotateBoneToMatchVec(tail_points[i+1], tail_points[i], ik_chain_elements[chain_start+i]);        
+    }
+    if(draw_skeleton_lines){
+        for(int i=0; i<chain_length; ++i){
+            debug_lines.push_back(DebugDrawLine(tail_points[i], tail_points[i+1], vec3(1.0f), _fade));
+        }
+    }
+}
+
+void DrawBody(const BoneTransform &in hip_transform, const BoneTransform &in chest_transform){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    int start = ik_chain_start_index[kTorsoIK];
+
+    BoneTransform old_hip_matrix = rigged_object.GetFrameMatrix(ik_chain_elements[start+2]);
+
+    int chest_bone = ik_chain_elements[start+0];
+    int abdomen_bone = ik_chain_elements[start+1];
+    int hip_bone = ik_chain_elements[start+2];
+
+    vec3 collarbone = chest_transform * skeleton.GetPointPos(skeleton.GetBonePoint(chest_bone, 1));
+    vec3 ribs = chest_transform * skeleton.GetPointPos(skeleton.GetBonePoint(chest_bone, 0));
+    vec3 stomach = hip_transform * skeleton.GetPointPos(skeleton.GetBonePoint(abdomen_bone, 0));
+    vec3 hips = hip_transform * skeleton.GetPointPos(skeleton.GetBonePoint(hip_bone, 0));
+    
+    if(draw_skeleton_lines){
+        debug_lines.push_back(DebugDrawLine(collarbone, ribs, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(ribs, stomach, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(stomach, hips, vec3(1.0f), _fade));
+    }
+
+    rigged_object.SetFrameMatrix(chest_bone, chest_transform * inv_skeleton_bind_transforms[chest_bone]);
+    BoneTransform temp = mix(chest_transform, hip_transform, 0.5f);
+    temp.rotation = mix(hip_transform.rotation, chest_transform.rotation, 0.5f);
+    rigged_object.SetFrameMatrix(abdomen_bone, temp * inv_skeleton_bind_transforms[abdomen_bone]);
+    
+
+    rigged_object.RotateBoneToMatchVec(ribs, collarbone, chest_bone);
+    rigged_object.RotateBoneToMatchVec(stomach, ribs, abdomen_bone);
+    rigged_object.RotateBoneToMatchVec(hips, stomach, hip_bone);
+
+    BoneTransform hip_rel = rigged_object.GetFrameMatrix(hip_bone) * invert(old_hip_matrix);
+
+    {
+        int start = ik_chain_start_index[kTailIK];
+        int len = ik_chain_length[kTailIK];
+
+        for(int i=0; i<len; ++i){
+            int bone = ik_chain_elements[start+i];
+            rigged_object.SetFrameMatrix(bone, hip_rel * rigged_object.GetFrameMatrix(bone));
+        }
+    }
+}
+
+void DrawHead(const BoneTransform &in chest_transform, const BoneTransform &in head_transform, int num_frames){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    int start = ik_chain_start_index[kHeadIK];
+    int head_bone = ik_chain_elements[start+0];
+    int neck_bone = ik_chain_elements[start+1];
+
+    int chest_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+    BoneTransform chest_frame_matrix = rigged_object.GetFrameMatrix(chest_bone);
+    BoneTransform chest_bind_matrix = skeleton_bind_transforms[chest_bone];
+    BoneTransform rel_mat = chest_transform * invert(BoneTransform(chest_frame_matrix * chest_bind_matrix));
+
+    BoneTransform old_head_matrix = rigged_object.GetFrameMatrix(head_bone);
+
+    vec3 crown, skull, neck;
+    crown = head_transform * skeleton.GetPointPos(skeleton.GetBonePoint(head_bone, 1));
+    skull = head_transform * skeleton.GetPointPos(skeleton.GetBonePoint(head_bone, 0));
+    neck = chest_transform * skeleton.GetPointPos(skeleton.GetBonePoint(neck_bone, 0));
+
+    BoneTransform world_chest = key_transforms[kChestKey] * inv_skeleton_bind_transforms[ik_chain_start_index[kTorsoIK]];
+    vec3 breathe_dir = world_chest.rotation * normalize(vec3(0,-0.3,1));
+    float scale = this_mo.rigged_object().GetCharScale();
+    skull += breathe_dir * breath_amount * 0.005f * scale;
+    crown += breathe_dir * breath_amount * 0.002f * scale;
+    
+
+    if(draw_skeleton_lines){
+        debug_lines.push_back(DebugDrawLine(crown, skull, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(skull, neck, vec3(1.0f), _fade));
+    }
+    
+    rigged_object.SetFrameMatrix(head_bone, head_transform * inv_skeleton_bind_transforms[head_bone]);
+    rigged_object.RotateBoneToMatchVec(neck, skull, neck_bone);
+    rigged_object.RotateBoneToMatchVec(skull, crown, head_bone);
+
+    BoneTransform head_rel = rigged_object.GetFrameMatrix(head_bone) * invert(old_head_matrix);
+
+    for(int i=0, len=GetNumBoneChildren(head_bone); i<len; ++i){
+        int child = GetBoneChild(head_bone, i);
+        rigged_object.SetFrameMatrix(child, head_rel * rigged_object.GetFrameMatrix(child));
+    }
+}
+
+// Key transform enums
+const int kHeadKey = 0;
+const int kLeftArmKey = 1;
+const int kRightArmKey = 2;
+const int kLeftLegKey = 3;
+const int kRightLegKey = 4;
+const int kChestKey = 5;
+const int kHipKey = 6;
+const int kNumKeys = 7;
+
+array<float> key_masses;
+array<int> root_bone;
+
+vec3 GetCenterOfMassEstimate(array<BoneTransform> &in key_transforms){
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+
+    bool show_debug_info = false;
+
+    // Estimate center of mass
+    vec3 estimate_com;
+    float body_mass = 0.0f;
+    for(int j=0; j<2; ++j){
+        int bone = ik_chain_elements[ik_chain_start_index[kLeftLegIK+j]];
+        vec3 point = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        vec3 foot_point = key_transforms[kLeftLegKey+j] * point;
+        vec3 hip_point = key_transforms[kHipKey] * skeleton.GetPointPos(skeleton.GetBonePoint(root_bone[kLeftLegKey+j], 0));
+        estimate_com += (hip_point + foot_point)*0.5f*key_masses[kLeftLegKey+j];
+        body_mass += key_masses[kLeftLegKey+j];
+        if(show_debug_info){
+            debug_lines.push_back(DebugDrawLine(hip_point, foot_point, vec3(1.0f,0.0f,0.0f), _fade));
+            debug_lines.push_back(DebugDrawWireSphere((hip_point + foot_point)*0.5f, pow(key_masses[kLeftLegKey+j], 0.33f) * 0.05f, vec3(1.0f), _fade));
+        }
+    }
+    for(int j=0; j<2; ++j){
+        int bone = ik_chain_elements[ik_chain_start_index[kLeftArmIK+j]];
+        vec3 foot_point = key_transforms[j==0?kLeftArmKey:kRightArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        vec3 hip_point = key_transforms[kChestKey] * skeleton.GetPointPos(skeleton.GetBonePoint(root_bone[kLeftArmKey+j], 0));
+        estimate_com += (hip_point + foot_point)*0.5f*key_masses[kLeftArmKey+j];
+        body_mass += key_masses[kLeftArmKey+j];
+        if(show_debug_info){
+            debug_lines.push_back(DebugDrawLine(hip_point, foot_point, vec3(1.0f,0.0f,0.0f), _fade));
+            debug_lines.push_back(DebugDrawWireSphere((hip_point + foot_point)*0.5f, pow(key_masses[kLeftArmKey+j], 0.33f) * 0.05f, vec3(1.0f), _fade));
+        }
+    }
+    {
+        int bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+        vec3 foot_point = key_transforms[kChestKey] * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+        vec3 hip_point = key_transforms[kHipKey] * skeleton.GetPointPos(skeleton.GetBonePoint(root_bone[kChestKey], 0));
+        estimate_com += (hip_point + foot_point)*0.5f*key_masses[kChestKey];
+        body_mass += key_masses[kChestKey];
+        if(show_debug_info){
+            debug_lines.push_back(DebugDrawLine(hip_point, foot_point, vec3(1.0f,0.0f,0.0f), _fade));
+            debug_lines.push_back(DebugDrawWireSphere((hip_point + foot_point)*0.5f, pow(key_masses[kChestKey], 0.33f) * 0.05f, vec3(1.0f), _fade));
+        }
+    }
+    {
+        int bone = ik_chain_elements[ik_chain_start_index[kHeadIK]];
+        vec3 foot_point = key_transforms[kHeadKey] * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+        vec3 hip_point = key_transforms[kChestKey] * skeleton.GetPointPos(skeleton.GetBonePoint(root_bone[kHeadKey], 0));
+        estimate_com += (hip_point + foot_point)*0.5f*key_masses[kHeadKey];
+        body_mass += key_masses[kHeadKey];
+        if(show_debug_info){
+            debug_lines.push_back(DebugDrawLine(hip_point, foot_point, vec3(1.0f,0.0f,0.0f), _fade));
+            debug_lines.push_back(DebugDrawWireSphere((hip_point + foot_point)*0.5f, pow(key_masses[kHeadKey], 0.33f) * 0.05f, vec3(1.0f), _fade));
+       }
+    }
+    if(show_debug_info){
+        debug_lines.push_back(DebugDrawWireSphere(estimate_com/body_mass, 0.1f, vec3(0.0f,1.0f,0.0f), _fade));
+    }
+    return estimate_com/body_mass;
+}
+
+float MoveTowards(float start, float target, float speed){
+    if(abs(target-start)<speed){
+        return target;
+    } else if(target > start){
+        return start + speed;
+    } else {
+        return start - speed;
+    }
+}
+
+vec3 old_com;
+vec3 old_com_vel;
+vec3 old_hip_offset;
+array<float> old_foot_offset;
+array<quaternion> old_foot_rotate;
+
+vec3 old_head_facing;
+vec2 old_angle;
+vec2 head_angle;
+vec2 target_head_angle;
+vec2 head_angle_vel;
+vec2 head_angle_accel;
+float old_head_angle;
+
+vec3 old_chest_facing;
+vec2 old_chest_angle_vec;
+vec2 chest_angle;
+vec2 target_chest_angle;
+vec2 chest_angle_vel;
+float old_chest_angle;
+float ragdoll_fade_speed = 1000.0f;
+float preserve_angle_strength = 0.0f;
+
+quaternion total_body_rotation;
+
+void AddIKBonesToArray(array<int> &inout bones, int which){
+    Skeleton @skeleton = this_mo.rigged_object().skeleton();
+    int start = ik_chain_start_index[which];
+    int end = ik_chain_start_index[which+1];
+    for(int i=start; i<end; ++i){
+        bones.push_back(ik_chain_elements[i]);
+    }
+}
+
+quaternion GetFrameRotation() {
+    mat4 transform2 = GetFrameAverageDeltaMatrix();
+    mat4 flip_rotation = transform2.GetRotationPart();
+    vec3 a = flip_rotation.GetColumn(0);
+    vec3 b = flip_rotation.GetColumn(1);
+    vec3 c = flip_rotation.GetColumn(2);
+    // orthonormalize
+    for(int i=0; i<5; ++i){
+        a = normalize(a);
+        b = normalize(b);
+        c = normalize(c);
+        vec3 new_a, new_b, new_c;
+        new_a = a-dot(a,b)*b*0.5f-dot(a,c)*c*0.5f;
+        new_b = b-dot(a,b)*a*0.5f-dot(b,c)*c*0.5f;
+        new_c = c-dot(a,c)*a*0.5f-dot(b,c)*b*0.5f;
+        a = mix(a, new_a, 0.5f);
+        b = mix(b, new_b, 0.5f);
+        c = mix(c, new_c, 0.5f);
+    }
+    flip_rotation.SetColumn(0, normalize(a));
+    flip_rotation.SetColumn(1, normalize(b));
+    flip_rotation.SetColumn(2, normalize(c));    
+    return QuaternionFromMat4(flip_rotation);
+}
+
+
+BoneTransform ApplyParentRotations(array<BoneTransform> &in matrices, int id) {
+    int parent_id = this_mo.rigged_object().skeleton().GetParent(id);
+    if(parent_id == -1){
+        return matrices[id];    
+    } else {
+        return ApplyParentRotations(matrices,parent_id) * matrices[id];
+    }
+}
+
+uint64 perf_count;
+
+void StartPerfCount() {
+    perf_count = GetPerformanceCounter();
+}
+
+void DisplayPerfCount(int num) {
+    uint64 new_perf_count = GetPerformanceCounter();
+    DebugText("count"+((num<10)?"0":"")+num, "count"+num+": "+(new_perf_count - perf_count), 0.5f);
+    perf_count = GetPerformanceCounter();
+}
+
+float last_changed_com = 0.0f;
+vec3 com_offset;
+vec3 com_offset_vel;
+vec3 target_com_offset;
+    
+array<int> roll_check_bones;
+array<BoneTransform> key_transforms;
+array<float> target_leg_length;
+void FinalAnimationMatrixUpdate(int num_frames) {
+    // Clear debug lines
+    for(int i=0, len=debug_lines.size(); i<len; ++i){
+        DebugDrawRemove(debug_lines[i]);
+    }
+    debug_lines.resize(0);
+
+    // Convenient shortcuts
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();    
+
+    // Get local to world transform
+    BoneTransform local_to_world;
+    {
         float ground_conform = this_mo.rigged_object().GetStatusKeyValue("groundconform");
-        //Print(""+ground_conform+"\n");
         if(ground_conform > 0.0f){
             ground_conform = min(1.0f, ground_conform);
-            vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
+            
+            vec3 a(0,1,0);
+            vec3 b = ground_normal;
+            vec3 rotate_axis = normalize(cross(a, b));
+            vec3 up = normalize(a);
+            vec3 right_vec = cross(up, rotate_axis);
+            vec3 ik_dir = normalize(b);
+            float rotate_angle = atan2(-dot(ik_dir, right_vec), dot(ik_dir, up));
+            
+            flip_modifier_axis = rotate_axis;
+            flip_modifier_rotation = rotate_angle*ground_conform;
+        }
 
-            float x_amount = ground_normal.y;
-            float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
-            float angle = atan2(y_amount, x_amount);
+        vec3 offset;
+        offset = this_mo.position;
+        offset.y -= _leg_sphere_size;
 
-            this_mo.SetFlip(axis,-angle*ground_conform,0.0f);
-            this_mo.rigged_object().SetIKTargetOffset("full_body", vec3(0.0f,offset_height*(1.0f-ground_conform),0.0f));
+        vec3 facing = this_mo.GetFacing();
+        float cur_rotation = atan2(facing.x, facing.z);
+        quaternion rotation(vec4(0,1,0,cur_rotation));
+
+        local_to_world.rotation = rotation;
+        local_to_world.origin = offset;
+
+        rigged_object.TransformAllFrameMats(local_to_world);
+
+        vec3 frame_com = rigged_object.GetFrameCenterOfMass();
+
+        BoneTransform flip_modifier;
+        flip_modifier.origin = frame_com * -1.0f;
+        BoneTransform flip_rotation;
+        flip_rotation.rotation = quaternion(vec4(flip_modifier_axis.x, flip_modifier_axis.y, flip_modifier_axis.z, flip_modifier_rotation));
+        vec3 tilt_axis = normalize(cross(vec3(0.0f, 1.0f, 0.0f), tilt_modifier));
+        BoneTransform tilt_rotation;
+        tilt_rotation.rotation = quaternion(vec4(tilt_axis.x, tilt_axis.y, tilt_axis.z, length(tilt_modifier)/180.0f*3.1417f));
+        flip_modifier = flip_rotation * tilt_rotation * flip_modifier;
+        flip_modifier.origin += frame_com;
+
+        rigged_object.TransformAllFrameMats(flip_modifier);
+
+        local_to_world = flip_modifier * local_to_world;
+
+        if(flip_info.IsFlipping() && on_ground && convex_hull_points.size()>0){
+            roll_check_bones.resize(0);
+            AddIKBonesToArray(roll_check_bones, kLeftLegIK);
+            AddIKBonesToArray(roll_check_bones, kRightLegIK);
+            AddIKBonesToArray(roll_check_bones, kTorsoIK);
+            AddIKBonesToArray(roll_check_bones, kHeadIK);
+            AddIKBonesToArray(roll_check_bones, kLeftArmIK);
+            AddIKBonesToArray(roll_check_bones, kRightArmIK);
+
+            float low_point = this_mo.position.y;
+            int num_convex_points = 0;
+            for(int i=0, len=roll_check_bones.size(); i<len; ++i){
+                int bone = roll_check_bones[i];
+                int num_hull_points = convex_hull_points_index[bone+1]-convex_hull_points_index[bone];
+                if(num_hull_points > 0){
+                    BoneTransform transformed = rigged_object.GetFrameMatrix(bone);
+                    mat3 mat_rot = Mat3FromQuaternion(transformed.rotation);
+                    num_convex_points += num_hull_points;
+                    for(int j=convex_hull_points_index[bone], len=convex_hull_points_index[bone+1]; j<len; ++j){
+                        vec3 transformed_point = transformed * convex_hull_points[j];
+                        low_point = min(low_point, transformed_point.y);
+                        //debug_lines.push_back(DebugDrawWireSphere(transformed_point), 0.01f, vec3(1.0f), _fade));
+                    }
+                }
+            }
+            if(num_convex_points != 0){
+                vec3 roll_offset = vec3(0,(this_mo.position.y-_leg_sphere_size)-low_point-0.02f,0);
+                BoneTransform roll_modifier;
+                float roll_offset_scale = 1.0f-pow((abs(0.5 - flip_info.flip_progress)*2.0f),2.0f);
+                roll_modifier.origin = roll_offset * roll_offset_scale;
+
+                for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+                    rigged_object.SetFrameMatrix(i, roll_modifier * rigged_object.GetFrameMatrix(i));
+                }
+                local_to_world = roll_modifier * local_to_world;
+            }
+        }
+
+        if(flip_info.IsFlipping() && on_ground){
+            vec3 frame_com = rigged_object.GetFrameCenterOfMass();
+            if(old_com == vec3(0.0f) || unragdoll_time > time - 0.5f){
+                old_com = frame_com;
+                old_com.x -= this_mo.position.x;
+                old_com.z -= this_mo.position.z;
+                old_com_vel = this_mo.velocity;
+                old_com_vel.x = 0.0f;
+                old_com_vel.z = 0.0f;
+                old_com_vel.y -= 0.5f;
+            }
+            {
+                old_com.x += this_mo.position.x;
+                old_com.z += this_mo.position.z;
+                old_com += old_com_vel * time_step * num_frames;
+                old_com_vel += physics.gravity_vector * time_step * num_frames;
+                if(old_com.y < frame_com.y){
+                    old_com.y = frame_com.y;
+                }
+                BoneTransform roll_modifier;
+                vec3 offset = old_com-frame_com;
+                offset.x *= pow(1.0f-flip_info.flip_progress, 2.0f);
+                offset.z *= pow(1.0f-flip_info.flip_progress, 2.0f);
+                roll_modifier.origin = offset;
+                for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+                    rigged_object.SetFrameMatrix(i, roll_modifier * rigged_object.GetFrameMatrix(i));
+                }
+                local_to_world = roll_modifier * local_to_world;
+            }
+
+            frame_com = rigged_object.GetFrameCenterOfMass();
+            //DebugDrawWireSphere(frame_com, 0.1f, vec3(1.0f), _fade);
+            old_com = frame_com;
+            old_com.x -= this_mo.position.x;
+            old_com.z -= this_mo.position.z;
+        } else {
+            old_com = vec3(0.0f);
+        }
+    }
+    if(num_frames > 8){
+        ResetSecondaryAnimation();
+        return;
+    }
+
+    bool draw_ground_plane = false;
+    if(draw_ground_plane) {    
+        vec3 mid = this_mo.position-vec3(0,_leg_sphere_size,0)*0.99;
+        mid += vec3(0,0,0.03);
+        vec3 facing = vec3(0,0,1);//this_mo.GetFacing();
+        vec3 right = vec3(facing.z, 0.0f, -facing.x);
+        debug_lines.push_back(DebugDrawLine(mid-right,mid+right, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(mid-facing,mid+facing, vec3(1.0f), _fade));
+    }
+
+    // Draw base of support
+    const bool draw_base_of_support = false;
+    if(draw_base_of_support){
+        array<vec3> points;
+        points.resize(4);
+        int bone = skeleton.IKBoneStart("left_leg");
+        BoneTransform transform = rigged_object.GetFrameMatrix(bone);
+        BoneTransform bind_matrix = skeleton_bind_transforms[bone];
+        transform = transform * bind_matrix;
+        points[0] = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        points[1] = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+        
+        bone = skeleton.IKBoneStart("right_leg");
+        transform = rigged_object.GetFrameMatrix(bone);
+        bind_matrix = skeleton_bind_transforms[bone];
+        transform = transform * bind_matrix;
+        points[2] = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        points[3] = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+        debug_lines.push_back(DebugDrawLine(points[0], points[1], vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(points[1], points[3], vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(points[2], points[3], vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(points[2], points[0], vec3(1.0f), _fade));
+    }
+
+    key_transforms.resize(kNumKeys);
+
+    // Get key points from animation
+    for(int j=0; j<2; ++j){
+        int bone = ik_chain_elements[ik_chain_start_index[kLeftLegIK+j]];
+        key_transforms[kLeftLegKey+j] = rigged_object.GetFrameMatrix(bone) * skeleton_bind_transforms[bone];
+    }
+    for(int j=0; j<2; ++j){
+        int bone = ik_chain_elements[ik_chain_start_index[kLeftArmIK+j]];
+        key_transforms[kLeftArmKey+j] = rigged_object.GetFrameMatrix(bone) * skeleton_bind_transforms[bone];
+    }
+    {
+        int bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+        key_transforms[kChestKey] = rigged_object.GetFrameMatrix(bone) * skeleton_bind_transforms[bone];
+        bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]+2];
+        key_transforms[kHipKey] = rigged_object.GetFrameMatrix(bone) * skeleton_bind_transforms[bone];
+    }
+    {
+        int bone = ik_chain_elements[ik_chain_start_index[kHeadIK]];
+        key_transforms[kHeadKey] = rigged_object.GetFrameMatrix(bone) * skeleton_bind_transforms[bone];
+    }
+
+    /*int left_arm_bone = ik_chain_elements[ik_chain_start_index[kLeftArmIK]];
+    int right_arm_bone = ik_chain_elements[ik_chain_start_index[kRightArmIK]];
+    //BoneTransform rel_hand_transform = invert(rigged_object.GetFrameMatrix(right_arm_bone)) * rigged_object.GetFrameMatrix(left_arm_bone);
+    BoneTransform rel_hand_transform = (invert(key_transforms[kRightArmKey] * inv_skeleton_bind_transforms[right_arm_bone])) * (key_transforms[kLeftArmKey] * invert(skeleton_bind_transforms[left_arm_bone]));
+    //rel_hand_transform = key_transforms[kLeftArmKey];//rel_hand_transform * (key_transforms[kRightArmKey] * inv_skeleton_bind_transforms[right_arm_bone]) * skeleton_bind_transforms[left_arm_bone];
+*/
+    // Get initial length of each leg (in pose)
+    target_leg_length.resize(2);
+    for(int j=0; j<2; ++j){
+        int bone = ik_chain_elements[ik_chain_start_index[kLeftLegIK+j]];
+        int bone_len = ik_chain_length[kLeftLegIK+j];
+        vec3 foot = key_transforms[kLeftLegKey+j] * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        bone = ik_chain_elements[ik_chain_start_index[kLeftLegIK+j]+bone_len-1];
+        vec3 hip = key_transforms[kHipKey] * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+        target_leg_length[j] = distance(hip, foot);
+    }
+
+    vec3 original_com = GetCenterOfMassEstimate(key_transforms);
+
+    float torso_damping = 0.93f;
+    float torso_stiffness = 0.5f;
+    float head_damping = 0.9f;
+    float head_stiffness = 0.8f;
+    float head_turn_speed = 1.0f;
+
+    float idle_look_amount = 0.0f;
+    if(!this_mo.controlled && idle_type != _combat){
+        idle_look_amount = idle_stance_amount*(sin(time)*0.02f+0.98f);
+    }
+    torso_damping = mix(torso_damping, 0.99f, idle_look_amount);
+    torso_stiffness = mix(torso_stiffness, 0.03f, idle_look_amount);
+
+    head_damping = mix(head_damping, 0.9f, idle_look_amount);
+    head_stiffness = mix(head_stiffness, 1.0f, idle_look_amount);
+    float head_accel_inertia = mix(0.0f, 0.99f, idle_look_amount);
+    float head_accel_damping = mix(0.0f, 0.95f, idle_look_amount);
+    head_turn_speed = mix(head_turn_speed, 0.0f, idle_look_amount);
+
+    float angle_threshold = 2.2f;
+
+    float chest_tilt_offset = 0.0f;
+    float head_tilt_offset = -0.2f;
+
+    // Rotate chest to look at target
+    const bool chest_enabled = true;
+    if(chest_enabled){
+        float head_look_amount = length(torso_look);
+        //vec3 tilt_axis = normalize(cross(vec3(0.0f, 1.0f, 0.0f), tilt));
+        //quaternion tilt_rotate(vec4(tilt_axis.x, tilt_axis.y, tilt_axis.z, length(tilt)/180.0f*3.1417f));
+        vec3 head_dir = normalize(key_transforms[kChestKey].rotation * vec3(0,0,1));//Mult(tilt_rotate, this_mo.GetFacing());
+        vec3 head_up = normalize(key_transforms[kChestKey].rotation * vec3(0,1,0));//Mult(tilt_rotate, vec3(0.0f,1.0f,0.0f));
+        vec3 head_right = cross(head_dir, head_up);
+        
+        {
+            vec2 head_look_flat;
+            head_look_flat.x = dot(old_chest_facing, head_right);
+            head_look_flat.y = dot(old_chest_facing, head_dir);
+            if(!(abs(dot(normalize(old_chest_facing), head_up)) > 0.9f)){
+                old_chest_angle_vec.x = atan2(-head_look_flat.x, head_look_flat.y);
+            }
+            float head_up_val = dot(old_chest_facing, head_up);
+            old_chest_angle_vec.y = 0.0f;
+            old_chest_angle_vec.y = asin(dot(old_chest_facing, head_up));
+            if(old_chest_angle_vec.y != old_chest_angle_vec.y){
+                old_chest_angle_vec.y = 0.0f;
+            }
+
+            old_chest_facing = head_dir;
+        }
+
+        vec2 head_look_flat;
+        head_look_flat.x = dot(torso_look, head_right);
+        head_look_flat.y = dot(torso_look, head_dir);
+        float angle = atan2(-head_look_flat.x, head_look_flat.y);
+        if(abs(dot(normalize(torso_look), head_up)) > 0.9f){
+            angle = old_chest_angle;
+        }
+        float head_up_val = dot(torso_look, head_up);
+        float angle2 = 0.0f;
+        angle2 = asin(dot(torso_look, head_up)+chest_tilt_offset);
+        if(angle2 != angle2){
+            angle2 = 0.0f;
+        }
+
+        // Avoid head flip-flopping when trying to look straight back
+        float head_range = 1.0f;
+        if(angle > angle_threshold && old_chest_angle <= -head_range ){
+            angle = -head_range;
+        } else if(angle < -angle_threshold && old_chest_angle >= head_range ){
+            angle = head_range;
+        }
+
+        angle = min(head_range, max(-head_range, angle));
+
+        old_chest_angle = angle;
+
+        target_chest_angle.x = angle * head_look_amount;
+        target_chest_angle.y = idle_stance_amount * (angle2 * head_look_amount);
+
+        float torso_shake_amount = 0.005f;
+        target_chest_angle.x += RangedRandomFloat(-torso_shake_amount, torso_shake_amount);
+        target_chest_angle.y += RangedRandomFloat(-torso_shake_amount, torso_shake_amount);
+
+        chest_angle_vel *= pow(torso_damping, num_frames);
+        chest_angle_vel += (target_chest_angle - chest_angle) * torso_stiffness * num_frames;
+        chest_angle += chest_angle_vel * time_step * num_frames;
+
+        int neck_bone = ik_chain_elements[ik_chain_start_index[kHeadIK]+1];
+        int chest_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+        BoneTransform chest_frame_matrix = rigged_object.GetFrameMatrix(chest_bone);
+        BoneTransform chest_bind_matrix = skeleton_bind_transforms[chest_bone];
+        BoneTransform rel_mat = key_transforms[kChestKey] * invert(chest_frame_matrix * chest_bind_matrix);
+        vec3 neck = rigged_object.GetTransformedBonePoint(neck_bone, 0);
+
+        quaternion rotation(vec4(head_up.x, head_up.y, head_up.z, chest_angle.x));
+        quaternion rotation2(vec4(head_right.x, head_right.y, head_right.z, chest_angle.y));
+        
+        quaternion identity;
+        int abdomen_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]+1];
+        vec3 abdomen_top = rigged_object.GetTransformedBonePoint(abdomen_bone, 1);     
+        vec3 abdomen_bottom = rigged_object.GetTransformedBonePoint(abdomen_bone, 0);
+
+        BoneTransform old_chest_transform = key_transforms[kChestKey];
+        key_transforms[kChestKey] = key_transforms[kChestKey] * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kTorsoIK]]];
+        key_transforms[kChestKey].origin -= abdomen_top;
+        quaternion chest_rotate = rotation*rotation2;
+        key_transforms[kChestKey] = mix(chest_rotate, identity, 0.5f) * key_transforms[kChestKey];
+        key_transforms[kChestKey].origin += abdomen_top;
+        key_transforms[kChestKey].origin -= abdomen_bottom;
+        key_transforms[kChestKey] = mix(chest_rotate, identity, 0.5f) * key_transforms[kChestKey];
+        key_transforms[kChestKey].origin += abdomen_bottom;
+        key_transforms[kChestKey] = key_transforms[kChestKey] * skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kTorsoIK]]];
+        BoneTransform offset = key_transforms[kChestKey] * invert(old_chest_transform);
+        key_transforms[kLeftArmKey] = offset * key_transforms[kLeftArmKey];
+        key_transforms[kRightArmKey] = offset * key_transforms[kRightArmKey];
+        key_transforms[kHeadKey] = offset * key_transforms[kHeadKey];
+    }
+    // Rotate head to look at target
+    {
+        vec3 head_dir = key_transforms[kHeadKey].rotation * vec3(0,0,1);
+        vec3 head_up = key_transforms[kHeadKey].rotation * vec3(0,1,0);
+        vec3 head_right = cross(head_dir, head_up);
+
+        {
+            vec2 head_look_flat;
+            head_look_flat.x = dot(old_head_facing, head_right);
+            head_look_flat.y = dot(old_head_facing, head_dir);
+            if(!(abs(dot(normalize(old_head_facing), head_up)) > 0.9f)){
+                old_angle.x = atan2(-head_look_flat.x, head_look_flat.y);
+            }
+            float head_up_val = dot(old_head_facing, head_up);
+            old_angle.y = 0.0f;
+            old_angle.y = asin(dot(old_head_facing, head_up));
+            if(old_angle.y != old_angle.y){
+                old_angle.y = 0.0f;
+            }
+
+            old_head_facing = head_dir;
+        }
+
+        float head_look_amount = length(head_look);
+        vec2 head_look_flat;
+        head_look_flat.x = dot(head_look, head_right);
+        head_look_flat.y = dot(head_look, head_dir);
+        float angle = atan2(-head_look_flat.x, head_look_flat.y);
+        if(abs(dot(normalize(head_look), head_up)) > 0.9f){
+            angle = old_head_angle;
+        }
+        float head_up_val = dot(head_look, head_up);
+        float angle2 = 0.0f;
+        angle2 = (asin(dot(head_look, head_up)) + head_tilt_offset);
+        if(angle2 != angle2){
+            angle2 = 0.0f;
+        }
+
+        // Avoid head flip-flopping when trying to look straight back
+        float head_range = 1.7f;
+        if(angle > angle_threshold && old_head_angle <= -head_range ){
+            angle = -head_range;
+        } else if(angle < -angle_threshold && old_head_angle >= head_range ){
+            angle = head_range;
+        }
+        angle = min(head_range, max(-head_range, angle));
+        angle2 = min(0.8f, max(-0.8f, angle2));
+
+        //angle = 0.0f;
+        //angle2 = 0.0f;
+
+        old_head_angle = angle;
+
+        target_head_angle.x = angle * head_look_amount;
+        target_head_angle.y = angle2 * head_look_amount;
+
+        float head_shake_amount = 0.001f;
+        target_head_angle.x += RangedRandomFloat(-head_shake_amount, head_shake_amount);
+        target_head_angle.y += RangedRandomFloat(-head_shake_amount, head_shake_amount);
+
+        head_angle_vel *= pow(head_damping, num_frames);
+        head_angle_accel *= pow(head_accel_damping, num_frames);
+        head_angle_accel = mix((target_head_angle - head_angle) * head_stiffness, head_angle_accel, pow(head_accel_inertia, num_frames));
+        head_angle_vel += head_angle_accel * num_frames;
+        head_angle += head_angle_vel * time_step * num_frames;
+        
+        
+        vec2 old_offset(old_angle * (1.0f - flip_ik_fade));
+        if((head_angle.x > target_head_angle.x && old_offset.x < 0.0f) ||
+           (head_angle.x < target_head_angle.x && old_offset.x > 0.0f))
+        {
+            head_angle.x = MoveTowards(head_angle.x, target_head_angle.x, abs(old_offset.x));
+        }
+        if((head_angle.y > target_head_angle.x && old_offset.y < 0.0f) ||
+           (head_angle.y < target_head_angle.x && old_offset.y > 0.0f))
+        {
+            head_angle.y = MoveTowards(head_angle.y, target_head_angle.y, abs(old_offset.y));
+        }
+
+        //head_angle.x = MoveTowards(head_angle.x, target_head_angle.x, time_step*num_frames*head_turn_speed);
+        //head_angle.y = MoveTowards(head_angle.y, target_head_angle.y, time_step*num_frames*head_turn_speed);
+
+        int neck_bone = ik_chain_elements[ik_chain_start_index[kHeadIK]+1];
+        int chest_bone = ik_chain_elements[ik_chain_start_index[kTorsoIK]];
+        BoneTransform chest_frame_matrix = rigged_object.GetFrameMatrix(chest_bone);
+        BoneTransform chest_bind_matrix = skeleton_bind_transforms[chest_bone];
+        BoneTransform rel_mat = key_transforms[kChestKey] * invert(chest_frame_matrix * chest_bind_matrix);
+        vec3 neck = rel_mat * rigged_object.GetTransformedBonePoint(neck_bone, 0);
+
+        quaternion rotation(vec4(head_up.x, head_up.y, head_up.z, head_angle.x));
+        quaternion rotation2(vec4(head_right.x, head_right.y, head_right.z, head_angle.y));
+        quaternion combined_rotation = rotation * rotation2;
+
+        quaternion identity;
+        key_transforms[kHeadKey] = key_transforms[kHeadKey] * inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kHeadIK]]];
+        BoneTransform neck_mat = rel_mat * rigged_object.GetFrameMatrix(neck_bone);
+        //neck_mat.SetTranslationPart(neck_mat.GetTranslationPart() - neck);
+        neck_mat = mix(combined_rotation, identity, 0.5f) * neck_mat;
+        //neck_mat.SetTranslationPart(neck_mat.GetTranslationPart() + neck);
+        rigged_object.SetFrameMatrix(neck_bone, neck_mat);
+        key_transforms[kHeadKey].origin -= neck;
+        key_transforms[kHeadKey] = mix(combined_rotation, identity, 0.5f) * key_transforms[kHeadKey];
+        key_transforms[kHeadKey].rotation = mix(combined_rotation, identity, 0.5f) * key_transforms[kHeadKey].rotation;
+        key_transforms[kHeadKey].origin += neck;
+        key_transforms[kHeadKey] = key_transforms[kHeadKey] * skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kHeadIK]]];
+    }
+    
+    vec3 post_look_com = GetCenterOfMassEstimate(key_transforms);
+
+    // Compensate for COM shift caused by look
+    if(on_ground) {
+        //vec3 balance_offset = original_com - post_look_com;
+        vec3 balance_offset = original_com - post_look_com;
+        balance_offset.y = 0.0f;
+        key_transforms[kHeadKey].origin += balance_offset;
+        key_transforms[kChestKey].origin += balance_offset;
+        key_transforms[kHipKey].origin += balance_offset;
+        key_transforms[kLeftArmKey].origin += balance_offset;
+        key_transforms[kRightArmKey].origin += balance_offset;
+    }
+    
+    // Modify key transforms
+    old_foot_offset.resize(2);
+    old_foot_rotate.resize(2);
+    if(on_ground) { // Use IK for foot plant on ground
+        array<bool> ground_collision;
+        array<vec3> offset;
+        ground_collision.push_back(false);
+        ground_collision.push_back(false);
+        offset.resize(2);
+        for(int j=0; j<2; ++j){
+            // Get initial foot information
+            string ik_label = j==0?"left_leg":"right_leg";
+            BoneTransform mat = local_to_world * rigged_object.GetIKTransform(ik_label) * skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kLeftLegIK+j]]];
+            int bone = skeleton.IKBoneStart(ik_label);
+            float weight = rigged_object.GetIKWeight(ik_label);
+            vec3 anim_pos = rigged_object.GetUnmodifiedIKTransform(ik_label).GetTranslationPart();
+            weight *= (1.0f-roll_ik_fade);
+            if(weight > 0.0f){
+                vec3 foot_center = (skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                                    skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1))) * 0.5f;
+                
+                BoneTransform transform = mix(key_transforms[kLeftLegKey+j], mat, weight);
+                vec3 pos = mat * foot_center;
+                vec3 check_pos = pos + foot[j].pos;
+
+                // Check where ground is under foot
+                col.GetSweptSphereCollision(check_pos + vec3(0.0f,0.2f,0.0f),
+                                            check_pos + vec3(0.0f,-0.6f,0.0f),
+                                            0.05f);
+                if(sphere_col.NumContacts() > 0){
+                    ground_collision[j] = true;
+                    float ground_height = sphere_col.position.y - 0.01;
+                    if(old_foot_offset[j] != 0.0f){
+                        old_foot_offset[j] = min(ground_height + 0.1f, max(ground_height - 0.1f, old_foot_offset[j]));
+                        ground_height = mix(ground_height, old_foot_offset[j], pow(0.8, num_frames));
+                    }
+                    old_foot_offset[j] = ground_height;
+                    float ground_offset = ground_height - pos.y;
+                    vec3 new_pos = pos + vec3(0,ground_offset,0);
+                    new_pos.y += anim_pos.y- 0.05f;
+                    new_pos.y += foot[j].height;
+                    new_pos.x += foot[j].pos.x;
+                    new_pos.z += foot[j].pos.z;
+                    offset[j] = (new_pos - pos)*weight;
+                    transform.origin += offset[j];
+                }
+
+                // Check ground normal
+                col.GetSlidingSphereCollision(sphere_col.position + vec3(0.0f, -0.01f, 0.0f), 0.05f);
+                vec3 normal = normalize(sphere_col.adjusted_position - sphere_col.position);
+
+                float rotate_weight = 1.0f;
+                rotate_weight -= (anim_pos.y - 0.05f)*4.0f;
+                rotate_weight = max(0.0f, rotate_weight);
+
+                quaternion rotation;
+                GetRotationBetweenVectors(vec3(0.0f, 1.0f, 0.0f), normal, rotation);
+                rotation = mix(rotation, old_foot_rotate[j], pow(0.8, num_frames));
+                old_foot_rotate[j] = rotation;
+                quaternion identity;
+                rotation = mix(identity, rotation, weight*rotate_weight);
+
+                transform = transform * inv_skeleton_bind_transforms[bone];
+                transform.rotation = rotation * transform.rotation;
+                transform = transform * skeleton_bind_transforms[bone];
+                key_transforms[kLeftLegKey+j] = transform;
+            }
+        }
+        for(int i=0; i<2; ++i){
+            int other = (i+1)%2;
+            if(ground_collision[i] && !ground_collision[other]){
+                key_transforms[kLeftLegKey+other].origin += offset[i];
+            }
+        }
+    } else {
+        for(int i=0; i<2; ++i){
+            old_foot_offset[i] = 0.0f;
+            old_foot_rotate[i] = quaternion();
+        }
+    }
+    for(int j=0; j<2; ++j){
+        BoneTransform mat = local_to_world * rigged_object.GetIKTransform(j==0?"leftarm":"rightarm");
+        int bone = skeleton.IKBoneStart(j==0?"leftarm":"rightarm");
+        float weight = rigged_object.GetIKWeight(j==0?"leftarm":"rightarm");
+        weight = min(1.0f, max(0.0f, weight));
+        weight *= (1.0f-roll_ik_fade);
+        if(weight > 0.0f){
+            mat = mat * skeleton_bind_transforms[skeleton.IKBoneStart(j==0?"leftarm":"rightarm")];
+            key_transforms[kLeftArmKey+j] = mix(key_transforms[kLeftArmKey+j], mat, weight);
         }
     }
 
-    /*vec3 item_pos;
-    int num_items = GetNumItems();
-    for(int i=0; i<num_items; i++){
-        this_mo.ReadItem(i);
-        vec3 pos = item_object_getter.GetPhysicsPosition();
-        item_pos = pos;
+    if(ledge_info.on_ledge){
+        array<vec3> hand, foot;
+        vec3 body;
+        hand.resize(2);
+        foot.resize(2);
+        ledge_info.shimmy_anim.GetIKOffsets(ledge_info.pls, body, hand[0], hand[1], foot[0], foot[1]);
+        key_transforms[kHipKey].origin += body;
+        key_transforms[kChestKey].origin += body;
+        key_transforms[kHeadKey].origin += body;
+        for(int i=0; i<2; ++i){
+            key_transforms[kLeftLegKey+i].origin += foot[i];
+            key_transforms[kLeftArmKey+i].origin += hand[i];
+        }
     }
-    this_mo.rigged_object().SetIKTargetOffset("rightarm",item_pos - this_mo.rigged_object().GetIKTargetPosition("rightarm"));*/
-}
 
-void UpdateIKTargets(int num_frames) {
-    Timestep ts(time_step, num_frames);
-    MovementState_UpdateIKTargets(ts);
+    // Adjust hip to preserve leg length
+    BoneTransform hip_offset;
+    quaternion hip_rotate;
+    {
+        array<vec3> temp_foot_pos;
+        array<vec3> hip_pos;
+        array<vec3> orig_hip_pos;
+        temp_foot_pos.resize(2);
+        hip_pos.resize(2);
+        orig_hip_pos.resize(2);
+        for(int j=0; j<2; ++j){
+            int bone = ik_chain_start_index[kLeftLegIK+j];
+            int bone_len = ik_chain_length[kLeftLegIK+j];;
+            temp_foot_pos[j] = key_transforms[kLeftLegKey+j] * skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[bone], 0));
+            hip_pos[j] = key_transforms[kHipKey] * skeleton.GetPointPos(skeleton.GetBonePoint(ik_chain_elements[bone+bone_len-1], 0));    
+            orig_hip_pos[j] = hip_pos[j];
+        }
+        vec3 orig_mid = (orig_hip_pos[0] + orig_hip_pos[1])*0.5f;
+        for(int i=0; i<2; ++i){
+            float hip_dist = distance(hip_pos[0], hip_pos[1]);
+            for(int j=0; j<2; ++j){
+                hip_pos[j] = temp_foot_pos[j] + normalize(hip_pos[j]-temp_foot_pos[j])*target_leg_length[j];
+            }
+            vec3 mid = (hip_pos[0] + hip_pos[1])*0.5f;
+            mid = vec3(orig_mid.x, mid.y, orig_mid.z);
+            vec3 dir = normalize((hip_pos[1]-hip_pos[0])+(orig_hip_pos[1]-orig_hip_pos[0])*3.0f);
+            hip_pos[0] = mid + dir * hip_dist * -0.5f;
+            hip_pos[1] = mid + dir * hip_dist * 0.5f;
+        }
+        quaternion rotation;
+        GetRotationBetweenVectors(orig_hip_pos[1] - orig_hip_pos[0], hip_pos[1]-hip_pos[0], rotation);
+        hip_rotate = rotation;
+        int hip_bone = skeleton.IKBoneStart("torso");
+        int hip_bone_len = skeleton.IKBoneLength("torso");
+        for(int i=0; i<hip_bone_len-1; ++i){
+            hip_bone = skeleton.GetParent(hip_bone);
+        }
+        vec3 hip_root = key_transforms[kHipKey] * ((skeleton.GetPointPos(skeleton.GetBonePoint(hip_bone, 1))));// + skeleton.GetPointPos(skeleton.GetBonePoint(hip_bone, 1))) * 0.5f);
+        vec3 orig_hip_offset = (orig_hip_pos[0] + orig_hip_pos[1])*0.5f - hip_root;
+        hip_offset.origin = (hip_pos[0]+hip_pos[1])*0.5f-(orig_hip_pos[0] + orig_hip_pos[1])*0.5f+orig_hip_offset-hip_rotate*orig_hip_offset;
+        vec3 temp = hip_offset.origin;
+        if(old_hip_offset == vec3(0.0f)){
+            old_hip_offset = temp;
+        }
+        hip_offset.origin = mix(temp, old_hip_offset, pow(0.95f,num_frames));
+        old_hip_offset = hip_offset.origin;
+    } 
+    vec3 body_offset(0.0f);
+    bool idle_bob_enabled = false;
+    if(idle_bob_enabled && idle_stance_amount > 0.0f){
+        float body_bob_time = time + body_bob_time_offset;
+        body_offset.y = sin(body_bob_time*4.0f*body_bob_freq)*0.02f*idle_stance_amount;
+        body_offset.x = sin(body_bob_time*2.0f*body_bob_freq)*0.02f*idle_stance_amount;
+        body_offset.z = sin(body_bob_time*1.5f*body_bob_freq)*0.02f*idle_stance_amount;
+    }
+    if(idle_stance_amount > 0.0f){
+        vec3 left_foot = (key_transforms[kLeftLegKey]*inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kLeftLegIK]]]).origin;
+        vec3 right_foot = (key_transforms[kRightLegKey]*inv_skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kRightLegIK]]]).origin;
+        if(last_changed_com < time){
+            last_changed_com = time + RangedRandomFloat(0.7f,4.0f);
+            target_com_offset.x = RangedRandomFloat(-0.05f,0.05f);
+            target_com_offset.y = RangedRandomFloat(-0.005f,0.005f) * this_mo.rigged_object().GetCharScale();
+            target_com_offset.z = RangedRandomFloat(-0.01f,0.01f) * this_mo.rigged_object().GetCharScale();
+        }
+        //DebugText("com_offset", "com_offset: "+com_offset, 0.5f);
+        com_offset_vel *= 0.97f;
+        com_offset_vel += (target_com_offset - com_offset) * 5.0f * time_step * num_frames;
+        com_offset += com_offset_vel * time_step * num_frames;
+        vec3 target_com = (right_foot - left_foot) * com_offset.x + this_mo.GetFacing() * com_offset.z;
+        body_offset.x += target_com.x * idle_stance_amount;
+        body_offset.z += target_com.z * idle_stance_amount;
+        body_offset.y += com_offset.y * idle_stance_amount;
+
+        vec3 axis = right_foot - left_foot;
+        axis = vec3(axis.z, 0.0f, -axis.x);
+        axis = normalize(axis);
+        quaternion rotate_x(vec4(axis.x, axis.y, axis.z, com_offset.x*0.25f*idle_stance_amount));
+        key_transforms[kChestKey].rotation = rotate_x * key_transforms[kChestKey].rotation;
+        key_transforms[kHipKey].rotation = rotate_x * key_transforms[kHipKey].rotation;
+        key_transforms[kHeadKey].origin -= key_transforms[kChestKey].origin;
+        key_transforms[kHeadKey] = rotate_x * key_transforms[kHeadKey];
+        key_transforms[kHeadKey].origin += key_transforms[kChestKey].origin;
+    } else {
+        com_offset = 0.0f;
+        target_com_offset = com_offset;
+        com_offset_vel = 0.0f;
+    }
+    
+    hip_offset.origin += body_offset;// * this_mo.rigged_object().GetCharScale() );
+    
+    if(!ledge_info.on_ledge){
+        key_transforms[kChestKey] = hip_offset * key_transforms[kChestKey];
+        key_transforms[kHeadKey] = hip_offset * key_transforms[kHeadKey];
+        key_transforms[kHipKey] = hip_offset * key_transforms[kHipKey];
+        key_transforms[kHipKey].rotation = hip_rotate * key_transforms[kHipKey].rotation;
+        key_transforms[kLeftArmKey] = hip_offset * key_transforms[kLeftArmKey];
+        key_transforms[kRightArmKey] = hip_offset * key_transforms[kRightArmKey];
+    }    
+    // Adjust arms for dragging bodies
+    if(tethered == _TETHERED_DRAGBODY){
+        MovementObject@ char = ReadCharacterID(tether_id);
+        vec3 target = char.rigged_object().GetIKChainPos(drag_body_part,drag_body_part_id);
+
+        vec3 offset;
+        if(weapon_slots[_held_left] != -1 || weapon_slots[_held_right] != -1){
+            if(weapon_slots[_held_left] == -1){
+                offset = target - key_transforms[kLeftArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("leftarm"), 0));
+            } else if(weapon_slots[_held_right] == -1){
+                offset = target - key_transforms[kLeftArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("rightarm"), 0));
+            } 
+            offset.y += 0.1f;
+            vec3 facing = this_mo.GetFacing();
+            vec3 right = vec3(facing.z, 0.0f, -facing.x);
+            if(weapon_slots[_held_left] == -1){
+                offset += right * 0.05f;
+            } else if(weapon_slots[_held_right] == -1){
+                offset -= right * 0.05f;
+            } 
+        } else {
+            vec3 hand_mid = (key_transforms[kLeftArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("leftarm"), 0)) +
+                             key_transforms[kRightArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("rightarm"), 0))) * 0.5f;
+            offset = target - hand_mid;
+        }
+        if(offset.y < -0.05f){
+            offset.y = -0.05f;
+        }
+
+        if(weapon_slots[_held_left] == -1){
+            key_transforms[kLeftArmKey].origin += offset * drag_strength_mult;
+        }
+        if(weapon_slots[_held_right] == -1){
+            key_transforms[kRightArmKey].origin += offset * drag_strength_mult;
+        }
+    }
+
+    vec3 final_com = GetCenterOfMassEstimate(key_transforms);
+
+    // Compensate for COM shift in air
+    if(!on_ground && !ledge_info.on_ledge) {
+        vec3 balance_offset = original_com - final_com;
+        key_transforms[kHeadKey].origin += balance_offset;
+        key_transforms[kChestKey].origin += balance_offset;
+        key_transforms[kHipKey].origin += balance_offset;
+        key_transforms[kLeftArmKey].origin += balance_offset;
+        key_transforms[kRightArmKey].origin += balance_offset;
+        key_transforms[kLeftLegKey].origin += balance_offset;
+        key_transforms[kRightLegKey].origin += balance_offset;
+    }
+
+    quaternion test_rot(vec4(1,0,0,sin(time)));
+    BoneTransform old_chest_transform = key_transforms[kChestKey];
+    //key_transforms[kChestKey].SetRotationPart(Mat4FromQuaternion(test_rot) * key_transforms[kChestKey].GetRotationPart());
+    //key_transforms[kLeftArmKey].SetTranslationPart(key_transforms[kLeftArmKey].GetTranslationPart() + vec3(sin(time)*0.5f,0.0f, 0.0f));
+
+    const bool draw_key_points = false;
+    if(draw_key_points){
+        array<vec3> points;
+        points.resize(4);
+        // Draw leg transforms
+        for(int j=0; j<2; ++j){
+            int bone;
+            mat4 transform = key_transforms[kLeftLegKey+j].GetMat4();
+            if(j==0){
+                bone = skeleton.IKBoneStart("left_leg");
+            } else {
+                bone = skeleton.IKBoneStart("right_leg");
+            }
+            vec3 foot_center = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                               skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+            foot_center *= 0.5f;
+            float foot_vis_size = 0.1f;
+            points[0] = transform * (foot_center + vec3(0.0f,0.0f,foot_vis_size));
+            points[1] = transform * (foot_center + vec3(foot_vis_size,0.0f,0.0f));
+            points[2] = transform * (foot_center + vec3(0.0f,0.0f,-foot_vis_size));
+            points[3] = transform * (foot_center + vec3(-foot_vis_size,0.0f,0.0f));
+            for(int i=0; i<4; ++i){
+                debug_lines.push_back(DebugDrawLine(points[i], points[(i+1)%4], vec3(0.0f,1.0f,0.0f), _fade));
+            }
+        }
+        // Draw hand transforms
+        for(int j=0; j<2; ++j){
+            int bone;
+            if(j==0){
+                bone = skeleton.IKBoneStart("leftarm");
+            } else {
+                bone = skeleton.IKBoneStart("rightarm");
+            }
+            mat4 transform = key_transforms[kLeftArmKey+j].GetMat4();
+            vec3 foot_center = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                               skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+            foot_center *= 0.5f;
+            float foot_vis_size = 0.1f;
+            points[0] = transform * (foot_center + vec3(0.0f,0.0f,foot_vis_size));
+            points[1] = transform * (foot_center + vec3(foot_vis_size,0.0f,0.0f));
+            points[2] = transform * (foot_center + vec3(0.0f,0.0f,-foot_vis_size));
+            points[3] = transform * (foot_center + vec3(-foot_vis_size,0.0f,0.0f));
+            for(int i=0; i<4; ++i){
+                debug_lines.push_back(DebugDrawLine(points[i], points[(i+1)%4], vec3(0.0f,1.0f,0.0f), _fade));
+            }
+        }
+        // Draw chest transform
+        {
+            int bone = skeleton.IKBoneStart("torso");
+            mat4 transform = key_transforms[kChestKey].GetMat4();
+            vec3 foot_center = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                               skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+            foot_center *= 0.5f;
+            float chest_vis_size = 0.125f;
+            points[0] = transform * (foot_center + vec3(0.0f,0.0f,chest_vis_size));
+            points[1] = transform * (foot_center + vec3(chest_vis_size,0.0f,0.0f));
+            points[2] = transform * (foot_center + vec3(0.0f,0.0f,-chest_vis_size));
+            points[3] = transform * (foot_center + vec3(-chest_vis_size,0.0f,0.0f));
+            for(int i=0; i<4; ++i){
+                debug_lines.push_back(DebugDrawLine(points[i], points[(i+1)%4], vec3(0.0f,1.0f,0.0f), _fade));
+            }
+        }
+        // Draw hip transform
+        {
+            int bone = skeleton.IKBoneStart("torso");
+            bone = skeleton.GetParent(bone);
+            bone = skeleton.GetParent(bone);
+            mat4 transform = key_transforms[kHipKey].GetMat4();
+            vec3 foot_center = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                               skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+            foot_center *= 0.5f;
+            float chest_vis_size = 0.125f;
+            points[0] = transform * (foot_center + vec3(0.0f,0.0f,chest_vis_size));
+            points[1] = transform * (foot_center + vec3(chest_vis_size,0.0f,0.0f));
+            points[2] = transform * (foot_center + vec3(0.0f,0.0f,-chest_vis_size));
+            points[3] = transform * (foot_center + vec3(-chest_vis_size,0.0f,0.0f));
+            for(int i=0; i<4; ++i){
+                debug_lines.push_back(DebugDrawLine(points[i], points[(i+1)%4], vec3(0.0f,1.0f,0.0f), _fade));
+            }
+        }
+        // Draw head transform
+        {
+            int bone = skeleton.IKBoneStart("head");
+            mat4 transform = key_transforms[kHeadKey].GetMat4();
+            vec3 foot_center = skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0)) +
+                               skeleton.GetPointPos(skeleton.GetBonePoint(bone, 1));
+            foot_center *= 0.5f;
+            float chest_vis_size = 0.1f;
+            points[0] = transform * (foot_center + vec3(0.0f,0.0f,chest_vis_size));
+            points[1] = transform * (foot_center + vec3(chest_vis_size,0.0f,0.0f));
+            points[2] = transform * (foot_center + vec3(0.0f,0.0f,-chest_vis_size*0.1f));
+            points[3] = transform * (foot_center + vec3(-chest_vis_size,0.0f,0.0f));
+            for(int i=0; i<4; ++i){
+                debug_lines.push_back(DebugDrawLine(points[i], points[(i+1)%4], vec3(0.0f,1.0f,0.0f), _fade));
+            }
+        }
+    }
+
+    //key_transforms[kLeftArmKey] = (key_transforms[kRightArmKey] * inv_skeleton_bind_transforms[right_arm_bone]) * rel_hand_transform * skeleton_bind_transforms[left_arm_bone];
+    
+    DrawLeg(false, key_transforms[kHipKey], key_transforms[kLeftLegKey], num_frames);
+    DrawLeg(true, key_transforms[kHipKey], key_transforms[kRightLegKey], num_frames);
+
+    /*quaternion weap_rotation;
+    vec3 weap_old_mid;
+    vec3 weap_new_mid;    
+    DrawWeapon(num_frames, weap_rotation, weap_old_mid, weap_new_mid);
+    for(int i=0; i<2; ++i){
+        key_transforms[kLeftArmKey+i].origin -= weap_old_mid;
+        key_transforms[kLeftArmKey+i] = weap_rotation * key_transforms[kLeftArmKey+i];
+        key_transforms[kLeftArmKey+i].origin += weap_new_mid;
+    }*/
+    DrawArms(key_transforms[kChestKey], key_transforms[kLeftArmKey], key_transforms[kRightArmKey], num_frames);
+
+    DrawHead(key_transforms[kChestKey], key_transforms[kHeadKey], num_frames);
+    
+    DrawBody(key_transforms[kHipKey], key_transforms[kChestKey]);
+    
+    DrawEar(false, key_transforms[kHeadKey], num_frames);
+    DrawEar(true, key_transforms[kHeadKey], num_frames);
+    
+    DrawTail(num_frames);
+
+    // Get center of mass
+    const bool draw_com = false;
+    if(draw_com){
+        vec3 frame_com = rigged_object.GetFrameCenterOfMass();
+        debug_lines.push_back(DebugDrawWireSphere(frame_com, 0.1f, vec3(1.0f), _fade));
+        debug_lines.push_back(DebugDrawLine(frame_com, frame_com+vec3(0.0f,-1.0f,0.0f), vec3(1.0f), _fade));
+    }
+
+    if(ragdoll_pose.size() > 0 && unragdoll_time > time - 1.0f/ragdoll_fade_speed){
+        int root;
+        array<BoneTransform> rel_mats;
+        array<BoneTransform> ragdoll_rel_mats;
+        array<BoneTransform> blended_rel_mats;
+        rel_mats.resize(skeleton.NumBones());
+        ragdoll_rel_mats.resize(skeleton.NumBones());
+        blended_rel_mats.resize(skeleton.NumBones());
+        for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+            ragdoll_pose[i].SetTranslationPart(ragdoll_pose[i].GetTranslationPart() + this_mo.velocity * time_step * num_frames);
+            int parent = skeleton.GetParent(i);
+            if(parent != -1){
+                rel_mats[i] = invert(BoneTransform(rigged_object.GetFrameMatrix(parent))) * BoneTransform(rigged_object.GetFrameMatrix(i));
+                ragdoll_rel_mats[i] = invert(BoneTransform(ragdoll_pose[parent])) * BoneTransform(ragdoll_pose[i]);
+            } else {
+                rel_mats[i] = BoneTransform(rigged_object.GetFrameMatrix(i));
+                ragdoll_rel_mats[i] = BoneTransform(ragdoll_pose[i]);
+                root = i;
+            }
+        }
+
+        for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+            blended_rel_mats[i] = mix(ragdoll_rel_mats[i], rel_mats[i], (time - unragdoll_time)*ragdoll_fade_speed);
+        }
+
+        for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+            ragdoll_pose[i] = ApplyParentRotations(blended_rel_mats, i).GetMat4();
+            rigged_object.SetFrameMatrix(i, ApplyParentRotations(blended_rel_mats, i));
+        }
+    }
+
+    UpdateEyeLook();
 }
 
 void ApplyPhysics(const Timestep &in ts) {
@@ -6757,12 +9228,6 @@ void ApplyPhysics(const Timestep &in ts) {
 }
 
 void SetParameters() {
-    weapon_slots.resize(_num_weap_slots);
-    for(int i=0; i<_num_weap_slots; ++i){
-        weapon_slots[i] = -1;       
-    }
-    //Print("Resizing weapon slots to "+_num_weap_slots+"\n");
-
     params.AddIntSlider("Lives",1,"min:1,max:4");
     p_lives = max(1, params.GetFloat("Lives"));
     lives = p_lives;
@@ -6803,6 +9268,9 @@ void SetParameters() {
     float new_char_scale = params.GetFloat("Character Scale");
     if(new_char_scale != this_mo.rigged_object().GetRelativeCharScale()){
         this_mo.RecreateRiggedObject(this_mo.char_path);
+        ResetSecondaryAnimation();
+        ResetLayers();
+        CacheSkeletonInfo();
     }
     
     params.AddFloatSlider("Fat",0.5f,"min:0.0,max:1.0,step:0.05,text_mult:200");
@@ -6821,11 +9289,6 @@ void SetParameters() {
     mirrored_stance = left_handed;
     primary_weapon_slot = left_handed?_held_left:_held_right;
     secondary_weapon_slot = left_handed?_held_right:_held_left;
-    
-    if(body_bob_freq == 0.0f){
-        body_bob_freq = RangedRandomFloat(0.9f,1.1f);
-        body_bob_time_offset = RangedRandomFloat(0.0f,100.0f);
-    }
 
     if(params.HasParam("Unarmed Stance Override")){
         this_mo.OverrideCharAnim("idle", params.GetString("Unarmed Stance Override"));

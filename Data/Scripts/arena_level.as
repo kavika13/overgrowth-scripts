@@ -370,6 +370,19 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
     char_obj.UpdateScriptParams();
 }
 
+void CharactersNoticeEachOther() {
+    int num_chars = GetNumCharacters();
+    for(int i=0; i<num_chars; ++i){
+         MovementObject@ char = ReadCharacter(i);
+         for(int j=i+1; j<num_chars; ++j){
+             MovementObject@ char2 = ReadCharacter(j);
+             Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
+             char.ReceiveMessage("notice " + char2.GetID());
+             char2.ReceiveMessage("notice " + char.GetID());
+         }
+     }
+}
+
 // Spawn all of the objects that we'll need in the level of given total difficulty
 void SetUpLevel(float initial_difficulty){
     // Remove all spawned objects
@@ -549,6 +562,7 @@ void SetUpLevel(float initial_difficulty){
     }
     
     SetAllHostile(false);
+    CharactersNoticeEachOther();
     
     ClearMeta();
     AddMetaEvent(kMessage, "set_meta_state 0 pre_intro");
@@ -785,7 +799,7 @@ void EndMatch(bool victory){
     WritePersistentInfo();
                
     AddMetaEvent(kMessage, "set_all_hostile false");
-    AddMetaEvent(kMessage, "set_meta_state 0 resetting");
+    AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
     AddMetaEvent(kDisplay, "The match is over!");
     AddMetaEvent(kWait, "2.0");
     AddMetaEvent(kDisplay, "");
@@ -1083,12 +1097,8 @@ void SetAllHostile(bool val){
         for(int i=0; i<num_chars; ++i){
              MovementObject@ char = ReadCharacter(i);
              char.ReceiveMessage("set_combat_allowed true");
-             for(int j=i+1; j<num_chars; ++j){
-                 MovementObject@ char2 = ReadCharacter(j);
-                 char.ReceiveMessage("notice " + char2.GetID());
-                 char2.ReceiveMessage("notice " + char.GetID());
-             }
          }
+         CharactersNoticeEachOther();
     } else {
         for(int i=0; i<num_chars; ++i){
             MovementObject@ char = ReadCharacter(i);
@@ -1158,7 +1168,7 @@ void Update() {
     global_time += time_step * 1000;
 
     SetPlaceholderPreviews();
-    if(GetInputPressed(0, "t")){
+    if(DebugKeysEnabled() && GetInputPressed(0, "t")){
         curr_difficulty = GetRandomDifficultyNearPlayerSkill();
         SetUpLevel(curr_difficulty);
     }

@@ -76,6 +76,17 @@ enum ClimbStage {_nothing, _jump, _wallrun, _grab, _climb_up};
 ClimbStage trying_to_climb = _nothing;
 vec3 climb_dir;
 
+void SetChaseTarget(int target){
+    if(chase_target_id != target){
+        target_history.Initialize();
+        if(target != -1){
+            MovementObject@ char = ReadCharacterID(target);
+            target_history.Update(char.position, char.velocity, time);
+        }
+    }
+    chase_target_id = target;
+}
+
 void AIMovementObjectDeleted(int id) {
     situation.MovementObjectDeleted(id);
     if(ally_id == id){
@@ -97,8 +108,8 @@ void AIMovementObjectDeleted(int id) {
         }
     }
     if(chase_target_id == id){
-        chase_target_id = -1;
-        if(goal == _attack && chase_target_id == -1){
+        SetChaseTarget(-1);
+        if(goal == _attack){
             SetGoal(_patrol);
         }   
     }
@@ -134,56 +145,70 @@ int IsAggressive() {
 class TargetHistoryElement {
     vec3 position;
     vec3 velocity;
-    float time_elapsed;
+    float time_stamp;
 }
 
 const int kTargetHistorySize = 16;
 class TargetHistory {
-    TargetHistoryElement[] elements;
-    int index;
-    bool first_update;
+    private TargetHistoryElement[] elements;
+    private int index;
+    private bool first_update;
     void Initialize() {
         elements.resize(kTargetHistorySize);
         index = 0;
         first_update = true;
     }
-    void Update(const vec3 &in pos, const vec3 &in vel, const Timestep &in ts){
-        for(int i=0; i<kTargetHistorySize; ++i){
-            elements[i].time_elapsed += ts.step();
-        }
+    void Update(const vec3 &in pos, const vec3 &in vel, float time_stamp){
         if(first_update){
             for(int i=0; i<kTargetHistorySize; ++i){
                 elements[i].position = pos;
                 elements[i].velocity = vel;
-                elements[i].time_elapsed = 0.0f;
+                elements[i].time_stamp = time_stamp;
             }
             first_update = false;
         }
         elements[index].position = pos;
         elements[index].velocity = vel;
-        elements[index].time_elapsed = 0.0f;
-        index = (index + 1)%kTargetHistorySize;
+        elements[index].time_stamp = time_stamp;
+        index = (index + 1) % kTargetHistorySize;
         /*for(int i=0; i<kTargetHistorySize; ++i){
             DebugDrawWireSphere(elements[i].position, 0.1f, vec3(1.0f), _delete_on_update);
         }*/
     }
-    vec3 GetPos(float delay){
-        int temp_index = index;
+    vec3 GetPos(float time_stamp){
+        int prev_index, next_index;
+        float t;
+        GetInterp(time_stamp, prev_index, next_index, t);
+        vec3 pos = mix(elements[prev_index].position, elements[next_index].position, t);// + elements[temp_index].velocity * elements[temp_index].time_elapsed;
+        return pos;
+    }
+    vec3 GetVel(float time_stamp){
+        int prev_index, next_index;
+        float t;
+        GetInterp(time_stamp, prev_index, next_index, t);
+        vec3 vel = mix(elements[prev_index].velocity, elements[next_index].velocity, t);// + elements[temp_index].velocity * elements[temp_index].time_elapsed;
+        return vel;
+    }
+    private void GetInterp(float time_stamp, int &out prev_index, int &out next_index, float &out t){
+        prev_index = index;
         for(int i=0; i<kTargetHistorySize; ++i){
-            temp_index = (temp_index + kTargetHistorySize - 1)%kTargetHistorySize;
-            if(elements[temp_index].time_elapsed > delay){
+            next_index = prev_index;
+            prev_index = (prev_index + kTargetHistorySize - 1)%kTargetHistorySize;
+            if(elements[prev_index].time_stamp < time_stamp){
                 break;
             }
         }
-        vec3 pos = elements[temp_index].position + elements[temp_index].velocity * elements[temp_index].time_elapsed;
-        //DebugDrawWireSphere(pos, 0.1f, vec3(1.0f,0.0f,0.0f), _fade);
-        return pos;
+        t = 0.0f;
+        float prev_time = elements[prev_index].time_stamp;
+        float next_time = elements[next_index].time_stamp;
+        if(next_time - prev_time != 0.0f){
+            t = (time_stamp - prev_time)/(next_time - prev_time);
+        }
+        t = max(t, 0.0f);
     }
 }
 
 TargetHistory target_history;
-vec3 last_seen_target_position;
-vec3 last_seen_target_velocity;
 
 void Startle() {
     startled = true;
@@ -191,21 +216,22 @@ void Startle() {
 }
 
 void Notice(int character_id){
-    situation.Notice(character_id);
     MovementObject@ char = ReadCharacterID(character_id);
     if(!this_mo.OnSameTeam(char) && (goal != _attack || chase_target_id == -1)){
-        chase_target_id = character_id;
-        last_seen_target_position = ReadCharacterID(character_id).position;
-        last_seen_target_velocity = ReadCharacterID(character_id).velocity;
+        SetChaseTarget(character_id);
         switch(goal){
             case _patrol:
-                Startle();
-                this_mo.PlaySoundGroupVoice("engage",0.0f);
+                if(!situation.KnowsAbout(character_id)){
+                    Startle();
+                    this_mo.PlaySoundGroupVoice("engage",0.0f);
+                }
                 SetGoal(_attack);
                 break;
             case _investigate:
-                Startle();
-                this_mo.PlaySoundGroupVoice("engage",0.0f);
+                if(!situation.KnowsAbout(character_id)){
+                    Startle();
+                    this_mo.PlaySoundGroupVoice("engage",0.0f);
+                }
                 SetGoal(_attack);
                 break;
             case _escort:
@@ -213,6 +239,7 @@ void Notice(int character_id){
                 break;
         }
     }
+    situation.Notice(character_id);
 }
 
 void NotifySound(int created_by_id, vec3 pos) {
@@ -332,6 +359,7 @@ void MindReceiveMessage(string msg){
         string second_token = token_iter.GetToken(msg);
         if(second_token == "true"){
             combat_allowed = true;
+            SetGoal(_attack);
         } else if(second_token == "false"){
             combat_allowed = false;
         }
@@ -339,9 +367,8 @@ void MindReceiveMessage(string msg){
         Print("Received notice message\n");
         token_iter.FindNextToken(msg);
         int id = atoi(token_iter.GetToken(msg));
-        Notice(id);
-    } else if(token == "notice"){
-        Print("Received notice message\n");
+        situation.Notice(id);
+    } else if(token == "collided"){
         token_iter.FindNextToken(msg);
         int id = atoi(token_iter.GetToken(msg));
         Notice(id);
@@ -442,13 +469,11 @@ void DisplayGoals() {
     DebugText(label, text,0.1f);
 }
 
-void UpdateTargetDecision() {
+int GetClosestKnownThreat() {
     int closest_enemy = -1;
     float closest_dist = 0.0f;
     for(uint i=0; i<situation.known_chars.size(); ++i){
         if(!situation.known_chars[i].friendly && situation.known_chars[i].knocked_out == _awake){
-            //MovementObject@ char = ReadCharacterID(situation.known_chars[i].id);
-            //DebugDrawLine(this_mo.position, situation.known_chars[i].last_known_position, vec3(1.0f, 0.0f ,0.0f), _fade);
             MovementObject@ char = ReadCharacterID(situation.known_chars[i].id);
             float dist = distance_squared(situation.known_chars[i].last_known_position, this_mo.position);
             if(closest_enemy == -1 || dist < closest_dist){
@@ -457,9 +482,7 @@ void UpdateTargetDecision() {
             }
         }
     }
-    if(closest_enemy != -1){
-        chase_target_id = closest_enemy;
-    }
+    return closest_enemy;
 }
 
 void CheckForNearbyWeapons() {
@@ -502,17 +525,18 @@ void CheckForNearbyWeapons() {
     }
 }
 
-void UpdateBrain(const Timestep &in ts){
+float next_vision_check_time;
+
+void UpdateBrain(const Timestep &in ts){    
     if(knocked_out != _awake){
         return;
     }
-    UpdateTargetDecision();
     awake_time += ts.step();
     const bool display_goals = false;
     if(display_goals){
         DisplayGoals();
     }
-    if(GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
+    if(DebugKeysEnabled() && GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
         if(hostile_switchable){
             SetHostile(!hostile);
         }
@@ -522,7 +546,6 @@ void UpdateBrain(const Timestep &in ts){
     }
 
     if(startled){
-        ai_attacking = false;
         startle_time -= ts.step();
         if(startle_time <= 0.0f){
             startled = false;
@@ -530,88 +553,96 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-    if(GetInputDown(this_mo.controller_id, "b")){
-        SetGoal(_investigate);
-        SetSubGoal(_investigate_around);
-        investigate_target_id = -1;
-        investigate_points.resize(0);
-    }
-
     move_delay = max(0.0f, move_delay - ts.step());
     repulsor_delay = max(0.0f, repulsor_delay - ts.step());
 
     // Update vision
     if(hostile && awake_time > AWAKE_NOTICE_THRESHOLD){
-        bool print_visible_chars = false;
-        if(print_visible_chars) {
-            array<int> characters;
-            GetVisibleCharacters(0, characters);
-            for(int i=0, len=characters.size(); i<len; ++i){
-                string desc;
-                MovementObject@ char = ReadCharacterID(characters[i]);
-                if(char.GetIntVar("knocked_out") == _awake){
-                    desc += "awake";
-                } else {
-                    desc += "unconscious";
+        if(time > next_vision_check_time){
+            next_vision_check_time = time + RangedRandomFloat(0.2f,0.3f);
+            bool print_visible_chars = false;
+            if(print_visible_chars) {
+                array<int> characters;
+                GetVisibleCharacters(0, characters);
+                for(int i=0, len=characters.size(); i<len; ++i){
+                    string desc;
+                    MovementObject@ char = ReadCharacterID(characters[i]);
+                    if(char.GetIntVar("knocked_out") == _awake){
+                        desc += "awake";
+                    } else {
+                        desc += "unconscious";
+                    }
+                    desc += " ";
+                    if(this_mo.OnSameTeam(char)){
+                        desc += "ally";
+                    } else {
+                        desc += "enemy";
+                    }
+                    DebugText(this_mo.getID()+"visible_character"+i, this_mo.getID()+" sees character "+characters[i]+" ("+desc+")", 0.5f);
                 }
-                desc += " ";
-                if(this_mo.OnSameTeam(char)){
-                    desc += "ally";
-                } else {
-                    desc += "enemy";
-                }
-                DebugText(this_mo.getID()+"visible_character"+i, this_mo.getID()+" sees character "+characters[i]+" ("+desc+")", 0.5f);
             }
-        }
 
-        array<int> visible_characters;
-        GetVisibleCharacters(0, visible_characters);
-        for(int i=0, len=visible_characters.size(); i<len; ++i){
-            int id = visible_characters[i];
-            MovementObject@ char = ReadCharacterID(id);
-            if(this_mo.OnSameTeam(char)){
-                if(char.GetIntVar("knocked_out") != _awake && goal == _patrol){
-                    // Check if we already know that this character is unconscious 
-                    bool already_known = false;
-                    int known_id = situation.KnownID(id);
-                    if(known_id != -1 && situation.known_chars[known_id].knocked_out != _awake){
-                        already_known = true;
-                    }        
-                    if(!already_known){
-                        // Investigate body of ally                
-                        Startle();
-                        this_mo.PlaySoundGroupVoice("suspicious",0.0f);
-                        random_look_delay = 1.0f;
-                        random_look_dir = char.position - this_mo.position;
-                        SetGoal(_investigate);
-                        SetSubGoal(_investigate_urgent);
-                        investigate_target_id = id;
+            array<int> visible_characters;
+            GetVisibleCharacters(0, visible_characters);
+            for(int i=0, len=visible_characters.size(); i<len; ++i){
+                int id = visible_characters[i];
+                MovementObject@ char = ReadCharacterID(id);
+                if(id == chase_target_id){    
+                    target_history.Update(char.position, char.velocity, time);
+                }
+                if(this_mo.OnSameTeam(char)){
+                    if(char.GetIntVar("knocked_out") != _awake && goal == _patrol){
+                        // Check if we already know that this character is unconscious 
+                        bool already_known = false;
+                        int known_id = situation.KnownID(id);
+                        if(known_id != -1 && situation.known_chars[known_id].knocked_out != _awake){
+                            already_known = true;
+                        }        
+                        if(!already_known){
+                            // Investigate body of ally                
+                            Startle();
+                            this_mo.PlaySoundGroupVoice("suspicious",0.0f);
+                            random_look_delay = 1.0f;
+                            random_look_dir = char.position - this_mo.position;
+                            SetGoal(_investigate);
+                            SetSubGoal(_investigate_urgent);
+                            investigate_target_id = id;
+                        }
+                    }
+                    Notice(id);
+                } else {
+                    if(char.GetIntVar("knocked_out") == _awake){
+                        enemy_seen += 1.0f / (distance_squared(this_mo.position, char.position) + 1.0f) * 30.0f;
                     }
                 }
-                Notice(id);
-            } else {
-                if(char.GetIntVar("knocked_out") == _awake){
-                    enemy_seen += 1.0f / (distance_squared(this_mo.position, char.position) + 1.0f) * 10.0f;
+                if(situation.KnownID(id) != -1){
+                    situation.Notice(id);
                 }
             }
-            int known_id = situation.KnownID(id);;
-            if(known_id != -1){
-                situation.known_chars[known_id].knocked_out = char.GetIntVar("knocked_out");
-                situation.known_chars[known_id].last_known_position = char.position;
-            }            
-        }
-
-        // Notice enemy if alerted above threshold
-        if(enemy_seen >= 1.0f){
-            array<int> enemies;
-            GetMatchingCharactersInArray(visible_characters, enemies, _TC_ENEMY | _TC_CONSCIOUS);
-            int closest_id = GetClosestCharacterInArray(this_mo.position, enemies, 0.0f);
-            if(closest_id != -1){
-                Notice(closest_id);
+            // Notice enemy if alerted above threshold
+            if(enemy_seen >= 1.0f){
+                array<int> enemies;
+                GetMatchingCharactersInArray(visible_characters, enemies, _TC_ENEMY | _TC_CONSCIOUS);
+                int closest_id = GetClosestCharacterInArray(this_mo.position, enemies, 0.0f);
+                if(closest_id != -1){
+                    Notice(closest_id);
+                }
+            } else 
+            if(enemy_seen > 0.1f){
+                array<int> enemies;
+                GetMatchingCharactersInArray(visible_characters, enemies, _TC_ENEMY | _TC_CONSCIOUS);
+                int closest_id = GetClosestCharacterInArray(this_mo.position, enemies, 0.0f);
+                if(closest_id != -1){
+                    MovementObject@ target = ReadCharacterID(closest_id);
+                    nav_target = this_mo.position + normalize(target.position-this_mo.position)*3.0f;
+                    SetGoal(_investigate);
+                    SetSubGoal(_investigate_slow);
+                    investigate_target_id = -1;
+                }
             }
         }
     } else {
-        chase_target_id = -1;
+        SetChaseTarget(-1);
         force_look_target_id = -1;
     }
 
@@ -713,12 +744,13 @@ void UpdateBrain(const Timestep &in ts){
         }
         break;}
     case _attack:{
-        if(!hostile){
+        SetChaseTarget(GetClosestKnownThreat());
+        if(!hostile || chase_target_id == -1){
             SetGoal(_patrol);
             break;
         }
         MovementObject@ target = ReadCharacterID(chase_target_id);
-                
+
         if(notice_target_aggression_id != chase_target_id){
             notice_target_aggression_delay = 0.0f;
         }
@@ -728,10 +760,6 @@ void UpdateBrain(const Timestep &in ts){
             notice_target_aggression_delay += ts.step();
         } else {
             notice_target_aggression_delay = 0.0f;   
-        }
-                
-        if(target.GetIntVar("knocked_out") != _awake){
-            SetGoal(_patrol);
         }
                 
         AISubGoal target_goal = _unknown;
@@ -843,18 +871,12 @@ void UpdateBrain(const Timestep &in ts){
         }
 
         // Assume target is moving in a straight line at slowly-decreasing velocity
-        last_seen_target_position += last_seen_target_velocity * ts.step();
-        last_seen_target_velocity *= pow(0.995f, ts.frames());
+        //last_seen_target_position += last_seen_target_velocity * ts.step();
+        //last_seen_target_velocity *= pow(0.995f, ts.frames());
 
         // If ray check is successful, update knowledge of target position and velocity
         vec3 real_target_pos = ReadCharacterID(chase_target_id).position;
         vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
-        if(ReadCharacterID(chase_target_id).VisibilityCheck(head_pos)){
-            last_seen_target_position = real_target_pos;
-            last_seen_target_velocity = ReadCharacterID(chase_target_id).velocity;
-        }
-    
-        target_history.Update(last_seen_target_position, last_seen_target_velocity, ts);
         CheckForNearbyWeapons();
         break;}
     case _get_help: {
@@ -909,9 +931,11 @@ void UpdateBrain(const Timestep &in ts){
     //MouseControlPathTest();
     //HandleDebugRayDraw();
 
-    situation.Update();
     if(hostile){
         force_look_target_id = situation.GetForceLookTarget();
+        if(goal == _attack && chase_target_id != -1){
+            force_look_target_id = chase_target_id;
+        }
     }
 }
 
@@ -1021,7 +1045,11 @@ bool WantsToJump() {
 }
 
 bool WantsToAttack() { 
-    return ai_attacking;
+    if(ai_attacking && !startled){
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool WantsToRollFromRagdoll(){
@@ -1511,8 +1539,6 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     dist = max(0.0, dist-seek_dist);
     target_velocity = normalize(target_vel_direct) * dist + target_vel_indirect;
 
-
-
     vec3 repulsor_force = GetRepulsorForce();
     if(length_squared(repulsor_force) > 0.0f){
         vec3 raycast_point = NavRaycast(this_mo.position, this_mo.position + repulsor_force);
@@ -1543,11 +1569,29 @@ vec3 GetDodgeDirection() {
 
 vec3 GetAttackMovement() {
     if(combat_allowed){
-        return GetMovementToPoint(target_history.GetPos(0.3), max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
+        float target_react_time = 0.2f; // How slow AI is to react to changes
+        vec3 target_react_pos = target_history.GetPos(time-target_react_time);
+        vec3 target_react_vel = target_history.GetVel(time-target_react_time);
+        float predict_dist = distance(target_react_pos, this_mo.position);
+        float estimated_run_speed = run_speed * 0.8f;
+        float predict_time = (predict_dist / estimated_run_speed); // How long it will take to reach target
+        // Update predicted time to take into account velocity
+        vec3 nav_target_react_pos = NavPoint(target_react_pos);
+        vec3 target_point = target_react_pos;
+        //DebugText("LastSeen", "Last seen time: T - "+ (situation.known_chars[situation.KnownID(chase_target_id)].last_seen_time-time), 0.5f);
+        if(situation.known_chars[situation.KnownID(chase_target_id)].last_seen_time > time - 1.0f){
+            if(nav_target_react_pos != vec3(0.0f)){
+                target_point = NavRaycast(nav_target_react_pos, nav_target_react_pos + target_react_vel * predict_time);
+                predict_dist = distance(target_point, this_mo.position);
+                predict_time = (predict_dist / estimated_run_speed);
+                predict_time += target_react_time;
+                predict_time = min(predict_time, 8.0f); // Cap prediction at 8 seconds to avoid weirdness when out of sight
+                vec3 predict_point = nav_target_react_pos + target_react_vel * predict_time;
+                target_point = NavRaycast(nav_target_react_pos, predict_point);
+            }
+        }
+        return GetMovementToPoint(target_point, max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
     } else {
-        /*if(distance_squared(this_mo.position, target_history.GetPos(0.3)) < 16.0f){
-            return GetMovementToPoint(target_history.GetPos(0.3), 1.0f, 5.0f, strafe_vel);
-        }*/
         return vec3(0.0f);
     }
     //CheckJumpTarget(last_seen_target_position);
@@ -1762,4 +1806,12 @@ void CheckJumpTarget(vec3 target) {
         has_jump_target = true;
         jump_target_vel = jump_vel;
     } 
+}
+
+int IsThreatToCharacter(int char_id){
+    if(chase_target_id == char_id && goal == _attack){
+        return 1;
+    } else {
+        return 0;
+    }
 }
