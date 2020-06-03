@@ -556,7 +556,7 @@ void EndAnim(){
 }
 
 void RecoverHealth() {      
-    knocked_out = _awake;
+    SetKnockedOut(_awake);
     knocked_out_time = 0.0f;
     blood_health = 1.0f;
     block_health = 1.0f;
@@ -586,7 +586,7 @@ void CutThroat() {
         cut_throat = true;
         blood_amount = _max_blood_amount;
         last_blood_particle_id = 0;
-        knocked_out = _dead;
+        SetKnockedOut(_dead);
         Ragdoll(_RGDL_INJURED);
         
         mat4 head_transform = this_mo.GetAvgIKChainTransform("head");
@@ -1446,7 +1446,7 @@ void RegenerateHealth() {
         blood_damage -= damage;
         blood_health -= damage;
         if(blood_health <= 0.0f && knocked_out == _awake){
-            knocked_out = _unconscious;
+            SetKnockedOut(_unconscious);
             Ragdoll(_RGDL_LIMP);
         }
     }
@@ -2160,7 +2160,12 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
         block_health = 0.0f;
     }
         
-    block_health -= attack_getter2.GetBlockDamage() * p_damage_multiplier * attack_damage_mult;
+    float block_damage = attack_getter2.GetBlockDamage() * p_damage_multiplier * attack_damage_mult;
+    if(this_mo.controlled){
+        AchievementEventFloat("player_block_damage", block_damage);
+    }
+    
+    block_health -= block_damage;
     block_health = max(0.0f, block_health);
 
     float sharp_damage = attack_getter2.GetSharpDamage();
@@ -2240,8 +2245,8 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             DropWeapon();
         }
     }
-
     active_dodge_recharge = 0.0f;
+    
     return _hit;
 }
 
@@ -2362,17 +2367,35 @@ void EndHitReaction() {
 
 int lives;
 
+void AchievementEvent(string event_str){
+    level.Execute("AchievementEvent(\""+event_str+"\")");
+}
+
+void AchievementEventFloat(string event_str, float val){
+    level.Execute("AchievementEventFloat(\""+event_str+"\", "+val+")");
+}
+
+void SetKnockedOut(int val) {
+    knocked_out = val;
+    if(val == _dead && !this_mo.controlled){
+        AchievementEvent("enemy_died");
+    }
+}
+
 void TakeDamage(float how_much){
+    if(this_mo.controlled){
+        AchievementEventFloat("player_damage", how_much);
+    }
     const float _permananent_damage_mult = 0.4f;
     how_much *= p_damage_multiplier;
     temp_health -= how_much;
     permanent_health -= how_much * _permananent_damage_mult;
     if(permanent_health <= 0.0f && knocked_out != _dead){
-        knocked_out = _dead;
+        SetKnockedOut(_dead);
         this_mo.StopVoice();
     }
     if(temp_health <= 0.0f && knocked_out == _awake){
-        knocked_out = _unconscious;
+        SetKnockedOut(_unconscious);
         --lives;
         if(lives > 0){
             RecoverHealth();
@@ -2391,10 +2414,13 @@ void TakeDamage(float how_much){
 }
 
 void TakeBloodDamage(float how_much){
+    if(this_mo.controlled){
+        AchievementEventFloat("player_blood_loss", how_much);
+    }
     how_much *= p_damage_multiplier;
     blood_health -= how_much;
     if(blood_health <= 0.0f && knocked_out == _awake){
-        knocked_out = _unconscious;
+        SetKnockedOut(_unconscious);
     }
 }
 
@@ -2698,6 +2724,9 @@ void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos
 
 void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) {
     if(event == "golimp"){
+        if(this_mo.controlled){
+            AchievementEvent("player_was_hit");
+        }
         //if(attack_getter2.IsThrow() == 1){
         //    TakeDamage(attack_getter2.GetDamage());
         //}
@@ -3031,6 +3060,9 @@ void UpdateGroundAttackControls() {
         sneak_throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_UNAWARE);
     }
     if(throw_id != -1){
+        if(this_mo.controlled){
+            AchievementEvent("player_counter_attacked");
+        }
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = 1;
@@ -3041,6 +3073,9 @@ void UpdateGroundAttackControls() {
         abs(this_mo.position.y - ReadCharacterID(sneak_throw_id).position.y) < 
         _max_tether_height_diff)
     {
+        if(this_mo.controlled){
+            AchievementEvent("player_sneak_attacked");
+        }
         SetState(_attack_state);
         attack_animation_set = false;
         attacking_with_throw = 2;
@@ -3059,6 +3094,9 @@ void UpdateGroundAttackControls() {
         char.MaterialEvent("choke_grab", char.position);
         //PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
     } else if(attack_id != -1){
+        if(this_mo.controlled){
+            AchievementEvent("player_attacked");
+        }
         LoadAppropriateAttack(false);
         if(attack_getter.GetAsLayer() == 1){
             if(mirrored_stance && state == _movement_state){
@@ -3084,6 +3122,9 @@ void UpdateGroundAttackControls() {
                 this_mo.PlaySoundGroupVoice("attack",0.0f);
             }
         } else {
+            if(this_mo.controlled){
+                AchievementEvent("player_attacked");
+            }
             SetState(_attack_state);
             attack_animation_set = false;
         }

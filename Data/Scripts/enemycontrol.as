@@ -8,7 +8,6 @@ float startle_time;
 bool has_jump_target = false;
 vec3 jump_target_vel;
 
-
 bool hostile = true;
 bool listening = true;
 bool ai_attacking = false;
@@ -208,6 +207,7 @@ void UpdateBrain(){
         startle_time -= time_step * num_frames;
         if(startle_time <= 0.0f){
             startled = false;
+            AchievementEvent("enemy_alerted");
         }
         return;
     }
