@@ -4465,7 +4465,6 @@ void DecalCheck(){
             }*/
             //this_mo.MaterialDecalAtBone("step","left_leg");
             this_mo.MaterialParticleAtBone("skid","left_leg");
-            //MakeSplatParticle(curr_left_decal_pos);
             left_decal_pos = curr_left_decal_pos;
             left_smear_time = 0.0f;
         }
@@ -4480,7 +4479,6 @@ void DecalCheck(){
             right_decal_pos = curr_right_decal_pos;
             //this_mo.MaterialDecalAtBone("step","right_leg");
             this_mo.MaterialParticleAtBone("skid","right_leg");
-            //MakeSplatParticle(curr_right_decal_pos);
             right_smear_time = 0.0f;
         }
     }

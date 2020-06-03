@@ -217,6 +217,7 @@ class JumpInfo {
                     this_mo.velocity.y += time_step * _jump_fuel_burn * num_frames;
                 }
             } else {
+                jetpack_fuel = 0.0f; // Don't allow releasing jump and then pressing it again
                 // the character is pushed downwards to allow for smaller, controlled jumps
                 if(down_jetpack_fuel > 0.0){
                     down_jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;

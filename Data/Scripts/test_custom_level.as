@@ -21,14 +21,36 @@ Object@ SpawnObjectAtSpawnPoint(Object@ spawn, string &in path){
     return new_obj;
 }
 
+void SetSpawnPointPreview(Object@ spawn, string &in path){
+    PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(spawn);
+    placeholder_object.SetPreview(path);
+}
+
+void SetPreviews() {
+    array<int> @object_ids = GetObjectIDs();
+    int num_objects = object_ids.length();
+    for(int i=0; i<num_objects; ++i){
+        Object @obj = ReadObjectFromID(object_ids[i]);
+        ScriptParams@ params = obj.GetScriptParams();
+        if(params.HasParam("Name")){
+            string name_str = params.GetString("Name");
+            if("player_spawn" == name_str){
+                SetSpawnPointPreview(obj,"Data/Objects/IGF_Characters/IGF_Turner.xml");
+            }
+            if("enemy_spawn" == name_str){
+                SetSpawnPointPreview(obj,"Data/Objects/IGF_Characters/IGF_Guard.xml");
+            }
+        }
+    }
+}
+
 void Update() {
+    SetPreviews();
     if(GetInputPressed(0, "t")){
-        Print("Pressed T\n");
         DeleteObjectsInList(spawned_object_ids);
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
         for(int i=0; i<num_objects; ++i){
-            Print("Reading object " + object_ids[i] + "\n");
             Object @obj = ReadObjectFromID(object_ids[i]);
             ScriptParams@ params = obj.GetScriptParams();
             if(params.HasParam("Name")){
