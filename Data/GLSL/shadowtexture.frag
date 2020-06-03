@@ -27,5 +27,5 @@ void main()
 	
 	//color = -ProjShadow.z*0.004;
 	
-	gl_FragColor = vec4(color,1.0);
+	gl_FragColor = vec4(color,1.0) * gl_Color;
 }

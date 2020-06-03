@@ -16,14 +16,16 @@ void main()
 	
 	float NdotL = max(0.0,dot(light_pos, normal_vec));
 
-	NdotL = NdotL * texture2D(tex2,gl_TexCoord[0].xy).x;
+	vec3 shadow_tex = texture2D(tex2,gl_TexCoord[0].xy).rgb;
+
+	NdotL = NdotL * shadow_tex.r;
 	
 	vec3 color = vec3(NdotL);
 	
 	// Add ambient lighting to baked texture
 	vec3 diffuse_map_vec = normal_vec;
 	diffuse_map_vec.y *= -1.0;
-	color += textureCube(tex4,diffuse_map_vec).xyz * (1.0-NdotL);
+	color += textureCube(tex4,diffuse_map_vec).xyz * min(1.0,max(shadow_tex.g * 1.5, 0.5));
 
 	// Combine diffuse color with baked texture
 	color *= texture2D(tex,gl_TexCoord[0].xy).xyz;
@@ -41,6 +43,10 @@ void main()
 	if(gl_TexCoord[0].y>1.0-border_fade_size) {
 		alpha *= (1.0-gl_TexCoord[0].y)/border_fade_size;
 	}
+	
+	color *= (1.0-NdotL*0.2);
+	
+	//color = shadow_tex.g;
 	
 	gl_FragColor = vec4(color,alpha);
 }
