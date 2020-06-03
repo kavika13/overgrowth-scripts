@@ -90,6 +90,21 @@ void AddHaze( inout vec3 color,
 float Exposure() {
 	return gl_LightSource[0].ambient.a;
 }
+/*
+float GetAnis(vec3 ws_vertex, vec3 ws_light, vec3 ws_normal){
+	vec3 V = normalize(ws_vertex*-1.0);
+	vec3 L = normalize(ws_light);
+	vec3 N = normalize(ws_normal);
+	//vec3 thread = normalize(cross(vec3(0,1,0),L));
+	vec3 thread = vec3(0,1,0);
+	vec3 T = normalize(thread-dot(thread,N)*N);
+	vec3 H = normalize(V + L);
+	N = normalize(H - dot(T,H)*T);
+	float spec_val = min(1.0, pow(max(0.0,dot(N,H)),100.0)*1.0);
+	spec_val *= dot(N,ws_normal);
+	spec_val *= max(0.0,min(1.0,dot(ws_normal,L)*10.0));
+	return spec_val;
+}*/
 
 float GammaCorrectFloat(in float val) {
 #ifdef GAMMA_CORRECT
