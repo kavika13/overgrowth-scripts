@@ -6,6 +6,7 @@ JumpInfo jump_info;
 LedgeInfo ledge_info;
 
 bool left_handed = true;
+bool dialogue_control = false;
 
 enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking, _jumped, _can_climb,
              _grabbed_ledge, _climbed_up};
@@ -848,6 +849,19 @@ string TetheredStr(int val){
 void Update(int num_frames) {
     Timestep ts(time_step, num_frames);
 
+    if(dialogue_control){
+        return;
+    }
+
+    bool test_talking = false;
+    // Test of talking animation
+    if(test_talking){
+        this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f)*0.5f+0.5f,0.3f);
+        this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f)+sin(time*13.0f))*0.25f+0.5f,0.7f);
+        this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f)*0.5f+0.5f,0.3f);
+        this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f)*0.5f+0.5f,0.3f);
+    }
+    
     bool display_player_state = false;
     if(this_mo.controlled && display_player_state){
         DebugText("player_state","State: "+StateStr(state),0.5f);
@@ -976,7 +990,6 @@ void Update(int num_frames) {
         }
     }
 }
-
 
 void JumpTest(const vec3&in initial_pos, 
               const vec3&in initial_vel,
@@ -1250,13 +1263,17 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
-            /*int8 flags = _ANM_FROM_START;
+            int8 flags = _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
-            this_mo.SetAnimation("Data/Animations/w_combatidlewild.anm",20.0f,flags);
+            flags = flags | _ANM_MOBILE;
+            //mirrored_stance = !mirrored_stance;
+            this_mo.SetAnimation("Data/Animations/r_hitspinright.anm",20.0f,flags);
+            this_mo.rigged_object().anim_client().SetAnimatedItemID(0, weapon_slots[primary_weapon_slot]);
             in_animation = true;
-            this_mo.rigged_object().anim_client().SetAnimationCallback("void EndAnim()");*/
+            //throw_anim = true;
+            this_mo.rigged_object().anim_client().SetAnimationCallback("void EndAnim()");
             //this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
             //this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
             /*if(sheathed_weapon == -1 && held_weapon != -1) {
@@ -1275,8 +1292,8 @@ void HandleSpecialKeyPresses() {
             }
             in_animation = true;
             this_mo.rigged_object().anim_client().SetAnimationCallback("void EndAnim()");*/
-            
-            SwapWeaponHands();
+            //
+            //SwapWeaponHands();
             
             //CheckPossibleAttacks();
         }
@@ -1726,8 +1743,6 @@ vec3 GetTargetHeadDir(const Timestep &in ts) {
     return target_head_dir;
 }
 
-
-
 void UpdateHeadLook(const Timestep &in ts) {
     vec3 target_head_dir = GetTargetHeadDir(ts);
     const bool _draw_gaze_line = false;
@@ -1868,9 +1883,13 @@ void UpdateActiveBlockAndDodge(const Timestep &in ts) {
     UpdateActiveBlockMechanics(ts);
     UpdateActiveDodgeMechanics(ts);
     if(active_blocking){
-        if(active_block_flinch_layer == -1 && state != _hit_reaction_state){
+        if(active_block_flinch_layer == -1 && state != _hit_reaction_state) {            
+            int8 flags = 0;
+            if(mirrored_stance){
+                flags |= _ANM_MIRRORED;
+            }
             active_block_flinch_layer = 
-                this_mo.rigged_object().anim_client().AddLayer(character_getter.GetAnimPath("blockflinch"),10.0f,0);
+                this_mo.rigged_object().anim_client().AddLayer(character_getter.GetAnimPath("blockflinch"),10.0f,flags);
         }
     } else {
         if(active_block_flinch_layer != -1){
@@ -2653,7 +2672,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             blockable_weapon_attack = true;
         }
     }
-
+    
     // Apply damage to passive block health 
     float block_damage = attack_getter2.GetBlockDamage() * p_damage_multiplier * attack_damage_mult;
     Print("block_damage: "+block_damage+"\n");
@@ -2671,17 +2690,20 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
 
     // Check if passive block is possible
     bool can_passive_block = true;
-    if((startled && !this_mo.controlled) ||
-       block_health <= 0.0f || 
-       flip_info.IsFlipping() || 
-       (state == _attack_state && (!blockable_weapon_attack || !has_blocking_weapon)) || 
-       !on_ground || 
-       blood_health <= 0.0f || 
-       state == _ragdoll_state ||
+    bool can_animate_passive_block = true;
+    bool can_gameplay_passive_block = true;
+    if(flip_info.IsFlipping() || !on_ground || block_health <= 0.0f || blood_health <= 0.0f || state == _ragdoll_state){
+       can_animate_passive_block = false;
+    }
+    if((startled && !this_mo.controlled) || 
+       (state == _attack_state && (!blockable_weapon_attack || !has_blocking_weapon)) ||
        dot(dir, this_mo.GetFacing()) > 0.0f ||
        (sharp_damage > 0.0f && (!blockable_weapon_attack || !has_blocking_weapon)))
     {
-       can_passive_block = false;
+       can_gameplay_passive_block = false;
+    }
+    if(!can_animate_passive_block || !can_gameplay_passive_block){
+        can_passive_block = false;    
     }
 
     if(sharp_damage == 0.0f){
@@ -2692,14 +2714,31 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     bool knocked_over = false;
     
     if(!can_passive_block){
+        if(enemy_primary_weapon_id != -1){
+            ItemObject@ weap = ReadItemID(enemy_primary_weapon_id);
+            if(weap.GetLabel() == "spear"){
+                if(can_animate_passive_block){
+                    HandlePassiveBlockImpact(dir, pos);
+                }
+            }
+        }
         if(sharp_damage > 0.0f){     
             level.SendMessage("cut "+this_mo.getID()+" "+attacker_id);   
             TakeSharpDamage(sharp_damage * attack_damage_mult, pos, attacker_id, true);
         }
-		if(sharp_damage == 0.0f || knocked_out != _awake){
-            float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f) * attack_knockback_mult;
+		if(sharp_damage == 0.0f || knocked_out != _awake || block_health <= 0){
+            float force = attack_getter2.GetForce()*(1.0f-max(0.0f,temp_health*0.5f)) * attack_knockback_mult;
             float damage = attack_getter2.GetDamage() * attack_damage_mult;
-            HandleRagdollImpact(dir, pos, damage, force);
+            if(enemy_primary_weapon_id != -1){
+                ItemObject@ weap = ReadItemID(enemy_primary_weapon_id);
+                int num_lines = weap.GetNumLines();
+                mat4 trans = weap.GetPhysicsTransform();
+                vec3 start = trans * weap.GetLineStart(0);
+                vec3 end = trans * weap.GetLineEnd(num_lines-1);
+                HandleRagdollImpactLine(dir, pos, damage, force, normalize(end-start));
+            } else {
+                HandleRagdollImpact(dir, pos, damage, force);
+            }
             knocked_over = true;
             if(!this_mo.controlled){
                 this_mo.PlaySoundGroupVoice("hit",0.0f);
@@ -2793,6 +2832,20 @@ void HandleRagdollImpactImpulse(const vec3&in impulse, const vec3&in pos, float 
     temp_health = max(0.0f, temp_health);
 }
 
+void HandleRagdollImpactImpulseLine(const vec3&in impulse, const vec3&in pos, float damage, const vec3 &in line_dir){
+    GoLimp();
+    ragdoll_limp_stun = 0.9f;
+    this_mo.rigged_object().ApplyForceLineToRagdoll(impulse, pos, line_dir);
+    block_health = 0.0f;
+    PossibleHeadBleed(damage);
+    TakeDamage(damage);
+    if(startled && knocked_out == _awake){
+        PossibleHeadBleed(damage);
+        TakeDamage(damage);
+    }
+    temp_health = max(0.0f, temp_health);
+}
+
 vec3 GetAdjustedAttackDir(const vec3&in dir) {
     vec3 impact_dir = attack_getter2.GetImpactDir();
     vec3 right;
@@ -2809,9 +2862,20 @@ void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, flo
     HandleRagdollImpactImpulse(GetAdjustedAttackDir(dir) * force, pos, damage);
 }
 
-void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
+void HandleRagdollImpactLine(const vec3&in dir, const vec3&in pos, float damage, float force, const vec3 &in line_dir){
+    HandleRagdollImpactImpulseLine(GetAdjustedAttackDir(dir) * force, pos, damage, line_dir);
+}
+
+void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){    
+    string reaction_path = attack_getter2.GetReactionPath();
     
-    reaction_getter.Load(attack_getter2.GetReactionPath());
+    int weapon_id = weapon_slots[primary_weapon_slot];
+    string weap_label = "";
+    if(weapon_id != -1){
+        ItemObject@ io = ReadItemID(weapon_id);
+        weap_label = io.GetLabel();
+    }
+    reaction_getter.Load(reaction_path);
     SetState(_hit_reaction_state);
 
     hit_reaction_event = "attackimpact";
@@ -2910,6 +2974,53 @@ void ReceiveMessage(string msg){
     string token = token_iter.GetToken(msg);
     if(token == "restore_health"){
         RecoverHealth();
+    } else if(token == "set_dialogue_control"){ // params: bool enabled
+        token_iter.FindNextToken(msg);
+        string token = token_iter.GetToken(msg);
+        if(token == "true"){
+            dialogue_control = true;
+            this_mo.velocity = vec3(0.0f, 0.0f, 0.0f);
+        } else if(token == "false"){
+            dialogue_control = false;
+        }
+    } else if(token == "set_head_target"){ // params: vec3 pos, float control
+        // Get params
+        vec3 pos;        
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.x = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.y = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.z = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        float control = atof(token);
+        // Apply head look
+        vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
+        vec3 dir = normalize(pos - ik_pos);
+        this_mo.rigged_object().SetIKTargetOffset("head",dir * control);
+    } else if(token == "set_torso_target"){ // params: vec3 pos, float control
+        // Get params
+        vec3 pos;        
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.x = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.y = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        pos.z = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        float control = atof(token);
+        // Apply head look
+        vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("torso");
+        vec3 dir = normalize(pos - ik_pos);
+        this_mo.rigged_object().SetIKTargetOffset("torso",dir * control);
     } else {
         MindReceiveMessage(msg); // Pass message to mind if it doesn't match body messages
     }
@@ -4628,6 +4739,7 @@ void UpdateHitReaction(const Timestep &in ts) {
         }
         this_mo.rigged_object().anim_client().SetAnimationCallback("void EndHitReaction()");
         hit_reaction_anim_set = true;
+        this_mo.rigged_object().anim_client().SetAnimatedItemID(0, weapon_slots[primary_weapon_slot]);
     }
     this_mo.velocity *= pow(0.95f,ts.frames());
     if(this_mo.rigged_object().GetStatusKeyValue("cancel")>=1.0f && WantsToCancelAnimation() && hit_reaction_time > 0.1f){
@@ -4895,6 +5007,7 @@ void UpdatePrimaryWeapon(){
         range_extender = item_obj.GetRangeExtender();
         range_multiplier = item_obj.GetRangeMultiplier();
     }
+    this_mo.UpdateWeapons();
 }
 
 void UpdateItemFistGrip(){
@@ -4965,21 +5078,29 @@ vec3 CalcLaunchVel(vec3 start, vec3 end, float mass, vec3 vel, vec3 targ_vel, fl
 void ThrowWeapon() {
     if(weapon_slots[primary_weapon_slot] != -1){
         int target = target_id;
-        if(target != -1){
+        //if(target != -1){
             int weapon_id = weapon_slots[primary_weapon_slot];
             this_mo.DetachItem(weapon_id);
             weapon_slots[primary_weapon_slot] = -1;
-            MovementObject@ char = ReadCharacterID(target);
             ItemObject@ io = ReadItemID(weapon_id);
             float time;
             // Apply velocity needed for item to reach target
             vec3 start = io.GetPhysicsPosition();
-            vec3 end = char.rigged_object().GetAvgIKChainPos("torso");
+            vec3 end = this_mo.position + this_mo.GetFacing() * 100.0f;
+            vec3 target_vel;
+            if(target_id != -1){
+                MovementObject@ char = ReadCharacterID(target);
+                end = char.rigged_object().GetAvgIKChainPos("torso");
+                target_vel = char.velocity;
+            }
             float effective_mass = io.GetMass();
             if(io.GetLabel() == "big_sword" && throw_anim){
                 effective_mass *= 0.25f;
             }
-            vec3 launch_vel = CalcLaunchVel(start, end, effective_mass, this_mo.velocity, char.velocity, time);
+            if(io.GetLabel() == "spear" && throw_anim){
+                effective_mass *= 0.25f;
+            }
+            vec3 launch_vel = CalcLaunchVel(start, end, effective_mass, this_mo.velocity, target_vel, time);
             io.SetLinearVelocity(launch_vel);
             // Determine angular velocity to end up hitting point-first
             vec3 ang_vel = io.GetAngularVelocity();
@@ -4988,12 +5109,14 @@ void ThrowWeapon() {
             ang_vel = ang_vel - twist_ang_vel;
             float num_turns = floor(time * 2.0f / io.GetMass()) + 0.25f;
             io.SetThrown();
-            if(throw_anim){
+            if(io.GetLabel() == "big_sword" && throw_anim){
                 vec3 flat_dir = dir;
                 flat_dir.y = 0.0f;
                 flat_dir = normalize(flat_dir);
                 vec3 perp_dir(-flat_dir.z, 0.0f, flat_dir.x);
                 io.SetAngularVelocity(perp_dir * -10.0f);
+            } else if(io.GetLabel() == "spear" && throw_anim){
+                io.SetThrownStraight();
             } else {
                 io.SetAngularVelocity((normalize(ang_vel)* 6.28318f * num_turns)/time + twist_ang_vel);
             }
@@ -5001,7 +5124,7 @@ void ThrowWeapon() {
             //this_mo.velocity -= launch_vel * io.GetMass() * 0.05f;
             UpdatePrimaryWeapon();
             UpdateItemFistGrip();
-        }
+        //}
     }
 }
 
@@ -5142,7 +5265,8 @@ void HandleThrow() {
                 flags |= _ANM_MIRRORED;   
             }
             int primary_weapon_id = weapon_slots[primary_weapon_slot];
-            if(on_ground && !flip_info.IsFlipping() && primary_weapon_id != -1 && ReadItemID(primary_weapon_id).GetLabel() == "big_sword"){
+            string label = ReadItemID(primary_weapon_id).GetLabel();
+            if(on_ground && !flip_info.IsFlipping() && primary_weapon_id != -1 && (label == "big_sword" || label == "spear")){
                 SetState(_attack_state);
                 can_feint = false;
                 feinting = false;
@@ -5152,7 +5276,11 @@ void HandleThrow() {
                 }
                 //this_mo.velocity = vec3(0.0f);
                 mirrored_stance = !mirrored_stance;
-                this_mo.SetAnimation("Data/Animations/r_dogswordthrow.anm", 10.0f, flags);
+                if(label == "big_sword"){
+                    this_mo.SetAnimation("Data/Animations/r_dogswordthrow.anm", 10.0f, flags);
+                } else if(label == "spear"){
+                    this_mo.SetAnimation("Data/Animations/r_spearthrow.anm", 10.0f, flags);
+                }
                 this_mo.rigged_object().anim_client().SetAnimationCallback("void EndAttack()");
                 this_mo.rigged_object().anim_client().SetAnimatedItemID(0, weapon_slots[primary_weapon_slot]);
                 attack_animation_set = true;
@@ -5283,6 +5411,9 @@ array<int> GetPlayerCharacterIDs() {
 void ApplyCameraControls(const Timestep &in ts) {
     if(!level.HasFocus()){
         SetGrabMouse(true);
+    }
+    if(level.QueryIntFunction("int HasCameraControl()") == 1){
+        return;
     }
 
     // Get array of players
