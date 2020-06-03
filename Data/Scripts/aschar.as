@@ -45,6 +45,11 @@ void Collided(float impulse){
     }
 }
 
+float block_stunned = 0.0f;
+int IsBlockStunned() {
+    return (block_stunned > 0.0f)?1:0;
+}
+
 void MouseControlJumpTest() {
     vec3 start = camera.GetPos();
     vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
@@ -330,6 +335,20 @@ void EndAnim(){
     in_animation = false;
 }
 
+void Recover() {      
+    knocked_out = _awake;
+    blood_health = 1.0f;
+    block_health = 1.0f;
+    temp_health = 1.0f;
+    permanent_health = 1.0f;
+    recovery_time = 0.0f;
+    cut_throat = false;
+    cut_torso = false;
+    this_mo.CleanBlood();
+    ClearTemporaryDecals();
+    blood_amount = _max_blood_amount;
+}
+
 void HandleSpecialKeyPresses() {
     if(GetInputDown("z") && !GetInputDown("ctrl")){
         GoLimp();
@@ -368,18 +387,8 @@ void HandleSpecialKeyPresses() {
     if(GetInputDown("m")){        
         Ragdoll(_RGDL_LIMP);
     }
-    if(GetInputDown("x")){        
-        knocked_out = _awake;
-        blood_health = 1.0f;
-        block_health = 1.0f;
-        temp_health = 1.0f;
-        permanent_health = 1.0f;
-        recovery_time = 0.0f;
-        cut_throat = false;
-        cut_torso = false;
-        this_mo.CleanBlood();
-        ClearTemporaryDecals();
-        blood_amount = _max_blood_amount;
+    if(GetInputDown("x")){      
+        Recover();
     }
 
     if(controlled){
@@ -461,6 +470,8 @@ void UpdateState() {
     UpdateActiveBlock();
     RegenerateHealth();
 
+    trying_to_get_weapon = max(0,trying_to_get_weapon-1);
+
      if(state == _ragdoll_state){ // This is not part of the else chain because
         UpdateRagDoll();         // the character may wake up and need other
         HandlePickUp();          // state updates
@@ -526,15 +537,16 @@ void UpdateHeadLook() {
     bool look_at_target = false;
     vec3 target_dir;
     if(target_id != -1){
-        vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
+        vec3 target_pos = this_mo.ReadCharacterID(target_id).GetAvgIKChainPos("head");
         if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
             look_at_target = true;
-            target_dir = normalize(target_pos - this_mo.position);
+            target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
         }
     }
     if(controlled){
         if(!look_at_target){
             target_head_dir = camera.GetFacing();
+            target_head_dir.y *= 0.5f;
         } else {
             target_head_dir = target_dir;
         }
@@ -544,6 +556,12 @@ void UpdateHeadLook() {
         } else {
             target_head_dir = target_dir;
         }
+    }
+
+    const bool _draw_gaze_line = false;
+    if(_draw_gaze_line){
+        vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+        DebugDrawLine(head_pos, head_pos + target_head_dir, vec3(1.0f), _delete_on_update);
     }
 
     head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
@@ -636,6 +654,7 @@ void UpdateBlink() {
 bool active_blocking = false;
 
 void UpdateActiveBlock() {
+    block_stunned = max(0.0f, block_stunned - time_step * num_frames);
     if(controlled){
         UpdateActiveBlockMechanics();
     } else {
@@ -927,6 +946,7 @@ void WasBlocked() {
     if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
         mirrored_stance = !mirrored_stance;
     }
+    block_stunned = 0.4f;
 }
 
 const int _miss = 0;
@@ -1511,7 +1531,9 @@ void UpdateGroundAttackControls() {
         /*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
             TimedSlowMotion(0.2f,0.4f, 0.15f);
         }*/
-    } else if(WantsToThrowEnemy() && distance(this_mo.position,this_mo.ReadCharacterID(target_id).position) <= _attack_range + range_extender){
+    } else if(WantsToThrowEnemy() && 
+              distance(this_mo.position,this_mo.ReadCharacterID(target_id).position) <= _attack_range + range_extender &&
+              this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsBlockStunned()") == 1){
         SetState(_attack_state);
         //Print("Starting attack\n");
         attack_animation_set = false;
@@ -1639,10 +1661,10 @@ int ThreatsPossible() {
     int num = this_mo.GetNumCharacters();
     int num_threats = 0;
     for(int i=0; i<num; ++i){
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(this_mo.position == target_pos){
+        if(this_mo.WhichCharacterAmI() == i){
             continue;
         }
+        vec3 target_pos = this_mo.ReadCharacter(i).position;
         if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
         {
             ++num_threats;
@@ -1655,10 +1677,10 @@ int ThreatsRemaining() {
     int num = this_mo.GetNumCharacters();
     int num_threats = 0;
     for(int i=0; i<num; ++i){
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(this_mo.position == target_pos){
+        if(this_mo.WhichCharacterAmI() == i){
             continue;
         }
+        vec3 target_pos = this_mo.ReadCharacter(i).position;
         if(this_mo.ReadCharacter(i).IsKnockedOut() == _awake &&
            character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
         {
@@ -1674,10 +1696,10 @@ void TargetClosest(){
     float closest_dist = 0.0f;
 
     for(int i=0; i<num; ++i){
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(this_mo.position == target_pos){
+        if(this_mo.WhichCharacterAmI() == i){
             continue;
         }
+        vec3 target_pos = this_mo.ReadCharacter(i).position;
         if(this_mo.ReadCharacter(i).IsKnockedOut() != _awake){
             continue;
         }
@@ -2606,8 +2628,21 @@ void HandleCollisionsBetweenCharacters() {
     }
 }
 
+void DropWeapon() {
+    if(holding_weapon){
+        this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
+        this_mo.DetachItem(this_mo.weapon_id);
+        item_object_getter.ActivatePhysics();
+        holding_weapon = false;
+        range_extender = 0.0f;
+    }
+}
+
+int trying_to_get_weapon = 0;
+vec3 get_weapon_dir;
+
 void HandlePickUp() {
-    if(WantsToPickUpItem()){
+    if(WantsToPickUpItem() && knocked_out == _awake){
         int num_items = this_mo.GetNumItems();
         
         if(!holding_weapon){
@@ -2626,6 +2661,22 @@ void HandlePickUp() {
                 }
             }
         }
+        if(!holding_weapon){
+            for(int i=0; i<num_items; i++){
+                this_mo.ReadItem(i);
+                vec3 pos = item_object_getter.GetPhysicsPosition();
+                if(distance_squared(this_mo.position, pos)<4.0f){ 
+                    vec3 flat_dir = pos-this_mo.position;
+                    flat_dir.y = 0.0f;
+                    if(length_squared(flat_dir) > 1.0f){
+                        flat_dir = normalize(flat_dir);
+                    }
+                    target_duck_amount = max(target_duck_amount,1.0f-length_squared(flat_dir));
+                    get_weapon_dir = flat_dir;
+                    trying_to_get_weapon = 2;
+                }
+            }
+        }
         if(holding_weapon){
             this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
             /*this_mo.ReadItem(weapon_id);
@@ -2641,14 +2692,9 @@ void HandlePickUp() {
                 transform.GetTranslationPart() + transform_rot * vec3(0.03f,0.15f,0.09f));
             item_object_getter.SetPhysicsTransform(new_transform);*/
         }
-    } else {
-        if(holding_weapon){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-            this_mo.DetachItem(this_mo.weapon_id);
-            item_object_getter.ActivatePhysics();
-            holding_weapon = false;
-            range_extender = 0.0f;
-        }
+    }
+    if(WantsToDropItem() || knocked_out != _awake){
+        DropWeapon();
     }
 }
 
@@ -2921,11 +2967,13 @@ void ApplyCameraCones(vec3 cam_pos){
 }
 
 void SwitchCharacter(string path){
+    DropWeapon();
     this_mo.char_path = path;
     character_getter.Load(this_mo.char_path);
     this_mo.RecreateRiggedObject(this_mo.char_path);
     this_mo.StartCharAnimation("idle");
     SetState(_movement_state);
+    Recover();
 }
 
 void init(string character_path) {

@@ -138,13 +138,11 @@ void Update() {
             co.position += co.velocity * time_step;
 
             
-            vec3 start = co.position;
+            /*vec3 start = co.position;
             vec3 end = co.position + camera.GetMouseRay()*50.0f;
-            //col.GetSweptSphereCollision(start, end, 0.005f);
-            //end = sphere_col.position;
             col.CheckRayCollisionCharacters(start, end);
             DebugDrawWireSphere(sphere_col.position, 0.05f, vec3(1.0f), _delete_on_update);
-            
+            */
              
             if(GetInputDown("mouse0") && !co.ignore_mouse_input){
                 target_rotation -= GetLookXAxis();

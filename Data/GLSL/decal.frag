@@ -10,6 +10,7 @@ uniform vec3 cam_pos;
 uniform mat3 test;
 uniform vec3 ws_light;
 uniform float extra_ao;
+uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 varying vec3 tangent;
@@ -54,7 +55,7 @@ void main()
                       GetAmbientContrib(shadow_tex.g);
 
         // Put it all together
-        vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(normalmap.a);
+        vec3 color = diffuse_color * colormap.xyz * color_tint + spec_color * GammaCorrectFloat(normalmap.a);
         
         color *= BalanceAmbient(NdotL);
         

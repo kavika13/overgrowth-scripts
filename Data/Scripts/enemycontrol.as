@@ -80,6 +80,11 @@ bool WantsToPickUpItem() {
     return false;
 }
 
+bool WantsToDropItem() {
+    return false;
+}
+
+
 bool WantsToThrowEnemy() {
     return ai_attacking && (rand()%3 == 0);
 }

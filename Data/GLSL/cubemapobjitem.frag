@@ -1,3 +1,7 @@
+#ifdef GL_ARB_sample_shading_available
+#extension GL_ARB_sample_shading: enable
+#endif
+
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
@@ -26,11 +30,19 @@ float rand(vec2 co){
 
 void main()
 {            
+#ifndef GL_ARB_sample_shading_available
     if(stipple_val != 1 &&
        (int(mod(gl_FragCoord.x + float(x_stipple_offset),float(stipple_val))) != 0 ||
         int(mod(gl_FragCoord.y + float(y_stipple_offset),float(stipple_val))) != 0)){
         discard;
     }
+#else
+    if(stipple_val != 1 &&
+       (int(mod(gl_FragCoord.x + mod(float(gl_SampleID), float(stipple_val)) + float(x_stipple_offset),float(stipple_val))) != 0 ||
+        int(mod(gl_FragCoord.y + float(gl_SampleID) / float(stipple_val) + float(y_stipple_offset),float(stipple_val))) != 0)){
+        discard;
+    }
+#endif
     if((rand(gl_FragCoord.xy)) < fade){
         discard;
     };

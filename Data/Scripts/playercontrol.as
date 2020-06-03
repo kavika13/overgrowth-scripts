@@ -58,7 +58,12 @@ bool WantsToThrowEnemy() {
 
 bool WantsToPickUpItem() {
     if(!controlled) return false;
-    return GetInputDown("grab");
+    return GetInputDown("item");
+}
+
+bool WantsToDropItem() {
+    if(!controlled) return false;
+    return GetInputDown("drop");
 }
 
 bool WantsToStartActiveBlock(){
@@ -121,6 +126,10 @@ vec3 GetTargetVelocity() {
         target_velocity = normalize(target_velocity);
     }
     
+    if(trying_to_get_weapon > 0){
+        target_velocity = get_weapon_dir;
+    }
+
     return target_velocity;
 }
 

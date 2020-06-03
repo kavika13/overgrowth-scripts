@@ -6,6 +6,7 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform mat3 test;
 uniform vec3 ws_light;
+uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 varying vec3 tangent;
