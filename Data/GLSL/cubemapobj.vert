@@ -30,7 +30,7 @@ void main()
 
 	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
   
-	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;;
+	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;
 	
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
