@@ -15,7 +15,7 @@ varying vec3 rel_pos;
  
 void main()
 {	
-	vec4 terrain_color = texture2D(tex5,gl_TexCoord[0].xy + vec2(0.0,0.002));
+	vec4 terrain_color = texture2D(tex5,gl_TexCoord[0].xy);// + vec2(0.0,0.002));
 	vec3 diffuse_color = terrain_color.xyz;
 	
 	//vec4 terrain_color = texture2D(tex5,gl_TexCoord[0].xy);

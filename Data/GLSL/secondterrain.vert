@@ -1,3 +1,4 @@
+uniform vec3 light_pos;
 uniform sampler2D tex;
 uniform samplerCube tex4;
 uniform sampler2D tex5;
