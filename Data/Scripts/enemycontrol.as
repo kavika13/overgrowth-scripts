@@ -121,7 +121,9 @@ void SetGoal(AIGoal _goal){
     goal = _goal;
 }
 
-enum MsgType {_escort_me = 0};
+float move_delay = 0.0f;
+
+enum MsgType {_escort_me = 0, _excuse_me = 1};
 
 void ReceiveMessage(int source_id, int _msg_type){
     MsgType type = MsgType(_msg_type);
@@ -129,11 +131,18 @@ void ReceiveMessage(int source_id, int _msg_type){
     if(type == _escort_me){
         Print("Escort me!");
     }
+    if(type == _excuse_me){
+        Print("Excuse me!");
+    }
     Print("\"\n");
     
     if(type == _escort_me && goal == _patrol){
         SetGoal(_escort);
         escort_id = source_id;
+    }
+    if(type == _excuse_me && (goal == _patrol || goal == _investigate)){
+        Print("\"Ok, I'll wait a second before continuing my goal.\"\n");
+        move_delay = 1.0f;
     }
 }
 
@@ -214,12 +223,11 @@ void UpdateBrain(){
                 GetPath(nav_target);
                 if(path.NumPoints() > 0){
                     vec3 path_end = path.GetPoint(path.NumPoints()-1);
-                    //DebugDrawWireSphere(path_end, 1.0f, vec3(1.0f,0.0f,0.0f), _delete_on_update);
-                    //DebugDrawWireSphere(nav_target, 1.0f, vec3(0.0f,1.0f,0.0f), _delete_on_update);
-                    //Print("Dist: "+distance_squared(this_mo.position, path_end)+"\n");
                     if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
                         SetGoal(_patrol);
                     }      
+                } else {
+                    SetGoal(_patrol);
                 }
             }
             break;
@@ -496,6 +504,9 @@ vec3 GetPatrolMovement(){
             waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
         }
     }
+    if(move_delay > 0.0f){
+        target_point = this_mo.position;
+    }
     target_velocity = GetMovementToPoint(target_point, 0.0f);
     float target_speed = 0.2f;
     if(length_squared(target_velocity) > target_speed){
@@ -597,6 +608,7 @@ vec3 struggle_dir;
 
 int last_seen_sphere = -1;
 vec3 GetBaseTargetVelocity() {
+    move_delay = max(0.0f, move_delay - time_step * num_frames);
     if(startled){
         return vec3(0.0f);
     } else if(goal == _patrol){
@@ -613,7 +625,11 @@ vec3 GetBaseTargetVelocity() {
     } else if(goal == _navigate){
         return GetMovementToPoint(nav_target, 1.0f); 
     } else if(goal == _investigate){
-        return GetMovementToPoint(nav_target, 0.0f) * 0.2f; 
+        if(move_delay <= 0.0f){
+            return GetMovementToPoint(nav_target, 0.0f) * 0.2f;
+        } else {
+            return GetMovementToPoint(this_mo.position, 0.0f) * 0.2f;
+        }
     } else if(goal == _struggle){
         if(struggle_change_time <= 0.0f){
             struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 
@@ -631,7 +647,7 @@ vec3 GetBaseTargetVelocity() {
 
 vec3 GetRepulsorForce(){
     array<int> nearby_characters;
-    const float _avoid_range = 2.0f;
+    const float _avoid_range = 1.5f;
     GetCharactersInSphere(this_mo.position, _avoid_range, nearby_characters);
 
     vec3 repulsor_total;
@@ -648,7 +664,11 @@ vec3 GetRepulsorForce(){
         if(dist == 0.0f || dist > _avoid_range){
             continue;
         }
-        repulsor_total += (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
+        vec3 repulsion = (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
+        if(length_squared(repulsion) > 0.0f && move_delay <= 0.0f){
+            char.ReceiveMessage(this_mo.getID(), int(_excuse_me));
+        }
+        repulsor_total += repulsion;
     }
 
     return repulsor_total;

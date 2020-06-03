@@ -9,6 +9,7 @@ uniform float plant_shake;
 VARYING_TAN_TO_WORLD
 VARYING_REL_POS
 VARYING_SHADOW
+//varying float wind_color;
 
 void main()
 {    
@@ -19,6 +20,7 @@ void main()
     vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Color.r, time, plant_shake);
     transformed_vertex.xyz += obj2worldmat3 * vertex_offset;
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
+    //wind_color = gl_Color.r;
 
     CALC_REL_POS
     CALC_TEX_COORDS
