@@ -16,6 +16,11 @@ bool left_foot_jump = false;
 bool to_jump_with_left = false;
 
 class JumpInfo {
+    array<vec3> jump_path;
+    float jump_path_progress;
+    bool follow_jump_path;
+    vec3 jump_start_vel;
+
     float jetpack_fuel; // the amount of fuel available for acceleration
     float jump_launch; // used for the initial jump stretch pose
 
@@ -185,17 +190,19 @@ class JumpInfo {
     }
 
     void UpdateAirControls() {
-        if(WantsToAccelerateJump()){
-            // if there's fuel left and character is not moving down, height can still be increased
-            if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
-                jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
-                this_mo.velocity.y += time_step * _jump_fuel_burn * num_frames;
-            }
-        } else {
-            // the character is pushed downwards to allow for smaller, controlled jumps
-            if(down_jetpack_fuel > 0.0){
-                down_jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
-                this_mo.velocity.y -= time_step * _jump_fuel_burn * num_frames;
+        if(!follow_jump_path){
+            if(WantsToAccelerateJump()){
+                // if there's fuel left and character is not moving down, height can still be increased
+                if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
+                    jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
+                    this_mo.velocity.y += time_step * _jump_fuel_burn * num_frames;
+                }
+            } else {
+                // the character is pushed downwards to allow for smaller, controlled jumps
+                if(down_jetpack_fuel > 0.0){
+                    down_jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
+                    this_mo.velocity.y -= time_step * _jump_fuel_burn * num_frames;
+                }
             }
         }
 
@@ -225,8 +232,10 @@ class JumpInfo {
         if(ledge_info.on_ledge){
             ledge_info.UpdateLedge(hit_wall);
         } else {
-            vec3 target_velocity = GetTargetVelocity();
-            this_mo.velocity += time_step * target_velocity * _air_control * num_frames;
+            if(!follow_jump_path){
+                vec3 target_velocity = GetTargetVelocity();
+                this_mo.velocity += time_step * target_velocity * _air_control * num_frames;
+            }
         }
 
         jump_launch -= _jump_launch_decay * time_step * num_frames;
@@ -255,13 +264,20 @@ class JumpInfo {
         tilt = this_mo.velocity * 5.0f;
     }
 
-    void StartJump(vec3 target_velocity) {
+    void StartJump(vec3 target_velocity, bool follow_path) {
         this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
         this_mo.position = sphere_col.adjusted_position;
+        follow_jump_path = follow_path;
         
         StartFall();
 
-        vec3 jump_vel = GetJumpVelocity(target_velocity);
+        vec3 jump_vel;
+        if(follow_path){
+            jump_vel = target_velocity;
+            target_velocity = vec3(target_velocity.x, 0.0f, target_velocity.z);
+        } else {
+            jump_vel = GetJumpVelocity(target_velocity);
+        }
         this_mo.velocity = jump_vel;
         jetpack_fuel = _jump_fuel;
         jump_launch = 1.0f;

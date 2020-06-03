@@ -14,7 +14,7 @@ const float _camera_inertia = 0.8f;
 const float _acceleration = 20.0f;
 const float _base_speed = 5.0f;
 
-void update() {
+void Update() {
     if(!co.controlled){
         return;
     }

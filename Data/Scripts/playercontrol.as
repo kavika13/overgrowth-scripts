@@ -2,15 +2,12 @@
 
 float throw_key_time;
 
-void ControlUpdate(){
+void UpdateBrain(){
     if(GetInputDown("grab")){
         throw_key_time += time_step * num_frames;
     } else {
         throw_key_time = 0.0f;
     }
-}
-
-void AIUpdate(){
 }
 
 void ActiveBlocked(){

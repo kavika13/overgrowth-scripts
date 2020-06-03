@@ -1,21 +1,895 @@
 #include "interpdirection.as"
 
-bool limp = false; // true if ragdoll is enabled
+bool controlled = false; //True if controlled by a human player
+int num_frames; //How many timesteps passed since the last update
 
-float air_time = 0.0f;
+vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz, float max_vert, float arc){
+    vec3 rel_vec = end - start;
+    vec3 rel_vec_flat = vec3(rel_vec.x, 0.0f, rel_vec.z);
+    vec3 flat = vec3(xz_distance(start, end), rel_vec.y, 0.0f);
+    float min_x_time = flat.x / max_horz;
+    float grav = physics.gravity_vector.y;
+    if(2*grav*flat.y+max_vert*max_vert <= 0.0f){
+        return vec3(0.0f);
+    }
+    float max_y_time = (sqrt(2*grav*flat.y+max_vert*max_vert) + max_vert)/-grav;
+    if(min_x_time > max_y_time){
+        return vec3(0.0f);
+    }
+    float time = mix(min_x_time, max_y_time, arc);
+    vec3 flat_vel(flat.x / time,
+                  flat.y / time - physics.gravity_vector.y * time * 0.5f,
+                  0.0f);
+    //Print("Flat vel: "+flat_vel.x+" "+flat_vel.y+"\n");
+    vec3 vel = flat_vel.x * normalize(rel_vec_flat) + vec3(0.0f, flat_vel.y, 0.0f);
+    //Print("Vel: "+vel.x+" "+vel.y+" "+vel.z+"\n");
+    return vel;
+}
+    
+void MouseControlJumpTest() {
+    vec3 start = camera.GetPos();
+    vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
+    this_mo.GetSweptSphereCollision(start, end, _leg_sphere_size);
+    DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+    vec3 rel_dist = sphere_col.position - this_mo.position;
+    vec3 flat_rd = vec3(rel_dist.x, 0.0f, rel_dist.z);
+    vec3 jump_target = sphere_col.position;
+    this_mo.SetRotationFromFacing(flat_rd);
+    vec3 start_vel = GetVelocityForTarget(this_mo.position, sphere_col.position, _run_speed*1.5f, _jump_vel*1.7f, 0.55f);
+    if(start_vel.y != 0.0f){
+        bool low_success = false;
+        bool med_success = false;
+        bool high_success = false;
+        const float _success_threshold = 0.1f;
+        vec3 end;
+        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 0.15f);
+        jump_info.jump_start_vel = low_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+            DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                vec3(1.0f,0.0f,0.0f), 
+                _delete_on_update);
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                low_success = true;
+            }
+        } 
+        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 0.55f);
+        jump_info.jump_start_vel = med_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+            DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                vec3(0.0f,0.0f,1.0f), 
+                _delete_on_update);
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                med_success = true;
+            }
+        } 
+        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 1.0f);
+        jump_info.jump_start_vel = high_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+            DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                vec3(0.0f,1.0f,0.0f), 
+                _delete_on_update);
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                high_success = true;
+            }
+        }
+        jump_info.jump_path.resize(0);
 
-// Pre-jump happens after jump key is pressed and before the character gets upwards velocity. The time available for the jump animation that happens on the ground. 
-bool pre_jump = false;
-float pre_jump_time;
-const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
+        if(low_success){
+            start_vel = low_vel;
+        } else if(med_success){
+            start_vel = med_vel;
+        } else if(high_success){
+            start_vel = high_vel;
+        } else {
+            start_vel = vec3(0.0f);
+        }
+
+        if(GetInputPressed("mouse0") && start_vel.y != 0.0f){
+            jump_info.StartJump(start_vel, true);
+            SetOnGround(false);
+        }
+    }
+}
+
+void Update(bool _controlled, int _num_frames) {
+    controlled = _controlled;
+    num_frames = _num_frames;
+    time += time_step;
+
+    if(!controlled && on_ground){
+        //MouseControlJumpTest();
+    }
+
+
+    HandleSpecialKeyPresses();
+
+    UpdateBrain(); //in playercontrol.as or enemycontrol.as
+    UpdateState();
+
+    if(controlled){
+        UpdateAirWhooshSound();
+        ApplyCameraControls();
+    }
+}
+;
+
+void JumpTest(const vec3&in initial_pos, 
+              const vec3&in initial_vel,
+              array<vec3>&inout jump_path) 
+{
+    const float _jump_test_steps = 40.0f;
+    jump_path.resize(0);
+    vec3 start = initial_pos;
+    vec3 end = start;
+    vec3 fake_vel = initial_vel;
+    for(int i=0; i< 400; ++i){
+        for(int j=0; j<_jump_test_steps / num_frames; ++j){
+            fake_vel += physics.gravity_vector * time_step * num_frames;
+            fake_vel = CheckTerminalVelocity(fake_vel);
+            end += fake_vel * time_step * num_frames;
+        }
+        jump_path.push_back(start);
+        this_mo.GetSweptSphereCollision(start,
+                                     end,
+                                     _leg_sphere_size);
+        start = end;
+        if(sphere_col.NumContacts() > 0){
+            jump_path.push_back(sphere_col.position);
+            break;
+        }
+    }
+}
+
+void JumpTestEq(const vec3&in initial_pos, 
+                const vec3&in initial_vel,
+                array<vec3>&inout jump_path) 
+{
+    const float _jump_test_steps = 20.0f;
+    jump_path.resize(0);
+    vec3 start = initial_pos;
+    vec3 end = start;
+    vec3 flat_vel = vec3(
+        sqrt(initial_vel.x*initial_vel.x + initial_vel.z+initial_vel.z),
+        initial_vel.y,
+        0.0f);
+    vec3 flat_dir = vec3(initial_vel.x, 0.0f, initial_vel.z);
+    float time = 0.0f;
+    float height;
+    for(int i=0; i< 400; ++i){
+        time += time_step * num_frames * _jump_test_steps;
+        height = flat_vel.y * time + 0.5f * physics.gravity_vector.y * time * time;
+        end = initial_pos + flat_dir * time;
+        end.y += height;
+        jump_path.push_back(start);
+        this_mo.GetSweptSphereCollision(start,
+                                     end,
+                                     _leg_sphere_size);
+        start = end;
+        if(sphere_col.NumContacts() > 0){
+            jump_path.push_back(sphere_col.position);
+            break;
+        }
+    }
+}
+
+void HandleSpecialKeyPresses() {
+    if(GetInputDown("z") && !GetInputDown("ctrl")){
+        GoLimp();
+    }
+    if(GetInputDown("n")){                
+        if(state != _ragdoll_state){
+            string sound = "Data/Sounds/hit/hit_hard.xml";
+            PlaySoundGroup(sound, this_mo.position);
+        }
+        Ragdoll(_RGDL_INJURED);
+    }
+    if(GetInputDown("m")){        
+        Ragdoll(_RGDL_LIMP);
+    }
+    if(GetInputDown("x")){        
+        knocked_out = _awake;
+        block_health = 1.0f;
+        temp_health = 1.0f;
+        permanent_health = 1.0f;
+        recovery_time = 0.0f;
+    }
+
+    if(controlled){
+        if(GetInputPressed("v")){
+            string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
+            this_mo.ForceSoundGroupVoice(sound, 0.0f);
+        }
+        if(GetInputPressed("1")){    
+            SwitchCharacter("Data/Characters/guard.xml");
+        }
+        if(GetInputPressed("2")){
+            SwitchCharacter("Data/Characters/guard2.xml");
+        }
+        if(GetInputPressed("3")){
+            SwitchCharacter("Data/Characters/turner.xml");
+        }
+        if(GetInputPressed("4")){
+            SwitchCharacter("Data/Characters/civ.xml");
+        }
+        if(GetInputPressed("5")){
+            SwitchCharacter("Data/Characters/wolf.xml");
+        }
+        if(GetInputPressed("6")){
+            SwitchCharacter("Data/Characters/rabbot.xml");
+        }
+        if(GetInputPressed("b")){
+            this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
+        }
+    }
+    if(GetInputPressed("p") && target_id != -1){
+        Print("Getting path");
+        NavPath temp = this_mo.GetPath(this_mo.position,
+                                        this_mo.ReadCharacterID(target_id).position);
+        int num_points = temp.NumPoints();
+        for(int i=0; i<num_points-1; i++){
+            DebugDrawLine(temp.GetPoint(i),
+                          temp.GetPoint(i+1),
+                          vec3(1.0f,1.0f,1.0f),
+                          _persistent);
+        }
+    }
+}
+
+vec3 CheckTerminalVelocity(const vec3&in velocity){
+    const float _terminal_velocity = 50.0f;
+    const float _terminal_velocity_sqrd = _terminal_velocity*_terminal_velocity;
+    if(length_squared(velocity) > _terminal_velocity_sqrd){
+        return velocity * pow(0.99f,num_frames);
+    } 
+    return velocity;
+}
+
+// States are used to differentiate between various widely different situations
+const int _movement_state = 0; // character is moving on the ground
+const int _ground_state = 1; // character has fallen down or is raising up, ATM ragdolls handle most of this
+const int _attack_state = 2; // character is performing an attack
+const int _hit_reaction_state = 3; // character was hit or dealt damage to and has to react to it in some manner
+const int _ragdoll_state = 4; // character is falling in ragdoll mode
+int state = _movement_state;
+
+void UpdateState() {
+    UpdateHeadLook();
+    UpdateBlink();
+    UpdateEyeLook();
+
+    UpdateActiveBlock();
+    RegenerateHealth();
+
+     if(state == _ragdoll_state){ // This is not part of the else chain because
+        UpdateRagDoll();         // the character may wake up and need other
+        HandlePickUp();          // state updates
+    } 
+    
+    if(state == _movement_state){
+        UpdateDuckAmount();
+        UpdateGroundAndAirTime();
+        HandleAccelTilt();
+        UpdateMovementControls();
+        UpdateAnimation();
+        ApplyPhysics();
+        HandlePickUp();
+        HandleGroundCollision();
+    } else if(state == _ground_state){
+        HandleAccelTilt();
+        UpdateGroundState();
+    } else if(state == _attack_state){
+        HandleAccelTilt();
+        UpdateAttacking();
+        HandleGroundCollision();
+    } else if(state == _hit_reaction_state){
+        UpdateHitReaction();
+        HandleAccelTilt();
+        HandleGroundCollision();
+    }
+
+    if(!controlled && state != _ragdoll_state){
+        HandleCollisionsBetweenCharacters();
+    }
+    this_mo.velocity = CheckTerminalVelocity(this_mo.velocity);   
+
+    UpdateTilt();
+    
+    if(on_ground && state == _movement_state){
+        DecalCheck();
+    }
+    left_smear_time += time_step * num_frames;
+    right_smear_time += time_step * num_frames;
+    smear_sound_time += time_step * num_frames;
+}
+
+vec3 target_tilt(0.0f);
+vec3 tilt(0.0f);
+
+void UpdateTilt() {
+    const float _tilt_inertia = 0.9f;
+    tilt = tilt * pow(_tilt_inertia,num_frames) +
+           target_tilt * (1.0f - pow(_tilt_inertia,num_frames));
+    this_mo.SetTilt(tilt);
+}
+
+vec3 head_dir;
+vec3 target_head_dir;
+
+void UpdateHeadLook() {
+    const float _target_look_threshold = 7.0f; // How close target must be to look at it
+    const float _target_look_threshold_sqrd = 
+        _target_look_threshold * _target_look_threshold;
+    const float _head_inertia = 0.8f;
+
+    bool look_at_target = false;
+    vec3 target_dir;
+    if(target_id != -1){
+        vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
+        if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
+            look_at_target = true;
+            target_dir = normalize(target_pos - this_mo.position);
+        }
+    }
+    if(controlled){
+        if(!look_at_target){
+            target_head_dir = camera.GetFacing();
+        } else {
+            target_head_dir = target_dir;
+        }
+    } else {
+        if(!look_at_target){
+            target_head_dir = this_mo.GetFacing();
+        } else {
+            target_head_dir = target_dir;
+        }
+    }
+
+    head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
+    this_mo.SetIKTargetOffset("head",head_dir);
+}
+
+vec3 eye_dir; // Direction eyes are looking
+vec3 target_eye_dir; // Direction eyes want to look
+float eye_delay = 0.0f; // How much time until the next eye dir adjustment
+
+void UpdateEyeLook(){
+    const float _eye_inertia = 0.85f;
+    const float _eye_min_delay = 0.5f; //Minimum time before changing eye direction
+    const float _eye_max_delay = 2.0f; //Maximum time before changing eye direction
+
+    if(eye_delay <= 0.0f){
+        eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
+        target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);        
+        target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);        
+        target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);    
+        normalize(target_eye_dir);
+    }
+    eye_delay -= time_step * num_frames;
+    eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
+
+    // Set weights for carnivore
+    this_mo.SetMorphTargetWeight("look_r",max(0.0f,eye_dir.x),1.0f);
+    this_mo.SetMorphTargetWeight("look_l",max(0.0f,-eye_dir.x),1.0f);
+    this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
+
+    // Set weights for herbivore
+    this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_f",max(0.0f,eye_dir.z),1.0f);
+    this_mo.SetMorphTargetWeight("look_b",max(0.0f,-eye_dir.z),1.0f);
+
+    // Set weights for independent-eye herbivore
+    this_mo.SetMorphTargetWeight("look_u_l",max(0.0f,eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_u_r",max(0.0f,eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_d_l",max(0.0f,-eye_dir.y),1.0f);
+    this_mo.SetMorphTargetWeight("look_d_r",max(0.0f,-eye_dir.y),1.0f);
+
+    float right_front = eye_dir.z;
+    float left_front = eye_dir.z;
+    this_mo.SetMorphTargetWeight("look_f_r",max(0.0f,right_front),1.0f);
+    this_mo.SetMorphTargetWeight("look_b_r",max(0.0f,-right_front),1.0f);
+    this_mo.SetMorphTargetWeight("look_f_l",max(0.0f,left_front),1.0f);
+    this_mo.SetMorphTargetWeight("look_b_l",max(0.0f,-left_front),1.0f);
+}
+
+bool blinking = false;  // Currently in the middle of blinking?
+float blink_progress = 0.0f; // Progress from 0.0 (pre-blink) to 1.0 (post-blink)
+float blink_delay = 0.0f; // Time until next blink
+float blink_amount = 0.0f; // How open eyes currently are
+void UpdateBlink() {
+    const float _blink_speed = 5.0f;
+    const float _blink_min_delay = 1.0f;
+    const float _blink_max_delay = 5.0f;
+
+    bool unconscious = (state != _ragdoll_state && ragdoll_type == _RGDL_LIMP);
+    if(!unconscious){
+        if(blink_delay < 0.0f){
+            blink_delay = RangedRandomFloat(_blink_min_delay,
+                                            _blink_max_delay);
+            blinking = true;
+            blink_progress = 0.0f;
+        }
+        if(blinking){
+            blink_progress += time_step * num_frames * 5.0f;
+            blink_amount = sin(blink_progress*3.14f);
+            if(blink_progress > 1.0f){
+                blink_amount = 0.0f;
+                blinking = false;
+            }
+        } else {
+            blink_amount = 0.0f;
+        }
+        blink_delay -= time_step * num_frames;
+    } else {
+        blink_amount = mix(blink_amount, 1.0f, 0.1f);
+    }
+    this_mo.SetMorphTargetWeight("wink_r",blink_amount,1.0f);
+    this_mo.SetMorphTargetWeight("wink_l",blink_amount,1.0f);
+}
+
+bool active_blocking = false;
+
+void UpdateActiveBlock() {
+    if(controlled){
+        UpdateActiveBlockMechanics();
+    } else {
+        active_blocking = (rand()%4)==0;
+    }
+}
+
+float active_block_duration = 0.0f; // How much longer can the active block last
+float active_block_recharge = 0.0f; // How long until the active block recharges
+
+void UpdateActiveBlockMechanics() {
+    if(WantsToStartActiveBlock()){
+        if(active_block_recharge <= 0.0f){
+            active_blocking = true;
+            active_block_duration = 0.2f;
+        }
+        active_block_recharge = 0.2f;
+    } 
+    if(active_blocking){
+        active_block_duration -= time_step * num_frames;
+        if(active_block_duration <= 0.0f){
+            active_blocking = false;
+        }
+    } else {
+        if(active_block_recharge > 0.0f){
+            active_block_recharge -= time_step * num_frames;
+        }
+    }
+}
+
+float block_health = 1.0f; // How strong is auto-block? Similar to ssb shield
+float temp_health = 1.0f; // Remaining regenerating health until knocked out
+float permanent_health = 1.0f; // Remaining non-regenerating health until killed
+
+const int _awake = 0;
+const int _unconscious = 1;
+const int _dead = 2;
+int knocked_out = _awake;
+
+void RegenerateHealth() {
+    const float _block_recover_speed = 0.3f;
+    const float _temp_health_recover_speed = 0.05f;
+    block_health += time_step * _block_recover_speed * num_frames;
+    block_health = min(temp_health, block_health);
+    temp_health += time_step * _temp_health_recover_speed * num_frames;
+    temp_health = min(permanent_health, temp_health);
+}
+
+float ragdoll_time; // How long spent in ragdoll mode this time
+bool frozen; // Dead or unconscious ragdoll no longer needs to be simulated
+bool no_freeze = false; // Freezing is disabled, e.g. for active ragdolls
+float injured_mouth_open; // How open mouth is during injured writhe
+
+void UpdateRagDoll() {
+    ragdoll_time += time_step * num_frames;
+    ragdoll_limp_stun -= time_step * num_frames;
+    ragdoll_limp_stun = max(0.0, ragdoll_limp_stun);
+
+    if(!frozen){
+        switch(ragdoll_type){
+            case _RGDL_FALL:
+                SetActiveRagdollFallPose();
+                break;
+            case _RGDL_INJURED:
+                SetActiveRagdollInjuredPose();
+                break;
+        }
+        
+        UpdateRagdollDamping();
+    }
+    
+    if(knocked_out == _awake){
+        HandleRagdollRecovery();
+    }
+    /*mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+    vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
+    Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
+    DebugDrawLine(this_mo.position,
+                  this_mo.position + torso_vec,
+                  vec3(1.0f),
+                  _delete_on_update);*/
+}
+
+float ragdoll_static_time; // How long ragdoll has been stationary
+
+void UpdateRagdollDamping() {
+    const float _ragdoll_static_threshold = 0.4f; // Velocity below which ragdoll is considered static
+
+    if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold){
+        ragdoll_static_time += time_step * num_frames;
+    } else {
+        ragdoll_static_time = 0.0f;
+    }
+    
+    if(!no_freeze){
+        const float damping_mult = 0.5f;
+        float damping = min(1.0f,ragdoll_static_time*damping_mult);
+        this_mo.SetRagdollDamping(damping);
+        if(damping >= 1.0f){
+            frozen = true;
+        }
+    } else {
+        this_mo.SetRagdollDamping(0.0f);
+    }
+}
+
+void SetActiveRagdollFallPose() {
+    const float danger_radius = 4.0f;
+    this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
+    vec3 danger_vec = this_mo.position - sphere_col.adjusted_position;
+    float penetration = length(danger_vec);
+    float penetration_ratio = penetration / danger_radius;
+    float protect_amount = min(1.0f,max(0.0f,penetration_ratio*4.0f-2.0));
+    this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount); // How much to try to curl up into a ball
+
+    mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+    vec3 torso_vec = torso_transform.GetColumn(1);
+    vec3 hazard_dir;
+    if(penetration != 0.0f){
+        hazard_dir = danger_vec / penetration;
+    }
+    float front_protect_amount = max(0.0f,dot(torso_vec, hazard_dir) * protect_amount);
+    this_mo.SetLayerOpacity(ragdoll_layer_catchfallfront, front_protect_amount); // How much to put arms out front to catch fall
+
+    float ragdoll_strength = length(this_mo.GetAvgVelocity())*0.1f;
+    ragdoll_strength = min(0.8f, ragdoll_strength);
+    ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+    this_mo.SetRagdollStrength(ragdoll_strength);
+}
+
+void SetActiveRagdollInjuredPose(){
+    const float time_until_death = 12.0f;
+    float speed = length(this_mo.GetAvgVelocity());
+    float ragdoll_strength = min(1.0f,max(0.2f,2.0f-speed*0.3f));
+    ragdoll_strength *= (time_until_death - ragdoll_time)*0.1f;
+    ragdoll_strength = min(0.9f, ragdoll_strength);
+    ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+    this_mo.SetRagdollStrength(ragdoll_strength);
+
+    injured_mouth_open = mix(injured_mouth_open, 
+                             sin(time*4.0f)*0.5f+sin(time*6.3f)*0.5f, 
+                             ragdoll_strength);
+    this_mo.SetMorphTargetWeight("mouth_open",injured_mouth_open,1.0f);
+
+    if(ragdoll_time > time_until_death){
+        ragdoll_type = _RGDL_LIMP;
+        no_freeze = false;
+        ragdoll_static_time = 0.0f;
+        this_mo.EnableSleep();
+        this_mo.SetRagdollStrength(0.0f);
+    }
+}
+
+float recovery_time;
+void HandleRagdollRecovery() {
+    recovery_time -= time_step * num_frames;
+    if(recovery_time <= 0.0f){
+        bool can_roll = CanRoll();
+        if(can_roll){
+            WakeUp(_wake_stand);
+        } else {
+            WakeUp(_wake_fall);
+        }
+    } else {
+        if(WantsToRollFromRagdoll()){
+            bool can_roll = CanRoll();
+            if(!can_roll){
+                WakeUp(_wake_flip);
+            } else {
+                WakeUp(_wake_roll);
+            }
+        }
+        return;
+    }
+}
+
+
+const int _RGDL_FALL = 0;
+const int _RGDL_LIMP = 1;
+const int _RGDL_INJURED = 2;
+
+int ragdoll_type;
+int ragdoll_layer_fetal;
+int ragdoll_layer_catchfallfront;
+float ragdoll_limp_stun;
+
+void Ragdoll(int type){
+    const float _ragdoll_recovery_time = 1.0f;
+    recovery_time = _ragdoll_recovery_time;
+    
+    if(state == _ragdoll_state){
+        return;
+    }
+    
+    this_mo.Ragdoll();
+    SetState(_ragdoll_state);
+    ragdoll_static_time = 0.0f;
+    ragdoll_time = 0.0f;
+    ragdoll_limp_stun = 0.0f;
+    frozen = false;
+    ragdoll_type = type;
+
+    switch(ragdoll_type){
+        case _RGDL_LIMP:
+            no_freeze = false;
+            this_mo.EnableSleep();
+            this_mo.SetRagdollStrength(0.0);
+            this_mo.StartAnimation("Data/Animations/r_idle.anm",4.0f);
+            break;
+        case _RGDL_FALL:
+            no_freeze = true;
+            this_mo.EnableSleep();
+            this_mo.SetRagdollStrength(1.0);
+            this_mo.StartAnimation("Data/Animations/r_flail.anm",4.0f);
+            ragdoll_layer_catchfallfront = 
+                this_mo.AddLayer("Data/Animations/r_catchfallfront.anm",4.0f,0);
+            ragdoll_layer_fetal = 
+                this_mo.AddLayer("Data/Animations/r_fetal.anm",4.0f,0);
+            break;
+        case _RGDL_INJURED:
+            no_freeze = true;
+            this_mo.DisableSleep();
+            this_mo.SetRagdollStrength(1.0);
+            this_mo.StartAnimation("Data/Animations/r_writhe.anm",4.0f);
+            //ragdoll_layer_fetal = 
+            //    this_mo.AddLayer("Data/Animations/r_grabface.anm",4.0f,0);
+            injured_mouth_open = 0.0f;
+            break;
+    }
+}
+
+void GoLimp() {
+    Ragdoll(_RGDL_FALL);
+}
+
+bool listening = false;
+
+void NotifySound(int created_by_id, vec3 pos) {
+    if(!listening){
+        return;
+    }
+    if(target_id == -1){
+        target_id = created_by_id;
+        last_seen_target_position = pos;
+    }
+}
+
+
+// WasBlocked() is executed if this character's attack was blocked by a different character
+void WasBlocked() {
+    this_mo.SwapAnimation(attack_getter.GetBlockedAnimPath());
+    if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
+        mirrored_stance = !mirrored_stance;
+    }
+}
+
+const int _miss = 0;
+const int _going_to_block = 1;
+const int _hit = 2;
+const int _block_impact = 3;
+const int _invalid = 4;
+
+// Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
+// Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
+int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id) {
+    attack_getter2.Load(attack_path);
+
+    if(type == "grabbed"){
+        return WasGrabbed(dir, pos, attacker_id);
+    } else if(type == "attackblocked"){
+        return BlockedAttack(dir, pos, attacker_id);
+    } else if(type == "blockprepare"){
+        return PrepareToBlock(dir, pos, attacker_id);
+    } else if(type == "attackimpact"){
+        return HitByAttack(dir, pos, attacker_id);
+    } else {
+        return _invalid;
+    }
+}
+
+int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
+    if(state == _ragdoll_state){
+        return _miss;
+    }
+    this_mo.position = pos;
+    this_mo.SetRotationFromFacing(dir);
+    int8 flags = _ANM_MOBILE;
+    if(attack_getter2.GetMirrored() == 0){
+        flags = flags | _ANM_MIRRORED;
+    }
+    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),1000.0f,flags);
+    SetState(_hit_reaction_state);
+    hit_reaction_anim_set = true;
+    if(!controlled){
+        this_mo.PlaySoundGroupVoice("surprise", 0.3f);
+        this_mo.PlaySoundGroupVoice("land_hit", 0.6f);
+    }
+    return _hit;
+}
+
+int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
+    string sound = "Data/Sounds/hit/hit_block.xml";
+    PlaySoundGroup(sound, pos);
+    MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+    MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+    TimedSlowMotion(0.1f,0.3f, 0.05f);
+    if(controlled){
+        camera.AddShake(0.5f);
+    }
+    return _block_impact;
+}
+
+int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
+    if(state != _movement_state || !on_ground || flip_info.IsFlipping() ||
+       !active_blocking || attack_getter2.GetUnblockable() != 0)
+    {
+        return _miss;
+    }
+
+    reaction_getter.Load(attack_getter2.GetReactionPath());
+    SetState(_hit_reaction_state);
+    hit_reaction_anim_set = false;
+    hit_reaction_event = "blockprepare";
+
+    vec3 flat_dir(dir.x, 0.0f, dir.z);
+    flat_dir = normalize(flat_dir) * -1;
+    if(length_squared(flat_dir)>0.0f){
+        this_mo.SetRotationFromFacing(flat_dir);
+    }
+    ActiveBlocked();
+    return _going_to_block;
+}
+
+int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
+    if(target_id == -1){
+        target_id = attacker_id;
+    }
+    if(attack_getter2.GetHeight() == _high && duck_amount > 0.5f){
+        return _miss;
+    }
+    if(controlled){
+        camera.AddShake(1.0f);
+    } else {
+        this_mo.PlaySoundGroupVoice("hit",0.0f);
+    }
+
+    if(attack_getter2.GetSpecial() == "legcannon"){
+        block_health = 0.0f;
+    }
+        
+    block_health -= attack_getter2.GetBlockDamage();
+    block_health = max(0.0f, block_health);
+
+    if(block_health <= 0.0f || state == _attack_state || !on_ground){
+        HandleRagdollImpact(dir, pos);
+    } else {
+        HandlePassiveBlockImpact(dir, pos);
+    }
+    return _hit;
+}
+
+void HandleRagdollImpact(const vec3&in dir, const vec3&in pos){
+    MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+    MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+    float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f);
+    GoLimp();
+    ragdoll_limp_stun = 0.9f;
+
+    vec3 impact_dir = attack_getter2.GetImpactDir();
+    vec3 right;
+    right.x = -dir.z;
+    right.z = dir.x;
+    right.y = dir.y;
+    vec3 impact_dir_adjusted = impact_dir.x * right +
+                               impact_dir.z * dir;
+    impact_dir_adjusted.y += impact_dir.y;
+    this_mo.ApplyForceToRagdoll(impact_dir_adjusted * force, pos);
+
+    block_health = 0.0f;
+    TakeDamage(attack_getter2.GetDamage());
+    if(knocked_out == _dead){
+        string sound = "Data/Sounds/hit/hit_hard.xml";
+        PlaySoundGroup(sound, pos);
+    } else {
+        string sound = "Data/Sounds/hit/hit_medium.xml";
+        PlaySoundGroup(sound, pos);
+    }
+    temp_health = max(0.0f, temp_health);
+}
+
+void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
+    string sound = "Data/Sounds/hit/hit_normal.xml";
+    PlaySoundGroup(sound, pos);
+    MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+    MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+    
+    reaction_getter.Load(attack_getter2.GetReactionPath());
+    SetState(_hit_reaction_state);
+    hit_reaction_anim_set = false;
+
+    hit_reaction_event = "attackimpact";
+
+    vec3 flat_dir(dir.x, 0.0f, dir.z);
+    flat_dir = normalize(flat_dir) * -1;
+    if(length_squared(flat_dir)>0.0f){
+        this_mo.SetRotationFromFacing(flat_dir);
+    }
+}
+
+void EndAttack() {
+    SetState(_movement_state);
+    if(!on_ground){
+        flip_info.StartLegCannonFlip(this_mo.GetFacing()*-1.0f, leg_cannon_flip);
+    }
+}
+
+void EndHitReaction() {
+    SetState(_movement_state);
+}
+
+void TakeDamage(float how_much){
+    const float _permananent_damage_mult = 0.4f;
+    temp_health -= how_much;
+    permanent_health -= how_much * _permananent_damage_mult;
+    if(permanent_health <= 0.0f && knocked_out != _dead){
+        knocked_out = _dead;
+    }
+    if(temp_health <= 0.0f && knocked_out == _awake){
+        knocked_out = _unconscious;
+        TimedSlowMotion(0.1f,0.7f, 0.05f);
+        if(!controlled){
+            this_mo.PlaySoundGroupVoice("death",0.4f);
+        }
+    }
+}
 
 // whether the character is in the ground or in the air, and how long time has passed since the status changed. 
 bool on_ground = false;
-float on_ground_time = 0.0f;
-
-vec3 tilt(0.0f);
-vec3 target_tilt(0.0f);
-const float _tilt_inertia = 0.9f; // affects tilt, must be between 0 and 1
 
 const float _duck_speed_mult = 0.5f;
 
@@ -38,13 +912,6 @@ int run_phase = 1;
 
 string hit_reaction_event;
 
-// states are used to differentiate between various widely different situations
-const int _movement_state = 0; // character is moving on the ground
-const int _ground_state = 1; // character has fallen down or is raising up, ATM ragdolls handle most of this
-const int _attack_state = 2; // character is performing an attack
-const int _hit_reaction_state = 3; // character was hit or dealt damage to and has to react to it in some manner
-int state;
-
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
 bool attacking_with_throw;
@@ -56,24 +923,14 @@ const float _close_attack_range = 1.0f;
 const float _run_threshold = 0.8f; // when character is moving faster than this, it runs
 const float _walk_threshold = 0.6f; // when character is moving slower than this, it's idling
 const float _walk_accel = 35.0f; // how fast characters accelerate when moving
-float duck_amount = 0.0f; // duck_amount is changed incrementally to animate crouching or standing up from a crouch
-float target_duck_amount = 0.0f; // this is 1.0 when the character crouches down,  0.0 otherwise. Used in UpdateDuckAmount() 
-float duck_vel = 0.0f;
-const float _duck_accel = 120.0f;
-const float _duck_vel_inertia = 0.89f;
 
 const float _roll_speed = 2.0f;
 const float _roll_accel = 50.0f;
-const float _ragdoll_recovery_time = 1.0f;
 const float _roll_ground_speed = 12.0f;
-float recovery_time;
 vec3 roll_direction;
 
 float leg_cannon_flip;
 
-// The 'controlled' variable is true when the character is controlled by a human, false when the character is controlled by AI. 
-// It's changed in the update(bool _controlled) function.
-bool controlled = false;
 
 // center of mass offset that will eventually be used for animation, but is probably used yet.
 vec3 com_offset;
@@ -81,243 +938,30 @@ vec3 com_offset_vel;
 
 bool mirrored_stance = false;
 
-float block_health = 1.0f;
-float temp_health = 1.0f;
-float permanent_health = 1.0f;
-int knocked_out = 0; // zero means conscious, 1 unconscious
-
 vec3 old_vel;
-vec3 accel_tilt;
 vec3 last_col_pos;
 
 float cancel_delay;
-
-bool active_blocking = false;
-float active_block_duration = 0.0f;
-float active_block_recharge = 0.0f;
 
 string curr_attack; 
 int target_id = -1;
 int self_id;
 
-int num_frames;
-
-const float _ragdoll_static_threshold = 0.4f;
-float ragdoll_static_time;
-float ragdoll_time;
-bool frozen;
-bool no_freeze = false;
 bool holding_weapon = false;
-float injured_mouth_open;
 int weapon_id = -1;
-
-const int _RGDL_FALL = 0;
-const int _RGDL_LIMP = 1;
-const int _RGDL_INJURED = 2;
-
-int ragdoll_type;
-int ragdoll_layer_fetal;
-int ragdoll_layer_catchfallfront;
-float ragdoll_limp_stun;
 
 vec3 last_seen_target_position;
 vec3 last_seen_target_velocity;
-bool listening = false;
 
-void NotifySound(int created_by_id, vec3 pos) {
-    if(!listening){
-        return;
-    }
-    if(target_id == -1){
-        target_id = created_by_id;
-        last_seen_target_position = pos;
-    }
-}
-
-void EndAttack() {
-    SetState(_movement_state);
-    if(!on_ground){
-        //StartWallJump(wall_dir * -1.0f);
-        flip_info.StartLegCannonFlip(this_mo.GetFacing()*-1.0f, leg_cannon_flip);
-    }
-}
-
-void EndHitReaction() {
-    SetState(_movement_state);
-}
-
-// WasBlocked() is executed if this character's attack was blocked by a different character
-void WasBlocked() {
-    this_mo.SwapAnimation(attack_getter.GetBlockedAnimPath());
-    if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
-        mirrored_stance = !mirrored_stance;
-    }
-}
-
-// Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
-// Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
-int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id) {
-    attack_getter2.Load(attack_path);
-
-    if(type == "grabbed"){
-        if(limp){
-            return 0;
-        }
-        this_mo.position = pos;
-        this_mo.SetRotationFromFacing(dir);
-        int8 flags = _ANM_MOBILE;
-        if(attack_getter2.GetMirrored() == 0){
-            flags = flags | _ANM_MIRRORED;
-        }
-        this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),1000.0f,flags);
-        SetState(_hit_reaction_state);
-        hit_reaction_anim_set = true;
-        if(!controlled){
-            this_mo.PlaySoundGroupVoice("surprise", 0.3f);
-            this_mo.PlaySoundGroupVoice("land_hit", 0.6f);
-        }
-    }
-    if(type == "attackblocked")
-    {
-        string sound = "Data/Sounds/hit/hit_block.xml";
-        PlaySoundGroup(sound, pos);
-        //MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
-        MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
-        MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-        TimedSlowMotion(0.1f,0.3f, 0.05f);
-        if(controlled){
-            camera.AddShake(0.5f);
-        }
-        return 3;
-    }
-    if(type == "blockprepare")
-    {
-        if(state == _movement_state && limp == false && on_ground && !flip_info.IsFlipping()){
-            if(active_blocking && attack_getter2.GetUnblockable() == 0){
-                reaction_getter.Load(attack_getter2.GetReactionPath());
-                SetState(_hit_reaction_state);
-                hit_reaction_anim_set = false;
-            
-                hit_reaction_event = type;
-
-                dir.y = 0.0f;
-                dir = normalize(dir) * -1;
-                if(length_squared(dir)>0.0f){
-                    this_mo.SetRotationFromFacing(dir);
-                }
-                ActiveBlocked();
-                return 1;
-            }
-        }
-    }
-    if(type == "attackimpact")
-    {
-        if(target_id == -1){
-            target_id = attacker_id;
-        }
-        if(controlled){
-            camera.AddShake(1.0f);
-        }
-        if(attack_getter2.GetHeight() == _high &&
-            duck_amount > 0.5f)
-        {
-            return 0;
-        }
-        if(attack_getter2.GetSpecial() == "legcannon"){
-            block_health = 0.0f;
-        }
-    
-        if(!controlled){
-            this_mo.PlaySoundGroupVoice("hit",0.0f);
-        }
-
-        block_health -= attack_getter2.GetBlockDamage();
-        block_health = max(0.0f, block_health);
-
-        if(block_health <= 0.0f || state == _attack_state || !on_ground){
-            MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
-            MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-            float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f);
-            GoLimp();
-            ragdoll_limp_stun = 0.9f;
-
-            vec3 impact_dir = attack_getter2.GetImpactDir();
-            //Print(""+impact_dir.x + "\n" + impact_dir.y + "\n" + impact_dir.z + "\n\n");
-            vec3 right;
-            right.x = -dir.z;
-            right.z = dir.x;
-            right.y = dir.y;
-            vec3 impact_dir_adjusted = impact_dir.x * right +
-                                       impact_dir.z * dir;
-            impact_dir_adjusted.y += impact_dir.y;
-            this_mo.ApplyForceToRagdoll(impact_dir_adjusted * force, pos);
-
-            block_health = 0.0f;
-            temp_health -= attack_getter2.GetDamage();
-            permanent_health -= attack_getter2.GetDamage() * 0.4f;
-            if(permanent_health <= 0.0f && knocked_out != 2){
-                knocked_out = 2;
-                string sound = "Data/Sounds/hit/hit_hard.xml";
-                PlaySoundGroup(sound, pos);
-            }
-            if(temp_health <= 0.0f && knocked_out==0){
-                knocked_out = 1;
-                TimedSlowMotion(0.1f,0.7f, 0.05f);
-                string sound = "Data/Sounds/hit/hit_medium.xml";
-                PlaySoundGroup(sound, pos);
-                if(!controlled){
-                    this_mo.PlaySoundGroupVoice("death",0.4f);
-                    //sound = "Data/Sounds/voice/torikamal/sleeping.xml";
-                    //this_mo.PlaySoundGroupVoice(sound,1.5f);
-                }
-            } else {
-                string sound = "Data/Sounds/hit/hit_medium.xml";
-                PlaySoundGroup(sound, pos);
-            }
-            temp_health = max(0.0f, temp_health);
-        } else {
-            string sound = "Data/Sounds/hit/hit_normal.xml";
-            PlaySoundGroup(sound, pos);
-            /*if(!controlled && rand()%2==0){
-                string sound = "Data/Sounds/voice/torikamal/was_hit_taunt.xml";
-                this_mo.PlaySoundGroupVoice(sound,0.2f);
-            }*/
-            //MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
-            MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
-            MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-            
-            reaction_getter.Load(attack_getter2.GetReactionPath());
-            SetState(_hit_reaction_state);
-            hit_reaction_anim_set = false;
-        
-            hit_reaction_event = type;
-
-            dir.y = 0.0f;
-            dir = normalize(dir) * -1;
-            if(length_squared(dir)>0.0f){
-                this_mo.SetRotationFromFacing(dir);
-            }
-        }
-        return 2;
-    }
-    return 4;
-}
 
 // Animation events are created by the animation files themselves. For example, when the run animation is played, it calls HandleAnimationEvent( "leftrunstep", left_foot_pos ) when the left foot hits the ground.
 void HandleAnimationEvent(string event, vec3 world_pos){
-    //Print("Angelscript received event: "+event+"\n");
-    if(event == "golimp"){
-        if(attack_getter2.IsThrow() == 1){
-            temp_health -= attack_getter2.GetDamage();
-            if(temp_health <= 0.0f && knocked_out==0){
-                knocked_out = 1;
-                TimedSlowMotion(0.1f,1.0f, 0.05f);
-            }
-        }
-        GoLimp();
-    }
-    
-    
+    HandleAnimationMaterialEvent(event, world_pos);
+    HandleAnimationCombatEvent(event, world_pos);
+    //DebugDrawText(world_pos, event, _persistent);
+}
+
+void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos) {
     if(event == "leftstep" ||
        event == "leftwalkstep" ||
        event == "leftwallstep" ||
@@ -326,10 +970,8 @@ void HandleAnimationEvent(string event, vec3 world_pos){
     {
         //this_mo.MaterialDecalAtBone("step", "left_leg");
         this_mo.MaterialParticleAtBone("step","left_leg");
-        //this_mo.AddDecalAtBone("left_leg", "footstep");
-        //PlaySoundGroup("Data/Sounds/footstep_mud.xml", world_pos);
-        //MakeSplatParticle(world_pos);
     }
+
     if(event == "rightstep" ||
        event == "rightwalkstep" ||
        event == "rightwallstep" ||
@@ -338,77 +980,65 @@ void HandleAnimationEvent(string event, vec3 world_pos){
     {
         //this_mo.MaterialDecalAtBone("step", "right_leg");
         this_mo.MaterialParticleAtBone("step","right_leg");
-        /*this_mo.AddDecalAtBone("right_leg", "footstep");
-        PlaySoundGroup("Data/Sounds/footstep_mud.xml", world_pos);
-        MakeSplatParticle(world_pos);*/
     }
     
-    if(event == "leftstep" || event == "rightstep"){
+    if(event == "leftstep" || event == "rightstep" ||
+       event == "leftwallstep" || event == "rightwallstep" ||
+       event == "leftrunstep" || event == "rightrunstep" ||
+       event == "leftwalkstep" || event == "rightwalkstep" ||
+       event == "leftcrouchwalkstep" || event == "rightcrouchwalkstep")
+    {
         this_mo.MaterialEvent(event, world_pos);
     }
-    if(event == "leftwallstep" || event == "rightwallstep"){
-        this_mo.MaterialEvent(event, world_pos);
-        //string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, world_pos);
-    }
-    if(event == "leftrunstep" || event == "rightrunstep"){
-        this_mo.MaterialEvent(event, world_pos);
-        //string path = "Data/Sounds/concrete_foley/bunny_run_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, world_pos);
-    }
-    if(event == "leftwalkstep" || event == "rightwalkstep"){
-        this_mo.MaterialEvent(event, world_pos);
-        //string path = "Data/Sounds/concrete_foley/bunny_walk_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, world_pos);
-    }
-    if(event == "leftcrouchwalkstep" || event == "rightcrouchwalkstep"){
-        this_mo.MaterialEvent(event, world_pos);
-        //string path = "Data/Sounds/concrete_foley/bunny_crouchwalk_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, world_pos);
+}
+
+void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) {
+    if(event == "golimp"){
+        if(attack_getter2.IsThrow() == 1){
+            TakeDamage(attack_getter2.GetDamage());
+        }
+        GoLimp();
     }
 
-    if(target_id == -1){
-        return;
-    }
-    vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
-    if((event == "attackblocked" ||
+    bool attack_event = false;
+    if(event == "attackblocked" ||
         event == "attackimpact" ||
-        event == "blockprepare") && 
-       distance(this_mo.position, target_pos) < _attack_range){
-        vec3 facing = this_mo.GetFacing();
-        vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
-        vec3 dir = normalize(target_pos - this_mo.position);
-        int return_val = this_mo.ReadCharacterID(target_id).WasHit(
-               event, attack_getter.GetPath(), dir, world_pos, this_mo.getID());
-        if(return_val == 1){
-            WasBlocked();
-        }
-        if((return_val == 2 || return_val ==3) && controlled){
-            camera.AddShake(0.5f);
-        }
-        if((return_val == 2) && !controlled){
-            //if(this_mo.ReadCharacter(target_id).IsKnockedOut() == 0){
-            /*if(rand()%2==0){
-                string sound = "Data/Sounds/voice/torikamal/hit_taunt.xml";
-                this_mo.PlaySoundGroupVoice(sound,0.2f);
+        event == "blockprepare")
+    {
+        attack_event = true;
+    }
+    if(attack_event == true && target_id != -1){
+        vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
+        if(distance(this_mo.position, target_pos) < _attack_range){
+            vec3 facing = this_mo.GetFacing();
+            vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
+            vec3 dir = normalize(target_pos - this_mo.position);
+            int return_val = this_mo.ReadCharacterID(target_id).WasHit(
+                   event, attack_getter.GetPath(), dir, world_pos, this_mo.getID());
+            if(return_val == _going_to_block){
+                WasBlocked();
+            }
+            if((return_val == _hit || return_val == _block_impact) && controlled){
+                camera.AddShake(0.5f);
+            }
+            if(return_val != _miss && attack_getter.GetSpecial() == "legcannon"){
+                this_mo.velocity += dir * -10.0f;
+            }
+            if(event == "frontkick"){
+                if(distance(this_mo.position, target_pos) < 1.0f){
+                    vec3 dir = normalize(target_pos - this_mo.position);
+                    this_mo.ReadCharacterID(target_id).position = 
+                        this_mo.position + dir;
+                }
+            }
+            /*if((return_val == _hit) && !controlled){
+                if(rand()%2==0){
+                    string sound = "Data/Sounds/voice/torikamal/hit_taunt.xml";
+                    this_mo.PlaySoundGroupVoice(sound,0.2f);
+                }
             }*/
         }
-        if(return_val != 0 && attack_getter.GetSpecial() == "legcannon"){
-            this_mo.velocity += dir * -10.0f;
-        }
-        if(event == "frontkick"){
-            if(distance(this_mo.position, target_pos) < 1.0f){
-                vec3 dir = normalize(target_pos - this_mo.position);
-                this_mo.ReadCharacterID(target_id).position = 
-                    this_mo.position + dir;
-            }
-        }
     }
-    /*
-    
-    DebugDrawText(world_pos,
-                  event,
-                  _persistent);*/
 }
 
 #include "aircontrols.as"
@@ -427,11 +1057,14 @@ vec3 WorldToGroundSpace(vec3 world_space_vec){
     return ground_space_vec;
 }
 
+// Pre-jump happens after jump key is pressed and before the character gets upwards velocity. The time available for the jump animation that happens on the ground. 
+bool pre_jump = false;
+float pre_jump_time;
+
 // WantsToDoSomething functions are called by the player or the AI in playercontrol.as or enemycontrol.as
 // For the player, they return true when the appopriate control key is down.
 void UpdateGroundMovementControls() {
-    // GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
-    vec3 target_velocity = GetTargetVelocity();
+    vec3 target_velocity = GetTargetVelocity(); // GetTargetVelocity() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
     if(length_squared(target_velocity)>0.0f){
         feet_moving = true;
     }
@@ -452,23 +1085,20 @@ void UpdateGroundMovementControls() {
 
     // If the characters has been touching the ground for longer than _jump_threshold_time and isn't already jumping, update variables 
     // Actual jump is activated after the if(pre_jump) clause below.
-    if(WantsToJump() && 
-       on_ground_time > _jump_threshold_time && 
-       !pre_jump)
-    {
+    if(WantsToJump() && on_ground_time > _jump_threshold_time && !pre_jump){
         pre_jump = true;
+        const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
         pre_jump_time = _pre_jump_delay;
-        // the character crouches down, getting ready for the jump
-        duck_vel = 30.0f * (1.0f-duck_amount * 0.6f);
-
+        duck_vel = 30.0f * (1.0f-duck_amount * 0.6f); // The character crouches down, getting ready for the jump
         vec3 target_jump_vel = jump_info.GetJumpVelocity(target_velocity);
         target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
     }
 
-    // preparing for the jump
+    // Preparing for the jump
     if(pre_jump){
         if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
-            jump_info.StartJump(target_velocity);
+            jump_info.StartJump(target_velocity, false);
+            //jump_info.StartJump(jump_info.jump_start_vel, true);
             SetOnGround(false);
             pre_jump = false;
         } else {
@@ -541,7 +1171,6 @@ void draw() {
 void ForceApplied(vec3 force) {
 }
 
-// knocked_out 0 means conscious, 1 unconscious
 int IsKnockedOut() {
     return knocked_out;
 }
@@ -603,6 +1232,8 @@ void UpdateGroundControls() {
     UpdateGroundAttackControls();
     UpdateGroundMovementControls();
 }
+
+vec3 accel_tilt;
 
 // handles tilting caused by accelerating when moving on the ground.
 void HandleAccelTilt() {
@@ -883,12 +1514,13 @@ void HandleGroundCollision() {
         if(landing){
             ground_normal = landing_normal;
             Land(air_vel);
-            SetState(_movement_state);
+            if(state != _ragdoll_state){
+                SetState(_movement_state);
+            }
         }
     }
     last_col_pos = this_mo.position;
-/*
-    if(on_ground){
+    /*if(on_ground){
         vec3 y_vec = ground_normal;
         vec3 x_vec = normalize(cross(y_vec,vec3(0,0,1)));
         vec3 z_vec = cross(y_vec, x_vec);
@@ -898,74 +1530,22 @@ void HandleGroundCollision() {
     }*/
 }
 
-void Ragdoll(int type){
-    recovery_time = _ragdoll_recovery_time;
-    
-    if(limp){
-        return;
-    }
-    
-    SetState(_movement_state);
-    limp = true;
-    this_mo.Ragdoll();
-    ragdoll_static_time = 0.0f;
-    ragdoll_time = 0.0f;
-    ragdoll_limp_stun = 0.0f;
-    frozen = false;
-    no_freeze = false;
+float duck_amount = 0.0f; // duck_amount is changed incrementally to animate crouching or standing up from a crouch
+float target_duck_amount = 0.0f; // this is 1.0 when the character crouches down,  0.0 otherwise. Used in UpdateDuckAmount() 
+float duck_vel = 0.0f;
 
-    ragdoll_type = type;
-
-    if(ragdoll_type == _RGDL_LIMP){
-        this_mo.EnableSleep();
-        this_mo.SetRagdollStrength(0.0);
-        this_mo.StartAnimation("Data/Animations/r_idle.anm",4.0f);
-    }
-
-    if(ragdoll_type == _RGDL_FALL) {
-        this_mo.EnableSleep();
-        no_freeze = true;
-        //this_mo.StartAnimation("Data/Animations/r_idle.anm");
-        //int layer = this_mo.AddLayer("Data/Animations/r_catchfallright.anm",20.0f,_ANM_MIRRORED);
-        //this_mo.SetLayerOpacity(layer, 1.0);
-        //this_mo.SetFrozenRagdollStrength(0.0);
-        this_mo.SetRagdollStrength(1.0);
-        this_mo.StartAnimation("Data/Animations/r_flail.anm",4.0f);
-        ragdoll_layer_catchfallfront = 
-            this_mo.AddLayer("Data/Animations/r_catchfallfront.anm",4.0f,0);
-        ragdoll_layer_fetal = 
-            this_mo.AddLayer("Data/Animations/r_fetal.anm",4.0f,0);
-        //this_mo.StartAnimation("Data/Animations/r_ragdollbase.anm",0.1f);
-        //this_mo.AddLayer("Data/Animations/r_protecthead.anm",4.0f,0.0f);
-        //this_mo.AddLayer("Data/Animations/r_grabface.anm",20.0f,0);
-        //this_mo.AddLayer("Data/Animations/r_protecthead.anm",20.0f,0);
-        //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-    }
-
-    if(ragdoll_type == _RGDL_INJURED) {
-        this_mo.DisableSleep();
-        no_freeze = true;
-        this_mo.SetRagdollStrength(1.0);
-        this_mo.StartAnimation("Data/Animations/r_writhe.anm",4.0f);
-        //ragdoll_layer_fetal = 
-        //    this_mo.AddLayer("Data/Animations/r_grabface.anm",4.0f,0);
-        injured_mouth_open = 0.0f;
-    }
-}
-
-void GoLimp() {
-    Ragdoll(_RGDL_FALL);
-}
-
-// target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
-void UpdateDuckAmount() {
+void UpdateDuckAmount() { // target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
+    const float _duck_accel = 120.0f;
+    const float _duck_vel_inertia = 0.89f;
     duck_vel += (target_duck_amount - duck_amount) * time_step * num_frames * _duck_accel;
     duck_vel *= pow(_duck_vel_inertia,num_frames);
     duck_amount += duck_vel * time_step * num_frames;
 }
 
-// tells how long the character has been touching the ground, or been in the air
-void UpdateGroundAndAirTime() {
+float air_time = 0.0f;
+float on_ground_time = 0.0f;
+
+void UpdateGroundAndAirTime() { // tells how long the character has been touching the ground, or been in the air
     if(on_ground){
         on_ground_time += time_step * num_frames;
     } else {
@@ -973,10 +1553,9 @@ void UpdateGroundAndAirTime() {
     }
 }
 
-// air whoosh sounds get louder at higher speed.
-void UpdateAirWhooshSound() {
+void UpdateAirWhooshSound() { // air whoosh sounds get louder at higher speed.
     float whoosh_amount = length(this_mo.velocity)*0.05f;
-    if(!limp){
+    if(state != _ragdoll_state){
         whoosh_amount += flip_info.WhooshAmount();
     }
     float whoosh_pitch = min(2.0f,whoosh_amount*0.5f + 0.5f);
@@ -1136,12 +1715,12 @@ void UpdateAttacking() {
             anim_path = attack_getter.GetUnblockedAnimPath();
         } else {
             anim_path = attack_getter.GetThrowAnimPath();
-            int hit = 0;
+            int hit = _miss;
             if(target_id != -1){
                 hit = this_mo.ReadCharacterID(target_id).WasHit(
                     "grabbed", attack_getter.GetPath(), direction, this_mo.position, this_mo.getID());        
             }
-            if(hit == 0){
+            if(hit == _miss){
                 EndAttack();
                 return;
             }
@@ -1257,7 +1836,6 @@ void WakeUp(int how) {
         how = _wake_fall;
     }
 
-    limp = false;
     duck_amount = 1.0f;
     duck_vel = 0.0f;
     target_duck_amount = 1.0f;
@@ -1318,153 +1896,6 @@ bool CanRoll() {
         }
     }
     return can_roll;
-}
-
-// UpdateRagDoll() is called every time update() is called, regardless of if the character is in ragdoll mode or not
-void UpdateRagDoll() {
-    if(GetInputDown("z") && !GetInputDown("ctrl")){
-        GoLimp();
-    }
-    if(GetInputDown("n")){                
-        if(!limp){
-            string sound = "Data/Sounds/hit/hit_hard.xml";
-            PlaySoundGroup(sound, this_mo.position);
-        }
-        Ragdoll(_RGDL_INJURED);
-    }
-    if(GetInputDown("m")){        
-        Ragdoll(_RGDL_LIMP);
-    }
-    if(GetInputDown("x")){        
-        //if(knocked_out != 0){
-            knocked_out = 0;
-            block_health = 1.0f;
-            temp_health = 1.0f;
-            permanent_health = 1.0f;
-            recovery_time = 0.0f;
-            //this_mo.UnRagdoll();
-        //}
-    }
-    if(!limp){
-        return;
-    }
-
-    /*mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
-    vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
-    Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
-    DebugDrawLine(this_mo.position,
-                  this_mo.position + torso_vec,
-                  vec3(1.0f),
-                  _delete_on_update);*/
-
-    ragdoll_time += time_step * num_frames;
-    ragdoll_limp_stun -= time_step * num_frames;
-    ragdoll_limp_stun = max(0.0, ragdoll_limp_stun);
-
-    if(ragdoll_type == _RGDL_FALL){
-        const float radius = 4.0f;
-        this_mo.GetSlidingSphereCollision(this_mo.position, radius);
-        vec3 hazard_dir = normalize(this_mo.position - sphere_col.adjusted_position);
-        float penetration = distance(this_mo.position, sphere_col.adjusted_position);
-        float protect_amount = min(1.0f,max(0.0f,(penetration / radius)*4.0f-2.0));
-        this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount);
-        mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
-        vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
-        float front_protect_amount = max(0.0f,dot(torso_vec, hazard_dir) * protect_amount);
-        this_mo.SetLayerOpacity(ragdoll_layer_catchfallfront, front_protect_amount);
-
-        float ragdoll_strength = length(this_mo.GetAvgVelocity())*0.1f;
-        ragdoll_strength = min(0.8f, ragdoll_strength);
-        ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
-        this_mo.SetRagdollStrength(ragdoll_strength);
-    }
-    if(ragdoll_type == _RGDL_INJURED){
-        float ragdoll_strength = min(1.0f,max(0.2f,2.0f-length(this_mo.GetAvgVelocity())*0.3f));
-        ragdoll_strength *= 1.2f - ragdoll_time * 0.1f;
-        ragdoll_strength = min(0.9f, ragdoll_strength);
-        ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
-        this_mo.SetRagdollStrength(ragdoll_strength);
-        injured_mouth_open = mix(injured_mouth_open, sin(time*4.0f)*0.5f+sin(time*6.3f)*0.5f, ragdoll_strength);
-        this_mo.SetMorphTargetWeight("mouth_open",injured_mouth_open,1.0f);
-        if(ragdoll_time > 12.0f){
-            Print("Ragdoll time up: "+ragdoll_time+"\n");
-            ragdoll_type = _RGDL_LIMP;
-            no_freeze = false;
-            ragdoll_static_time = 0.0f;
-            this_mo.EnableSleep();
-            this_mo.SetRagdollStrength(0.0f);
-        }
-    }
-    //this_mo.SetRagdollStrength(max(0.0,0.9-ragdoll_time));
-    if(!frozen){
-        vec3 color;
-        if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold)
-        {
-            color = vec3(1.0f,0.0f,0.0f);
-            ragdoll_static_time += time_step * num_frames;
-        } else {
-            color = vec3(1.0f,1.0f,1.0f);
-            ragdoll_static_time = 0.0f;
-        }
-
-        /*DebugDrawLine(this_mo.position,
-                      this_mo.position + this_mo.GetAvgVelocity(),
-                      color,
-                      _delete_on_update);*/
-        
-        if(!no_freeze){
-            float damping = min(1.0f,ragdoll_static_time*0.5f);
-            this_mo.SetRagdollDamping(damping);
-            if(damping >= 1.0f){
-                frozen = true;
-            }
-        } else {
-            this_mo.SetRagdollDamping(0.0f);
-        }
-    }
-    if(knocked_out==0){
-        recovery_time -= time_step * num_frames;
-        if(recovery_time <= 0.0f){
-            bool can_roll = CanRoll();
-            if(can_roll){
-                WakeUp(_wake_stand);
-            } else {
-                WakeUp(_wake_fall);
-            }
-        } else {
-            if(WantsToRollFromRagdoll()){
-                bool can_roll = CanRoll();
-                if(!can_roll){
-                    WakeUp(_wake_flip);
-                } else {
-                    WakeUp(_wake_roll);
-                    //this_mo.position = roll_point + 
-                    //z                   vec3(0.0f,_leg_sphere_size,0.0f);
-                }
-            }
-            return;
-        }
-    }
-}
-
-
-// motion capture test functions
-bool testing_mocap = false;
-void TestMocap(){
-    //this_mo.SetAnimation("Data/Animations/mocapsit.anm");
-    //this_mo.SetAnimation("Data/Animations/r_bow.anm");
-    this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-    //this_mo.SetAnimationCallback("void EndTestMocap()");
-    //testing_mocap = true;
-    //this_mo.velocity = vec3(0.0f);
-    
-    //this_mo.position += vec3(0.0f,-0.1f,0.0f);
-    //this_mo.position = vec3(16.23, 109.45, 11.71);
-    //this_mo.SetRotationFromFacing(vec3(0.0f,0.0f,1.0f));
-}
-
-void EndTestMocap() {
-    testing_mocap = false;
 }
 
 int count = 0;
@@ -1563,31 +1994,6 @@ void DecalCheck(){
     }
 }
 
-// blocking actions for combat, including a quick hack for the AI
-void HandleActiveBlock() {
-    if(WantsToStartActiveBlock()){
-        if(active_block_recharge <= 0.0f){
-            active_blocking = true;
-            active_block_duration = 0.2f;
-        }
-        active_block_recharge = 0.2f;
-    } 
-    if(active_blocking){
-        active_block_duration -= time_step * num_frames;
-        if(active_block_duration <= 0.0f){
-            active_blocking = false;
-        }
-    } else {
-        if(active_block_recharge > 0.0f){
-            active_block_recharge -= time_step * num_frames;
-        }
-    }
-    // the AI blocks randomly
-    if(!controlled){
-        active_blocking = (rand()%4)==0;
-    }
-}
-
 void HandleCollisionsBetweenTwoCharacters(int which){
     if(this_mo.position == this_mo.ReadCharacter(which).position){
         return;
@@ -1600,7 +2006,7 @@ void HandleCollisionsBetweenTwoCharacters(int which){
         return;
     }
 
-    if(knocked_out == 0 && this_mo.ReadCharacter(which).IsKnockedOut() == 0){
+    if(knocked_out == _awake && this_mo.ReadCharacter(which).IsKnockedOut() == _awake){
         float distance_threshold = 0.7f;
         vec3 this_com = this_mo.GetCenterOfMass();
         vec3 other_com = this_mo.ReadCharacter(which).GetCenterOfMass();
@@ -1680,9 +2086,6 @@ float cam_rotation2 = 0.0f;
 
 
 void ApplyCameraControls() {
-    if(!controlled){
-        return;
-    }
     const float _camera_rotation_inertia = 0.5f;
     const float _cam_follow_distance = 2.0f;
     const float _cam_collision_radius = 0.15f;
@@ -1713,7 +2116,7 @@ void ApplyCameraControls() {
     //camera.SetZRotation(0.0f);
     //camera.SetZRotation(dot(right,this_mo.velocity+accel_tilt)*-0.1f);
     
-    if(!limp){
+    if(state != _ragdoll_state){
         cam_pos += vec3(0.0f,0.35f,0.0f);
     } else {
         cam_pos += vec3(0.0f,0.1f,0.0f);
@@ -1769,292 +2172,14 @@ void ApplyCameraControls() {
     UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
 }
 
-const float _target_look_threshold_sqrd = 7.0f * 7.0f;
-const float _head_inertia = 0.8f;
-vec3 head_dir;
-vec3 target_head_dir;
-
-void UpdateHeadLook() {
-    bool look_at_target = false;
-    vec3 target_dir;
-    if(target_id != -1){
-        vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
-        if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
-            look_at_target = true;
-            target_dir = normalize(target_pos - this_mo.position);
-        }
-    }
-    if(controlled){
-        if(!look_at_target){
-            target_head_dir = camera.GetFacing();
-        } else {
-            target_head_dir = target_dir;
-        }
-    } else {
-        if(!look_at_target){
-            target_head_dir = this_mo.GetFacing();
-        } else {
-            target_head_dir = target_dir;
-        }
-    }
-
-    head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
-    this_mo.SetIKTargetOffset("head",head_dir);
+void SwitchCharacter(string path){
+    this_mo.char_path = path;
+    character_getter.Load(this_mo.char_path);
+    this_mo.RecreateRiggedObject(this_mo.char_path);
+    this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+    SetState(_movement_state);
 }
 
-vec3 eye_dir;
-vec3 target_eye_dir;
-const float _eye_inertia = 0.85f;
-const float _eye_min_delay = 0.5f;
-const float _eye_max_delay = 2.0f;
-float eye_delay = 0.0f;
-
-void UpdateEyeLook(){
-    if(eye_delay <= 0.0f){
-        eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
-        target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);    
-        normalize(target_eye_dir);
-    }
-    eye_delay -= time_step * num_frames;
-    eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
-
-    // Set weights for carnivore
-    this_mo.SetMorphTargetWeight("look_r",max(0.0f,eye_dir.x),1.0f);
-    this_mo.SetMorphTargetWeight("look_l",max(0.0f,-eye_dir.x),1.0f);
-    this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
-
-    // Set weights for herbivore
-    this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_f",max(0.0f,eye_dir.z),1.0f);
-    this_mo.SetMorphTargetWeight("look_b",max(0.0f,-eye_dir.z),1.0f);
-
-    // Set weights for independent-eye herbivoe
-    this_mo.SetMorphTargetWeight("look_u_l",max(0.0f,eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_u_r",max(0.0f,eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_d_l",max(0.0f,-eye_dir.y),1.0f);
-    this_mo.SetMorphTargetWeight("look_d_r",max(0.0f,-eye_dir.y),1.0f);
-
-    float right_front = eye_dir.z;
-    float left_front = eye_dir.z;
-    this_mo.SetMorphTargetWeight("look_f_r",max(0.0f,right_front),1.0f);
-    this_mo.SetMorphTargetWeight("look_b_r",max(0.0f,-right_front),1.0f);
-    this_mo.SetMorphTargetWeight("look_f_l",max(0.0f,left_front),1.0f);
-    this_mo.SetMorphTargetWeight("look_b_l",max(0.0f,-left_front),1.0f);
-}
-
-const float _blink_speed = 5.0f;
-const float _blink_min_delay = 1.0f;
-const float _blink_max_delay = 5.0f;
-bool blinking = false;
-float blink_progress = 0.0f;
-float blink_delay = 0.0f;
-float blink_amount = 0.0f;
-void UpdateBlink() {
-    bool unconscious = (limp && ragdoll_type == _RGDL_LIMP);
-    if(!unconscious){
-        if(blink_delay < 0.0f){
-            blink_delay = RangedRandomFloat(_blink_min_delay,
-                                            _blink_max_delay);
-            blinking = true;
-            blink_progress = 0.0f;
-        }
-        if(blinking){
-            blink_progress += time_step * num_frames * 5.0f;
-            blink_amount = sin(blink_progress*3.14f);
-            if(blink_progress > 1.0f){
-                blink_amount = 0.0f;
-                blinking = false;
-            }
-        } else {
-            blink_amount = 0.0f;
-        }
-        blink_delay -= time_step * num_frames;
-    } else {
-        blink_amount = mix(blink_amount, 1.0f, 0.1f);
-    }
-    this_mo.SetMorphTargetWeight("wink_r",blink_amount,1.0f);
-    this_mo.SetMorphTargetWeight("wink_l",blink_amount,1.0f);
-}
-
-// THIS IS WHERE THE MAGIC HAPPENS.
-// update() function is called once per every time unit for every player and AI character, and most things that must be constantly updated will be called from this function.
-// the bool _controlled is true when character is controlled by a human, false when it's controlled by AI.
-void update(bool _controlled, int _num_frames) {
-    UpdateHeadLook();
-    UpdateBlink();
-    UpdateEyeLook();
-
-    if(controlled && GetInputPressed("v")){
-        string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
-        this_mo.ForceSoundGroupVoice(sound, 0.0f);
-    }
-
-    num_frames = _num_frames;
-
-    HandleActiveBlock();
-
-    ControlUpdate();
-    AIUpdate();
-    time += time_step;
-    //this_mo.SetMorphTargetWeight("fist_l",min(1,max(0,sin(time*3))),0.0f);
-    /*this_mo.SetMorphTargetWeight("wink_r",sin(time*3),1.0f);
-    this_mo.SetMorphTargetWeight("wink_l",sin(time*2+0.3),1.0f);
-    this_mo.SetMorphTargetWeight("squint_l",sin(time*3),1.0f);
-    this_mo.SetMorphTargetWeight("squint_r",sin(time*2),1.0f);
-    this_mo.SetMorphTargetWeight("oh",sin(time*3),1.0f);
-    this_mo.SetMorphTargetWeight("mouth_open",sin(time*4),1.0f);
-    this_mo.SetMorphTargetWeight("sniff",sin(time*20)*0.5+0.5,1.0f);*/
-
-    if(testing_mocap) {
-        return;
-    }
-    controlled = _controlled;
-
-    if(controlled){
-        UpdateAirWhooshSound();
-    }
-    UpdateRagDoll();    
-    if(limp){
-        HandlePickUp();
-        ApplyCameraControls();
-        return;
-    }
-/*
-    vec3 vel(RangedRandomFloat(-20.0f,20.0f),
-             RangedRandomFloat(0.0f,100.0f),
-             RangedRandomFloat(-20.0f,20.0f));
-    vel *= 0.05;
-    vec3 pos = this_mo.GetAvgIKChainTransform("head") * vec3(0.0f,0.0f,0.0f);
-    MakeParticle("Data/Particles/spark.xml",pos, vel)*/;
-    //MakeParticle("Data/Particles/smoke.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-    //MakeParticle("Data/Particles/heavysand.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-    //MakeParticle("Data/Particles/heavydirt.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-    //MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-    //MakeParticle("Data/Particles/impactfast.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-    //MakeParticle("Data/Particles/impactslow.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
-
-    //MakeImpactParticle(this_mo.position);
-
-    block_health += time_step * 0.3f * num_frames;
-    block_health = min(temp_health, block_health);
-    temp_health += time_step * 0.05f * num_frames;
-    temp_health = min(permanent_health, temp_health);
-
-    if(state == _movement_state){
-        UpdateDuckAmount();
-        UpdateGroundAndAirTime();
-        HandleAccelTilt();
-        UpdateMovementControls();
-        UpdateAnimation();
-        ApplyPhysics();
-        HandlePickUp();
-        HandleGroundCollision();
-    } else if(state == _ground_state){
-        HandleAccelTilt();
-        UpdateGroundState();
-    } else if(state == _attack_state){
-        HandleAccelTilt();
-        UpdateAttacking();
-        HandleGroundCollision();
-    } else if(state == _hit_reaction_state){
-        UpdateHitReaction();
-        HandleAccelTilt();
-        HandleGroundCollision();
-    }
-/*
-    if(GetInputPressed("x")){
-        NavPath temp = this_mo.GetPath(this_mo.position,
-                                        this_mo.ReadCharacter(target_id).position);
-        int num_points = temp.NumPoints();
-        for(int i=0; i<num_points-1; i++){
-            DebugDrawLine(temp.GetPoint(i),
-                          temp.GetPoint(i+1),
-                          vec3(1.0f,1.0f,1.0f),
-                          _persistent);
-        }
-    }*/
-    if(controlled && GetInputPressed("1")){    
-        this_mo.char_path = "Data/Characters/guard.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    if(controlled && GetInputPressed("2")){
-        this_mo.char_path = "Data/Characters/guard2.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    if(controlled && GetInputPressed("3")){
-        this_mo.char_path = "Data/Characters/turner.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    if(controlled && GetInputPressed("4")){
-        this_mo.char_path = "Data/Characters/civ.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    if(controlled && GetInputPressed("5")){
-        this_mo.char_path = "Data/Characters/wolf.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    if(controlled && GetInputPressed("6")){
-        this_mo.char_path = "Data/Characters/rabbot.xml";
-        character_getter.Load(this_mo.char_path);
-        this_mo.RecreateRiggedObject(this_mo.char_path);
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        SetState(_movement_state);
-    }
-    
-    if(GetInputPressed("b")){
-        // if you were looking for the controls to change if the AI is hostile or not, look at enemycontrol.as
-        /*if(state == _movement_state){
-            SetState(_ground_state);
-        } else {
-            SetState(_movement_state);
-        }*/
-        TestMocap();
-    }
-
-    if(!controlled){
-        HandleCollisionsBetweenCharacters();
-    }
-
-    float terminal_velocity = 50.0f;
-    if(length_squared(this_mo.velocity) > terminal_velocity*terminal_velocity){
-        this_mo.velocity *= pow(0.99f,num_frames);
-    }    
-    
-    tilt = tilt * pow(_tilt_inertia,num_frames) +
-           target_tilt * (1.0f - pow(_tilt_inertia,num_frames));
-
-    //tilt = vec3(sin(time*2.0f)*20.0f,0.0f,0.0f);
-
-    this_mo.SetTilt(tilt);
-
-    
-    if(on_ground && state == _movement_state){
-        DecalCheck();
-    }
-    left_smear_time += time_step * num_frames;
-    right_smear_time += time_step * num_frames;
-    smear_sound_time += time_step * num_frames;
-    ApplyCameraControls();
-}
 
 void init(string character_path) {
     this_mo.char_path = character_path;
@@ -2066,6 +2191,7 @@ void init(string character_path) {
         this_mo.position = sphere_col.position;
         last_col_pos = this_mo.position;
     }
+    SetState(_movement_state);
 }
 
 void UpdateAnimation() {
