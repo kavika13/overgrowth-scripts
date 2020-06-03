@@ -3899,7 +3899,7 @@ void SwitchCharacter(string path){
 }
 
 
-void init(string character_path) {
+void Init(string character_path) {
     StartFootStance();
     this_mo.char_path = character_path;
     character_getter.Load(this_mo.char_path);
