@@ -1,4 +1,3 @@
-#include "targetvel.as"
 #include "fliproll.as"
 
 const float _jump_fuel_burn = 10.0f;
@@ -27,14 +26,14 @@ class JumpInfo {
 	}
 
 	void UpdateAirControls() {
-		if(GetInputDown("jump")){
+		if(WantsToAccelerateJump()){
 			if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
 				jetpack_fuel -= time_step * _jump_fuel_burn;
 				this_mo.velocity.y += time_step * _jump_fuel_burn;
 			}
 		}
 
-		if(GetInputPressed("crouch")){
+		if(WantsToFlip()){
 			if(!flip_info.IsFlipping()){
 				flip_info.StartFlip();
 			}

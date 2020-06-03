@@ -67,7 +67,6 @@ void HandleAnimationEvent(string event, vec3 pos){
 	}
 }
 
-#include "targetvel.as"
 #include "aircontrols.as"
 
 vec3 flatten(vec3 vec){
@@ -89,19 +88,19 @@ void UpdateGroundMovementControls() {
 		feet_moving = true;
 	}
 
-	if(GetInputDown("crouch")){
+	if(WantsToCrouch()){
 		target_duck_amount = 1.0f;
 	} else {
 		target_duck_amount = 0.0f;
 	}
 	
-	if(GetInputPressed("crouch") && length_squared(target_velocity)>0.2f){
+	if(WantsToRoll() && length_squared(target_velocity)>0.2f){
 		if(!flip_info.IsFlipping()){
 			flip_info.StartRoll(target_velocity);
 		}
 	}
 
-	if(GetInputDown("jump") && 
+	if(WantsToJump() && 
 	   on_ground_time > _jump_threshold_time && 
 	   !pre_jump)
 	{
@@ -142,13 +141,16 @@ void draw() {
 	this_mo.DrawBody();
 }
 
+void ForceApplied(vec3 force) {
+}
+
 void UpdateGroundAttackControls() {
-	if(GetInputDown("attack") && distance_squared(this_mo.position,target.position) < 1.0){
+	/*if(WantsToAttack() && distance_squared(this_mo.position,target.position) < 1.0){
 		attacking = true;
 		attacking_time = 0.0;
 		this_mo.StartAnimation("Data/Animations/kick.anm");
 		this_mo.SetAnimationCallback("void EndAttack()");
-	}
+	}*/
 }
 
 void UpdateGroundControls() {
@@ -206,7 +208,7 @@ void Land(vec3 vel) {
 	duck_amount = 1.0;
 	target_duck_amount = 1.0;
 	duck_vel = land_speed * 0.3f;
-	if(GetInputDown("crouch")){
+	if(WantsToCrouch()){
 		duck_vel = max(6.0f,duck_vel);
 	}
 
@@ -371,7 +373,7 @@ void UpdateRagDoll() {
 		if(recovery_time < 0.0f){
 			WakeUp(_wake_stand);
 		} else {
-			if(GetInputPressed("crouch")){
+			if(WantsToRollFromRagdoll()){
 				vec3 sphere_center = this_mo.position;
 				float radius = 1.0f;
 				this_mo.GetSlidingSphereCollision(sphere_center, radius);

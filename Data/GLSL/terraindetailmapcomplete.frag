@@ -19,6 +19,7 @@ uniform vec3 avg_color3;
 uniform vec3 cam_pos;
 uniform int weight_component;
 uniform vec3 ws_light;
+uniform float extra_ao;
 
 varying vec3 tangent;
 varying vec3 ws_vertex;
@@ -94,7 +95,7 @@ void main()
 	// Put it all together
 	vec3 color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
 	color *= BalanceAmbient(NdotL);
-	color *= vec3(min(1.0,shadow_tex.g*2.0));
+	color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
 

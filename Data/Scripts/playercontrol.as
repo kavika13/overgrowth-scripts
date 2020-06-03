@@ -1,3 +1,33 @@
+#include "aschar.as"
+
+bool WantsToCrouch() {
+	return GetInputDown("crouch");
+}
+
+bool WantsToRoll() {
+	return GetInputPressed("crouch");
+}
+
+bool WantsToJump() {
+	return GetInputDown("jump");
+}
+
+bool WantsToAttack() {
+	return GetInputDown("attack");
+}
+
+bool WantsToRollFromRagdoll(){
+	return GetInputPressed("crouch");
+}
+
+bool WantsToFlip() {
+	return GetInputPressed("crouch");
+}
+
+bool WantsToAccelerateJump() {
+	return GetInputDown("jump");
+}
+
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0f);
 	

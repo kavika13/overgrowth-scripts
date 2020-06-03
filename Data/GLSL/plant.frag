@@ -10,6 +10,7 @@ uniform vec3 cam_pos;
 uniform float in_light;
 uniform float time;
 uniform vec3 ws_light;
+uniform float extra_ao;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;
@@ -50,9 +51,11 @@ void main()
 	
 
 	color *= BalanceAmbient(NdotL);
-	color *= vec3(min(1.0,shadow_tex.g*2.0));
+	color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
+
+	colormap.a = pow(colormap.a, max(0.1,min(1.0,3.0/length(ws_vertex))));
 
 	gl_FragColor = vec4(color,colormap.a);
 }

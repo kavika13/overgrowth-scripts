@@ -5,6 +5,7 @@ uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
+uniform float extra_ao;
 
 varying vec3 ws_vertex;
 varying vec3 tangent_to_world1;
@@ -48,7 +49,7 @@ void main()
 	
 	color *= BalanceAmbient(NdotL);
 	
-	color *= vec3(min(1.0,shadow_tex.g*2.0));
+	color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 
 	color *= Exposure();
