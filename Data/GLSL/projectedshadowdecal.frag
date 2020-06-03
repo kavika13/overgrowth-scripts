@@ -21,7 +21,8 @@ const float _shadow_blur_fudge = -2.3;
 void main()
 {
     // Get amount to fade shadow based on distance
-    float projected_how_far = (gl_TexCoord[0].z + _half_shadow_depth + _shadow_blur_fudge);
+    float depth =  (ProjShadow.z-0.5)*2000.0 - 5.0;
+    float projected_how_far = (depth + (_shadow_depth * 0.5) + _shadow_blur_fudge);
     float distance_fade = max(0.0, projected_how_far / _shadow_depth);
         
     // Get amount to blur shadow based on distance
@@ -62,6 +63,9 @@ void main()
         //color.xyz = vec3(1.0)-(gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a);
         //color.xyz += LookupCubemapSimple(normal, tex3)*color.a*GetAmbientMultiplier();
         //color.a = 1.0;
+
+        //color = vec4(vec3(depth),1.0);
+        //color = vec4(vec3(projected_how_far),1.0);
 
         gl_FragColor = color;
     }

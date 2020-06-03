@@ -542,11 +542,11 @@ class LedgeInfo {
         if(char_height > ledge_height - grab_height){                           // If ledge is within reach, grab it
             if(char_height < ledge_height - _base_grab_height){                 // If height difference requires the scramble grab, then
                 playing_animation = true;                                       // play the animation
-                int flags = 0;
+                int flags = _ANM_FROM_START;
                 if(rand()%2 == 0){
                     flags = _ANM_MIRRORED;
                 }
-                this_mo.StartAnimation("Data/Animations/r_ledge_barely_reach.anm",8.0f,flags);
+                this_mo.SetAnimation("Data/Animations/r_ledge_barely_reach.anm",8.0f,flags);
                 this_mo.SetAnimationCallback("void EndClimbAnim()");
                 leg_ik_mult = 0.0f;
             } else {
@@ -688,8 +688,8 @@ class LedgeInfo {
                 //this_mo.position.y = target_height;
                 playing_animation = true;
                 allow_ik = false;
-                int flags = _ANM_SUPER_MOBILE;
-                this_mo.StartAnimation("Data/Animations/r_ledge_climb_fast.anm",8.0f,flags);
+                int flags = _ANM_SUPER_MOBILE | _ANM_FROM_START;
+                this_mo.SetAnimation("Data/Animations/r_ledge_climb_fast.anm",8.0f,flags);
                 this_mo.SetAnimationCallback("void EndClimbAnim()");
                 ghost_movement = true;
             }
