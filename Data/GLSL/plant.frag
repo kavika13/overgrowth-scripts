@@ -29,7 +29,7 @@ void main()
 	
 	vec3 diffuse_map_vec = normal;
 	diffuse_map_vec = obj2world3 * tangent_to_world * diffuse_map_vec;
-	diffuse_map_vec.y *= -1.0;
+	diffuse_map_vec.xy *= -1.0;
 	diffuse_color += textureCube(tex4,diffuse_map_vec).xyz * (1.0-NdotL);
 	
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
@@ -38,7 +38,7 @@ void main()
 	
 	vec3 spec_map_vec = reflect(vertex_pos,normal);
 	spec_map_vec = normalize(obj2world3 * tangent_to_world * spec_map_vec);
-	spec_map_vec.y *= -1.0;
+	spec_map_vec.xy *= -1.0;
 	spec_color += textureCube(tex3,spec_map_vec).xyz * 0.5;
 	
 	vec4 colormap = texture2D(tex,gl_TexCoord[0].xy);
