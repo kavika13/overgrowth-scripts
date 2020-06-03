@@ -16,12 +16,14 @@ void main()
 	float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
 	
 	vec3 color = GetDirectColor(NdotL);
-	
-	color += emission.xyz;
 
 	color += textureCube(tex4,world_normal).xyz	* GetAmbientContrib(1.0);
 	
 	color *= BalanceAmbient(NdotL);
+	
+	color *= gl_Color.xyz;
+	
+	color += emission.xyz;
 	
 	AddHaze(color, rel_pos, tex4);
 
