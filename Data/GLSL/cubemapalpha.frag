@@ -36,9 +36,9 @@ void main()
 	vec3 spec_color = vec3(spec);
 	
 	vec3 spec_map_vec = reflect(vertex_pos,normal);
-	spec_map_vec = obj2world3 * tangent_to_world * spec_map_vec;
+	spec_map_vec = normalize(obj2world3 * tangent_to_world * spec_map_vec);
 	spec_map_vec.y *= -1.0;
-	shade_mult = min(1.0,in_light-spec_map_vec.y+1.25) * (in_light*0.3+0.7);;
+	shade_mult = min(1.0,in_light-spec_map_vec.y+1.25) * (in_light*0.3+0.7);
 	spec_color += textureCube(tex3,spec_map_vec).xyz * 0.5 * shade_mult;
 	
 	vec4 colormap = texture2D(tex,gl_TexCoord[0].xy);
