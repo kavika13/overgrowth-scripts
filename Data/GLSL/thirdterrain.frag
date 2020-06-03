@@ -39,9 +39,6 @@ void main()
 	float far = 1000.0;
 	
 	color = mix(color, textureCube(tex4,normalize(rel_pos)).xyz, min(1.0,length(rel_pos)/far));
-	
-	//color = terrain_color.xyz;
 
-	
-	gl_FragColor = vec4(color,1.0);
+	gl_FragColor = vec4(color,terrain_color.a);
 }
