@@ -620,9 +620,9 @@ void UpdateState() {
 }
 
 void UpdateIdleType() {
-    if(target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsKnockedOut()") == _awake){
+    if(situation.NeedsCombatPose()){
         idle_type = _combat;
-    } else if(this_mo.controlled){
+    } else if(WantsReadyStance()){
         idle_type = _active;
     } else {
         idle_type = _stand;
@@ -734,16 +734,15 @@ void UpdateTilt() {
 float stance_move_fade = 0.0f;
 float stance_move_fade_val = 0.0f;
 vec3 head_dir;
-const float _target_look_threshold = 7.0f; // How close target must be to look at it
-const float _target_look_threshold_sqrd = 
-    _target_look_threshold * _target_look_threshold;
     
 float head_look_opac;
 float choke_look_time = 0.0f;
 
+int force_look_target_id = -1;
 vec3 random_look_dir;
 float random_look_delay = 0.0f;
 float look_inertia;
+LookTarget look_target;
 
 vec3 GetTargetHeadDir() {
     bool look_at_target = false;
@@ -765,12 +764,10 @@ vec3 GetTargetHeadDir() {
         look_inertia = 0.8f;
         target_head_dir = normalize(get_weapon_pos - this_mo.GetAvgIKChainPos("head"));
     } else {
-        if(target_id != -1){
-            vec3 target_pos = ReadCharacterID(target_id).GetAvgIKChainPos("head");
-            if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
-                look_at_target = true;
-                target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
-            }
+        if(force_look_target_id != -1){
+            vec3 target_pos = ReadCharacterID(force_look_target_id).GetAvgIKChainPos("head");
+            look_at_target = true;
+            target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
         }
         if(look_at_target){
             target_head_dir = target_dir;
@@ -786,7 +783,12 @@ vec3 GetTargetHeadDir() {
             target_head_dir = normalize(target_head_dir);
             look_inertia = 0.8f;
         } else {
-            target_head_dir = random_look_dir;//this_mo.GetFacing();
+            if(look_target.type == _none){
+                target_head_dir = random_look_dir;
+            } else if(look_target.type == _character){
+                vec3 target_pos = ReadCharacterID(look_target.id).GetAvgIKChainPos("head");
+                target_head_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
+            }
             look_inertia = 0.9f;
         }
     }
@@ -807,6 +809,7 @@ vec3 GetTargetHeadDir() {
         rand_dir.y += RangedRandomFloat(-0.3f,0.3f);
         random_look_dir = normalize(rand_dir);
         random_look_dir = mix(this_mo.GetFacing(), random_look_dir, 0.5f);
+        situation.GetLookTarget(look_target);
     }
 
     return target_head_dir;
@@ -2622,7 +2625,7 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint16 flags, fl
     return closest_id;
 }
 
-int GetClosestVisibleCharacterID(uint16 flags){
+void GetVisibleCharacters(uint16 flags, array<int> &visible_characters){
     mat4 transform = this_mo.GetAvgIKChainTransform("head");
     mat4 transform_offset;
     transform_offset.SetRotationX(-70);
@@ -2631,7 +2634,6 @@ int GetClosestVisibleCharacterID(uint16 flags){
     GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
     //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _fade);
     vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-    array<int> visible_characters;
     for(uint i=0; i<nearby_characters.size(); ++i){
         if(this_mo.getID() != nearby_characters[i] &&
            ReadCharacterID(nearby_characters[i]).VisibilityCheck(head_pos))
@@ -2639,7 +2641,11 @@ int GetClosestVisibleCharacterID(uint16 flags){
             visible_characters.push_back(nearby_characters[i]);
         }
     }
+}
 
+int GetClosestVisibleCharacterID(uint16 flags){
+    array<int> visible_characters;
+    GetVisibleCharacters(flags, visible_characters);
     return GetClosestCharacterInArray(this_mo.position, visible_characters, flags, 0.0f);
 }
 
@@ -4131,10 +4137,9 @@ void UpdateAnimation() {
             // when there are more than two animations to blend, the XML file refers to another 
             // XML file which asks for another blending variable.
             stance_move = false;
-            if(target_id != -1 && speed < _stance_move_threshold && trying_to_get_weapon == 0){
-                MovementObject @char = ReadCharacterID(target_id);
-                if(distance_squared(this_mo.position,char.position) < _target_look_threshold_sqrd &&
-                    char.IsKnockedOut() == 0)
+            int force_look_target = situation.GetForceLookTarget();
+            if(force_look_target != -1 && speed < _stance_move_threshold && trying_to_get_weapon == 0){
+                if(situation.NeedsCombatPose())
                 {
                     stance_move = true;
                     stance_move_fade = 1.0f;
@@ -4147,6 +4152,13 @@ void UpdateAnimation() {
             if(speed < _walk_threshold && GetTargetVelocity() != vec3(0.0f)){
                 stance_move = true;
             }
+            if(WantsToWalkBackwards() && length_squared(flat_velocity) > 0.001f){
+                stance_move = true;
+                this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
+                                                               normalize(flat_velocity * -1.0f),
+                                                               1.0 - pow(0.95f, num_frames)));
+            }
+
             if(speed > _walk_threshold && feet_moving && !stance_move){
                 this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                                normalize(flat_velocity),
@@ -4157,8 +4169,8 @@ void UpdateAnimation() {
                 mirrored_stance = false;
             } else {
                 if(stance_move){
-                    if(target_id != -1 && speed > 1.0f && tethered == _TETHERED_FREE){
-                        MovementObject@ char = ReadCharacterID(target_id);
+                    if(force_look_target != -1 && speed > 1.0f && tethered == _TETHERED_FREE){
+                        MovementObject@ char = ReadCharacterID(force_look_target);
                         vec3 dir = char.position - this_mo.position;
                         dir.y = 0.0f;
                         dir = normalize(dir);

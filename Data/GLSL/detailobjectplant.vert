@@ -10,6 +10,7 @@ uniform mat4 transforms[40];
 uniform vec4 texcoords2[40];
 uniform float height;
 uniform float max_distance;
+uniform float plant_shake;
 
 varying mat3 tangent_to_world;
 VARYING_REL_POS
@@ -21,7 +22,7 @@ void main()
 {    
     mat4 obj2world = transforms[int(index)];
     vec4 transformed_vertex = obj2world*gl_Vertex;
-    vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Vertex.y*2.0, time);
+    vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Vertex.y*2.0, time, plant_shake);
     vertex_offset.y *= 0.2;
 
     CALC_TAN_TO_WORLD

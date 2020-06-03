@@ -1,7 +1,10 @@
 #include "aschar.as"
+#include "situationawareness.as"
 
 float throw_key_time;
 bool listening = false;
+
+Situation situation;
 
 int IsUnaware() {
     return 0;
@@ -10,15 +13,26 @@ int IsUnaware() {
 void NotifySound(int created_by_id, float max_dist, vec3 pos) {
 }
 
+
 void UpdateBrain(){
     if(GetInputDown(this_mo.controller_id, "grab")){
         throw_key_time += time_step * num_frames;
     } else {
         throw_key_time = 0.0f;
     }
+
+    array<int> characters;
+    GetVisibleCharacters(0, characters);
+    for(uint i=0; i<characters.size(); ++i){
+        situation.Notice(characters[i]);
+    }
+
+    situation.Update();
+    force_look_target_id = situation.GetForceLookTarget();
 }
 
 void ResetMind() {
+    situation.clear();
 }
 
 int IsIdle() {
@@ -184,4 +198,20 @@ void ChooseAttack(bool front) {
     } else {
         curr_attack = "air";
     }
+}
+
+bool WantsToWalkBackwards() {
+    return false;
+}
+
+bool WantsReadyStance() {
+    return true;
+}
+
+int CombatSong() {
+    return situation.PlayCombatSong()?1:0;
+}
+
+int IsAggressive() {
+    return 0;
 }

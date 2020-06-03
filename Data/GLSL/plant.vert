@@ -4,6 +4,7 @@
 
 UNIFORM_REL_POS
 uniform float time;
+uniform float plant_shake;
 
 VARYING_TAN_TO_WORLD
 VARYING_REL_POS
@@ -15,7 +16,7 @@ void main()
 
     mat4 obj2world = GetPseudoInstanceMat4();
     vec4 transformed_vertex = obj2world*gl_Vertex;
-    vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Color.r, time);
+    vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Color.r, time, plant_shake);
     transformed_vertex.xyz += obj2worldmat3 * vertex_offset;
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
 
