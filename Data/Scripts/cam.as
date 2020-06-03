@@ -46,6 +46,9 @@ void Update() {
         //MakeParticle("Data/Particles/bloodmist.xml",sprite_pos,vec3(0.0f));
     }
 
+    if(GetInputPressed("l")){
+        //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
+    }
 
     if(GetInputPressed("o") && GetInputDown("ctrl")){
         camera_animation_reader.AttachTo("Data/Animations/test.canm");

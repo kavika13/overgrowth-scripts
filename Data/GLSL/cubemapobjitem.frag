@@ -27,7 +27,8 @@ float rand(vec2 co){
 void main()
 {            
     if(stipple_val != 1 &&
-       int(gl_FragCoord.x + x_stipple_offset) % 2 * int(gl_FragCoord.y + y_stipple_offset) % 2 == 0){
+       (int(mod(gl_FragCoord.x + float(x_stipple_offset),float(stipple_val))) != 0 ||
+        int(mod(gl_FragCoord.y + float(y_stipple_offset),float(stipple_val))) != 0)){
         discard;
     }
     if((rand(gl_FragCoord.xy)) < fade){

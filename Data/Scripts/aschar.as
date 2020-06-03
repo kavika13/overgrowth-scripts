@@ -384,7 +384,7 @@ void HandleSpecialKeyPresses() {
 
     if(controlled){
         if(GetInputPressed("l")){
-            //this_mo.LoadLevel("Data/Levels/DesertFort_IGF.xml");
+            //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
             this_mo.ResetLevel();
         }
         if(GetInputPressed("v")){
