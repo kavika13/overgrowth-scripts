@@ -111,7 +111,8 @@ float blood_amount, wetblood; \
 ReadBloodTex(blood_tex, tc0, blood_amount, wetblood);
 
 #define UNIFORM_BLOOD_TEXTURE \
-uniform sampler2D blood_tex;
+uniform sampler2D blood_tex; \
+uniform vec3 blood_tint;
 
 #define UNIFORM_FUR_TEXTURE \
 uniform sampler2D fur_tex;
@@ -235,7 +236,7 @@ vec3 tint_mult = mix(vec3(0.0), tint_palette[0], tintmap.r) + \
 colormap.xyz *= tint_mult;
 
 #define CALC_BLOOD_ON_COLOR_MAP \
-ApplyBloodToColorMap(colormap, blood_amount, wetblood);
+ApplyBloodToColorMap(colormap, blood_amount, wetblood, blood_tint);
 
 #define CALC_RIM_HIGHLIGHT \
 vec3 view = normalize(ws_vertex*-1.0); \

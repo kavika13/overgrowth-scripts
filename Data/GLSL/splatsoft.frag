@@ -61,5 +61,5 @@ void main()
     depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
     
     float alpha = min(1.0,pow(colormap.a*gl_Color.a*depth_blend,5.0)*20.0);
-    gl_FragColor = vec4(color,alpha);
+    gl_FragColor = vec4(color*gl_Color.xyz,alpha);
 }

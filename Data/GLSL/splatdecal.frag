@@ -3,6 +3,7 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform vec3 color_tint;
 uniform float wetness;
 
 varying mat3 tangent_to_world;
@@ -49,7 +50,7 @@ void main()
     colormap.xyz *= (wetness*0.5+0.75);
     
     float fresnel = 1.0;// - dot(normalize(vertex_pos), vec3(0,0,-1))*0.8;
-    color = diffuse_color * colormap.xyz + spec_color * fresnel;
+    color = diffuse_color * colormap.xyz * color_tint + spec_color * fresnel;
     
     AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 

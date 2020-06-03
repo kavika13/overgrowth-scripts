@@ -38,5 +38,5 @@ void main()
     color *= BalanceAmbient(NdotL);
 
     float alpha = min(1.0,pow(colormap.a*gl_Color.a,5.0)*20.0);
-    gl_FragColor = vec4(color,alpha);
+    gl_FragColor = vec4(color*gl_Color.xyz,alpha);
 }

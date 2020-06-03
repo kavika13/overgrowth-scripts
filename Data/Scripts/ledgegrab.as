@@ -48,9 +48,9 @@ class MovingGrip {  // This class handles grip positions (IK targets) as they mo
         if(time >= end_time){
             if(id < 2 && distance(start_pos, end_pos)>0.1f){                    // Hands play grip sound at the end of their movements
                 if(id==0){
-                    this_mo.MaterialEvent("edge_crawl", this_mo.GetIKTargetPosition("leftarm"));
+                    this_mo.MaterialEvent("edge_crawl", this_mo.rigged_object().GetIKTargetPosition("leftarm"));
                 } else {
-                    this_mo.MaterialEvent("edge_crawl", this_mo.GetIKTargetPosition("rightarm"));
+                    this_mo.MaterialEvent("edge_crawl", this_mo.rigged_object().GetIKTargetPosition("rightarm"));
                 }
             }
             start_pos = end_pos;
@@ -167,7 +167,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         old_offset[0] = offset[0];
         old_offset[1] = offset[1];
 
-        vec3 check_pos = this_mo.GetIKTargetPosition("leftarm")+offset[0]+ledge_dir*0.1f;    
+        vec3 check_pos = this_mo.rigged_object().GetIKTargetPosition("leftarm")+offset[0]+ledge_dir*0.1f;    
         vec3 check_dir = normalize(vec3(0.0f,-1.0f,0.0f)+ledge_dir*0.5f);
         col.GetSweptSphereCollision(check_pos-check_dir*0.2f,
                                         check_pos+check_dir*0.4f,
@@ -178,11 +178,11 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
             offset[0].y -= 0.10f;
         } else {
             if(last_grip_pos[0] != vec3(0.0f)){
-                offset[0] = last_grip_pos[0] - this_mo.GetIKTargetPosition("leftarm");   
+                offset[0] = last_grip_pos[0] - this_mo.rigged_object().GetIKTargetPosition("leftarm");   
             }
         }
 
-        check_pos = this_mo.GetIKTargetPosition("rightarm")+offset[1]+ledge_dir*0.1f;    
+        check_pos = this_mo.rigged_object().GetIKTargetPosition("rightarm")+offset[1]+ledge_dir*0.1f;    
         col.GetSweptSphereCollision(check_pos-check_dir*0.2f,
                                         check_pos+check_dir*0.4f,
                                         0.05f); 
@@ -192,7 +192,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
             offset[1].y -= 0.10f;
         } else {
             if(last_grip_pos[1] != vec3(0.0f)){
-                offset[1] = last_grip_pos[1] - this_mo.GetIKTargetPosition("rightarm");   
+                offset[1] = last_grip_pos[1] - this_mo.rigged_object().GetIKTargetPosition("rightarm");   
             }
         }
 
@@ -224,10 +224,10 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         weight[3] = foot_pos[1].GetWeight();
         float total_weight = weight[0] + weight[1] + weight[2] + weight[3];     
         vec3 weight_offset = vec3(0.0f);
-        weight_offset += this_mo.GetIKTargetPosition("leftarm") * (weight[0] / total_weight);   // Get weighted average of gripper offsets
-        weight_offset += this_mo.GetIKTargetPosition("rightarm") * (weight[1] / total_weight);
-        weight_offset += this_mo.GetIKTargetPosition("left_leg") * (weight[2] / total_weight);
-        weight_offset += this_mo.GetIKTargetPosition("right_leg") * (weight[3] / total_weight);
+        weight_offset += this_mo.rigged_object().GetIKTargetPosition("leftarm") * (weight[0] / total_weight);   // Get weighted average of gripper offsets
+        weight_offset += this_mo.rigged_object().GetIKTargetPosition("rightarm") * (weight[1] / total_weight);
+        weight_offset += this_mo.rigged_object().GetIKTargetPosition("left_leg") * (weight[2] / total_weight);
+        weight_offset += this_mo.rigged_object().GetIKTargetPosition("right_leg") * (weight[3] / total_weight);
         weight_offset -= this_mo.position;
         weight_offset -= dot(ledge_dir,weight_offset) * ledge_dir;              // Flatten weighted offset against ledge plane
         float move_amount = sqrt(this_mo.velocity.x * this_mo.velocity.x
@@ -245,7 +245,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
 
         weight_offset *= pls.ik_mult;     
         weight_offset.y += pls.height_offset * (1.0f-pls.ik_mult);
-        this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,pls.transition_progress)); // Apply weight offset to torso
+        this_mo.rigged_object().SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,pls.transition_progress)); // Apply weight offset to torso
 
         for(int i=0; i<4; i++){
             offset[i] -= weight_offset;
@@ -262,10 +262,10 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
 
         //Print("IK mult: " + ik_mult + "\n"); 
 
-        this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],pls.transition_progress));  // Set IK target offsets
-        this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],pls.transition_progress));
-        this_mo.SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],pls.transition_progress));
-        this_mo.SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],pls.transition_progress));
+        this_mo.rigged_object().SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],pls.transition_progress));  // Set IK target offsets
+        this_mo.rigged_object().SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],pls.transition_progress));
+        this_mo.rigged_object().SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],pls.transition_progress));
+        this_mo.rigged_object().SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],pls.transition_progress));
     }
 }
 
@@ -491,11 +491,11 @@ class LedgeInfo {
     void UpdateIKTargets() {
         /*if(playing_animation){
             vec3 offset = (ledge_grab_origin - this_mo.position)*(1.0f-transition_progress);
-            this_mo.SetIKTargetOffset("leftarm",offset);
-            this_mo.SetIKTargetOffset("rightarm",offset);
-            this_mo.SetIKTargetOffset("left_leg",offset);
-            this_mo.SetIKTargetOffset("right_leg",offset);
-            this_mo.SetIKTargetOffset("full_body",offset);
+            this_mo.rigged_object().SetIKTargetOffset("leftarm",offset);
+            this_mo.rigged_object().SetIKTargetOffset("rightarm",offset);
+            this_mo.rigged_object().SetIKTargetOffset("left_leg",offset);
+            this_mo.rigged_object().SetIKTargetOffset("right_leg",offset);
+            this_mo.rigged_object().SetIKTargetOffset("full_body",offset);
             return;
         }*/
         shimmy_anim.UpdateIKTargets(pls);
@@ -613,7 +613,7 @@ class LedgeInfo {
                     flags = _ANM_MIRRORED;
                 }
                 this_mo.SetAnimation("Data/Animations/r_ledge_barely_reach.anm",8.0f,flags);
-                this_mo.SetAnimationCallback("void EndClimbAnim()");
+                this_mo.rigged_object().anim_client().SetAnimationCallback("void EndClimbAnim()");
                 pls.leg_ik_mult = 0.0f;
             } else {
                 playing_animation = false;                                      // Otherwise go straight into ledge pose
@@ -656,7 +656,7 @@ class LedgeInfo {
     
     void UpdateLedge(const Timestep &in ts) {
         if(playing_animation){
-            if(this_mo.GetStatusKeyValue("cancel")>=1.0f && 
+            if(this_mo.rigged_object().GetStatusKeyValue("cancel")>=1.0f && 
                WantsToCancelAnimation())
             {
                 EndClimbAnim();
@@ -759,7 +759,7 @@ class LedgeInfo {
                 allow_ik = false;
                 int flags = _ANM_SUPER_MOBILE | _ANM_FROM_START;
                 this_mo.SetAnimation("Data/Animations/r_ledge_climb_fast.anm",8.0f,flags);
-                this_mo.SetAnimationCallback("void EndClimbAnim()");
+                this_mo.rigged_object().anim_client().SetAnimationCallback("void EndClimbAnim()");
                 ghost_movement = true;
             }
             HandleAIEvent(_climbed_up);
