@@ -66,7 +66,7 @@ float GetSpecContrib ( const vec3 light_pos,
 					   const vec3 vertex_pos,
 					   const float unshadowed ) {
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
-	return min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0)*unshadowed;
+	return min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0)*unshadowed*gl_LightSource[0].diffuse.a;
 }
 
 float BalanceAmbient ( const float direct_contrib ) {

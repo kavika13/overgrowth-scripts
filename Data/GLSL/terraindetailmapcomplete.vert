@@ -59,6 +59,6 @@ void main()
 			min(1.0,(terrain_size-gl_Vertex.z)*fade_mult)*
 			min(1.0,(gl_Vertex.z+500.0)*fade_mult);
 
-	gl_TexCoord[0] = gl_MultiTexCoord0;	
+	gl_TexCoord[0] = gl_MultiTexCoord0+vec4(0.0005)+vec4(light_pos.xz*0.0005,0.0,0.0);	
 	gl_TexCoord[1] = gl_MultiTexCoord3*0.1;
 } 

@@ -73,7 +73,7 @@ void main()
 	vec3 spec_color;
 	vec3 spec_map_vec;
 
-	float fade_distance = 100.0;
+	float fade_distance = 200.0;
 	float fade = min(1.0,max(0.0,length(rel_pos)/fade_distance));
 
 	vec3 normalmap = (texture2D(tex7,gl_TexCoord[1].xy) * weight_map[0] +
@@ -96,8 +96,8 @@ void main()
 	spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
 	spec_map_vec = reflect(vertex_pos,normal);
-	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
-				  GetAmbientContrib(shadow_tex.g);
+	spec_color += LookupCubemapSimple(spec_map_vec, tex2) *
+				  GetAmbientContrib(shadow_tex.g) * 2.0;
 	 
 	vec4 colormap = texture2D(tex6,gl_TexCoord[1].xy) * weight_map[0] +
 				    texture2D(tex8,gl_TexCoord[1].xy) * weight_map[1] +
