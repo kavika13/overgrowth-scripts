@@ -11,6 +11,7 @@ varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
 varying vec3 world_light;
+//varying vec3 normal_var;
 
 //#include "lighting.glsl"
 
@@ -60,6 +61,7 @@ void main()
 	//color = vec3(dot(light_pos,normal));
 
 	//color = vec3(NdotL*0.6);
+
 
 	gl_FragColor = vec4(color,1.0);
 }

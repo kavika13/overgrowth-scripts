@@ -11,12 +11,15 @@ varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
 varying vec3 world_light;
+//varying vec3 normal_var;
 
 //#include "transposemat3.glsl"
 //#include "relativeskypos.glsl"
 
 void main()
 {	
+	//normal_var = normalize(gl_Normal);//(obj2world * vec4(normalize(gl_NormalMatrix * gl_Normal),0.0)).xyz;
+	
 	mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
 
 	vec3 eyeSpaceVert = (gl_ModelViewMatrix * gl_Vertex).xyz;

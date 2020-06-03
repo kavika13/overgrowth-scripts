@@ -12,7 +12,9 @@ varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
 varying vec3 world_light;
-varying mat4 concat_bone;
+varying vec3 concat_bone1;
+varying vec3 concat_bone2;
+varying vec3 concat_bone3;
 
 //#include "lighting.glsl"
 
@@ -23,11 +25,16 @@ void main()
 	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[1].xy).rgb;
 	
 	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
-	vec3 normal = UnpackObjNormal(normalmap);
+	
+	mat3 concat_bone;
+	concat_bone[0] = concat_bone1;
+	concat_bone[1] = concat_bone2;
+	concat_bone[2] = concat_bone3;
+	vec3 normal = normalize(concat_bone * UnpackObjNormal(normalmap));
 
-	vec4 temp_normal = vec4(normal,0.0);
-	temp_normal = concat_bone * temp_normal;
-	normal = normalize(temp_normal.xyz);
+	//vec4 temp_normal = vec4(normal,0.0);
+	//temp_normal = concat_bone * temp_normal;
+	//normal = normalize(temp_normal.xyz);
 
 	float NdotL = GetDirectContrib(light_pos, normal, shadow_tex.r);
 	
