@@ -97,9 +97,11 @@ void HandleAIEvent(AIEvent event){
         will_throw_counter = RangedRandomFloat(0.0f,1.0f)<_throw_counter_probability;        
     }
     if(event == _activeblocked){
-        throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.5f;
-        if(!throw_after_active_block){
-            ai_attacking = true;
+        if(RangedRandomFloat(0.0f, 1.0f) < p_block_followup){
+            throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.5f;
+            if(!throw_after_active_block){
+                ai_attacking = true;
+            }
         }
     }
     if(event == _choking){
@@ -220,7 +222,9 @@ void UpdateBrain(){
                     SetGoal(_patrol);
                 }
                 if(rand()%(150/num_frames)==0){
-                    ai_attacking = !ai_attacking;
+                    float rand_val = RangedRandomFloat(0.0f,1.0f);
+                    //Print(rand_val + " < " + p_aggression + "?\n");
+                    ai_attacking = (RangedRandomFloat(0.0f,1.0f) < p_aggression);
                 }
                 if(rand()%(150/num_frames)==0){
                     target_attack_range = RangedRandomFloat(0.0f, 3.0f);
@@ -374,11 +378,18 @@ bool ShouldBlock(){
 bool WantsToStartActiveBlock(){
     bool should_block = ShouldBlock();
     if(should_block && !going_to_block){
-        going_to_block = true;
-        block_delay = RangedRandomFloat(_block_reflex_delay_min,_block_reflex_delay_max);
+        MovementObject @char = ReadCharacterID(target_id);
+        block_delay = char.GetTimeUntilEvent("blockprepare");
+        if(block_delay != -1.0f){
+            going_to_block = true;
+        }
+        if(RangedRandomFloat(0.0f,1.0f) > p_block_skill){
+            block_delay += 0.4f;
+        }
     }
     if(going_to_block){
         block_delay -= time_step * num_frames;
+        block_delay = min(1.0f, block_delay);
         if(block_delay <= 0.0f){
             going_to_block = false;
             return true;
@@ -564,7 +575,7 @@ float struggle_change_time = 0.0f;
 vec3 struggle_dir;
 
 int last_seen_sphere = -1;
-vec3 GetTargetVelocity() {
+vec3 GetBaseTargetVelocity() {
     if(startled){
         return vec3(0.0f);
     } else if(goal == _patrol){
@@ -595,6 +606,40 @@ vec3 GetTargetVelocity() {
     } else {
         return vec3(0.0f);
     }
+}
+
+vec3 ApplyRepulsor(vec3 vel){
+    array<int> nearby_characters;
+    const float _avoid_range = 2.0f;
+    GetCharactersInSphere(this_mo.position, _avoid_range, nearby_characters);
+
+    for(uint i=0; i<nearby_characters.size(); ++i){
+        if(this_mo.getID() == nearby_characters[i]){
+            continue;
+        }
+        MovementObject@ char = ReadCharacterID(nearby_characters[i]);
+        if(character_getter.OnSameTeam(char.char_path) != 1){
+            continue;
+        }
+        float dist = length(this_mo.position - char.position);
+        if(dist == 0.0f || dist > _avoid_range){
+            continue;
+        }
+        vel += (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
+    }
+    if(length_squared(vel) > 1.0f){
+        vel = normalize(vel);
+    }
+    return vel;
+}
+
+vec3 GetTargetVelocity(){
+    vec3 base_target_velocity = GetBaseTargetVelocity();
+    vec3 target_vel = base_target_velocity;
+    
+    target_vel = ApplyRepulsor(target_vel);
+
+    return target_vel;
 }
 
 // Called from aschar.as, bool front tells if the character is standing still. 

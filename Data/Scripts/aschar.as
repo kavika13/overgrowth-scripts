@@ -75,14 +75,14 @@ void MouseControlJumpTest() {
     vec3 flat_rd = vec3(rel_dist.x, 0.0f, rel_dist.z);
     vec3 jump_target = sphere_col.position;
     this_mo.SetRotationFromFacing(flat_rd);
-    vec3 start_vel = GetVelocityForTarget(this_mo.position, sphere_col.position, _run_speed*1.5f, _jump_vel*1.7f, 0.55f);
+    vec3 start_vel = GetVelocityForTarget(this_mo.position, sphere_col.position, run_speed*1.5f, _jump_vel*1.7f, 0.55f);
     if(start_vel.y != 0.0f){
         bool low_success = false;
         bool med_success = false;
         bool high_success = false;
         const float _success_threshold = 0.1f;
         vec3 end;
-        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 0.15f);
+        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.15f);
         jump_info.jump_start_vel = low_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -99,7 +99,7 @@ void MouseControlJumpTest() {
                 low_success = true;
             }
         } 
-        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 0.55f);
+        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f);
         jump_info.jump_start_vel = med_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -116,7 +116,7 @@ void MouseControlJumpTest() {
                 med_success = true;
             }
         } 
-        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, _run_speed*1.5f, _jump_vel*1.7f, 1.0f);
+        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 1.0f);
         jump_info.jump_start_vel = high_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -1654,7 +1654,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         block_health = 0.0f;
     }
         
-    block_health -= attack_getter2.GetBlockDamage();
+    block_health -= attack_getter2.GetBlockDamage() * p_damage_multiplier;
     block_health = max(0.0f, block_health);
 
     float sharp_damage = attack_getter2.GetSharpDamage();
@@ -1827,6 +1827,7 @@ void EndHitReaction() {
 
 void TakeDamage(float how_much){
     const float _permananent_damage_mult = 0.4f;
+    how_much *= p_damage_multiplier;
     temp_health -= how_much;
     permanent_health -= how_much * _permananent_damage_mult;
     if(permanent_health <= 0.0f && knocked_out != _dead){
@@ -1845,6 +1846,7 @@ void TakeDamage(float how_much){
 }
 
 void TakeBloodDamage(float how_much){
+    how_much *= p_damage_multiplier;
     blood_health -= how_much;
     if(blood_health <= 0.0f && knocked_out == _awake){
         knocked_out = _unconscious;
@@ -1860,9 +1862,10 @@ const float _ground_normal_y_threshold = 0.5f;
 const float _leg_sphere_size = 0.45f; // affects the size of a sphere collider used for leg collisions
 const float _bumper_size = 0.5f;
 
-const float _run_speed = 8.0f; // used to calculate movement and jump velocities, change this instead of max_speed
+const float _base_run_speed = 8.0f; // used to calculate movement and jump velocities, change this instead of max_speed
 const float _true_max_speed = 12.0f; // speed can never exceed this amount
-float max_speed = _run_speed; // this is recalculated constantly because actual max speed is affected by slopes
+float run_speed = _base_run_speed;
+float max_speed = run_speed; // this is recalculated constantly because actual max speed is affected by slopes
 
 const float _tilt_transition_vel = 8.0f;
 
@@ -2165,7 +2168,7 @@ void UpdateGroundMovementControls() {
     vec3 adjusted_vel = WorldToGroundSpace(target_velocity);
 
     // Adjust speed based on ground slope
-    max_speed = _run_speed;
+    max_speed = run_speed;
     if(tethered != _TETHERED_FREE){
         max_speed *= 0.5f;   
         //if(tethered == _TETHERED_DRAGBODY){
@@ -3154,6 +3157,7 @@ void UpdateAttacking() {
         }
 
         this_mo.StartAnimation(anim_path, 20.0f, flags);
+        this_mo.SetSpeedMult(p_attack_speed_mult);
 
         string material_event = attack_getter.GetMaterialEvent();
         if(material_event.length() > 0){
@@ -4363,4 +4367,33 @@ void ApplyPhysics() {
             this_mo.velocity *= pow(current_movement_friction, num_frames);
         }
     }
+}
+
+float p_aggression;
+float p_damage_multiplier;
+float p_block_skill;
+float p_block_followup;
+float p_attack_speed_mult;
+float p_speed_mult;
+
+
+void SetParameters() {
+    params.AddString("Aggression","0.5");
+    p_aggression = min(1.0f, max(0.0f, params.GetFloat("Aggression")));
+
+    params.AddString("Damage Resistance","1.0");
+    p_damage_multiplier = 1.0f / max(0.00001f,params.GetFloat("Damage Resistance"));
+
+    params.AddString("Block Skill","0.5");
+    p_block_skill = min(1.0f, max(0.0f, params.GetFloat("Block Skill")));
+
+    params.AddString("Block Follow-up","0.5");
+    p_block_followup = min(1.0f, max(0.0f, params.GetFloat("Block Follow-up")));
+
+    params.AddString("Attack Speed","1.0");
+    p_attack_speed_mult = min(2.0f, max(0.1f, params.GetFloat("Attack Speed")));
+
+    params.AddString("Movement Speed","1.0");
+    p_speed_mult = min(100.0f, max(0.01f, params.GetFloat("Movement Speed")));
+    run_speed = _base_run_speed * p_speed_mult;
 }

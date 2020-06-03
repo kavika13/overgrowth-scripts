@@ -334,7 +334,7 @@ class JumpInfo {
 
     // adjusts the velocity of jumps and wall jumps based on ground_normal
     vec3 GetJumpVelocity(vec3 target_velocity){
-        vec3 jump_vel = target_velocity * _run_speed;
+        vec3 jump_vel = target_velocity * run_speed;
         jump_vel.y = _jump_vel;
 
         vec3 jump_dir = normalize(jump_vel);
@@ -353,7 +353,7 @@ class JumpInfo {
             ground_space.y = dot(ground_up, jump_vel);
             ground_space.z = dot(ground_front, jump_vel);
 
-            vec3 corrected_ground_space = vec3(0,_jump_vel,length(target_velocity)*_run_speed);
+            vec3 corrected_ground_space = vec3(0,_jump_vel,length(target_velocity)*run_speed);
             ground_space = corrected_ground_space;
 
             jump_vel = ground_space.x * ground_right +

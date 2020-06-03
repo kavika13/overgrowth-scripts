@@ -32,9 +32,9 @@ void main()
     
     // Clip decal to texture edges
     float edge_buffer = 0.01;
-    if(gl_TexCoord[0].x <= blur_offset+edge_buffer || gl_TexCoord[0].x >= 1.0-blur_offset-edge_buffer ||
-       gl_TexCoord[0].y <= blur_offset+edge_buffer || gl_TexCoord[0].y >= 1.0-blur_offset-edge_buffer ||
-       gl_TexCoord[0].z < -10.0){
+    if(ProjShadow.x <= blur_offset+edge_buffer || ProjShadow.x >= 1.0-blur_offset-edge_buffer ||
+       ProjShadow.y <= blur_offset+edge_buffer ||ProjShadow.y >= 1.0-blur_offset-edge_buffer ||
+       ProjShadow.z < -10.0){
         discard;
     } else {
         // Accumulate shadow samples
