@@ -1686,10 +1686,10 @@ void ApplyCameraControls() {
 	camera.SetFOV(90);
 	camera.SetPos(cam_pos);
 
-	/*camera.SetFOV(30);
-	cam_pos.y+=0.05f;
-	camera.SetPos(cam_pos);
-	*/
+	//cam_pos = this_mo.GetAvgIKChainTransform("head") * vec3(0.0f,0.0f,0.0f);
+	//camera.SetFOV(20);
+	//camera.SetPos(cam_pos);
+	
 
 	old_cam_pos = cam_pos;
 	camera.CalcFacing();
@@ -1818,7 +1818,6 @@ void update(bool _controlled, int _num_frames) {
 	UpdateEyeLook();
 
 	if(controlled && GetInputPressed("v")){
-		//string sound = "Data/Sounds/voice/kill_intent.xml";
 		string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
 		this_mo.ForceSoundGroupVoice(sound, 0.0f);
 	}

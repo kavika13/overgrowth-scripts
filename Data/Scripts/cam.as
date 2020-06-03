@@ -18,6 +18,12 @@ void update() {
 	if(!co.controlled){
 		return;
 	}
+	
+	if(GetInputPressed("v") && !GetInputDown("ctrl")){
+		vec3 sprite_pos = co.position + camera.GetFacing()*4.0;
+		MakeParticle("Data/Particles/bigfire.xml",sprite_pos,vec3(0.0f));
+	}
+
 	if(GetInputPressed("o") && GetInputDown("ctrl")){
 		camera_animation_reader.AttachTo("Data/Animations/test.canm");
 		co.LoadParallaxScene("Data/Textures/twisted_paths.png",
