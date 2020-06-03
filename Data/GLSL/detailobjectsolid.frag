@@ -16,6 +16,7 @@ uniform float overbright;
 UNIFORM_LIGHT_DIR
 UNIFORM_EXTRA_AO
 uniform vec3 avg_color;
+uniform vec3 color_tint;
 
 varying mat3 tangent_to_world;
 VARYING_REL_POS
@@ -30,7 +31,11 @@ void main()
     vec3 ws_normal = tangent_to_world * normal;
 
     vec3 base_normalmap = texture2D(base_normal_tex,tc1).xyz;
-    vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
+    #ifdef TERRAIN
+        vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
+    #else
+        vec3 base_normal = normalMatrix * UnpackObjNormalV3(base_normalmap.xyz);
+    #endif
     ws_normal = mix(ws_normal,base_normal,min(1.0,1.0-dist_fade*0.7));
      
     #define shadow_tex_coords tc1
@@ -38,7 +43,7 @@ void main()
     CALC_DIFFUSE_LIGHTING
     
     // Put it all together
-    vec3 base_color = texture2D(base_color_tex,tc1).rgb;
+    vec3 base_color = texture2D(base_color_tex,tc1).rgb * color_tint;
     CALC_COLOR_MAP
     float overbright_adjusted = dist_fade * overbright;
     colormap.xyz = mix(base_color * colormap.xyz / avg_color, colormap.xyz, overbright_adjusted * 0.5);

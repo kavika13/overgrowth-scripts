@@ -44,4 +44,5 @@ void main()
     CALC_HAZE
     CALC_EXPOSURE
     CALC_FINAL_ALPHA
+    //gl_FragColor = vec4(base_normal, 1.0);
 }

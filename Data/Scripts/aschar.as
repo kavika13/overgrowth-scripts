@@ -18,7 +18,7 @@ const float QUIET_SOUND_AI = 2.0f;
 const float LOUD_SOUND_AI = 5.0f;
 
 enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking, _jumped, _can_climb,
-             _grabbed_ledge, _climbed_up};
+             _grabbed_ledge, _climbed_up, _damaged};
 
 int head_choke_queue = -1;
 
@@ -1650,6 +1650,7 @@ void Recover() {
     RecoverHealth();
     cut_throat = false;
     cut_torso = false;
+    injured_mouth_open = 0.0f;
     this_mo.rigged_object().CleanBlood();
     ClearTemporaryDecals();
     blood_amount = _max_blood_amount;
@@ -1949,7 +1950,7 @@ void HandleSpecialKeyPresses() {
             DebugDrawLine(temp.GetPoint(i),
                           temp.GetPoint(i+1),
                           vec3(1.0f,1.0f,1.0f),
-                          _persistent);
+                          _fade);
         }
     }
 }
@@ -3944,6 +3945,7 @@ void TakeDamage(float how_much){
     if(this_mo.controlled){
         AchievementEventFloat("player_damage", how_much);
     }
+    HandleAIEvent(_damaged);
     const float _permananent_damage_mult = 0.4f;
     how_much *= p_damage_multiplier;
     temp_health -= how_much;
@@ -3977,6 +3979,7 @@ void TakeBloodDamage(float how_much){
     if(this_mo.controlled){
         AchievementEventFloat("player_blood_loss", how_much);
     }
+    HandleAIEvent(_damaged);
     how_much *= p_damage_multiplier;
     blood_health -= how_much;
     if(permanent_health > blood_health){
@@ -4051,7 +4054,25 @@ void HandleEditorAttachment(int which, int attachment_type, bool mirror){
             weap_slot = _sheathed_left;
         }         
     }
-    if(weap_slot == -1 || weapon_slots[weap_slot] != -1){
+    Print("Requested attach item "+which+" to slot "+weap_slot+"\n");
+    if(weap_slot == -1){
+        Print("No such slot\n");
+        return;
+    }    
+    if(weapon_slots[weap_slot] != -1){
+        Print("Slot already has item "+weapon_slots[weap_slot]+"\n");
+        bool new_goes_in_old = DoesItemFitInItem(which, weapon_slots[weap_slot]);
+        bool old_goes_in_new = DoesItemFitInItem(weapon_slots[weap_slot], which);
+        if(new_goes_in_old){
+            Print("Item "+which+" could fit in item "+weapon_slots[weap_slot]+"\n");
+            weapon_slots[weap_slot+2] = weapon_slots[weap_slot];
+            weapon_slots[weap_slot] = which;
+        } else if(old_goes_in_new) {
+            Print("Item "+weapon_slots[weap_slot]+" could fit in item "+which+"\n");
+            weapon_slots[weap_slot+2] = weapon_slots[which];
+        } else {
+            Print("Neither item can fit in the other\n");
+        }
         return;
     }    
     weapon_slots[weap_slot] = which;
@@ -4731,35 +4752,38 @@ void ApplyIdle(float speed, bool start){
     if(start){
         flags = flags | _ANM_FROM_START;
     }
-
-    if(blood_health < 1.0f){
-        if(weapon_slots[primary_weapon_slot] == -1){
-            if(blood_health < 0.5f && length_squared(this_mo.velocity) < 0.5f){
-                this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedidle.xml", speed, flags,"idle");
-            } else {
-                this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedidle.xml", speed, flags,"idle");
-            }
-        } else {
-            if(blood_health < 0.5f){
-                this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedarmed.xml", speed, flags,"idle");
-            } else {
-                this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedarmed.xml", speed, flags,"idle");
-            }
-        }
+    string AI_idle_anim_override = GetIdleOverride();
+    if(AI_idle_anim_override != ""){
+        this_mo.SetAnimAndCharAnim(AI_idle_anim_override, speed, flags,"idle");
     } else {
-        if(idle_type == _combat){
-            this_mo.SetCharAnimation("idle",speed,flags);
-        } else {
-            string path;
-            if(idle_type == _active){
-                path = "Data/Animations/r_actionidle.xml";
-            } else if(idle_type == _stand){
-                path = "Data/Animations/r_relaxidle.xml";
+        if(blood_health < 1.0f){
+            if(weapon_slots[primary_weapon_slot] == -1){
+                if(blood_health < 0.5f && length_squared(this_mo.velocity) < 0.5f){
+                    this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedidle.xml", speed, flags,"idle");
+                } else {
+                    this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedidle.xml", speed, flags,"idle");
+                }
+            } else {
+                if(blood_health < 0.5f){
+                    this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedarmed.xml", speed, flags,"idle");
+                } else {
+                    this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedarmed.xml", speed, flags,"idle");
+                }
             }
-            this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
+        } else {
+            if(idle_type == _combat){
+                this_mo.SetCharAnimation("idle",speed,flags);
+            } else {
+                string path;
+                if(idle_type == _active){
+                    path = "Data/Animations/r_actionidle.xml";
+                } else if(idle_type == _stand){
+                    path = "Data/Animations/r_relaxidle.xml";
+                }
+                this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
+            }
         }
     }
-
     /*if(this_mo.controlled){
         DebugText("a","Primary weapon: "+weapon_slots[primary_weapon_slot],0.5f);
     }*/
@@ -6898,6 +6922,8 @@ void ScriptSwap() {
 }
 
 void Reset() {
+    this_mo.rigged_object().anim_client().RemoveAllLayers();
+    ResetLayers();
     StartFootStance();
     DropWeapon(); 
     this_mo.ResetSoftAnimation();
@@ -8343,6 +8369,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
     // Get local to world transform
     BoneTransform local_to_world;
     {
+        EnterTelemetryZone("get local_to_world transform");
         float ground_conform = this_mo.rigged_object().GetStatusKeyValue("groundconform");
         if(ground_conform > 0.0f){
             ground_conform = min(1.0f, ground_conform);
@@ -8388,6 +8415,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
 
         local_to_world = flip_modifier * local_to_world;
 
+        // Update offset to handle roll contacts
         if(flip_info.IsFlipping() && on_ground && convex_hull_points.size()>0){
             roll_check_bones.resize(0);
             AddIKBonesToArray(roll_check_bones, kLeftLegIK);
@@ -8426,20 +8454,17 @@ void FinalAnimationMatrixUpdate(int num_frames) {
             }
         }
 
+        // Reduce speed that COM can move downwards during roll
         if(flip_info.IsFlipping() && on_ground){
-            vec3 frame_com = rigged_object.GetFrameCenterOfMass();
+            vec3 frame_com = rigged_object.GetFrameCenterOfMass() - this_mo.position;
             if(old_com == vec3(0.0f) || unragdoll_time > time - 0.5f){
                 old_com = frame_com;
-                old_com.x -= this_mo.position.x;
-                old_com.z -= this_mo.position.z;
                 old_com_vel = this_mo.velocity;
                 old_com_vel.x = 0.0f;
                 old_com_vel.z = 0.0f;
-                old_com_vel.y -= 0.5f;
+                old_com_vel.y = -0.5f;
             }
             {
-                old_com.x += this_mo.position.x;
-                old_com.z += this_mo.position.z;
                 old_com += old_com_vel * time_step * num_frames;
                 old_com_vel += physics.gravity_vector * time_step * num_frames;
                 if(old_com.y < frame_com.y){
@@ -8456,20 +8481,18 @@ void FinalAnimationMatrixUpdate(int num_frames) {
                 local_to_world = roll_modifier * local_to_world;
             }
 
-            frame_com = rigged_object.GetFrameCenterOfMass();
-            //DebugDrawWireSphere(frame_com, 0.1f, vec3(1.0f), _fade);
+            frame_com = rigged_object.GetFrameCenterOfMass() - this_mo.position;
             old_com = frame_com;
-            old_com.x -= this_mo.position.x;
-            old_com.z -= this_mo.position.z;
         } else {
             old_com = vec3(0.0f);
         }
+        LeaveTelemetryZone();
     }
     if(num_frames > 8){
         ResetSecondaryAnimation();
         return;
     }
-
+    EnterTelemetryZone("inverse kinematics");
     bool draw_ground_plane = false;
     if(draw_ground_plane) {    
         vec3 mid = this_mo.position-vec3(0,_leg_sphere_size,0)*0.99;
@@ -8568,10 +8591,10 @@ void FinalAnimationMatrixUpdate(int num_frames) {
 
     float chest_tilt_offset = 0.0f;
     float head_tilt_offset = -0.2f;
-
     // Rotate chest to look at target
     const bool chest_enabled = true;
     if(chest_enabled){
+        EnterTelemetryZone("chest ik");
         float head_look_amount = length(torso_look);
         //vec3 tilt_axis = normalize(cross(vec3(0.0f, 1.0f, 0.0f), tilt));
         //quaternion tilt_rotate(vec4(tilt_axis.x, tilt_axis.y, tilt_axis.z, length(tilt)/180.0f*3.1417f));
@@ -8662,9 +8685,11 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         key_transforms[kLeftArmKey] = offset * key_transforms[kLeftArmKey];
         key_transforms[kRightArmKey] = offset * key_transforms[kRightArmKey];
         key_transforms[kHeadKey] = offset * key_transforms[kHeadKey];
+        LeaveTelemetryZone();
     }
     // Rotate head to look at target
     {
+        EnterTelemetryZone("head ik");
         vec3 head_dir = key_transforms[kHeadKey].rotation * vec3(0,0,1);
         vec3 head_up = key_transforms[kHeadKey].rotation * vec3(0,1,0);
         vec3 head_right = cross(head_dir, head_up);
@@ -8768,6 +8793,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         key_transforms[kHeadKey].rotation = mix(combined_rotation, identity, 0.5f) * key_transforms[kHeadKey].rotation;
         key_transforms[kHeadKey].origin += neck;
         key_transforms[kHeadKey] = key_transforms[kHeadKey] * skeleton_bind_transforms[ik_chain_elements[ik_chain_start_index[kHeadIK]]];
+        LeaveTelemetryZone();
     }
     
     vec3 post_look_com = GetCenterOfMassEstimate(key_transforms);
@@ -8788,6 +8814,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
     old_foot_offset.resize(2);
     old_foot_rotate.resize(2);
     if(on_ground) { // Use IK for foot plant on ground
+        EnterTelemetryZone("foot ik");
         array<bool> ground_collision;
         array<vec3> offset;
         ground_collision.push_back(false);
@@ -8858,6 +8885,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
                 key_transforms[kLeftLegKey+other].origin += offset[i];
             }
         }
+        LeaveTelemetryZone();
     } else {
         for(int i=0; i<2; ++i){
             old_foot_offset[i] = 0.0f;
@@ -8895,6 +8923,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
     BoneTransform hip_offset;
     quaternion hip_rotate;
     {
+        EnterTelemetryZone("hip ik");
         array<vec3> temp_foot_pos;
         array<vec3> hip_pos;
         array<vec3> orig_hip_pos;
@@ -8921,7 +8950,17 @@ void FinalAnimationMatrixUpdate(int num_frames) {
             hip_pos[1] = mid + dir * hip_dist * 0.5f;
         }
         quaternion rotation;
-        GetRotationBetweenVectors(orig_hip_pos[1] - orig_hip_pos[0], hip_pos[1]-hip_pos[0], rotation);
+        {
+            vec3 orig_hip_vec = normalize(orig_hip_pos[1] - orig_hip_pos[0]);
+            vec3 new_hip_vec = normalize(hip_pos[1]-hip_pos[0]);
+            vec3 rotate_axis = normalize(cross(orig_hip_vec, new_hip_vec));
+            vec3 right_vec = cross(orig_hip_vec, rotate_axis);
+            float rotate_angle = atan2(-dot(new_hip_vec, right_vec), dot(new_hip_vec, orig_hip_vec));
+            float flat_speed = sqrt(this_mo.velocity.x*this_mo.velocity.x + this_mo.velocity.z*this_mo.velocity.z);
+            float max_rotate_angle = max(0.0f, 0.2f - flat_speed * 0.2f);
+            rotate_angle = max(-max_rotate_angle, min(max_rotate_angle, rotate_angle));
+            rotation = quaternion(vec4(rotate_axis, rotate_angle));
+        }
         hip_rotate = rotation;
         int hip_bone = skeleton.IKBoneStart("torso");
         int hip_bone_len = skeleton.IKBoneLength("torso");
@@ -8937,6 +8976,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         }
         hip_offset.origin = mix(temp, old_hip_offset, pow(0.95f,num_frames));
         old_hip_offset = hip_offset.origin;
+        LeaveTelemetryZone();
     } 
     vec3 body_offset(0.0f);
     bool idle_bob_enabled = false;
@@ -8999,7 +9039,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
             if(weapon_slots[_held_left] == -1){
                 offset = target - key_transforms[kLeftArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("leftarm"), 0));
             } else if(weapon_slots[_held_right] == -1){
-                offset = target - key_transforms[kLeftArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("rightarm"), 0));
+                offset = target - key_transforms[kRightArmKey] * skeleton.GetPointPos(skeleton.GetBonePoint(skeleton.IKBoneStart("rightarm"), 0));
             } 
             offset.y += 0.1f;
             vec3 facing = this_mo.GetFacing();
@@ -9145,6 +9185,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
 
     //key_transforms[kLeftArmKey] = (key_transforms[kRightArmKey] * inv_skeleton_bind_transforms[right_arm_bone]) * rel_hand_transform * skeleton_bind_transforms[left_arm_bone];
     
+    EnterTelemetryZone("final bone ik");
     DrawLeg(false, key_transforms[kHipKey], key_transforms[kLeftLegKey], num_frames);
     DrawLeg(true, key_transforms[kHipKey], key_transforms[kRightLegKey], num_frames);
 
@@ -9167,6 +9208,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
     DrawEar(true, key_transforms[kHeadKey], num_frames);
     
     DrawTail(num_frames);
+    LeaveTelemetryZone();
 
     // Get center of mass
     const bool draw_com = false;
@@ -9177,6 +9219,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
     }
 
     if(ragdoll_pose.size() > 0 && unragdoll_time > time - 1.0f/ragdoll_fade_speed){
+        EnterTelemetryZone("ragdoll transition blend");
         int root;
         array<BoneTransform> rel_mats;
         array<BoneTransform> ragdoll_rel_mats;
@@ -9184,6 +9227,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         rel_mats.resize(skeleton.NumBones());
         ragdoll_rel_mats.resize(skeleton.NumBones());
         blended_rel_mats.resize(skeleton.NumBones());
+        EnterTelemetryZone("getting relative matrices");
         for(int i=0, len=skeleton.NumBones(); i<len; ++i){
             ragdoll_pose[i].SetTranslationPart(ragdoll_pose[i].GetTranslationPart() + this_mo.velocity * time_step * num_frames);
             int parent = skeleton.GetParent(i);
@@ -9196,18 +9240,25 @@ void FinalAnimationMatrixUpdate(int num_frames) {
                 root = i;
             }
         }
+        LeaveTelemetryZone();
 
+        EnterTelemetryZone("blending matrices");
         for(int i=0, len=skeleton.NumBones(); i<len; ++i){
             blended_rel_mats[i] = mix(ragdoll_rel_mats[i], rel_mats[i], (time - unragdoll_time)*ragdoll_fade_speed);
         }
+        LeaveTelemetryZone();
 
+        EnterTelemetryZone("Applying parent rotations");
         for(int i=0, len=skeleton.NumBones(); i<len; ++i){
-            ragdoll_pose[i] = ApplyParentRotations(blended_rel_mats, i).GetMat4();
-            rigged_object.SetFrameMatrix(i, ApplyParentRotations(blended_rel_mats, i));
+            ragdoll_pose[i] = skeleton.ApplyParentRotations(blended_rel_mats, i).GetMat4();
+            rigged_object.SetFrameMatrix(i, skeleton.ApplyParentRotations(blended_rel_mats, i));
         }
+        LeaveTelemetryZone();
+        LeaveTelemetryZone();
     }
 
     UpdateEyeLook();
+    LeaveTelemetryZone();
 }
 
 void ApplyPhysics(const Timestep &in ts) {
