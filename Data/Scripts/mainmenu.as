@@ -1,18 +1,19 @@
 #include "ui_effects.as"
 #include "ui_tools.as"
+#include "arena_meta_persistence.as"
 
 AHGUI::FontSetup labelFont("edosz", 100,HexColor("#fff"));
 AHGUI::FontSetup versionFont("edosz", 65, HexColor("#fff"));
 
 int title_spacing = 150;
-int menu_item_spacing = 40; 
+int menu_item_spacing = 40;
 
-AHGUI::MouseOverPulseColor buttonHover( 
-                                        HexColor("#ffde00"), 
+AHGUI::MouseOverPulseColor buttonHover(
+                                        HexColor("#ffde00"),
                                         HexColor("#ffe956"), .25 );
 
 class MainMenuGUI : AHGUI::GUI {
-    RibbonBackground ribbon_background; 
+    RibbonBackground ribbon_background;
 
     MainMenuGUI()
     {
@@ -26,7 +27,7 @@ class MainMenuGUI : AHGUI::GUI {
     void Init()
     {
         AHGUI::Divider@ mainpane = root.addDivider( DDTop,
-                                                    DOVertical, 
+                                                    DOVertical,
                                                     ivec2( UNDEFINEDSIZE, 1140 ) );
 
         /*
@@ -61,7 +62,7 @@ class MainMenuGUI : AHGUI::GUI {
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
 
-        /*
+		/*
         {
             AHGUI::Text buttonText = AHGUI::Text("Lugaru", labelFont);
             buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
@@ -70,7 +71,7 @@ class MainMenuGUI : AHGUI::GUI {
 
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
-        */
+		*/
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Settings", labelFont);
@@ -111,16 +112,18 @@ class MainMenuGUI : AHGUI::GUI {
         }
     }
 
-    void processMessage( AHGUI::Message@ message ) 
+    void processMessage( AHGUI::Message@ message )
     {
         Log( info, "Got processMessage " + message.name );
         if( message.name == "arena" )
         {
+            global_data.clearSessionProfile();
+            global_data.clearArenaSession();
             this_ui.SendCallback( "arena_meta.as" );
         }
         else if( message.name == "lugaru" )
         {
-            Log( info, "Lugaru Placeholder" );
+			this_ui.SendCallback( "lugaru_menu.as" );
         }
         else if( message.name == "mods" )
         {
@@ -139,11 +142,11 @@ class MainMenuGUI : AHGUI::GUI {
             OpenSettings(context);
         }
     }
-    
+
     void update()
     {
         //Other things here, before
-        
+
         AHGUI::GUI::update();
     }
 
