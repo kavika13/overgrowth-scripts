@@ -23,6 +23,7 @@ in float alpha;
 in vec4 frag_tex_coords;
 in vec3 world_vert;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {

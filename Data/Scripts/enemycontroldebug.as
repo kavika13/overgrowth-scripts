@@ -250,7 +250,6 @@ string GetAISubGoalString( AISubGoal g )
     switch( g )
     {
         case _unknown: return "_unknown";
-        case _punish_fall: return "_punish_fall";
         case _provoke_attack: return "_provoke_attack";
         case _avoid_jump_kick: return "_avoid_jump_kick";
         case _wait_and_attack: return "_wait_and_attack";

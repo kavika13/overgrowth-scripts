@@ -55,7 +55,7 @@ void main() {
 
     //color_map.xyz = vec3(pow(1.0-occlusion,3.0));
 
-    //color_map.xyz = vec3(abs(10.0f-(distance/(1.0+length(vert.xy)))));
+    //color_map.xyz = vec3(abs(10.0-(distance/(1.0+length(vert.xy)))));
 
     gl_FragColor = vec4(color_map,1.0);
 }

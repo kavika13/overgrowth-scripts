@@ -8,6 +8,7 @@ bool has_display_text = false;
 uint32 display_text_id;
 string hotspot_image_string;
 bool menu_paused = false;
+bool allow_retry = true;
 
 Dialogue dialogue;
 
@@ -63,9 +64,9 @@ void DrawDialogueTextCanvas(int obj_id){
         text.SetPenColor(255,255,255,255);
         text.SetPenRotation(0.0f);
         TextMetrics metrics;
-        text.GetTextMetrics(new_string, small_style, metrics);
+        text.GetTextMetrics(new_string, small_style, metrics, UINT32MAX);
         text.SetPenPosition(vec2(128-metrics.advance_x/64.0f*0.5f, 210));
-        text.AddText(new_string, small_style);
+        text.AddText(new_string, small_style,UINT32MAX);
         text.UploadTextCanvasToTexture();
         assigned.text = new_string;
     }
@@ -90,9 +91,9 @@ void Init(string p_level_name) {
         text.SetPenRotation(0.0f);
         TextMetrics metrics;
         string new_string = ""+(i+1);
-        text.GetTextMetrics(new_string, small_style, metrics);
+        text.GetTextMetrics(new_string, small_style, metrics, UINT32MAX);
         text.SetPenPosition(vec2(16-metrics.advance_x/64.0f*0.5f, 24));
-        text.AddText(new_string, small_style);
+        text.AddText(new_string, small_style,UINT32MAX);
         text.UploadTextCanvasToTexture();
     }
 }
@@ -114,6 +115,20 @@ bool HasFocus(){
     return has_gui;
 }
 
+void CharactersNoticeEachOther() {
+    int num_chars = GetNumCharacters();
+    for(int i=0; i<num_chars; ++i){
+         MovementObject@ char = ReadCharacter(i);
+         char.ReceiveMessage("set_omniscient true");
+         for(int j=i+1; j<num_chars; ++j){
+             MovementObject@ char2 = ReadCharacter(j);
+             //Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
+             char.ReceiveMessage("notice " + char2.GetID());
+             char2.ReceiveMessage("notice " + char.GetID());
+         }
+     }
+}
+
 void ReceiveMessage(string msg) {
     TokenIterator token_iter;
     token_iter.Init();
@@ -129,6 +144,8 @@ void ReceiveMessage(string msg) {
     } else if(token == "dispose_level"){
         gui.RemoveAll();
         has_gui = false;
+    } else if(token == "disable_retry"){
+        allow_retry = false;
     } else if(token == "go_to_main_menu"){
         level.SendMessage("dispose_level");
         LoadLevel("back");
@@ -137,6 +154,7 @@ void ReceiveMessage(string msg) {
 	} else if(token == "manual_reset"){
         level.SendMessage("reset");
     } else if(token == "reset"){
+        dialogue.Init();
         ResetLevel();
     } else if(token == "displaytext"){
         if(has_display_text){
@@ -165,12 +183,22 @@ void ReceiveMessage(string msg) {
         level.SendMessage("dispose_level");
 		token_iter.FindNextToken(msg);
         LoadLevel(token_iter.GetToken(msg));
+    } else if(token == "make_all_aware"){
+        CharactersNoticeEachOther();
     } else if(token == "start_dialogue"){
 		token_iter.FindNextToken(msg);
         dialogue.StartDialogue(token_iter.GetToken(msg));
     } else if(token == "open_menu") {
         if(!level.HasFocus()){
-            gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,290,0);
+            if(EditorEnabled()){
+                gui_id = gui.AddGUI("gamemenu","dialogs\\editorgamemenu.html",220,290,0);
+            } else {
+                if(allow_retry){
+                    gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,260,0);                    
+                } else {
+                    gui_id = gui.AddGUI("gamemenu","dialogs\\arenagamemenu.html",220,230,0);                     
+                }
+            }
             SetPaused(true);
             menu_paused = true;
             has_gui = true;
@@ -277,7 +305,7 @@ void SetAnimUpdateFreqs() {
     float total_framerate_request = 0.0f;
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
-        if(char.controlled){
+        if(char.controlled || char.QueryIntFunction("int NeedsAnimFrames()") == 0){
             continue;
         }
         float dist = distance(char.position, cam_pos);
@@ -289,13 +317,17 @@ void SetAnimUpdateFreqs() {
     if(total_framerate_request != 0.0f){
         scale *= _max_anim_frames_per_second/total_framerate_request;
     }
-    for(int i=0; i<num; ++i){
-        MovementObject@ char = ReadCharacter(i);
-        if(char.controlled){
+    for(int i=0; i<num; ++i)
+{        MovementObject@ char = ReadCharacter(i);
+        int needs_anim_frames = char.QueryIntFunction("int NeedsAnimFrames()");
+        if(char.controlled || needs_anim_frames==0){
             continue;
         }
         int period = int(120.0f/(framerate_request[i]*scale));
         period = int(min(10,max(4, period)));
+        if(needs_anim_frames == 2){
+            period = min(period, 4);
+        }
         if(char.GetIntVar("tether_id") != -1){
             char.rigged_object().SetAnimUpdatePeriod(2);
             char.SetScriptUpdatePeriod(2);
@@ -363,4 +395,29 @@ JSON getArenaSpawns() {
 
     return testValue;
 
+}
+
+void TextInput( string text )
+{
+    dialogue.TextInput(text);
+}
+
+void KeyPressed( string command, bool repeated )
+{
+    dialogue.KeyPressed(command,repeated);
+}
+
+void KeyReleased( string command )
+{
+    dialogue.KeyReleased(command);
+}
+
+uint PollKeyboardFocus()
+{
+    return dialogue.PollKeyboardFocus();
+}
+
+void SetWindowDimensions(int w, int h)
+{
+    dialogue.ResizeUpdate(w,h);
 }

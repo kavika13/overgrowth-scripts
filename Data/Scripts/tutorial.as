@@ -22,14 +22,24 @@ bool enemyHighlighted = false;
 float highlightTimer = 0.0f;
 float highlightDuration = 0.5f;
 bool highlightEnemy = false;
-bool reviveCharacters = false;
-string enemyPath = "Data/Objects/IGF_Characters/IGF_GuardActor.xml";
-int knifeID = -1;
+
+string enemyRabbitPath = "Data/Objects/IGF_Characters/IGF_GuardActor.xml";
+string enemyWolfPath = "Data/Objects/IGF_Characters/IGF_WolfActor.xml";
+
+array<int> playerKnifeID = {-1,-1,-1};
+int knifeIDCounter = 0;
+
+int enemyKnifeID = -1;
 string knifePath = "Data/Items/rabbit_weapons/rabbit_knife.xml";
+string swordPath = "Data/Items/DogWeapons/DogSword.xml";
+
+string enemyKnifePath = "Data/Items/rabbit_weapons/rabbit_knife.xml";
 int screen_height = 1500;
 int screen_width = 2560;
 vec4 backgroundColor = vec4(0.0f,0.0f,0.0f,0.5f);
 bool inCombat = false;
+
+float spawn_knife_countdown = 0.0;
 
 MusicLoad ml("Data/Music/challengelevel.xml");
 
@@ -44,63 +54,81 @@ class Assignment{
     }
 }
 
-array<Assignment@> assignments =
-{Assignment("Welcome to the tutorial!", Delay(5.0f)),
-//Assignment("BASIC MOVEMENT:", Delay(3.0f)),
-Assignment("Move the mouse to rotate the camera.", MouseMove()),
-Assignment("Use W, A, S and D to move around.", WASDMove()), //TODO get the input names dynamically so that it works with controllers and keyboard
-Assignment("Press space to jump. Holding the button will result in a longer jump.", SpaceJump()),
-Assignment("Hold shift to crouch.", ShiftCrouch()),
-Assignment("Press shift while moving to roll.", ShiftRoll()),
-Assignment("Sneak by holding shift and moving.", ShiftSneak()),
-//Assignment("Release the crouch key while sneaking and hold the movement keys to run animal-style.", AnimalRun()),
-//Assignment("ADVANCED MOVEMENT:", Delay(3.0f)),
-Assignment("Jump into a wall and press space again while wall running to perform a walljump.", WallJump()),
-Assignment("Hold the right mouse button while close to a ledge to grab it. While holding a ledge, move towards it to climb it.", LedgeGrab()),
-Assignment("You move slower when walking through bushes. You will lose control when jumping through bushes and trees at high speed.", Plants()),
-Assignment("A fire was just lit on the plateu. Enter it to catch fire, then roll to put it out.", Fire()),
-//Assignment("While running along a wall, you can press shift to do a wallflip. Walljumps and wallflips confuse enemies and give you more control.", WallFlip()),
-//Assignment("BASIC COMBAT:", Delay(3.0f)),
-Assignment("There is now an enemy in the middle of the training area.", SendInEnemy()),
-Assignment("Hold left click when you are near the enemy to attack.", AnyAttack()),
-Assignment("Do a knee strike by standing still and attacking while really close to the enemy.", KneeStrike()),
-Assignment("Do a front kick by standing still and attacking while a bit further from the enemy. This is good for keeping opponents away.", AttackFarStationary()),
-Assignment("Punch by moving and attacking while really close to the enemy. This is a very fast attack.", AttackCloseMoving()),
-Assignment("Do a spin kick by moving while a bit further away from the enemy. This is one of your most powerful ground attacks.", SpinKick()),
-Assignment("Do a leg sweep by attacking while crouched.", Sweep()),
-Assignment("Do a rabbit kick by attacking while in the air close to the enemy. This is your most powerful individual attack.", LegCannon()),
-//Assignment("Using the movement keys in the air will help you aim your landing.", Delay(5.0f)),
-//Assignment("The rabbit kick is devastating if timed correctly. Even if timed incorrectly, it will knock the enemy over. Try rabbit-kicking the enemy again.", LegCannon()),
-Assignment("Sneak behind the enemy unnoticed and hold right click to choke them.", ChokeHold()),
-//Assignment("Dodge by pressing back and attack. Dodging is essential against enemies with swords or other long weapons.", Dodge()),
-//Assignment("REVERSALS AND COUNTER-REVERSALS", Delay(3.0f)),
-Assignment("The enemy can now reverse your attacks.", ActivateEnemy()),
-Assignment("The enemy now sometimes blocks your attack and throws you to the ground, this is called a reversal. Press right mouse button to escape from reversals.", ThrowEscape()),
-Assignment("Try escaping from two more reversals in a row. Press right mouse button to escape from reversals", TwoThrowEscape()),
-Assignment("Good!", Delay(3.0f)),
-Assignment("Click the right mouse button to block an incomming attack. Keep holding the right mouse button after a block to perform a reversal.", TabToContinue()),
-Assignment("The enemy can attack in %variable0% seconds. The attacks will be highlighted in red to make reversals easier.", CountDown()),
-Assignment("Reverse three enemy attacks by holding right click when he attacks.", ReverseAttack()),
-Assignment("Reverse two more enemy attacks by holding right click when he attacks.", ReverseAttack()),
-Assignment("Reverse one more enemy attack by holding right click when he attacks.", ReverseAttack()),
-Assignment("Excellent!", Delay(3.0f)),
-Assignment("Spar with the enemy for %variable0% seconds. Damage dealt: %variable1% Damage taken: %variable2%", AttackCountDown()),
-//Assignment("WEAPONS:", Delay(3.0f)),
-Assignment("There is now an knife in the center of the training area. Stand or roll over the knife while holding Q to pick it up. Press Q while crouching to drop what you're holding.", PickUpKnife()),
-Assignment("Sheathe and unsheathe weapons with the E key.", SheatheKnife()),
-Assignment("Sometimes it is best to keep weapons sheathed to prevent enemies from taking them.", TabToContinue()),
-Assignment("The knife is the smallest and least encumbering weapon. You can equip or unequip it while standing, crouching, running or flipping.", TabToContinue()),
-Assignment("Cut the enemy by pressing left click while in cutting range. Remember that you can press E to unsheathe it.", SharpDamage()),
-Assignment("Sharp weapons cause permanent damage instead of the temporary trauma from blunt weapons, fists and feet.", TabToContinue()),
-//Assignment("The enemy now has your knife! Please reverse two of his knife attacks.", Delay(3.0)),
-Assignment("When an enemy is nearby, throw the knife with Q. It is possible to throw the knife while flipping, but it is very inaccurate.", KnifeThrow()),
-Assignment("You are now ready to fight in a real battle! Try out the arena from the main menu to sharpen your skills.", TabToContinue()),
-Assignment("Press escape and click 'main menu' to exit the tutorial.", EndLevel())};
+class KnockoutCountdown {
+    int character_id;
+    float countdown;
+}
 
-string bottomText = "Press 'Tab' to skip to the next item. Press escape to open the menu.";
+array<KnockoutCountdown> knockout_countdown;
+
+array<Assignment@> assignments =
+{Assignment("Welcome to the tutorial! Complete the tasks, or skip them with tab.", Delay(5.0f)),
+
+Assignment("Move the mouse to rotate the camera.", MouseMove()),
+Assignment("Use @up@, @left@, @down@ and @right@ to move around.", WASDMove()), //TODO get the input names dynamically so that it works with controllers and keyboard
+Assignment("Press @jump@ to jump. Holding the button will result in a longer jump.", SpaceJump()),
+Assignment("Hold @crouch@ to crouch and move quietly.", ShiftSneak()),
+Assignment("Press @crouch@ while moving to roll. Rolling is useful for putting out fires or quickly picking up weapons.", ShiftRoll()),
+Assignment("Press @crouch@ in the air to flip. Try different directions, but be careful how you land!", ShiftFlip()),
+Assignment("Jump into a wall to wall-run, then press @jump@ or @crouch@ to jump or flip off of it.", WallJump()),
+Assignment("Hold the Right Mouse Button while close to a ledge to grab it, then move towards it to climb up.", LedgeGrab()),
+
+Assignment("There is now an enemy in the middle of the training area.", SendInEnemy("rabbit")),
+Assignment("Hold Left Mouse Button near the enemy to attack. Your attack changes based on your distance, which direction you're moving, and whether you're crouching.", AnyAttack()),
+Assignment("Perform a rabbit kick by attacking while in the air close to the enemy. This is your most powerful attack, but also the most dangerous and difficult.", LegCannon()),
+Assignment("Hold Right Mouse Button and sneak behind the enemy unnoticed to choke them.", ChokeHold()),
+
+Assignment("The enemy can now block your attacks. Vary your attacks to break through his guard!", ActivateEnemy()),
+Assignment("When your attack is blocked or dodged, you are vulnerable to throws. Attack the enemy and press Right Mouse Button at the right moment to escape from his throw.", ThrowEscape()),
+
+Assignment("Click the Right Mouse Button to block incoming attacks. You can even block while lying on the ground!", BlockAttack()),
+Assignment("When knocked over, you can press @crouch@ to quickly roll to your feet. Don't let enemies hit you while you're down.", RollFromGround()),
+Assignment("If you keep holding Right Mouse Button after a block, you can attempt a throw.", ReverseAttack()),
+Assignment("Defeat the enemy five times, however you like!", AttackCountDown()),
+//Assignment("WEAPONS:", Delay(3.0f)),
+Assignment("There's now a knife in the center of the training area. Hold @drop@ near the knife to pick it up. This also works while flipping or rolling!", PickUpKnife()),
+Assignment("Sheathe and unsheathe weapons with the @item@ key.", SheatheKnife()),
+Assignment("Cut the enemy by holding Left Mouse Click while in cutting range.", KillWolfSharp()),
+Assignment("Grab the enemy from behind by pressing Right Mouse Click and press Left Mouse Click or @drop@ to perform a quick and silent execution.", KnifeGrabExecution()),
+Assignment("When an enemy is nearby, throw the knife with @drop@.", KnifeThrow()),
+Assignment("The enemy now has your knife! Without a weapon, you can't block sharp attacks. Try dodging by standing still, and then suddenly moving backwards or to the side.", Dodge()),
+Assignment("After dodging, you can throw the enemy and take their weapon.", ReverseAttackArmed()),
+
+Assignment("There is now a Wolf in the training area.", SendInEnemy("wolf")),
+Assignment("Wolves are incredibly strong. Punching one is like punching a tree. The only unarmed rabbit attack they'll even notice is the jump kick.", LegCannon()),
+Assignment("Pick up the sword on the pedestal.", PickUpSword()),
+Assignment("Wolves are strong, but not impenetrable. Use the sword to kill the Wolf.", KillWolfSharp()),
+Assignment("Try throwing the sword at the wolf using @drop@.", KnifeThrow()),
+Assignment("You can increase the damage of thrown weapons by twisting them out again. Try holding @drop@ while flipping past the sword stuck in the wolf.", PullSword()),
+Assignment("You are now ready to fight in a real battle! Press @quit@ and click 'main menu' to exit the tutorial, or 'retry' to start over.", EndLevel())};
+
+string bottomText = "Press '@slow@' to skip to the next item. Press @quit@ to open the menu.";
+
+string InsertKeysToString( string text )
+{
+    for( uint i = 0; i < text.length(); i++ ) {
+        if( text[i] == '@'[0] ) {
+            for( uint j = i + 1; j < text.length(); j++ ) {
+                if( text[j] == '@'[0] ) {
+                    string first_half = text.substr(0,i);
+                    string second_half = text.substr(j+1);
+                    string input = text.substr(i+1,j-i-1);
+                    string middle = GetStringDescriptionForBinding(input);
+
+                    text = first_half + middle + second_half;
+                    i += middle.length();
+                    break;    
+                }
+            }
+        }
+    }
+    return text;
+}
 
 void Init(string _levelName) {
-    SetDebugKeysEnabled(false);
+    bottomText = InsertKeysToString(bottomText);
+
+    ActivateKeyboardEvents();
     levelName = _levelName;
     //lugaruGUI.AddFooter();
     lugaruGUI.AddInstruction();
@@ -130,7 +158,7 @@ class LugaruGUI : AHGUI::GUI {
     }
 
      void AddFooter() {
-		AHGUI::Divider@ footerBackground = root.addDivider( DDBottomRight,  DOVertical, ivec2( UNDEFINEDSIZE, 300 ) );
+		AHGUI::Divider@ footerBackground = root.addDivider( DDBottomRight,  DOVertical, ivec2( AH_UNDEFINEDSIZE, 300 ) );
 		footerBackground.setName("footerbackground");
 		//Dark background
 		AHGUI::Image background( "Textures/diffuse.tga" );
@@ -140,7 +168,7 @@ class LugaruGUI : AHGUI::GUI {
 		background.setSizeY(40 * 3);
 		footerBackground.addFloatingElement(background, "footerbackgroundimage", ivec2(int(screen_width / 2.0f) - background.getSizeX() / 2, 0.0f), 0);
 
-        AHGUI::Divider@ footer = footerBackground.addDivider( DDBottomRight,  DOVertical, ivec2( UNDEFINEDSIZE, 300 ) );
+        AHGUI::Divider@ footer = footerBackground.addDivider( DDBottomRight,  DOVertical, ivec2( AH_UNDEFINEDSIZE, 300 ) );
         footer.setName("footer");
         footer.setVeritcalAlignment(BACenter);
         DisplayText(DDTop, footer, 8, bottomText, footerTextSize, vec4(0,0,0,1));
@@ -164,7 +192,7 @@ class LugaruGUI : AHGUI::GUI {
         DisplayText(DDTop, footer, 8, bottomText, footerTextSize, vec4(1,1,1,1));
     }
     void AddInstruction(){
-		AHGUI::Divider@ container = root.addDivider( DDTop,  DOVertical, ivec2( UNDEFINEDSIZE, 400 ) );
+		AHGUI::Divider@ container = root.addDivider( DDTop,  DOVertical, ivec2( AH_UNDEFINEDSIZE, 400 ) );
 		container.setVeritcalAlignment(BACenter);
 		AHGUI::Image background( "Textures/diffuse.tga" );
 		background.setName("headerbackgroundimage");
@@ -174,7 +202,7 @@ class LugaruGUI : AHGUI::GUI {
 		background.setSizeX(sizeX);
 		background.setSizeY(sizeY);
 		container.addFloatingElement(background, "headerbackground", ivec2(int(screen_width / 2.0f) - background.getSizeX() / 2, int(container.getSizeY() / 2.0f) - (sizeY / 2)), 0);
-        AHGUI::Divider@ header = container.addDivider( DDCenter,  DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ header = container.addDivider( DDCenter,  DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         header.setName("header");
         header.setVeritcalAlignment(BACenter);
         DisplayText(DDTop, header, 8, bottomText, assignmentTextSize, vec4(0,0,0,1));
@@ -219,43 +247,57 @@ class LugaruGUI : AHGUI::GUI {
         }
     }
     void Update(){
+        if( spawn_knife_countdown > 0.0f ) {
+            spawn_knife_countdown -= time_step;
+            if( (spawn_knife_countdown > 0.0f) == false ) {
+                SendInWeapon("");
+            }
+        }
         HandleAssignmentChange();
         CheckCurrentAssignment();
         AHGUI::GUI::update();
         ReviveCharacters();
         HandleEnemyHighlight();
     }
+
     void HandleEnemyHighlight(){
-        if(highlightEnemy && enemyID != -1){
-            MovementObject@ enemy = ReadCharacterID(enemyID);
-            if(enemyAttacking){
-                if(!enemyHighlighted){
-                    //Print("Setting color to red\n");
-                    Object@ obj = ReadObjectFromID(enemyID);
-                    for(int i=0; i<4; ++i){
-                        obj.SetPaletteColor(i, vec3(1,0,0));
+        if( enemyID != -1 ) {
+            if(highlightEnemy){
+                MovementObject@ enemy = ReadCharacterID(enemyID);
+                if(enemyAttacking){
+                    if(!enemyHighlighted){
+                        //Print("Setting color to red\n");
+                        Object@ obj = ReadObjectFromID(enemyID);
+                        for(int i=0; i<4; ++i){
+                            obj.SetPaletteColor(i, vec3(1,0,0));
+                        }
+                        enemyHighlighted = true;
+                        highlightTimer = 0.0f;
                     }
-                    enemyHighlighted = true;
                 }
-                highlightTimer += time_step;
-                if(highlightTimer > highlightDuration){
+            }
+            if( enemyHighlighted ) {
+                if(highlightTimer > highlightDuration ) {
                     //Print("Setting color to white\n");
                     enemyAttacking = false;
                     enemyHighlighted = false;
                     Object@ obj = ReadObjectFromID(enemyID);
-                    for(int i=0; i<4; ++i){
+                    for(int i=0; i<4; ++i) {
                         obj.SetPaletteColor(i, vec3(1));
                     }
-                    highlightTimer = 0.0f;
+                } else {
+                    highlightTimer += time_step;
                 }
             }
         }
-
-
     }
-    void DisplayText(DividerDirection dd, AHGUI::Divider@ div, int maxWords, string text, int textSize, vec4 color, string extraText = "", int extraTextSize = 0){
+
+    void DisplayText(DividerDirection dd, AHGUI::Divider@ div, int maxWords, string text, int textSize, vec4 color, string extraText = "", int extraTextSize = 0) {
         //The maxWords is the amount of words per line.
         array<string> sentences;
+
+        text = InsertKeysToString( text );
+
         array<string> words = text.split(" ");
         string sentence;
         for(uint i = 0; i < words.size(); i++){
@@ -282,14 +324,14 @@ class LugaruGUI : AHGUI::GUI {
 			div.addElement(extraSentence, dd);
 		}
 	}
-    void CheckCurrentAssignment(){
+    void CheckCurrentAssignment() {
 		/*else if(GetInputPressed(0, "esc")){
 			level.SendMessage("dispose_level");
 	        LoadLevel("back");
 		}*/
         //Print("Got returned " + newBool + "\n");
         if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()){
-            if(assignments[lastAssignment].callback.CheckCompleted()){
+            if(assignments[lastAssignment].callback.CheckCompleted() ){
                 currentAssignment++;
             }
         }
@@ -311,6 +353,19 @@ void PostReset(){
     lastAssignment = -1;
 }
 
+int GetPlayerID() {
+    int id = -1;
+    int num = GetNumCharacters();
+    for(int i=0; i<num; ++i){
+        MovementObject@ char = ReadCharacter(i);
+        if(char.controlled){
+            id = char.GetID();
+			break;
+        }
+    }
+    return id;
+}
+
 void ReceiveMessage(string msg) {
     TokenIterator token_iter;
     token_iter.Init();
@@ -320,11 +375,42 @@ void ReceiveMessage(string msg) {
     }
     string token = token_iter.GetToken(msg);
     Print("Token: " + token + "\n");
-    if(token == "reset"){
+    Print("Full: " + msg + "\n");
+    if( token == "hotspot_announce_items" ) {
+        //If one of the player knifes leaves the knife area, respawn a new knife
+        token_iter.FindNextToken(msg); 
+        string source_id = token_iter.GetToken(msg);
+
+        if( source_id == "player_knife_monitor" ) {
+            token_iter.FindNextToken(msg); 
+            string type = token_iter.GetToken(msg);
+
+            if( type == "inside_list" ) {
+                bool found_knife_on_zone = false;
+                bool have_active_weapon = false;
+                while( token_iter.FindNextToken(msg) ) {
+                    string item_id = token_iter.GetToken(msg);
+
+                    for( uint i = 0; i < playerKnifeID.length(); i++ ) {
+                        if( playerKnifeID[i] != -1 ) {
+                            have_active_weapon = true;
+                        }
+                        if( ("" + playerKnifeID[i]) == item_id ) {
+                            found_knife_on_zone = true;
+                        }
+                    }
+                }
+
+                if( found_knife_on_zone == false && have_active_weapon == true ) {
+                    spawn_knife_countdown = 5.0f;
+                }
+            }
+        }
+    } else if(token == "reset") {
         Reset();
-    } else if(token == "dispose_level"){
+    } else if(token == "dispose_level") {
         gui.RemoveAll();
-    } else if(token == "achievement_event"){
+    } else if(token == "achievement_event") {
         token_iter.FindNextToken(msg);
         string achievement = token_iter.GetToken(msg);
         Print("achievement: " + achievement + "\n");
@@ -342,29 +428,53 @@ void ReceiveMessage(string msg) {
         string value = token_iter.GetToken(msg);
         Print("value: " + value + "\n");
         assignments[lastAssignment].callback.ReceiveAchievementEventFloat(achievement, atof(value));
-    } else if(token == "send_in_enemy"){
-        SendInEnemyChar();
-    } else if(token == "delete_enemy"){
-        DeleteObjectID(enemyID);
+    } else if(token == "send_in_enemy") {
+        if( token_iter.FindNextToken(msg) ) {
+            SendInEnemyChar( token_iter.GetToken(msg) );
+        }
+    } else if(token == "give_enemy_knife" ) {
+        GiveEnemyKnife();
+    } else if(token == "delete_enemy") {
+        if( enemyKnifeID != -1 ) {
+            DeleteObjectID(enemyKnifeID);
+        }
+        enemyKnifeID = -1;
+        if( enemyID != -1 ) {
+            DeleteObjectID(enemyID);
+        }
         enemyID = -1;
-    }else if(token == "send_in_knife"){
-        SendInKnifeWeapon();
-    } else if(token == "delete_knife"){
-        DeleteObjectID(knifeID);
-        knifeID = -1;
-    } else if(token == "set_highlight"){
+    } else if(token == "send_in_weapon") {
+        if( token_iter.FindNextToken(msg) ) {
+            SendInWeapon(token_iter.GetToken(msg));
+        }
+    } else if(token == "delete_weapon") {
+        for( uint i = 0; i < playerKnifeID.length(); i++ )
+        {
+            if( playerKnifeID[i] != -1 )
+                DeleteObjectID(playerKnifeID[i]);
+            playerKnifeID[i] = -1;
+        }
+    } else if(token == "set_highlight") {
 		token_iter.FindNextToken(msg);
         string command = token_iter.GetToken(msg);
-		if(command == "true"){
+		if(command == "true") {
 			highlightEnemy = true;
-		}else if(command == "false"){
+		} else if(command == "false") {
 			highlightEnemy = false;
 		}
-	} else if(token == "post_reset"){
+	} else if(token == "post_reset") {
         PostReset();
-    } else if(token == "character_knocked_out" || token == "character_died" || token == "cut_throat"){
-        reviveCharacters = true;
-	} else if(token == "revive_all"){
+    } else if(token == "character_knocked_out" || token == "character_died" || token == "cut_throat") {
+		token_iter.FindNextToken(msg);
+        string character_id = token_iter.GetToken(msg);
+        
+        KnockoutCountdown kc;
+        kc.character_id = parseInt(character_id);
+        kc.countdown = 2.0f;
+
+        knockout_countdown.insertLast(kc);
+        Log( info, "Added player " + character_id + " to queue for reawekening" );
+	} else if(token == "revive_all") {
 		for(int i = 0; i < GetNumCharacters(); i++){
             MovementObject@ char = ReadCharacter(i);
             char.Execute("Recover();");
@@ -376,8 +486,11 @@ void ReceiveMessage(string msg) {
     } else if(token == "player_execute"){
         token_iter.FindNextToken(msg);
         string command = token_iter.GetToken(msg);
-        MovementObject@ player = ReadCharacterID(enemyID);
-        player.Execute(command);
+		int playerID = GetPlayerID();
+		if(playerID != -1){
+	        MovementObject@ player = ReadCharacterID(playerID);
+	        player.Execute(command);
+		}
     } else if(token == "enemy_execute"){
         token_iter.FindNextToken(msg);
         string command = token_iter.GetToken(msg);
@@ -409,7 +522,7 @@ void ReceiveMessage(string msg) {
                 break;
             }
         }
-		AddExtraAssignmentText(completeSentence);
+		AddExtraAssignmentText(InsertKeysToString(completeSentence));
     }else if(token == "set_combat"){
 		token_iter.FindNextToken(msg);
         string command = token_iter.GetToken(msg);
@@ -418,7 +531,14 @@ void ReceiveMessage(string msg) {
 		}else if(command == "false"){
 			inCombat = false;
 		}
-	}
+	} else if(token == "player_invincible") {
+        int player_id = GetPlayerID();
+        if( player_id != -1 ) {
+            Log(info, "PLAYER CAN'T DIE NOW" );
+            MovementObject@ player = ReadCharacterID(player_id);
+            player.Execute("invincible = true;"); 
+        }
+    }
 }
 
 LugaruGUI lugaruGUI;
@@ -471,20 +591,35 @@ void AddExtraAssignmentText(string extra_text){
 
 void Initialize(){
 
-
 }
 
-void SendInEnemyChar(){
+void SendInEnemyChar(string type){
+    string enemyPath;
+
+    if( type == "wolf" ) {
+        enemyPath = enemyWolfPath;
+    } else {
+        enemyPath = enemyRabbitPath;
+    }
+
+    if( enemyKnifeID != -1 ) {
+        DeleteObjectID(enemyKnifeID);
+    }
+    enemyKnifeID = -1;
+
+    if(enemyID != -1) {
+        DeleteObjectID(enemyID);
+        enemyID = -1;
+    }
     //Don't spawn more than one enemy.
     if(enemyID == -1){
         enemyID = CreateObject(enemyPath);
         Object@ charObj = ReadObjectFromID(enemyID);
         //At first the enemy can't fight back and cannot die
         MovementObject@ enemy = ReadCharacterID(enemyID);
-        enemy.Execute("SetHostile(false);");
-        enemy.Execute("combat_allowed = false;");
-        enemy.Execute("ignore_death = true;");
-        enemy.Execute("allow_active_block = false;");
+        enemy.Execute("SetHostile(false);
+                       combat_allowed = false;
+                       allow_active_block = false;");
         //Find the enemy spawn placeholder and put the new enemy at that point.
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
@@ -505,19 +640,63 @@ void SendInEnemyChar(){
 			navObj.ConnectTo(charObj);
 		}
 
-    }else{
+    } else {
         MovementObject@ enemy = ReadCharacterID(enemyID);
-        enemy.Execute("combat_allowed = false;");
-        enemy.Execute("ignore_death = true;");
-        enemy.Execute("allow_active_block = false;");
+        enemy.Execute("combat_allowed = false; 
+                       allow_active_block = false;");
     }
 
+    MovementObject@ enemy = ReadCharacterID(enemyID);
+    if( type == "wolf" ) {
+        enemy.Execute("max_ko_shield = 3; ko_shield = max_ko_shield;");
+    } else {
+        enemy.Execute("p_block_skill = 0.5;");
+    }
 }
 
-void SendInKnifeWeapon(){
-    //Don't spawn more than one knife.
+void GiveEnemyKnife() {
+    Log(info, "Giving enemy knife");
+    
+    if( enemyID != -1 ) {
+        if(enemyKnifeID != -1 ) {
+            DeleteObjectID(enemyKnifeID);
+        }
+        enemyKnifeID = CreateObject(enemyKnifePath);
+        //Object@ knifeObj = ReadObjectFromID(enemyKnifeID);
+        MovementObject@ enemy = ReadCharacterID(enemyID);
+        enemy.Execute("AttachWeapon(" + enemyKnifeID + ");");
+    } else {
+        Log(error, "Unable to give enemy knife, no enemy");
+    }
+}
+
+string last_type = "knife";
+void SendInWeapon( string type ) {
+    string weapon;
+
+    if( type == "" ) {
+        type = last_type;
+    }
+    last_type = type;   
+
+    if( type == "sword" ) {
+        weapon = swordPath;
+    } else {
+        weapon = knifePath;
+    }
+      
+    Log( info, "Spawning new player knife" );
+
+    int player_id = GetPlayerID();
+    knifeIDCounter = (knifeIDCounter + 1) % playerKnifeID.length();
+
+    int knifeID =  playerKnifeID[knifeIDCounter];
+    if(knifeID != -1 ) {
+        DeleteObjectID(knifeID);
+        knifeID = -1;
+    }
     if(knifeID == -1){
-        knifeID = CreateObject(knifePath);
+        knifeID = CreateObject(weapon);
         Object@ knifeObj = ReadObjectFromID(knifeID);
         //Find the knife spawn placeholder and put the new knife at that point.
         array<int> @object_ids = GetObjectIDs();
@@ -535,25 +714,45 @@ void SendInKnifeWeapon(){
             }
         }
     }
+    playerKnifeID[knifeIDCounter] = knifeID;
 }
 
-int GetCharPrimaryWeapon(MovementObject@ mo){
+bool HavePlayerKnifeInWorld() {
+    for( uint i = 0; i < playerKnifeID.length(); i++ )
+    {
+        if( playerKnifeID[i] != -1 )
+            return true;
+    }
+    return false;
+}
+
+int GetCharPrimaryWeapon(MovementObject@ mo) {
     return mo.GetArrayIntVar("weapon_slots",mo.GetIntVar("primary_weapon_slot"));
 }
 
-int GetCharPrimarySheathedWeapon(MovementObject@ mo){
+int GetCharPrimarySheathedWeapon(MovementObject@ mo) {
     return mo.GetArrayIntVar("weapon_slots", 3);
 }
 
-void ReviveCharacters(){
-    //Because the state knocked_out changes in the next update the reviving needs to happen in the update after that
-    if(reviveCharacters){
-        for(int i = 0; i < GetNumCharacters(); i++){
-            MovementObject@ char = ReadCharacter(i);
-            if(char.GetIntVar("knocked_out") != _awake){
-                char.Execute("Recover();");
-                reviveCharacters = false;
+void ReviveCharacters() {
+    for( uint i = 0; i < knockout_countdown.length(); i++ ) {
+        if( knockout_countdown[i].countdown < 0.0f ) {
+            MovementObject@ char = ReadCharacterID(knockout_countdown[i].character_id);
+            if( char !is null ) {
+                if(char.GetIntVar("knocked_out") != _awake){
+                    char.Execute("Recover();");
+                    if(!char.controlled) {
+                        int playerID = GetPlayerID();
+                        if(playerID != -1) {
+                            char.Execute("situation.Notice(" + playerID + ");");
+                        }
+                    }
+                }
             }
+            knockout_countdown.removeAt(i);
+            i -= 1;
+        } else {
+            knockout_countdown[i].countdown -= time_step;
         }
     }
 }
@@ -598,4 +797,15 @@ void UpdateMusic() {
 		PlaySong("ambient-happy");
         return;
 	}
+}
+
+void KeyPressed( string command, bool repeated ) {
+    if( command == "n" && repeated == false ) {
+        if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()){
+            currentAssignment++;
+        }
+    }
+}
+
+void KeyReleased( string command ) {
 }

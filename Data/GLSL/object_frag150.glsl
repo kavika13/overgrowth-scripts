@@ -107,7 +107,11 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
 
 		vec3 n = normalize(to_light);
         float bias = max(0.0, (light_size - length(to_light)) / light_size * 2.0);
-		float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+        #ifdef PLANT
+            float d = abs(dot(n, ws_normal)+bias)/(1.0 + bias);
+        #else
+            float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+        #endif
 
         // Shadow from fire light
         if(n.y > 0.5){
@@ -188,10 +192,10 @@ uniform sampler2DArray detail_normal; \
 uniform vec4 detail_normal_indices; \
 
 #define UNIFORM_AVG_COLOR4 \
-uniform vec3 avg_color0; \
-uniform vec3 avg_color1; \
-uniform vec3 avg_color2; \
-uniform vec3 avg_color3;
+uniform vec4 avg_color0; \
+uniform vec4 avg_color1; \
+uniform vec4 avg_color2; \
+uniform vec4 avg_color3;
 
 #define CALC_BLOOD_AMOUNT \
 float blood_amount, wetblood; \

@@ -29,8 +29,8 @@ uniform int water_decal_num;
     #endif
 #endif
 
+#pragma bind_out_color
 out vec4 out_color;
-
 
 float hash( vec2 p )
 {

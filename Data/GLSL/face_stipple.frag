@@ -2,6 +2,7 @@
 
 uniform vec4 color;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {    

@@ -20,6 +20,7 @@ in vec3 ws_vertex;
 in vec3 tex_coord;
 in vec3 base_tex_coord;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #define shadow_tex_coords gl_TexCoord[1].xy

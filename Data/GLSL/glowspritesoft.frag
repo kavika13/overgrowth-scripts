@@ -8,6 +8,7 @@ uniform vec4 color_tint;
 
 in vec2 tex_coord;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 float LinearizeDepth(float z)

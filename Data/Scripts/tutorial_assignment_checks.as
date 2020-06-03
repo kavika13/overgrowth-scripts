@@ -13,6 +13,9 @@ class AssignmentCallback
     void Init(){}
     bool CheckCompleted(){
 		//Don't start the timer if it's already triggered.
+		if(GetInputPressed(0, "tab")){
+			return true;
+        }
 		if(!disabled){
 			if(timerStarted){
 	    		UpdateTimer();
@@ -57,6 +60,7 @@ class AssignmentCallback
 		disabled = false;
 		LocalReset();
     }
+
     void LocalReset(){
 
     }
@@ -80,11 +84,11 @@ class AssignmentCallback
 	void PlayerExecute(string command){
 		SendCommand("player_execute", command);
 	}
-	void SendCommand(string firstCommand, string secondCommand){
+	void SendCommand(string firstCommand, string secondCommand) {
 		//Remove all the spaces from the actual command or else the command will be split up in the ReceiveMessage
 		level.SendMessage(firstCommand + " " + join(secondCommand.split( " " ), "" ));
 	}
-	void SendCommand(string singleCommand){
+	void SendCommand(string singleCommand) {
 		level.SendMessage(singleCommand);
 	}
 	void ReceiveAchievementEvent(string _achievement){}
@@ -105,12 +109,9 @@ class TabToContinue : AssignmentCallback
 {
 	TabToContinue(){}
 	void Init(){
-		SendCommand("extra_assignment_text " + "Press tab to continue." );
+		SendCommand("extra_assignment_text " + "Press @slow@ to continue." );
 	}
 	void Completed(){
-		if(GetInputPressed(0, "tab")){
-			StartTimerNoSound(0.0f);
-        }
 	}
 }
 
@@ -129,7 +130,7 @@ class MouseMove : AssignmentCallback
 		posX = 0;
 		negY = 0;
 		posY = 0;
-		threshold = 20.0f;
+		threshold = 100.0f;
 		prevXAxis = 0;
 		prevYAxis = 0;
 	}
@@ -149,8 +150,10 @@ class MouseMove : AssignmentCallback
     	}else if(diffYAxis > 0){
     		posY += diffYAxis;
     	}
+    	float success = ((negX + negY + posX + posY) / threshold) * 0.25f;
+    	DebugText("Success", "Success: "+success, 0.5f);
     	//Checking for all mousemovements are large enough
-    	if(negX > threshold && posX > threshold && negY > threshold && posY > threshold){
+    	if(success >= 1.0){
     		StartTimer(1.0f);
     	}
     }
@@ -159,9 +162,19 @@ class MouseMove : AssignmentCallback
 class WASDMove : AssignmentCallback
 {
 
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void Completed()
 	{
 		if(length(player.velocity) > 1.0f){
+			success += time_step * 0.2;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -169,8 +182,18 @@ class WASDMove : AssignmentCallback
 
 class SpaceJump : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "player_jumped"){
+			success += 0.2f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -178,9 +201,19 @@ class SpaceJump : AssignmentCallback
 
 class ShiftCrouch : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void Completed()
 	{
 		if(GetInputDown(0, "crouch") && player.GetBoolVar("on_ground")){
+			success += time_step * 0.25f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -188,8 +221,37 @@ class ShiftCrouch : AssignmentCallback
 
 class ShiftRoll : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "character_start_roll"){
+			success += 0.2f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
+			StartTimer(1.0f);
+		}
+	}
+}
+
+class ShiftFlip : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "character_start_flip"){
+			success += 0.2f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -197,15 +259,19 @@ class ShiftRoll : AssignmentCallback
 
 class ShiftSneak : AssignmentCallback
 {
-	float timer = 0.0f;
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void Completed()
 	{
 		if(GetInputDown(0, "crouch") && length(player.velocity) > 1.0f && player.GetBoolVar("on_ground")){
-			timer += time_step;
-		}else{
-			timer = 0.0f;
+			success += time_step * 0.2;
 		}
-		if(timer > 1.5f){
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -221,8 +287,18 @@ class AnimalRun : AssignmentCallback
 }
 class WallJump : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
-		if(_achievement == "jump_off_wall"){
+		if(_achievement == "jump_off_wall" || _achievement == "wall_flip"){
+			success += 0.34;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}
@@ -235,23 +311,42 @@ class WallFlip : AssignmentCallback
 		}
 	}
 }
+
 class SendInEnemy : AssignmentCallback
 {
+    string type;
+    SendInEnemy(string _type) {
+        type = _type; 
+    }
+
 	void LocalReset(){
 		level.SendMessage("delete_enemy");
 	}
-	void Init(){
-		level.SendMessage("send_in_enemy");
+
+	void Init() {
+		level.SendMessage("send_in_enemy " + type);
 		StartTimerNoSound(3.0f);
 	}
 }
 class AnyAttack : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
 		if(	_achievement == "attack_stationary_close" ||
 			_achievement == "attack_stationary_far" ||
 			_achievement == "attack_moving_close" ||
-			_achievement == "attack_moving_far"){
+			_achievement == "attack_moving_far" ||
+			_achievement == "attack_low")
+		{
+			success += 0.1f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
@@ -306,17 +401,29 @@ class Sweep : AssignmentCallback
 }
 class LegCannon : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
-		if(_achievement == "attack_air"){
+		if(_achievement == "leg_cannon_hit"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
 }
+
 class ChokeHold : AssignmentCallback
 {
 	void Init(){
 		EnemyExecute("always_unaware = true;");
 	}
+
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "choke_hold_kill"){
 			StartTimer(1.0f);
@@ -325,36 +432,99 @@ class ChokeHold : AssignmentCallback
 }
 class Dodge : AssignmentCallback
 {
+	float success;
+
 	void Init(){
-		EnemyExecute("always_unaware = false;");
+		success = 0.0f;
+		level.SendMessage("delete_weapon");
+        level.SendMessage("give_enemy_knife");
+		SendCommand("set_combat true");
+		EnemyExecute(
+		   "SetHostile(true);
+			always_unaware = false;
+			combat_allowed = true;
+			chase_allowed = false;
+			allow_active_block = true;
+			always_active_block = false;
+			goal = _attack;");
+        SendCommand("player_invincible");
 	}
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "active_dodging"){
+			success += 0.2f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
 }
 class ActivateEnemy : AssignmentCallback
 {
+	float success;
+
 	void Init(){
-		EnemyExecute("SetHostile(true);");
-		EnemyExecute("always_unaware = false;");
-		EnemyExecute("combat_allowed = false;");
-		EnemyExecute("chase_allowed = true;");
-		EnemyExecute("allow_active_block = true;");
-		EnemyExecute("always_active_block = true;");
-		EnemyExecute("goal = _attack;");
-		StartTimerNoSound(3.0f);
+		success = 0.0f;
+		EnemyExecute("SetHostile(true);
+				  	  always_unaware = false;
+					  combat_allowed = false;
+					  chase_allowed = true;
+					  allow_active_block = true;
+					  allow_throw = false;
+					  goal = _attack;");
 	}
-}
-class ThrowEscape : AssignmentCallback
-{
+
 	void ReceiveAchievementEvent(string _achievement){
-		if(_achievement == "character_throw_escape"){
+		if(_achievement == "enemy_ko"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
 }
+class ThrowEscape : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+		EnemyExecute("always_active_block = true;
+					  allow_throw = true;
+					  goal = _attack;");
+	}
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "character_throw_escape"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
+		}
+	}
+}
+
+class ThrowEnemy : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+		EnemyExecute("always_active_block = false;
+					  goal = _attack;");
+	}
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "character_throw_escape"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
+		}
+	}
+}
+
 class TwoThrowEscape : AssignmentCallback
 {
 	int successfull;
@@ -397,9 +567,55 @@ class CountDown : AssignmentCallback
 		level.SendMessage("set_highlight true");
 	}
 }
+class BlockAttack : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+		SendCommand("set_combat true");
+		EnemyExecute("always_unaware = false;");
+		EnemyExecute("combat_allowed = true;");
+		EnemyExecute("chase_allowed = false;");
+		EnemyExecute("allow_active_block = true;");
+		EnemyExecute("always_active_block = false;");
+		EnemyExecute("goal = _attack;");
+		player.Execute("max_ko_shield = 9999; ko_shield = max_ko_shield;");
+	}
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "player_blocked"){
+			success += 0.1f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
+		}
+	}
+}
+class RollFromGround : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "player_wake_roll"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
+		}
+	}
+}
 class ReverseAttack : AssignmentCallback
 {
+	float success;
+
 	void Init(){
+		success = 0.0f;
+		
 		EnemyExecute("always_unaware = false;");
 		EnemyExecute("combat_allowed = true;");
 		EnemyExecute("chase_allowed = false;");
@@ -409,41 +625,56 @@ class ReverseAttack : AssignmentCallback
 	}
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "player_counter_attacked"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
+		}
+	}
+}
+class ReverseAttackArmed : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+        level.SendMessage("give_enemy_knife");
+		EnemyExecute("SetHostile(true);");
+		EnemyExecute("always_unaware = false;");
+		EnemyExecute("combat_allowed = true;");
+		EnemyExecute("chase_allowed = false;");
+		EnemyExecute("allow_active_block = true;");
+		EnemyExecute("always_active_block = false;");
+		EnemyExecute("goal = _attack;");
+        SendCommand("player_invincible");
+	}
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "player_counter_attacked"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
 }
 class AttackCountDown : AssignmentCallback
 {
-	int seconds;
-	int lastTime;
-	int player_damage;
-	int enemy_damage;
+	float success;
+
 	void Init(){
-		seconds = 50;
-		lastTime = -1;
-		player_damage = 0;
-		enemy_damage = 0;
+		success = 0.0f;
 		level.SendMessage("set_highlight false");
-		SendCommand("update_text_variables " + seconds + " " + enemy_damage + " " + player_damage);
 	}
-	void ReceiveAchievementEventFloat(string _achievement, float _value){
-		if(_achievement == "player_damage"){
-			player_damage += int(_value*10);
-		}else if(_achievement == "ai_damage"){
-			enemy_damage += int(_value*10);
+
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "enemy_ko"){
+			success += 0.2f;
 		}
-	}
-	void Completed(){
-		time += time_step;
-		if(floor(time) != lastTime){
-			lastTime = int(floor(time));
-			seconds -= 1;
-			//Print("time " + seconds + "\n");
-			SendCommand("update_text_variables " + seconds + " " + enemy_damage + " " + player_damage);
-		}
-		if(seconds == 0){
-			StartTimer(0.0f);
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
+			StartTimer(1.0f);
 			SendCommand("set_combat false");
 		}
 	}
@@ -458,7 +689,8 @@ class PickUpKnife : AssignmentCallback
 		EnemyExecute("chase_allowed = false;");
 		EnemyExecute("allow_active_block = false;");
 		EnemyExecute("always_active_block = false;");
-		level.SendMessage("send_in_knife");
+		level.SendMessage("delete_weapon");
+		level.SendMessage("send_in_weapon knife");
 	}
 	void Completed(){
 		if(GetCharPrimaryWeapon(player) != -1){
@@ -466,9 +698,47 @@ class PickUpKnife : AssignmentCallback
 		}
 	}
 	void LocalReset(){
-		level.SendMessage("delete_knife");
+		level.SendMessage("delete_weapon");
 	}
 }
+
+class PickUpSword : AssignmentCallback
+{
+	void Init() {
+		EnemyExecute("SetHostile(false);");
+		EnemyExecute("hostile = false;");
+		EnemyExecute("always_unaware = false;");
+		EnemyExecute("combat_allowed = false;");
+		EnemyExecute("chase_allowed = false;");
+		EnemyExecute("allow_active_block = false;");
+		EnemyExecute("always_active_block = false;");
+		level.SendMessage("delete_weapon");
+		level.SendMessage("send_in_weapon sword");
+	}
+	void Completed(){
+		if(GetCharPrimaryWeapon(player) != -1){
+			StartTimer(1.0f);
+		}
+	}
+	void LocalReset(){
+		level.SendMessage("delete_weapon");
+	}
+}
+
+class RemoveWeapon : AssignmentCallback
+{
+	RemoveWeapon(float _delay){delay = _delay;}
+	void Init() {
+		level.SendMessage("delete_weapon");
+	}
+
+	void Completed()
+	{
+		//Wait for n seconds and then continue.
+		StartTimerNoSound(delay);
+	}
+}
+
 class SheatheKnife : AssignmentCallback
 {
 	void Completed(){
@@ -477,13 +747,59 @@ class SheatheKnife : AssignmentCallback
 		}
 	}
 }
+
 class SharpDamage : AssignmentCallback
 {
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "ai_took_sharp_damage"){
+			success += 0.1f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0f){			
 			StartTimer(1.0f);
 		}
 	}
+}
+
+class KillWolfSharp : AssignmentCallback
+{
+	float success;
+
+	void Init(){
+		success = 0.0f;
+	}
+
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "ai_took_sharp_damage"){
+			success += 0.1f;
+		}
+		if(success >= 1.0f && _achievement == "enemy_died"){			
+			StartTimer(1.0f);
+		}
+	}
+}
+
+class PullSword : AssignmentCallback
+{
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "ai_alive_weapon_removed_from_body"){
+			StartTimer(1.0f);
+		}
+	}
+}
+class KnifeGrabExecution : AssignmentCallback
+{
+	void ReceiveAchievementEvent(string _achievement){
+		if(_achievement == "choke_hold_knife_cut_kill"){
+            StartTimer(1.0f);
+        }
+    }
 }
 class KnifeThrow : AssignmentCallback
 {
@@ -493,13 +809,27 @@ class KnifeThrow : AssignmentCallback
 		}
 	}
 }
+
+class EnemyKnife : AssignmentCallback
+{
+	void Init() {
+        level.SendMessage("give_enemy_knife");
+        StartTimerNoSound(5.0f);
+    }
+	void ReceiveAchievementEvent(string _achievement) {
+	}
+}
+
 class LedgeGrab : AssignmentCallback
 {
 	int pillarID = -1;
 	float offsetY = 3.0f;
 	float speed = 0.01f;
 	float movedY = 0.0f;
+	float success;
+
 	void Init(){
+		success = 0.0f;
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
         for(int i=0; i<num_objects; ++i){
@@ -537,6 +867,10 @@ class LedgeGrab : AssignmentCallback
 	}
 	void ReceiveAchievementEvent(string _achievement){
 		if(_achievement == "climbed_up"){
+			success += 0.34f;
+		}
+    	DebugText("Success", "Success: "+success, 0.5f);
+		if(success >= 1.0){			
 			StartTimer(1.0f);
 		}
 	}

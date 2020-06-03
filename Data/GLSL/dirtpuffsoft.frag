@@ -17,6 +17,7 @@ in vec3 tangent_to_world1;
 in vec3 tangent_to_world2;
 in vec3 tangent_to_world3;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #include "lighting150.glsl"

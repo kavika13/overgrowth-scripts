@@ -233,7 +233,7 @@ class ArenaGUI : AHGUI::GUI {
 
     AHGUI::Divider@ addFooter(bool showback = true, bool showcontinue = true)
     {
-        AHGUI::Divider@ footer = root.addDivider( DDBottomRight, DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+        AHGUI::Divider@ footer = root.addDivider( DDBottomRight, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
         footer.setName("footerdiv");
 
         footer.addSpacer( 175, DDLeft );
@@ -246,7 +246,7 @@ class ArenaGUI : AHGUI::GUI {
                                             HexColor("#ffde00"), 
                                             HexColor("#ffe956"), .25, sub_names );
 
-            AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
+            AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, AH_UNDEFINEDSIZE ) );
 
             backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
             backDivider.addMouseOverBehavior( buttonHoverSubElements, "mouseover" );
@@ -274,7 +274,7 @@ class ArenaGUI : AHGUI::GUI {
                                             HexColor("#ffde00"), 
                                             HexColor("#ffe956"), .25, sub_names );
 
-            AHGUI::Divider@ nextDivider = footer.addDivider( DDRight, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
+            AHGUI::Divider@ nextDivider = footer.addDivider( DDRight, DOHorizontal, ivec2( 200, AH_UNDEFINEDSIZE ) );
 
             nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next"), "leftclick" );
             nextDivider.addMouseOverBehavior( buttonHoverSubElements, "mouseover" );
@@ -338,12 +338,12 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,
                                                             DOHorizontal, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+                                                            ivec2( AH_UNDEFINEDSIZE, 1140 ) );
 
                 mainpane.addSpacer(left_margin, DDLeft);
                 AHGUI::Divider@ menulist = mainpane.addDivider( DDTop,
                                                                 DOVertical,
-                                                                ivec2(400, UNDEFINEDSIZE) );
+                                                                ivec2(400, AH_UNDEFINEDSIZE) );
                 menulist.addSpacer(top_margin, DDTop);
 
                 mainpane.setName("mainpane");
@@ -415,7 +415,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
                                                             DOVertical, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+                                                            ivec2( AH_UNDEFINEDSIZE, 1140 ) );
 
                 mainpane.addSpacer( top_margin, DDTop );
                 
@@ -452,7 +452,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ characterdiv = centerpane.addDivider( DDLeft,
                                                                       DOHorizontal,
-                                                                      ivec2(700,UNDEFINEDSIZE) );
+                                                                      ivec2(700,AH_UNDEFINEDSIZE) );
 
                 
                 AHGUI::Image leftarrow = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
@@ -462,7 +462,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ characterImagediv = characterdiv.addDivider( DDCenter,
                                                                              DOVertical,
-                                                                             ivec2(250, UNDEFINEDSIZE) );
+                                                                             ivec2(250, AH_UNDEFINEDSIZE) );
                 
                 AHGUI::Image rightarrow = AHGUI::Image("Textures/ui/arena_mode/right_arrow.png");
                 rightarrow.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next_character") );
@@ -472,7 +472,7 @@ class ArenaGUI : AHGUI::GUI {
                 centerpane.addSpacer(75, DDRight);
                 AHGUI::Divider@ infodiv = centerpane.addDivider( DDRight,
                                                                  DOVertical,
-                                                                 ivec2(600, UNDEFINEDSIZE) );
+                                                                 ivec2(600, AH_UNDEFINEDSIZE) );
 
                 AHGUI::Image@ portrait = AHGUI::Image();
                 portrait.setName("portrait");
@@ -492,7 +492,7 @@ class ArenaGUI : AHGUI::GUI {
                 infodiv.addElement(descriptiontext, DDTop);
 
                 infodiv.addSpacer(50,DDBottom);
-                AHGUI::Divider@ iconListdiv = infodiv.addDivider(DDBottom, DOHorizontal, ivec2(250, UNDEFINEDSIZE));
+                AHGUI::Divider@ iconListdiv = infodiv.addDivider(DDBottom, DOHorizontal, ivec2(250, AH_UNDEFINEDSIZE));
                 iconListdiv.setName("statediv");
 
                 mainpane.addElement(AHGUI::Image("Textures/ui/arena_mode/select_character_divider.png"), DDTop); 
@@ -517,12 +517,12 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,
                                                             DOHorizontal, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+                                                            ivec2( AH_UNDEFINEDSIZE, 1140 ) );
 
                 mainpane.addSpacer(left_margin, DDLeft);
                 AHGUI::Divider@ menulist = mainpane.addDivider( DDTop,
                                                                 DOVertical,
-                                                                ivec2(400, UNDEFINEDSIZE) );
+                                                                ivec2(400, AH_UNDEFINEDSIZE) );
                 menulist.addSpacer(top_margin, DDTop);
 
                 mainpane.setName("mainpane");
@@ -538,7 +538,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ characterdiv = menulist.addDivider( DDLeft,
                                                                       DOHorizontal,
-                                                                      ivec2(700,UNDEFINEDSIZE) );
+                                                                      ivec2(700,AH_UNDEFINEDSIZE) );
                 
                 AHGUI::Image leftarrow = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
                 leftarrow.setName( "leftarrow" );
@@ -548,7 +548,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ infodiv = characterdiv.addDivider( DDCenter,
                                                                    DOVertical,
-                                                                   ivec2(250, UNDEFINEDSIZE) );
+                                                                   ivec2(250, AH_UNDEFINEDSIZE) );
                 infodiv.addSpacer(100,DDTop);
 
                 AHGUI::Text profileName = AHGUI::Text( "", label_font, label_font_size, label_color );
@@ -628,7 +628,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
                                                             DOVertical, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+                                                            ivec2( AH_UNDEFINEDSIZE, 1140 ) );
 
                 mainpane.addSpacer( top_margin, DDTop );
 
@@ -650,7 +650,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDCenter,
                                              DOVertical,
-                                             ivec2(1409, UNDEFINEDSIZE) ); 
+                                             ivec2(1409, AH_UNDEFINEDSIZE) ); 
                 
 
                 subbodydiv.addSpacer( 100, DDTop );
@@ -668,7 +668,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ pagediv = mainpane.addDivider( DDTop,
                                             DOHorizontal,
-                                            ivec2(100, UNDEFINEDSIZE) ); 
+                                            ivec2(100, AH_UNDEFINEDSIZE) ); 
 
                 AHGUI::Image prevImage = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
 
@@ -686,7 +686,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ pagecounterwrapper = pagediv.addDivider( DDLeft,
                                                         DOVertical,
-                                                        ivec2(200, UNDEFINEDSIZE));  
+                                                        ivec2(200, AH_UNDEFINEDSIZE));  
                 AHGUI::Text pagecounter = AHGUI::Text("0/0", label_font, label_font_size, label_color );
                 pagecounter.setName( "pagecounter" );
                 pagecounterwrapper.addElement(pagecounter, DDLeft);
@@ -710,12 +710,12 @@ class ArenaGUI : AHGUI::GUI {
             case agsMetaChoice: {
                 AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
                                                                  DOVertical,
-                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                                                                 ivec2( AH_UNDEFINEDSIZE, screen_height ) );
                 toppadwrapper.addSpacer( top_margin, DDTop );
 
                 AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
                                                                DOHorizontal,
-                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                                                               ivec2( AH_UNDEFINEDSIZE, screen_height-top_margin ) );
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
@@ -746,7 +746,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
                                              DOHorizontal,
-                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                                             ivec2(AH_UNDEFINEDSIZE, 961) ); 
                 bodydiv.addSpacer(100, DDLeft);
 
                 AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
@@ -765,7 +765,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ optionsdiv = subbodydiv.addDivider( DDTop,
                                              DOVertical,
-                                             ivec2(800, UNDEFINEDSIZE) ); 
+                                             ivec2(800, AH_UNDEFINEDSIZE) ); 
                 optionsdiv.setName("options");
                 
                 RefreshMetaPage();
@@ -775,12 +775,12 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
                                                                  DOVertical,
-                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                                                                 ivec2( AH_UNDEFINEDSIZE, screen_height ) );
                 toppadwrapper.addSpacer( top_margin, DDTop );
 
                 AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
                                                                DOHorizontal,
-                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                                                               ivec2( AH_UNDEFINEDSIZE, screen_height-top_margin ) );
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
@@ -811,7 +811,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
                                              DOHorizontal,
-                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                                             ivec2(AH_UNDEFINEDSIZE, 961) ); 
                 bodydiv.addSpacer(100, DDLeft);
 
                 AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
@@ -830,7 +830,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ optionsdiv = subbodydiv.addDivider( DDTop,
                                              DOVertical,
-                                             ivec2(800, UNDEFINEDSIZE) ); 
+                                             ivec2(800, AH_UNDEFINEDSIZE) ); 
                 optionsdiv.setName("options");
                 
                 RefreshMessage();
@@ -840,7 +840,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ footer = addFooter(false,false);
 
-                AHGUI::Divider@ backDivider = footer.addDivider( DDCenter, DOHorizontal, ivec2( 0, UNDEFINEDSIZE ) );
+                AHGUI::Divider@ backDivider = footer.addDivider( DDCenter, DOHorizontal, ivec2( 0, AH_UNDEFINEDSIZE ) );
                 backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
                 AHGUI::Text backText( "The End", button_font, 100, button_color );
                 backText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
@@ -849,7 +849,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
                                                             DOVertical, 
-                                                            ivec2( UNDEFINEDSIZE, 1000 ) );
+                                                            ivec2( AH_UNDEFINEDSIZE, 1000 ) );
 
                 mainpane.addSpacer( 100, DDTop );
 
@@ -897,14 +897,14 @@ class ArenaGUI : AHGUI::GUI {
                     killcount.setName("killcount");
                     killInfoDiv.addElement(killcount, DDTop);
                     killInfoDiv.addSpacer(spacerHeight,DDTop);
-                    AHGUI::Divider@ killsDiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(UNDEFINEDSIZE,60));
+                    AHGUI::Divider@ killsDiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(AH_UNDEFINEDSIZE,60));
                     killsDiv.setName("killsdiv");
                     killInfoDiv.addSpacer(spacerHeight*2,DDTop);
                     AHGUI::Text kocount = AHGUI::Text("----", label_font, label_font_size, label_color );
                     kocount.setName("kocount");
                     killInfoDiv.addElement(kocount,DDTop);
                     killInfoDiv.addSpacer(spacerHeight,DDTop);
-                    AHGUI::Divider@ kodiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(UNDEFINEDSIZE,60));
+                    AHGUI::Divider@ kodiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(AH_UNDEFINEDSIZE,60));
                     kodiv.setName("kodiv");
                 }
                 {
@@ -958,12 +958,12 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
                                                                  DOVertical,
-                                                                 ivec2( UNDEFINEDSIZE, main_height) );
+                                                                 ivec2( AH_UNDEFINEDSIZE, main_height) );
                 toppadwrapper.addSpacer( top_margin, DDTop );
 
                 AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
                                                                DOHorizontal,
-                                                               ivec2( UNDEFINEDSIZE, main_height) );
+                                                               ivec2( AH_UNDEFINEDSIZE, main_height) );
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
@@ -995,7 +995,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
                                              DOHorizontal,
-                                             ivec2(UNDEFINEDSIZE, main_height - 150) ); 
+                                             ivec2(AH_UNDEFINEDSIZE, main_height - 150) ); 
                 bodydiv.addSpacer(100, DDLeft);
 
                 AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
@@ -1319,7 +1319,7 @@ class ArenaGUI : AHGUI::GUI {
 
                         if( state.type() == JSONobjectValue )
                         {
-                            AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                            AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, AH_UNDEFINEDSIZE));  
 
                             if( i == 6 )
                             {
@@ -1338,7 +1338,7 @@ class ArenaGUI : AHGUI::GUI {
                     }
                     else
                     {
-                        AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                        AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, AH_UNDEFINEDSIZE));  
                         /*
                         icon1div.addElement(AHGUI::Image("Textures/ui/arena_mode/glyphs/skull.png"),DDTop);
                         icon1div.addElement(AHGUI::Text("Food", label_font, label_font_size, label_color), DDBottom);
@@ -1409,7 +1409,7 @@ class ArenaGUI : AHGUI::GUI {
                         {
                             if( i > 0 ) statediv.addSpacer(50,DDLeft);
 
-                            AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                            AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, AH_UNDEFINEDSIZE));  
                         
                             icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
                             icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
@@ -1421,7 +1421,7 @@ class ArenaGUI : AHGUI::GUI {
                     }
                     else
                     {
-                        AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                        AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, AH_UNDEFINEDSIZE));  
                     }
                 }
             }
@@ -1493,7 +1493,7 @@ class ArenaGUI : AHGUI::GUI {
             {
                 AHGUI::Divider@ descriptionlinewrapper = description.addDivider( DDTop,
                                                                                  DOHorizontal,
-                                                                                 ivec2(1200,UNDEFINEDSIZE ));
+                                                                                 ivec2(1200,AH_UNDEFINEDSIZE ));
                 AHGUI::Text descriptionline(global_data.resolveString(meta_choice["description"][j].asString()), query_font, query_font_size, query_color);
                 descriptionlinewrapper.setHorizontalAlignment( BALeft );
                 descriptionlinewrapper.addElement(descriptionline,DDLeft);
@@ -1503,7 +1503,7 @@ class ArenaGUI : AHGUI::GUI {
             {
                 AHGUI::Divider@ optionlinewrapper = options.addDivider( DDTop,
                                                                         DOHorizontal,
-                                                                        ivec2( 1200, UNDEFINEDSIZE ));
+                                                                        ivec2( 1200, AH_UNDEFINEDSIZE ));
                 AHGUI::Text optionline( "" + (j+1) + ". " + meta_choice["options"][j]["description"].asString(), query_font, query_font_size, query_color);
                 optionline.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("option", j));
                 optionline.addMouseOverBehavior( buttonHover );
@@ -1538,14 +1538,14 @@ class ArenaGUI : AHGUI::GUI {
             {
                 AHGUI::Divider@ descriptionlinewrapper = description.addDivider( DDTop,
                                                                                  DOHorizontal,
-                                                                                 ivec2(1200,UNDEFINEDSIZE ));
+                                                                                 ivec2(1200,AH_UNDEFINEDSIZE ));
                 AHGUI::Text descriptionline(global_data.resolveString(message["description"][j].asString()), query_font, query_font_size, query_color);
                 descriptionlinewrapper.addElement(descriptionline,DDLeft);
             }
 
             AHGUI::Divider@ optionlinewrapper = options.addDivider( DDTop,
                                                                     DOHorizontal,
-                                                                    ivec2( 1200, UNDEFINEDSIZE ));
+                                                                    ivec2( 1200, AH_UNDEFINEDSIZE ));
             AHGUI::Text optionline( "Continue", query_font, query_font_size, query_color);
             optionline.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
             optionline.addMouseOverBehavior(buttonHover);
@@ -2022,7 +2022,7 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
         AHGUI::Container@ foreground = getForegroundLayer( 0 );
 
         // Make a new image 
-        AHGUI::Image blueBackground("Textures/ui/challenge_mode/blue_gradient_c.tga");
+        AHGUI::Image blueBackground("Textures/ui/challenge_mode/blue_gradient_c_nocompress.tga");
         // fill the screen
         blueBackground.setSize(2560, AHGUI::screenMetrics.GUISpaceY);
         blueBackground.setColor( 1.0,1.0,1.0,0.8 );
@@ -2099,7 +2099,7 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
         // Now construct main pane
         
         // First a footer
-        AHGUI::Divider@ footer = root.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        AHGUI::Divider@ footer = root.addDivider( DDBottom, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
         footer.setName("footerdiv");
 
         // Add some text to put something here
@@ -2109,7 +2109,7 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
         footer.addElement( footerText, DDLeft );
 
         // Repeat for a header
-        AHGUI::Divider@ header = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        AHGUI::Divider@ header = root.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
         footer.setName("headerdiv");
 
         // Add some text to put something here

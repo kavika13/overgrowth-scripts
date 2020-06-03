@@ -176,6 +176,10 @@ class Situation {
     }
 
     int GetForceLookTarget() {
+        if(state == _attack_state){
+            return target_id;
+        }
+
         const float _target_look_threshold = this_mo.controlled?7.0f:30.0f; // How close target must be to look at it
         const float _target_look_threshold_sqrd = 
             _target_look_threshold * _target_look_threshold;
@@ -186,7 +190,13 @@ class Situation {
         for(uint i=0; i<known_chars.size(); ++i){
             if(!known_chars[i].friendly){
                 MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                float dist = distance_squared(char.position, this_mo.position);
+                float dist;
+                if(this_mo.controlled) {
+                    vec3 cam_dir = normalize(char.position - camera.GetPos());
+                    dist = -dot(cam_dir, camera.GetFacing());
+                } else {
+                    dist = distance_squared(char.position, this_mo.position);
+                }
                 if(char.GetIntVar("knocked_out") == _awake && dist < _target_look_threshold_sqrd){
                     if(closest_id == -1 || dist < closest_dist){
                         closest_id = known_chars[i].id;
@@ -200,7 +210,13 @@ class Situation {
             for(uint i=0; i<known_chars.size(); ++i){
                 if(!known_chars[i].friendly){
                     MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                    float dist = distance_squared(char.position, this_mo.position);
+                    float dist;
+                    if(this_mo.controlled) {
+                        vec3 cam_dir = normalize(char.position - camera.GetPos());
+                        dist = -dot(cam_dir, camera.GetFacing());
+                    } else {
+                        dist = distance_squared(char.position, this_mo.position);
+                    }
                     if(dist < _target_look_threshold_sqrd){
                         if(closest_id == -1 || dist < closest_dist){
                             closest_id = known_chars[i].id;

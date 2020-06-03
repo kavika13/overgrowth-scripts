@@ -4,6 +4,7 @@ const float pi = 3.14159265359;
 
 enum ProcessStringType { kInGame, kInEditor };
 
+// What actions can be triggered from a dialogue script line
 enum ObjCommands {
     kUnknown,
     kCamera,
@@ -26,11 +27,12 @@ enum ObjCommands {
 };
 
 class ScriptElement {
-    string str;
-    bool visible;
-    bool locked;
-    bool record_locked;
-    int spawned_id;
+    string str; // The raw string
+    bool visible; // Display this line in editor?
+    bool locked; // Allow changes?
+    bool record_locked; 
+    int spawned_id; // ID of the object associated with this script line
+    // Pre-tokenized
     ObjCommands obj_command;
     array<string> params;
 }
@@ -53,6 +55,8 @@ class CharRecord {
 
 enum SayParseState {kStart, kInBracket, kContinue};
 
+uint old_input_mode;
+
 class Dialogue {
     // Contains information from undo/redo
     string history_str;
@@ -66,11 +70,13 @@ class Dialogue {
     array<string> dialogue_poses;
     int index; // which dialogue element is being executed
     int sub_index;
-    int text_id; // ID for dialogue text canvas texture
+    int text_id = -1; // ID for dialogue text canvas texture
+    int text_id_position_x = 50;
     bool has_cam_control;
     bool show_dialogue;
     bool waiting_for_dialogue;
     bool is_waiting_time;
+    bool skip_dialogue;
     float wait_time;
     string dialogue_text;
     float dialogue_text_disp_chars;
@@ -82,13 +88,16 @@ class Dialogue {
     bool clear_on_complete;
 
     bool show_editor_info;
-    int editor_text_id; // ID of editor text canvas texture
+    int editor_text_id = -1; // ID of editor text canvas texture
     bool text_dirty;
     int set_animation_char_select;
     int set_animation_pose_select;
-	float last_key_update;
 	bool edit_mode;
+    int input_mode_id = -1;
 	string edit_text;
+
+    float init_time;
+    float start_time = 0.0;
 
     void SetRecording(bool val){
         if(recording != val){
@@ -118,6 +127,7 @@ class Dialogue {
 
     // Play dialogue with given name
     void StartDialogue(const string &in name){
+        start_time = the_time;
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
         for(int i=0; i<num_objects; ++i){
@@ -125,8 +135,8 @@ class Dialogue {
             ScriptParams@ params = obj.GetScriptParams();
             if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("DisplayName") && params.GetString("DisplayName") == name){
                 SetDialogueObjID(object_ids[i]);
-                clear_on_complete = true;
                 Play();
+                clear_on_complete = true;
             }
         }
     }
@@ -156,6 +166,7 @@ class Dialogue {
 		if (edit_mode) {
 			StopTextInput();
 			edit_mode = false;
+            Log(info, "Ending input limitation");
 		}
     }
 
@@ -265,25 +276,41 @@ class Dialogue {
         }
     }
 
+    void ResizeUpdate( int w, int h ) {
+        TextCanvasTexture @text = level.GetTextElement(text_id);
+        text.Create(w-text_id_position_x*2, 200);
+    }
+
     void Init() {
         ClearEditor();
+        skip_dialogue = false;
         is_waiting_time = false;
         index = 0;
         sub_index = -1;
-        text_id = level.CreateTextElement();
+        init_time = the_time;
+
+        if( text_id == -1 ) {
+            text_id = level.CreateTextElement();
+        }
+
+        ResizeUpdate(GetScreenWidth(),GetScreenHeight());
+
         TextCanvasTexture @text = level.GetTextElement(text_id);
-        text.Create(GetScreenWidth(), 200);
         has_cam_control = false;
         show_dialogue = false;
         show_editor_info = true;
         waiting_for_dialogue = false;
-        editor_text_id = level.CreateTextElement();
+
+        if( editor_text_id == -1 ) {
+            editor_text_id = level.CreateTextElement();
+        }
+
         TextCanvasTexture @editor_text = level.GetTextElement(editor_text_id);
         editor_text.Create(800, 512);
         set_animation_char_select = -1;
         set_animation_pose_select = -1;
-		last_key_update = 0.0f;
 		edit_mode = false;
+        input_mode_id = -1;
 		edit_text = "";
 
         Print("Loading dialogue poses file\n");
@@ -299,6 +326,18 @@ class Dialogue {
             dialogue_poses.push_back(new_str);
         }
         Print("Finished loading dialogue poses file\n");
+    }
+
+    ~Dialogue() {
+        if( text_id != -1 ) {
+            level.DeleteTextElement(text_id); 
+            text_id = -1;
+        }
+        
+        if( editor_text_id != -1 ) {
+            level.DeleteTextElement(editor_text_id); 
+            text_id = -1;
+        }
     }
 
     string CreateStringFromParams(ObjCommands command, array<string> &in params){
@@ -380,6 +419,26 @@ class Dialogue {
         if(params.HasParam("NumParticipants")){
             num_participants = params.GetInt("NumParticipants");
         }
+
+        //Place the defaults at the top, but below the title, if there are no commands before then.
+        int insert_index = 0;
+        for( uint i = 0; i < strings.length(); i++ ) {
+            if( strings[i].str.length() == 0 )   
+            {
+
+            }
+            else if( strings[i].str.substr(0,1) == "#" )
+            {
+
+            }
+            else
+            {
+                insert_index = i;
+                break;
+            }
+        }
+
+        Log( info, "index " + insert_index );
          
         array<string> str_params;
         str_params.resize(7);
@@ -390,8 +449,8 @@ class Dialogue {
         str_params[4] = 0;
         str_params[5] = 0;
         str_params[6] = 90;
-        AddLine(CreateStringFromParams(kCamera, str_params), 0);
-        strings[0].visible = false;
+        AddLine(CreateStringFromParams(kCamera, str_params), insert_index);
+        strings[insert_index].visible = false;
         for(int i=0; i<num_participants; ++i){
             int char_id = GetDialogueCharID(i+1);
             if(char_id == -1){
@@ -408,8 +467,8 @@ class Dialogue {
             str_params[2] = head_pos.y;
             str_params[3] = head_pos.z;
             str_params[4] = 0.0f;
-            AddLine(CreateStringFromParams(kHeadTarget, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kHeadTarget, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(5);
             mat4 chest_mat = char.rigged_object().GetAvgIKChainTransform("torso");
@@ -418,8 +477,8 @@ class Dialogue {
             str_params[2] = torso_pos.y;
             str_params[3] = torso_pos.z;
             str_params[4] = 0.0f;
-            AddLine(CreateStringFromParams(kChestTarget, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kChestTarget, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(5);
             vec3 eye_pos = head_mat * vec4(0,0,0,1) + head_mat * vec4(0,2,0,0);
@@ -427,13 +486,13 @@ class Dialogue {
             str_params[2] = eye_pos.y;
             str_params[3] = eye_pos.z;
             str_params[4] = 1.0f;
-            AddLine(CreateStringFromParams(kEyeTarget, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kEyeTarget, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(2);
             str_params[1] = "Data/Animations/r_actionidle.anm";
-            AddLine(CreateStringFromParams(kSetAnimation, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kSetAnimation, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(5);
             Object @char_spawn = ReadObjectFromID(char_id);
@@ -441,13 +500,13 @@ class Dialogue {
             str_params[2] = char_spawn.GetTranslation().y;
             str_params[3] = char_spawn.GetTranslation().z;
             str_params[4] = 0;
-            AddLine(CreateStringFromParams(kCharacter, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kCharacter, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(2);
             str_params[1] = "true";
-            AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), 0);
-            strings[0].visible = false;
+            AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), insert_index);
+            strings[insert_index].visible = false;
                 
             str_params.resize(2);
             str_params[1] = "false";
@@ -468,46 +527,47 @@ class Dialogue {
     }
 
     void SetDialogueObjID(int id) {
-        if(dialogue_obj_id == id){
-            return; // This dialogue object is already selected
-        }
-        ClearEditor();
-        dialogue_obj_id = id;
-        if(id == -1){
-            return;
-        }
-        Object @obj = ReadObjectFromID(dialogue_obj_id);
-        ScriptParams @params = obj.GetScriptParams();
+        if(dialogue_obj_id != id){
+            ClearEditor();
+            dialogue_obj_id = id;
+            if(id != -1){
+                Object @obj = ReadObjectFromID(dialogue_obj_id);
+                ScriptParams @params = obj.GetScriptParams();
 
-        if(!params.HasParam("NumParticipants") || !params.HasParam("Dialogue")){
-            Print("Selected dialogue object does not have the necessary parameters (id "+id+")\n");
-            return; 
-        }
-        if(!params.HasParam("Script")){
-			if(params.GetString("Dialogue") == "empty") {
-				strings.resize(0);
-				AddLine("#name \"Unnamed\"", strings.size());
-				AddLine("#participants 1", strings.size());
-				AddLine("", strings.size());
-				AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
-			} else {
-				LoadScriptFile(params.GetString("Dialogue"));
-			}
-        } else {
-            string script = params.GetString("Script");
-            string token = "\n";
-            int script_len = int(script.length());
-            int line_start = 0;
-            for(int i=0; i<script_len; ++i){
-                if(script[i] == token[0]){
-                    AddLine(script.substr(line_start, i-line_start),int(strings.size()));
-                    line_start = i+1;
+                if(!params.HasParam("NumParticipants") || !params.HasParam("Dialogue")){
+                    Print("Selected dialogue object does not have the necessary parameters (id "+id+")\n");
+                } else {
+                    if(!params.HasParam("Script")){
+            			if(params.GetString("Dialogue") == "empty") {
+                            // Create placeholder script
+            				strings.resize(0);
+            				AddLine("#name \"Unnamed\"", strings.size());
+            				AddLine("#participants 1", strings.size());
+            				AddLine("", strings.size());
+            				AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
+            			} else {
+                            // Parse script from file
+            				LoadScriptFile(params.GetString("Dialogue"));
+            			}
+                    } else {
+                        // Parse script directly from parameters
+                        string script = params.GetString("Script");
+                        string token = "\n";
+                        int script_len = int(script.length());
+                        int line_start = 0;
+                        for(int i=0; i<script_len; ++i){
+                            if(script[i] == token[0]){
+                                AddLine(script.substr(line_start, i-line_start),int(strings.size()));
+                                line_start = i+1;
+                            }
+                        }
+                    }
+
+                    AddInvisibleStrings();
+                    selected_line = 1;
                 }
             }
         }
-
-        AddInvisibleStrings();
-        selected_line = 1;
     }
 
 	void DeleteLine(int index){
@@ -545,9 +605,29 @@ class Dialogue {
 
     void Play() {
         bool stop = false;
+
+        int last_wait = -1;
+        int prev_last_wait = -1;
+        for(int i=0, len=strings.size(); i<len; ++i){
+            if(strings[i].obj_command == kWaitForClick || strings[i].obj_command == kSay){
+                prev_last_wait = last_wait;
+                last_wait = i;
+            }
+        }
+
+        if(the_time > init_time + 0.5){
+            skip_dialogue = false; // Only skip dialogue that starts at the beginning of the level
+        }
+
         while(!stop){
             if(index < int(strings.size())){
                 stop = ExecuteScriptElement(strings[index], kInGame);
+                if(index == prev_last_wait){
+                    skip_dialogue = false;
+                }
+                if(skip_dialogue){
+                    stop = false;
+                }
                 if(sub_index == -1){
                     ++index;
                 }
@@ -556,6 +636,7 @@ class Dialogue {
                 index = 0;
             }
         }
+        skip_dialogue = false;
     }
 
     void SaveToFile(const string &in path) {
@@ -667,6 +748,11 @@ class Dialogue {
             camera.SetDistance(0.0f);
             camera.SetFOV(cam_zoom);
             UpdateListener(cam_pos,vec3(0.0f),camera.GetFacing(),camera.GetUpVector());
+            if(EditorModeActive()){
+                SetGrabMouse(false);
+            } else {
+                SetGrabMouse(true);                
+            }
         }
 
         // Progress dialogue one character at a time
@@ -688,131 +774,52 @@ class Dialogue {
             }
         }
 
-		if(edit_mode) {
-			string input = GetTextInput();
-			if (input.length() == 1) {
-				edit_text += input;
-			}
-			text_dirty = true;
-		}
-
         if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
             // Handle up/down dialogue editor navigation
-			if((the_time - last_key_update) > 0.05f) {
-				last_key_update = the_time;
-				if((GetInputDown(controller_id, "down") || selected_line < 0 || !strings[selected_line].visible) && !edit_mode){
-					int num_lines = int(strings.size());
-					int i = selected_line + 1;
-					if(GetInputDown(controller_id, "shift")){
-						while(i < num_lines && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-							++i;
-						}
-					} else {
-						while(i < num_lines && !strings[i].visible){
-							++i;
-						}
-					}
-					if(i < num_lines && strings[i].visible){
-						selected_line = i;
-					}
-					text_dirty = true;
-					HandleSelectedString(selected_line);
-					if(recording){
-						UpdateRecordLocked();
-					}
-					ClearUnselectedObjects();
-				}
-				if((GetInputDown(controller_id, "up") || selected_line >= int(strings.size())) && !edit_mode){
-					int i = selected_line - 1;
-					if(GetInputDown(controller_id, "shift")){
-						while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-							--i;
-						}
-					} else {
-						while(i > 0 && !strings[i].visible){
-							--i;
-						}
-					}
-					if(i > 0 && strings[i].visible){
-						selected_line = i;
-					}
-					text_dirty = true;
-					HandleSelectedString(selected_line);
-					if(recording){
-						UpdateRecordLocked();
-					}
-					ClearUnselectedObjects();
-				}
-				if(GetInputDown(controller_id, "return")){
-					if (!edit_mode) {
-						StartTextInput();
-						edit_mode = true;
-						edit_text = strings[selected_line].str;
-					} else {
-						StopTextInput();
-						edit_mode = false;
-						strings[selected_line].str = edit_text;
-						UpdateParams(edit_text, dialogue_obj_id);
-						SetupDialogueObjectConnectors(dialogue_obj_id);
-					}
-				}
-				if(GetInputDown(controller_id, "backspace") && edit_mode) {
-					edit_text = edit_text.substr(0, edit_text.length - 1);
-					text_dirty = true;
-				}
-				if(GetInputDown(controller_id, "keypad+")) {
-					// add new line
-					AddLine("", selected_line + 1);
-					text_dirty = true;
-				}
-				if(GetInputDown(controller_id, "keypad-")) {
-					// delete line
-					DeleteLine(selected_line);
-					edit_mode = false;
-					text_dirty = true;
-				}
-			}
-        }
-        // Lock selected dialogue script line
-        if(GetInputPressed(controller_id, "f")){
-            if(selected_line >= 0 && selected_line < int(strings.size())){
-                strings[selected_line].locked = !strings[selected_line].locked;
-                text_dirty = true;
-            }
-        }
-        // Toggle recording
-        if(GetInputDown(controller_id, "ctrl") && GetInputPressed(controller_id, "r")){
-            SetRecording(!recording);
-            UpdateRecordLocked();
-        }
-        // Navigate left-right through dialogue script options
-        if(GetInputPressed(controller_id, "right")){
-            if(set_animation_char_select != -1){
-                ++set_animation_pose_select;
-                if(set_animation_pose_select >= int(dialogue_poses.size())){
-                    set_animation_pose_select = 0;
+            if((selected_line < 0 || !strings[selected_line].visible) && !edit_mode){
+                int num_lines = int(strings.size());
+                int i = selected_line + 1;
+                while(i < num_lines && !strings[i].visible){
+                    ++i;
                 }
-                strings[selected_line].str = "send_character_message "+set_animation_char_select+
-                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
-                ExecutePreviousCommands(selected_line);
-                text_dirty = true;
-            }
-        }
-        if(GetInputPressed(controller_id, "left")){
-            if(set_animation_char_select != -1){
-                --set_animation_pose_select;
-                if(set_animation_pose_select < 0){
-                    set_animation_pose_select = int(dialogue_poses.size());
+                if(i < num_lines && strings[i].visible){
+                    selected_line = i;
                 }
-                strings[selected_line].str = "send_character_message "+set_animation_char_select+
-                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
-                ExecutePreviousCommands(selected_line);
                 text_dirty = true;
+                HandleSelectedString(selected_line);
+                if(recording){
+                    UpdateRecordLocked();
+                }
+                ClearUnselectedObjects();
+            }
+            if(selected_line >= int(strings.size()) && !edit_mode){
+                int i = selected_line - 1;
+                while(i > 0 && !strings[i].visible){
+                    --i;
+                }
+                if(i > 0 && strings[i].visible){
+                    selected_line = i;
+                }
+                text_dirty = true;
+                HandleSelectedString(selected_line);
+                if(recording){
+                    UpdateRecordLocked();
+                }
+                ClearUnselectedObjects();
             }
         }
-        if(GetInputPressed(controller_id, "attack")){
+
+        if(GetInputPressed(controller_id, "attack") && start_time != the_time){
             if(index != 0){
+                while(waiting_for_dialogue || is_waiting_time){
+                    dialogue_text_disp_chars = dialogue_text.length();
+                    waiting_for_dialogue = false;
+                    is_waiting_time = false;
+                    wait_time = 0.0f;
+                    Play();   
+                }
                 Play();   
+                PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml");
             }
         }
         
@@ -871,6 +878,12 @@ class Dialogue {
                     
                     string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
                     RecordInput(new_string, i, last_wait);
+
+                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                    if(char_id != -1){
+                        MovementObject@ mo = ReadCharacterID(char_id);
+                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                    }
                 }
                 break;
             case kChestTarget:
@@ -894,6 +907,12 @@ class Dialogue {
                     
                     string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
                     RecordInput(new_string, i, last_wait);
+
+                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                    if(char_id != -1){
+                        MovementObject@ mo = ReadCharacterID(char_id);
+                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                    }
                 }
                 break;
             case kEyeTarget:
@@ -917,6 +936,12 @@ class Dialogue {
                     
                     string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
                     RecordInput(new_string, i, last_wait);
+                    
+                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                    if(char_id != -1){
+                        MovementObject@ mo = ReadCharacterID(char_id);
+                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                    }
                 }
                 break;
             case kCharacter:
@@ -1147,6 +1172,7 @@ class Dialogue {
             obj.SetScalable(false);
             obj.SetSelectable(true);
             obj.SetTranslatable(true);
+            obj.SetRotatable(true);
             break; }
         case kHeadTarget: {
             if(se.spawned_id == -1){
@@ -1425,6 +1451,11 @@ class Dialogue {
                     mo.ReceiveMessage(token);
                 }
             }
+            if(token == "send_level_message"){
+                token_iter.FindNextToken(script_element.str);
+                token = token_iter.GetToken(script_element.str);
+                level.SendMessage(token);
+            }
             break;
             }
         }
@@ -1446,8 +1477,12 @@ class Dialogue {
                 new_obj.SetRotation(quat);
                 new_obj.SetScale(obj.GetScale()*0.3f);
                 if(player_id == -1){
-                    TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
-                    text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _delete_on_update);
+                    new_obj.SetEditorLabel(""+j);
+                    new_obj.SetEditorLabelScale(6);
+                    new_obj.SetEditorLabelOffset(vec3(0));
+                    
+                   // TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
+                   // text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _persistent);//_delete_on_update);
                 }
                 new_obj.SetCopyable(false);
                 new_obj.SetDeletable(false);
@@ -1466,6 +1501,7 @@ class Dialogue {
                 int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
                 params.AddInt("obj_"+j, obj_id);
                 Object@ object = ReadObjectFromID(obj_id);
+                object.SetSelectable(true);
                 PlaceholderObject@ inner_placeholder_object = cast<PlaceholderObject@>(object);
                 inner_placeholder_object.SetSpecialType(kPlayerConnect);
             }
@@ -1498,6 +1534,7 @@ class Dialogue {
 			if(token == "#name"){
 				if(token_iter.FindNextToken(str)){
 					params.SetString("DisplayName", token_iter.GetToken(str));
+                    obj.SetEditorLabel(params.GetString("DisplayName"));
 				}
 			}
 			if(token == "#participants"){
@@ -1541,6 +1578,9 @@ class Dialogue {
 				}
 			}
         }
+        obj.SetEditorLabel(params.GetString("DisplayName"));
+        obj.SetEditorLabelOffset(vec3(0,1.25,0)); 
+        obj.SetEditorLabelScale(10);
         int player_id = GetPlayerCharacterID();
         // Draw dialogue name
         //if(player_id == -1){
@@ -1560,24 +1600,30 @@ class Dialogue {
         if(token == "notify_deleted"){
 		    token_iter.FindNextToken(msg);
             NotifyDeleted(atoi(token_iter.GetToken(msg)));
+        } else if(token == "skip_dialogue"){
+            skip_dialogue = true;
         } else if(token == "added_object"){
             token_iter.FindNextToken(msg);
             int obj_id = atoi(token_iter.GetToken(msg));
             AddedObject(obj_id);
-        } else if(token == "moved_object"){
-            token_iter.FindNextToken(msg);
-            int obj_id = atoi(token_iter.GetToken(msg));
-            MovedObject(obj_id);
+        } else if(token == "moved_objects"){
+            while(token_iter.FindNextToken(msg)){
+                int obj_id = atoi(token_iter.GetToken(msg));
+                MovedObject(obj_id);
+            }
         } else if(token == "stop_editing_dialogue") {
+            DeactivateKeyboardEvents();
 			if (edit_mode) {
 				StopTextInput();
 				edit_mode = false;
+                Log(info, "Ending input limitation");
 			}
             ClearEditor();
         } else if(token == "dialogue_set_recording") {
 		    token_iter.FindNextToken(msg);
             SetRecording((token_iter.GetToken(msg) == "true"));
         } else if(token == "edit_selected_dialogue"){
+            ActivateKeyboardEvents();
             array<int> @object_ids = GetObjectIDs();
             int num_objects = object_ids.length();
             for(int i=0; i<num_objects; ++i){
@@ -1593,8 +1639,8 @@ class Dialogue {
         } else if(token == "preview_dialogue"){
             DebugText("preview_dialogue", "preview_dialogue", 0.5f);
             if(index == 0 && dialogue_obj_id != -1){
-                camera.SetFlags(kPreviewCamera);
-                SetGUIEnabled(false);
+                //camera.SetFlags(kPreviewCamera);
+                //SetGUIEnabled(false);
                 Play();
             }
         } else if(token == "save_dialogue"){
@@ -1656,7 +1702,7 @@ class Dialogue {
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             // Draw text background
             HUDImage @blackout_image = hud.AddImage();
-            blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
+            blackout_image.SetImageFromPath("Data/Textures/diffuse_hud.tga");
             blackout_image.position.y = 0;
             blackout_image.position.x = 0.0f;
             blackout_image.position.z = -2.0f;
@@ -1677,7 +1723,7 @@ class Dialogue {
             text.SetPenPosition(pen_pos);
             text.SetPenColor(255,255,255,160);
             text.SetPenRotation(0.0f);
-            text.AddText(dialogue_name+":", small_style);
+            text.AddText(dialogue_name+":", small_style, UINT32MAX);
         
             // Draw dialogue text to canvas
             text.SetPenColor(255,255,255,255);
@@ -1685,14 +1731,17 @@ class Dialogue {
             pen_pos.x += 40;
             pen_pos.y += br_size;
             text.SetPenPosition(pen_pos);
-            string display_dialogue_text = dialogue_text.substr(0,int(dialogue_text_disp_chars));
-            text.AddText(display_dialogue_text, small_style);
+
+            //uint len_in_bytes = GetLengthInBytesForNCodepoints(dialogue_text,uint(dialogue_text_disp_chars));
+            //string display_dialogue_text = dialogue_text.substr(0,int(len_in_bytes));
+            
+            text.AddTextMultiline(dialogue_text, small_style, uint(dialogue_text_disp_chars));
 
             // Draw text canvas to screen
             text.UploadTextCanvasToTexture();
             HUDImage @text_image = hud.AddImage();
             text_image.SetImageFromText(level.GetTextElement(text_id)); 
-            text_image.position.x = GetScreenWidth()/2-256;
+            text_image.position.x = text_id_position_x;
             text_image.position.y = GetScreenHeight()/4.0f-210;
             text_image.position.z = 4;
             text_image.color = vec4(1,1,1,1);
@@ -1705,15 +1754,15 @@ class Dialogue {
                 editor_text.ClearTextCanvas();
                 int font_size = 14;
                 TextStyle small_style, big_style;
-                small_style.font_face_id = GetFontFaceID("Data/Fonts/arial.ttf", font_size);
-                big_style.font_face_id = GetFontFaceID("Data/Fonts/arialbd.ttf", font_size);
+                small_style.font_face_id = GetFontFaceID("Data/Fonts/inconsolata.ttf", font_size);
+                big_style.font_face_id = GetFontFaceID("Data/Fonts/inconsolata.ttf", font_size);
 
                 vec2 pen_pos = vec2(0,font_size);
                 uint num_strings = strings.size();
 
 				TextMetrics metrics;
 				string test_string = "test";
-				editor_text.GetTextMetrics(test_string, small_style, metrics);
+				editor_text.GetTextMetrics(test_string, small_style, metrics, UINT32MAX);
 				int cur_pos = selected_line * (metrics.bounds_y / 64); // font_size should do this too?
 				uint i = 0;
 
@@ -1722,7 +1771,7 @@ class Dialogue {
 				}
 
                 for(; i<num_strings; ++i){
-                    const bool show_invisible = false;
+                    bool show_invisible = false;
                     if(!strings[i].visible && !show_invisible){
                         continue;
                     }
@@ -1739,15 +1788,68 @@ class Dialogue {
                         editor_text.SetPenColor(0,0,0,opac);
                     }
                     editor_text.SetPenRotation(0.0f);
+                    string disp = strings[i].str;
+                    if(strings[i].obj_command == kUnknown){
+                        ParseLine(strings[i]);
+                    }
+   /* kUnknown,
+    kCamera,
+    kHeadTarget,
+    kEyeTarget,
+    kChestTarget,
+    kCharacter,
+    kCharacterDialogueControl,
+    kDialogueVisible,
+    kDialogueName,
+    kSetDialogueText,
+    kAddDialogueText,
+    kCharacterStartTalking,
+    kCharacterStopTalking,
+    kWait,
+    kWaitForClick,
+    kSetCamControl,
+    kSetAnimation,
+    kSay*/
+                    if(strings[i].obj_command != kSay){
+                        continue;
+                    } else {
+                        int name_len = strings[i].params[1].length;
+                        string padding;
+                        for(int pad=0, len=max(0, 8 - name_len); pad<len; ++pad){
+                            padding += " ";
+                        }
+                        disp = strings[i].params[1] + ": " + padding + strings[i].params[2];
+                        if(strings[i].params[0] == "1"){
+                            editor_text.SetPenColor(50,0,0,opac);
+                        }
+                        if(strings[i].params[0] == "2"){
+                            editor_text.SetPenColor(0,50,0,opac);
+                        }
+                        if(strings[i].params[0] == "3"){
+                            editor_text.SetPenColor(0,0,50,opac);
+                        }
+                    }
+
+                    switch(strings[i].obj_command){
+                        case kCharacter: disp = strings[i].params[0] + " Move"; break;
+                        case kCamera: disp = "Camera"; break;
+                        case kHeadTarget: disp = strings[i].params[0] + " Head"; break;
+                        case kEyeTarget: disp = strings[i].params[0] + " Eye"; break;
+                        case kChestTarget: disp = strings[i].params[0] + " Torso"; break;
+                        case kSetAnimation: disp = strings[i].params[0] + " Pose"; break;
+                        case kUnknown: continue;
+                    }
 					if(uint(selected_line) == i){
 						if(edit_mode){
 							editor_text.SetPenColor(0,125,0,opac);
-							editor_text.AddText(edit_text, big_style);
+							editor_text.AddText(edit_text, big_style, UINT32MAX);
 						} else {
-							editor_text.AddText(strings[i].str, big_style);
+                            editor_text.AddText(disp, big_style, UINT32MAX);
+                            editor_text.SetPenPosition(pen_pos + vec2(1,1));
+                            editor_text.AddText(disp, big_style, UINT32MAX);
 						}
                     } else {
-                        editor_text.AddText(strings[i].str, small_style);
+                        editor_text.AddText(disp, small_style, UINT32MAX);
                     }
                     pen_pos.y += font_size;
                 }
@@ -1795,4 +1897,154 @@ class Dialogue {
         HandleSelectedString(selected_line);
         history_str = "";
     }
+
+    void TextInput( string text )
+    {
+		if(edit_mode) {
+			string input = text;
+			if (input.length() == 1) {
+				edit_text += input;
+			}
+			text_dirty = true;
+		}
+    }
+
+    void KeyPressed( string command, bool repeated )
+    {
+        if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
+            // Handle up/down dialogue editor navigation
+            if(command == "down" && !edit_mode){
+                int num_lines = int(strings.size());
+                int i = selected_line + 1;
+                if(GetInputDown(controller_id, "shift")){
+                    while(i < num_lines && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
+                        ++i;
+                    }
+                } else {
+                    while(i < num_lines && !strings[i].visible){
+                        ++i;
+                    }
+                }
+                if(i < num_lines && strings[i].visible){
+                    selected_line = i;
+                }
+                text_dirty = true;
+                HandleSelectedString(selected_line);
+                if(recording){
+                    UpdateRecordLocked();
+                }
+                ClearUnselectedObjects();
+            }
+            if(command == "up" && !edit_mode){
+                int i = selected_line - 1;
+                if(GetInputDown(controller_id, "shift")){
+                    while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
+                        --i;
+                    }
+                } else {
+                    while(i > 0 && !strings[i].visible){
+                        --i;
+                    }
+                }
+                if(i >= 0 && strings[i].visible){
+                    selected_line = i;
+                }
+                text_dirty = true;
+                HandleSelectedString(selected_line);
+                if(recording){
+                    UpdateRecordLocked();
+                }
+                ClearUnselectedObjects();
+            }
+            if(command == "return"){
+                if (!edit_mode) {
+                    StartTextInput();
+                    edit_mode = true;
+                    Log(info, "Starting input limitation");
+                    edit_text = strings[selected_line].str;
+                    text_dirty = true;
+                } else {
+                    StopTextInput();
+                    edit_mode = false;
+                    Log(info, "Ending input limitation");
+                    strings[selected_line].str = edit_text;
+                    UpdateParams(edit_text, dialogue_obj_id);
+                    SetupDialogueObjectConnectors(dialogue_obj_id);
+                    text_dirty = true;
+                }
+            }
+            if(command == "backspace" && edit_mode) {
+                edit_text = edit_text.substr(0, edit_text.length - 1);
+                text_dirty = true;
+            }
+            if(command == "keypad+") {
+                // add new line
+                AddLine("", selected_line + 1);
+                text_dirty = true;
+            }
+            if(command == "keypad-") {
+                // delete line
+                DeleteLine(selected_line);
+                edit_mode = false;
+                Log(info, "Ending input limitation");
+                text_dirty = true;
+            }
+        }
+        // Lock selected dialogue script line
+        if( command == "f" && repeated == false ) {
+            if(selected_line >= 0 && selected_line < int(strings.size())){
+                strings[selected_line].locked = !strings[selected_line].locked;
+                text_dirty = true;
+            }
+        }
+        // Toggle recording
+        if(GetInputDown(controller_id, "ctrl") && command == "r" && repeated == false){
+            SetRecording(!recording);
+            UpdateRecordLocked();
+        }
+        // Navigate left-right through dialogue script options
+        if( command == "right" && repeated == false){
+            if(set_animation_char_select != -1){
+                ++set_animation_pose_select;
+                if(set_animation_pose_select >= int(dialogue_poses.size())){
+                    set_animation_pose_select = 0;
+                }
+                strings[selected_line].str = "send_character_message "+set_animation_char_select+
+                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
+                ExecutePreviousCommands(selected_line);
+                text_dirty = true;
+            }
+        }
+        if( command == "left" && repeated == false){
+            if(set_animation_char_select != -1){
+                --set_animation_pose_select;
+                if(set_animation_pose_select < 0){
+                    set_animation_pose_select = int(dialogue_poses.size());
+                }
+                strings[selected_line].str = "send_character_message "+set_animation_char_select+
+                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
+                ExecutePreviousCommands(selected_line);
+                text_dirty = true;
+            }
+        }
+
+    }
+
+    void KeyReleased( string command )
+    {
+
+    }
+
+    uint PollKeyboardFocus()
+    {
+        if( edit_mode )
+        {
+            return KIMF_LEVEL_EDITOR_DIALOGUE_EDITOR;
+        }
+        else
+        {
+            return KIMF_NO;
+        }
+    }
 };
+

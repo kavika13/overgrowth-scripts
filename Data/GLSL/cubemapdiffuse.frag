@@ -14,6 +14,7 @@ in vec3 ws_vertex;
 in vec4 shadow_coords[4];
 in vec3 normal;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main()

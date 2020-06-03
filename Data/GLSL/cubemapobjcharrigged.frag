@@ -44,6 +44,7 @@ in vec2 morphed_tex_coord;
 in vec3 world_vert;
 #endif
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main()

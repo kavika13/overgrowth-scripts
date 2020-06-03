@@ -5,6 +5,7 @@ uniform vec4 color;
 
 in vec2 frag_texcoord;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {    

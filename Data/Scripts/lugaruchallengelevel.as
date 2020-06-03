@@ -87,7 +87,7 @@ class ChallengeGUI : AHGUI::GUI {
 		}
 	}
 	void ShowFightingUI(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 		mainPane.addSpacer( 50, DDLeft );
 		DisplayText(mainPane, DDTop, "Score: " + points, challengeTextSize, textColor, true, "ScoreText");
         if(showBorders){
@@ -100,16 +100,16 @@ class ChallengeGUI : AHGUI::GUI {
         AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOVertical, ivec2( 2562, 1440 ) );
 		mainPane.setHorizontalAlignment(BALeft);
 		mainPane.setBackgroundImage("Textures/LugaruMenu/LugaruChallengeBackground.png");
-		AHGUI::Divider@ title = mainPane.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+		AHGUI::Divider@ title = mainPane.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
 		DisplayText(title, DDCenter, "Level Cleared!", textSize, textColor, true);
 
-		AHGUI::Divider@ scorePane = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, 300 ) );
+		AHGUI::Divider@ scorePane = mainPane.addDivider( DDTop, DOVertical, ivec2( AH_UNDEFINEDSIZE, 300 ) );
 		DisplayText(scorePane, DDTop, "Score:          " + (points + pointsToAdd), textSize, textColor, true);
 		DisplayText(scorePane, DDTop, "Time:           " + GetTime(int(challengeDuration)), textSize, textColor, true);
 		DisplayText(scorePane, DDTop, "Merciful", textSize, textColor, true);
 		DisplayText(scorePane, DDTop, "Divide and Conquer", textSize, textColor, true);
 
-		AHGUI::Divider@ footer = mainPane.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+		AHGUI::Divider@ footer = mainPane.addDivider( DDBottom, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
 		DisplayText(footer, DDCenter, "Press escape to return to menu or space to continue", textSize, textColor, true);
 
         if(showBorders){

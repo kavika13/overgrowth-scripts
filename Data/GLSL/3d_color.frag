@@ -1,12 +1,15 @@
 #version 150
 in vec4 color;
 in vec3 world_vert;
+#pragma bind_out_color
 out vec4 out_color;
+#pragma bind_out_vel
 out vec4 out_vel;
 uniform float opacity;
 uniform sampler2D tex5;
 uniform vec2 viewport_dims;
 uniform vec3 cam_pos;
+uniform mat4 mvp;
 
 float hash( vec2 p )
 {
@@ -49,6 +52,7 @@ float LinearizeDepth(float z) {
 
 void main() {    
     #ifdef FIRE
+    const float kFireSpeed = 3.0;
     float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
     float particle_depth = LinearizeDepth(gl_FragCoord.z);
     float heat = max(0.0, color[0]);
@@ -61,26 +65,45 @@ void main() {
     float fractal_u = u + (rel.x)*0.2;
     float fractal_v = v + (rel.z)*0.02;
     float noise = fractal(vec2(fractal_u,fractal_v * 10.0));
-    float noise2 = (fractal(vec2(fractal_u,fractal_v * 10.0 + time)*3) + fractal(vec2(fractal_u,fractal_v * 10.0 + time)*-2))*0.5;
+    float noise2 = (fractal(vec2(fractal_u,fractal_v * 10.0 + time * kFireSpeed)*3) + fractal(vec2(fractal_u,fractal_v * 10.0 + time * kFireSpeed)*-2))*0.5;
     u += (noise * 0.3 + noise2 * 0.3 + 0.15)*1.0;
     float width = min(pow(heat, 0.6), 1.0) * 0.5 * 0.5;
     float alpha;
     if(abs(u) > width){
         alpha = pow(max(0.0, 1.0 - (abs(u) - width)), 60.0) * min(1.0, max(0.0, (color[0] + 0.02)*10.0));
     } else {
-        alpha = pow((abs(u)/width), 3.0);
+        alpha = pow((abs(u)/width), 2.0);
         alpha = max(alpha, min(1.0, (0.1-heat)*10.0));
-        alpha += pow(0.5-abs(noise2), 4.0) * 16.0;
+        alpha += pow(0.5-abs(noise2), 2.0) * 8.0;
     }   
     alpha *= 0.25;
     float start_fade = max(0.0, min(1.0,  (time - v - 0.1)*20.0));
     start_fade *= 1.0 - max(0.0, min(1.0,  (time - v - 0.3)*20.0));
     start_fade *= min(1.0, (env_depth - particle_depth)*3.0);
-    start_fade *= max(0.0, min(1.0, (particle_depth-0.4)));
-    out_color = vec4(6.0, 2.0, 0.0, alpha * start_fade);
+    alpha = max(0.0, alpha + start_fade - 1.0);
+    alpha *= max(0.0, min(1.0, (particle_depth-0.4)));
+    out_color = vec4(6.0-heat, 1.0, 0.0, alpha);
+    out_color.b = max(0.0, pow(heat * 2.5, 2.0)-1.0)*0.5;
+    out_color.g = max(0.0, pow(heat,0.5) * 3.0);
+    out_color.a *= pow(heat, 0.5);
+
+
+    vec3 world_dx = dFdx(world_vert);
+    vec3 world_dy = dFdy(world_vert);
+    vec3 norm = normalize(cross(world_dx, world_dy));
+    vec3 view_dir = normalize(cam_pos-world_vert);
+    vec3 right = cross(view_dir, vec3(0,1,0));
+    vec3 up = cross(right, view_dir);
+    float dot_val = dot(norm, view_dir);
+    //out_color = vec4(norm, dot(norm, view_dir));
+    out_color.a *= min(1.0, max(0.0, (dot_val-0.4)*2.0));
+    //out_color = vec4(vec3((dot_val-0.2)*0.1), 1.0);
     //out_color = vec4(1.0, 1.0, 1.0, 0.1*start_fade);
-    const float motion_blur_amount = 30.0;
-    out_vel = vec4((noise+0.3)*motion_blur_amount, (noise2+0.3)*motion_blur_amount, (noise2+0.3)*motion_blur_amount, start_fade * 0.3 * min(1.0, max(0.0, -0.3-color[0])));//0.0, min(1.0, pow(width / abs(u), 10.0))*start_fade);
+    const float motion_blur_amount = 5.0;
+    out_vel.xyz = right * (noise+0.3)*motion_blur_amount;
+    out_vel.xyz += up * (noise2+0.3)*motion_blur_amount;
+    out_vel.a = start_fade * 0.3 * min(1.0, max(0.0, -0.3-color[0]));//0.0, min(1.0, pow(width / abs(u), 10.0))*start_fade);
+    out_vel.xyz *= env_depth;
     //out_color = out_vel;
     #else
 	out_color = vec4(color.rgb, color.w * opacity);

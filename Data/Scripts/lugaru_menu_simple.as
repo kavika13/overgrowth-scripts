@@ -2,22 +2,25 @@
 #include "ui_tools.as"
 #include "arena_meta_persistence.as"
 #include "music_load.as"
+#include "lugaru_campaign.as"
 
 AHGUI::FontSetup titleFont("edosz", 125, HexColor("#fff"));
 AHGUI::FontSetup labelFont("Inconsolata", 80 , HexColor("#fff"));
+AHGUI::FontSetup labelFontLightGrey("Inconsolata", 80 , HexColor("#999"));
+AHGUI::FontSetup labelFontGrey("Inconsolata", 80 , HexColor("#444"));
 AHGUI::FontSetup backFont("edosz", 60 , HexColor("#fff"));
 
 
 int title_spacing = 150;
 int menu_item_spacing = 40;
 
-MusicLoad ml("Data/Music/menu.xml");
+MusicLoad ml("Data/Music/lugaru_new.xml");
 
 AHGUI::MouseOverPulseColor buttonHover(
                                         HexColor("#ffde00"),
                                         HexColor("#ffe956"), .25 );
 
-class SimpleArenaGUI : AHGUI::GUI {
+class LugaruMenuSimpleGUI : AHGUI::GUI {
     // fancy ribbon background coordinates
     ivec2 fgUpper1Position;
     ivec2 fgUpper2Position;
@@ -28,14 +31,112 @@ class SimpleArenaGUI : AHGUI::GUI {
     ivec2 bgRibbonDown1Position;
     ivec2 bgRibbonDown2Position;
     
-    SimpleArenaGUI()
+    LugaruMenuSimpleGUI()
     {
         super();
         Init();
     }
 
+    string output;
+
+    void ParseLine(const string& in line){
+        string final;
+        string quot = "&quot;";
+        int line_len = line.length;
+        if(line.substr(0,4) == "say "){
+            int index = 4;
+            while(line[index] != quot[4]){
+                ++index;
+            }
+            ++index;
+            int name_start = index;
+            while(line[index] != quot[0]){
+                ++index;
+            }
+            string name = line.substr(name_start + 1, index - name_start - 1);
+            index += 5;
+            while(line[index] != quot[4]){
+                ++index;
+            }
+            ++index;
+            int speech_start = index;
+            int speech_end = line_len - 4;
+            string speech = line.substr(speech_start + 1, speech_end - speech_start - 2);
+            final = name + ": " + speech;
+            output += final + "\n";
+        }
+
+    }
+
+    void ParseDialogue(const string& in dialogue) {
+        string line_end = "&#x0A;";
+        int combo = 0;
+        int combo_len = line_end.length;
+        int dialogue_len = dialogue.length;
+        int line_start = 0;
+        output += "Dialogue:\n";
+        for(int index=0;;){
+            if(index == dialogue_len){
+                ParseLine(dialogue.substr(line_start, index-line_start-combo_len));
+                break;
+            }
+            if(dialogue[index] != line_end[combo]){
+                combo = 0;
+            } else {
+                ++combo;
+                if(combo == combo_len){
+                    ParseLine(dialogue.substr(line_start, index-line_start-combo_len));
+                    combo = 0;
+                    line_start = index+1;
+                }
+            }
+            ++index;
+        }
+        output += "\n\n";
+    }
+
+    void ExtractDialogue() {
+        output = "";
+        string extract_str = "<parameter name=\"Script\" type=\"string\" val='";
+        int extract_len = extract_str.length;
+        string new_str;
+        for(int level_index=0, len=lugaru_levels.size(); level_index<len; ++level_index){
+            if(!LoadFile("Data/Levels/"+lugaru_levels[level_index])){
+                Print("Failed to load: "+"Data/Levels/"+lugaru_levels[level_index]+"\n");
+            }
+            output += lugaru_levels[level_index] + ":\n\n";
+            while(true){
+                new_str = GetFileLine();
+                if(new_str == "end"){
+                    break;
+                }
+                for(int curr_index = 0, max_index = new_str.length - extract_len; curr_index < max_index; ++curr_index){
+                    int match = -1;
+                    for(int cmp_index = 0; cmp_index < extract_len; ++cmp_index){
+                        match = curr_index+cmp_index+1;
+                        if(new_str[curr_index+cmp_index] != extract_str[cmp_index]){
+                            match = -1;
+                            break;
+                        }
+                    }
+                    if(match != -1){
+                        ParseDialogue(new_str.substr(match, new_str.length - match));
+                        break;
+                    }
+                }
+            }
+            output += "\n\n";
+        }
+        StartWriteFile();
+        AddFileString(output);
+        WriteFileToWriteDir("lugaru_dialogues.txt");
+    }
+
     void Init()
     {
+        PlaySong("lugaru_menu");
+        
+        //ExtractDialogue();
 
         // Initialize the extra layers (one in front, one behind)
         setBackgroundLayers(1);
@@ -98,34 +199,6 @@ class SimpleArenaGUI : AHGUI::GUI {
         fgImageLower2.setImageOffset( ivec2(0,0), ivec2(1024, 600) );
         foreground.addFloatingElement( fgImageLower2, "gradientLower2", fgLower2Position, 2 );   
 
-        // Repeat this same process for the two 'ribbons' which will, instead' go up and down
-        AHGUI::Image bgRibbonUp1("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
-        bgRibbonUp1.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
-        // Fill the left half of the screen
-        bgRibbonUp1.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
-        bgRibbonUp1.setColor( 0.0,0.0,0.0,1.0 );
-        // Put this at the front of the blue background (z=3)
-        background.addFloatingElement( bgRibbonUp1, "ribbonUp1", bgRibbonUp1Position, 3 );
-
-        AHGUI::Image bgRibbonUp2("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
-        bgRibbonUp2.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
-        bgRibbonUp2.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
-        bgRibbonUp2.setColor( 0.0,0.0,0.0,1.0 );
-        background.addFloatingElement( bgRibbonUp2, "ribbonUp2", bgRibbonUp2Position, 3 );
-        
-        AHGUI::Image bgRibbonDown1("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
-        bgRibbonDown1.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
-        bgRibbonDown1.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
-        bgRibbonDown1.setColor( 0.0,0.0,0.0,1.0 );
-        background.addFloatingElement( bgRibbonDown1, "ribbonDown1", bgRibbonDown1Position, 3 );
-
-        AHGUI::Image bgRibbonDown2("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
-        bgRibbonDown2.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
-        bgRibbonDown2.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
-        bgRibbonDown2.setColor( 0.0,0.0,0.0,1.0 );
-        background.addFloatingElement( bgRibbonDown2, "ribbonDown2", bgRibbonDown2Position, 3 );
-
-
         AHGUI::Divider@ header = root.addDivider( DDTop, DOHorizontal, ivec2( 2560, 200 ) );
         header.setName("headerdiv");
 
@@ -134,45 +207,84 @@ class SimpleArenaGUI : AHGUI::GUI {
                                                     ivec2( 2560, 1040 ) );
         mainpane.addSpacer(title_spacing,DDTop);
 
-        AHGUI::Text titleText = AHGUI::Text("Select Arena", titleFont);
+        AHGUI::Text titleText = AHGUI::Text("Lugaru", titleFont);
         mainpane.addElement(titleText,DDTop);
 
         mainpane.addSpacer(title_spacing,DDTop);
 
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Waterfall Cave", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("waterfall_arena.xml") );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
+        AHGUI::Divider@ levels = mainpane.addDivider( DDTop,
+                                                    DOHorizontal,
+                                                    ivec2( 0, 0 ) );
 
         {
-            AHGUI::Text buttonText = AHGUI::Text("Magma Arena", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("Magma_Arena.xml") );
-            mainpane.addElement(buttonText, DDTop);
+            SavedLevel @level = save_file.GetSavedLevel("lugaru_campaign");
+            string curr_level = level.GetValue("current_level");
+            string highest_level = level.GetValue("highest_level");
+            Print("curr_level: "+curr_level+"\n");
+            Print("highest_level: "+highest_level+"\n");
+            int highest_level_id = 0;            
+            if(highest_level != ""){
+                highest_level_id = atoi(highest_level);
+            }
+            Print("highest_level_id: "+highest_level_id+"\n");
 
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
+            if(curr_level != ""){
+                string temp = "Data/Levels/";
+                if(temp.length < curr_level.length){
+                    curr_level = curr_level.substr(temp.length, curr_level.length - temp.length);
+                }
+            } else {
+                curr_level = lugaru_levels[0];
+            }
+            Print("curr_level: "+curr_level+"\n");
 
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Rock Cave", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("Cave_Arena.xml") );
-            mainpane.addElement(buttonText, DDTop);
+            int curr_level_id = 0;
+            for(int i=0, len=lugaru_levels.size(); i<len; ++i) {
+                if(lugaru_levels[i] == curr_level){
+                    curr_level_id = i;
+                }
+            }
+            Print("curr_level_id: "+curr_level_id+"\n");
 
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
+            if(curr_level_id > highest_level_id){
+                highest_level_id = curr_level_id;
+                level.SetValue("highest_level", ""+highest_level_id);  
+                save_file.WriteInPlace();
+            }
+            Print("highest_level_id: "+highest_level_id+"\n");
 
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Stucco Courtyard", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("stucco_courtyard_arena.xml") );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+            bool hit_curr_level = false;
+            for(int i=1, len=lugaru_levels.size()+1; i<len; ++i) {
+                string label = "";
+                if(i<10){
+                    label = label + "0";
+                }
+                label = label + i;
+                AHGUI::Text buttonText;
+                if(i-1 == curr_level_id) {
+                    buttonText = AHGUI::Text(label, labelFont);
+                    buttonText.addMouseOverBehavior( buttonHover );
+                    buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(lugaru_levels[i-1]) );
+                } else {
+                    if(!hit_curr_level){
+                        buttonText = AHGUI::Text(label, labelFontLightGrey);
+                        buttonText.addMouseOverBehavior( buttonHover );
+                        buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(lugaru_levels[i-1]) );
+                    } else {                  
+                        buttonText = AHGUI::Text(label, labelFontGrey);      
+                    }
+                }
+                if(i-1 == highest_level_id){
+                    hit_curr_level = true;
+                }
+                levels.addElement(buttonText, DDTop);
+                levels.addElement(AHGUI::Text(" ", labelFont), DDTop);
+                if(i==10 || i==20){
+                    @levels = mainpane.addDivider( DDTop,
+                                                  DOHorizontal,
+                                                  ivec2( 0, 0 ) );
+                }
+            }
         }
 
         AHGUI::Divider@ footer = root.addDivider( DDBottom, DOHorizontal, ivec2( 2560, 200 ) );
@@ -212,38 +324,21 @@ class SimpleArenaGUI : AHGUI::GUI {
 
     }
 
-    void processMessage( AHGUI::Message@ message )
-    {
-        
-        if( message.name == "back" )
-        {
-            global_data.WritePersistentInfo( false );
-            global_data.clearSessionProfile();
-            global_data.clearArenaSession();
-
+    void processMessage( AHGUI::Message@ message ) {
+        if( message.name == "back" ) {
             this_ui.SendCallback( "back" );
-        }
-        else 
-        {
-            // Hack for this simplified arena menu
-            global_data.clearArenaSession();
-            this_ui.SendCallback( "arenas/" + message.name );
+        } else {
+            this_ui.SendCallback( message.name );
         }
     }
 
-    void update()
-    {
+    void Update() {
         // Update the background images (we could have made this into a behavior)
-    
         // Calculate the new positions
         fgUpper1Position.x -= 2;
         fgUpper2Position.x -= 2;
         fgLower1Position.x -= 1;
         fgLower2Position.x -= 1;
-        bgRibbonUp1Position.y -= 1;
-        bgRibbonUp2Position.y -= 1;
-        bgRibbonDown1Position.y += 1;
-        bgRibbonDown2Position.y += 1;
 
         // wrap the images around
         if( fgUpper1Position.x == 0 ) {
@@ -260,14 +355,6 @@ class SimpleArenaGUI : AHGUI::GUI {
 
         if( fgLower2Position.x == 0 ) {
             fgLower1Position.x = 2560;
-        }
-
-        if( bgRibbonUp1Position.y == 0 ) {
-            bgRibbonUp2Position.y = AHGUI::screenMetrics.GUISpaceY;
-        }
-
-        if( bgRibbonUp2Position.y == 0 ) {
-            bgRibbonUp1Position.y = AHGUI::screenMetrics.GUISpaceY;
         }
 
         if( bgRibbonDown1Position.y == 0 ) {
@@ -287,10 +374,6 @@ class SimpleArenaGUI : AHGUI::GUI {
         foreground.moveElement( "gradientUpper2", fgUpper2Position );
         foreground.moveElement( "gradientLower1", fgLower1Position );
         foreground.moveElement( "gradientLower2", fgLower2Position );
-        background.moveElement( "ribbonUp1",      bgRibbonUp1Position );
-        background.moveElement( "ribbonUp2",      bgRibbonUp2Position );
-        background.moveElement( "ribbonDown1",    bgRibbonDown1Position );
-        background.moveElement( "ribbonDown2",    bgRibbonDown2Position );
 
         // Update the GUI 
         AHGUI::GUI::update();
@@ -304,14 +387,13 @@ class SimpleArenaGUI : AHGUI::GUI {
 
 }
 
-SimpleArenaGUI simpleArenaGUI;
+LugaruMenuSimpleGUI lugaru_menu_simple_gui;
 
 bool HasFocus() {
     return false;
 }
 
 void Initialize() {
-    PlaySong("menu-lugaru");
 }
 
 void Dispose() {
@@ -322,12 +404,11 @@ bool CanGoBack() {
 }
 
 void Update() {
-
-    simpleArenaGUI.update();
+    lugaru_menu_simple_gui.Update();
 }
 
 void DrawGUI() {
-    simpleArenaGUI.render();
+    lugaru_menu_simple_gui.render();
 }
 
 void Draw() {

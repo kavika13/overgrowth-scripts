@@ -7,6 +7,7 @@ uniform sampler2D tex4; // normal map
 
 in vec2 var_uv;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 const float texture_offset = 0.001;

@@ -47,6 +47,7 @@ in vec3 world_vert;
 flat in int instance_id;
 #endif
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #define shadow_tex_coords tc1

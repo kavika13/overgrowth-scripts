@@ -41,7 +41,7 @@ void TestOcclusionCircle(in float radius, in float distance, in vec2 tex_point, 
 vec4 ScreenCoordFromDepth(vec2 tex_uv, vec2 offset, out float distance) {
 	float depth = texture2DRect( tex1, tex_uv + offset ).r;
 	distance = DistFromDepth( depth );
-	return vec4((tex_uv[0] + offset[0]) / 1280.0f * 2.0 - 1.0, (tex_uv[1] + offset[1]) / 720.0f * 2.0 - 1.0, depth * 2.0- 1.0, 1.0);
+	return vec4((tex_uv[0] + offset[0]) / 1280.0 * 2.0 - 1.0, (tex_uv[1] + offset[1]) / 720.0 * 2.0 - 1.0, depth * 2.0- 1.0, 1.0);
 }
 
 void CheckSphere(in vec4 world_pos, in vec3 norm, in vec3 noise, in float ray_length, inout float total_divisor, inout float total_light) {
@@ -55,7 +55,7 @@ void CheckSphere(in vec4 world_pos, in vec3 norm, in vec3 noise, in float ray_le
 			screen_coord_test[0] = (screen_coord_test[0] + 1.0) / 2.0 * 1280.0;
 			screen_coord_test[1] = (screen_coord_test[1] + 1.0) / 2.0 * 720.0;
 			screen_coord_test[2] = (screen_coord_test[2] + 1.0) / 2.0;
-			if(screen_coord_test[0] < 0.0 || screen_coord_test[0] > 1280.0f || screen_coord_test[1] < 0.0f || screen_coord_test[1] > 720.0f){
+			if(screen_coord_test[0] < 0.0 || screen_coord_test[0] > 1280.0 || screen_coord_test[1] < 0.0 || screen_coord_test[1] > 720.0){
 			} else {
 				float test_depth = texture2DRect( tex1, screen_coord_test.xy ).r;
 				total_divisor += weight;
@@ -85,8 +85,8 @@ void main() {
 
     vec3 norm = normalize(cross(normalize(b-a), normalize(c-a)));
 
-    norm *= 0.5f;
-    norm += 0.5f;
+    norm *= 0.5;
+    norm += 0.5;
 
     float dist;
     float dist1;
@@ -97,9 +97,9 @@ void main() {
 	vec4 screen_coord2 = ScreenCoordFromDepth(tex_point, vec2(0,1.0), dist2);
 	
 	mat4 temp_view = view_mat;	
-	//temp_view[3][0] *= 2.0f;
-	//temp_view[3][1] *= 2.0f;
-	//temp_view[3][2] *= 2.0f;
+	//temp_view[3][0] *= 2.0;
+	//temp_view[3][1] *= 2.0;
+	//temp_view[3][2] *= 2.0;
 
     vec4 world_pos = inverse(proj_mat * temp_view) * screen_coord;
     vec4 world_pos1 = inverse(proj_mat * temp_view) * screen_coord1;
@@ -113,8 +113,8 @@ void main() {
 	//norm = (view_mat * vec4(norm, 0.0)).xyz;
 
 
-	float total_divisor = 0.000001f;
-	float total_light = 0.0f;
+	float total_divisor = 0.000001;
+	float total_light = 0.0;
 	float ray_length = 0.05;
 	float sphere_mult = pow(dist, 0.6);
 	for(int i=0; i<5; ++i){

@@ -15,6 +15,7 @@ flat in int instance_id;
 in vec3 vert;
 //in vec3 world_vert;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main()

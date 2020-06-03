@@ -5,6 +5,8 @@ uniform vec3 cam_pos;
 
 in vec3 world_vert;
 in vec3 normal;
+
+#pragma bind_out_color
 out vec4 out_color;
 
 void main()

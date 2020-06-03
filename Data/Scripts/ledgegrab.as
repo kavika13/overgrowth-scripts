@@ -310,7 +310,7 @@ LedgeDirInfo GetPossibleLedgeDir(vec3 &in pos) {
         ledge_dir_info.ledge_dir = sphere_col.GetContact(closest_horz_point).position - pos;
     }
     ledge_dir_info.ledge_dir = normalize(ledge_dir_info.ledge_dir);
-    const bool _debug_draw_sphere_check = false;
+    bool _debug_draw_sphere_check = false;
     if(_debug_draw_sphere_check){
         DebugDrawWireSphere(pos, _leg_sphere_size*1.5f, vec3(1.0f), _delete_on_update);
         DebugDrawLine(pos, pos+ledge_dir_info.ledge_dir, vec3(1.0f,0.0f,0.0f), _delete_on_update);
@@ -336,7 +336,7 @@ LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
                                   _leg_sphere_size,
                                   1.0f);
 
-    const bool _debug_draw_sweep_test = false;
+    bool _debug_draw_sweep_test = false;
     if(_debug_draw_sweep_test){
         DebugDrawWireCylinder(test_start,
                               _leg_sphere_size,
@@ -370,7 +370,7 @@ LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
                                 1.0f);
 
 
-    const bool _debug_draw_top_surface_clear = false;
+    bool _debug_draw_top_surface_clear = false;
     if(sphere_col.NumContacts() != 0){
         if(_debug_draw_top_surface_clear){
             DebugDrawWireCylinder(surface_pos + vec3(0.0f,0.07f,0.0f),
@@ -410,7 +410,7 @@ LedgeGrabInfo GetLedgeGrabInfo(vec3 &in pos, vec3 &in ledge_dir, float ledge_hei
                                   _leg_sphere_size,
                                   1.0f);
     
-    const bool _debug_draw_depth_test = false;
+    bool _debug_draw_depth_test = false;
     if(_debug_draw_depth_test){
         DebugDrawWireCylinder(sphere_col.position,
                               _leg_sphere_size,
@@ -505,7 +505,7 @@ class LedgeInfo {
                                           1.0f);
 
 
-        const bool _debug_draw_sweep_test = false;
+        bool _debug_draw_sweep_test = false;
         if(_debug_draw_sweep_test){
             DebugDrawWireCylinder(test_start,
                                   _leg_sphere_size,
@@ -760,12 +760,12 @@ class LedgeInfo {
             return;
         }
 
-        if(on_ledge && weapon_slots[primary_weapon_slot] != -1){
+        /*if(on_ledge && weapon_slots[primary_weapon_slot] != -1){
             ItemObject@ item_obj = ReadItemID(weapon_slots[primary_weapon_slot]);
             if(item_obj.GetMass() > 1.0f){
                 DropWeapon();
             }
-        }
+        }*/
 
         CheckLedges();
         if(on_ledge){
@@ -832,7 +832,7 @@ class LedgeInfo {
                          disp_ledge_dir,
                          pow(inertia,ts.frames()));
         this_mo.SetRotationFromFacing(disp_ledge_dir); 
-        if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
+        if((this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f) || !this_mo.controlled){ // Climb up ledge if above threshold
             this_mo.SetRotationFromFacing(ledge_dir); 
             if(this_mo.velocity.y >= 3.0f + ts.frames() * 0.25f){
                 on_ledge = false;    

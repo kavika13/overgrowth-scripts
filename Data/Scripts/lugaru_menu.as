@@ -143,9 +143,9 @@ class MenuGUI : AHGUI::GUI {
 
 
         // Create a divider for our footer 300px high (using a convenience factory in the divider)
-        // The UNDEFINEDSIZE will tell it to expand to the size of it's container
+        // The AH_UNDEFINEDSIZE will tell it to expand to the size of it's container
         // So we take up the whole bottom of the screen
-        AHGUI::Divider@ footer = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        AHGUI::Divider@ footer = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
         footer.setName("footerdiv");
 
         // Add some space on the left
@@ -224,7 +224,7 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void ShowConfirmDeleteUI(){
-        AHGUI::Divider@ buttonsPanel = root.addDivider( DDCenter, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ buttonsPanel = root.addDivider( DDCenter, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
         buttonsPanel.addSpacer(150, DDTop);
 		DisplayText(buttonsPanel, DDTop, "ARE YOU SURE YOU WANT TO DELETE THIS USER?", textSize, textColor, true);
@@ -244,12 +244,12 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void ShowDifficultySelectUI(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDCenter, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDCenter, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
+        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         footerPane.setName("footerdiv");
         mainPane.addSpacer(50, DDTop);
 
-        AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
 
 
@@ -283,7 +283,7 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void ShowLevelSelectUI(){
-        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
         footerPane.setName("footerdiv");
         AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal );
 
@@ -293,14 +293,14 @@ class MenuGUI : AHGUI::GUI {
 		DisplayText(footerPane, DDLeft, "MAIN MENU", textSize, textColor, true, "mainmenu", "mainmenu");
 		DisplayText(footerPane, DDRight, "DELETE USER", textSize, textColor, true, "deleteuser", "deleteuser");
 
-        AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
         buttonsPanel.addSpacer(50, DDTop );
 
-        AHGUI::Divider@ mainButtonsPanel = buttonsPanel.addDivider( DDCenter, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainButtonsPanel = buttonsPanel.addDivider( DDCenter, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         mainButtonsPanel.setVeritcalAlignment(BACenter);
 
-        AHGUI::Divider@ usernamePane = buttonsPanel.addDivider( DDLeft, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ usernamePane = buttonsPanel.addDivider( DDLeft, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         usernamePane.setHorizontalAlignment(BALeft);
         usernamePane.addSpacer(50, DDLeft );
         usernamePane.addSpacer(50, DDRight );
@@ -309,7 +309,7 @@ class MenuGUI : AHGUI::GUI {
 		DisplayText(buttonsPanel, DDLeft, user_name, textSize, textColor, true);
         buttonsPanel.addSpacer(50, DDTop );
 
-        AHGUI::Divider@ challengePanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ challengePanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         challengePanel.setHorizontalAlignment(BALeft);
         challengePanel.addSpacer(50, DDLeft );
 
@@ -317,7 +317,7 @@ class MenuGUI : AHGUI::GUI {
         mainButtonsPanel.addSpacer(150, DDTop );
 		DisplayText(challengePanel, DDTop, "CHALLENGE", textSize, textColor, true, "challenge", "challenge");
 
-        AHGUI::Divider@ changeUserPanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ changeUserPanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         changeUserPanel.setHorizontalAlignment(BALeft);
         changeUserPanel.addSpacer(50, DDLeft );
 
@@ -445,15 +445,15 @@ class MenuGUI : AHGUI::GUI {
         }
     }
     void ShowUserSelectUI(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDLeft, DOHorizontal, ivec2( UNDEFINEDSIZE, 400 ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDLeft, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 400 ) );
         mainPane.addSpacer(50, DDLeft );
-        AHGUI::Divider@ newUserPane = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ newUserPane = mainPane.addDivider( DDTop, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
-        AHGUI::Divider@ centerPane = root.addDivider( DDCenter, DOHorizontal, ivec2( UNDEFINEDSIZE, 600 ) );
+        AHGUI::Divider@ centerPane = root.addDivider( DDCenter, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 600 ) );
         centerPane.addSpacer(50, DDLeft );
-        AHGUI::Divider@ usernamesPane = centerPane.addDivider( DDLeft, DOVertical, ivec2( UNDEFINEDSIZE, 10 ) );
+        AHGUI::Divider@ usernamesPane = centerPane.addDivider( DDLeft, DOVertical, ivec2( AH_UNDEFINEDSIZE, 10 ) );
 
-        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
         footerPane.setName("footerdiv");
 
         mainPane.addSpacer(50, DDLeft );
@@ -506,17 +506,17 @@ class MenuGUI : AHGUI::GUI {
     }
 
 	void ShowChallengeUI(){
-		AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+		AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
         footerPane.setName("footerdiv");
 		footerPane.addSpacer(50, DDLeft );
 
-        AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         mainPane.addSpacer(500, DDLeft );
         mainPane.addSpacer(500, DDRight );
-        AHGUI::Divider@ levelPane = mainPane.addDivider( DDLeft, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ levelPane = mainPane.addDivider( DDLeft, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 		mainPane.addSpacer(50, DDTop );
-        AHGUI::Divider@ highscorePane = mainPane.addDivider( DDCenter, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-        AHGUI::Divider@ besttimePane = mainPane.addDivider( DDRight, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ highscorePane = mainPane.addDivider( DDCenter, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
+        AHGUI::Divider@ besttimePane = mainPane.addDivider( DDRight, DOVertical, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
         mainPane.addSpacer(50, DDLeft );
 
@@ -595,8 +595,8 @@ class MenuGUI : AHGUI::GUI {
 	}
 
     void ShowNewUserSelectUI(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
-        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
+        AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 200 ) );
         footerPane.setName("footerdiv");
 
         // Add some space on the left
@@ -729,9 +729,9 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void addCommonElements(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDBottomRight, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDBottomRight, DOHorizontal, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
 
-        //AHGUI::Divider@ footer = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        //AHGUI::Divider@ footer = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( AH_UNDEFINEDSIZE, 300 ) );
         mainPane.addSpacer( 50, DDLeft );
 
         mainPane.addSpacer(50, DDLeft );
@@ -1275,4 +1275,18 @@ bool CanGoBack(){
 }
 void Dispose(){
 
+}
+
+string text_input_buffer;
+
+string GetTextInput()
+{
+    string text_input_buffer_temp = text_input_buffer;
+    text_input_buffer = "";
+    return text_input_buffer_temp;
+}
+
+void TextInput(string text)
+{
+    text_input_buffer = text_input_buffer + text;
 }
