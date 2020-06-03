@@ -1,6 +1,7 @@
 void init() {
 }
 
+int controller_id = 0;
 bool reset_allowed = true;
 bool has_gui = false;
 uint32 gui_id;
@@ -64,19 +65,19 @@ void Update() {
             callback = gui.GetCallback(gui_id);
         }
     }
-    if(!has_gui && GetInputDown("esc") && GetPlayerCharacterID() == -1){
+    if(!has_gui && GetInputDown(controller_id, "esc") && GetPlayerCharacterID() == -1){
         gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,250);
         has_gui = true;
     }  /*
     if(GetInputPressed("l")){
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }*/
-    if(GetInputPressed("l")){
+    if(GetInputPressed(controller_id, "l")){
         Reset();
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
-    if(GetInputDown("x")){  
+    if(GetInputDown(controller_id, "x")){  
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
             ItemObject@ item_obj = ReadItem(i);

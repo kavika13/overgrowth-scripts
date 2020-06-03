@@ -390,13 +390,13 @@ class LedgeInfo {
                     Print("Letting go because nearest surface is downwards\n");
                 }
                 on_ledge = false;
-                return;
                 if(_debug_draw_sphere_check){
                     DebugDrawLine(sphere_col.GetContact(closest_point).position,
                                   this_mo.position,
                                   vec3(1.0f,0.0f,0.0f),
                                   _delete_on_update);
                 }
+                return;
             } else {
                 if(_debug_draw_sphere_check){
                     DebugDrawLine(sphere_col.GetContact(closest_point).position,

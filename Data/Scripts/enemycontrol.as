@@ -106,7 +106,7 @@ void ReceiveMessage(int source_id, int _msg_type){
 }
 
 void UpdateBrain(){
-    if(GetInputDown("c") && !GetInputDown("ctrl")){
+    if(GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
         if(hostile_switchable){
             hostile = !hostile;
             if(hostile){
@@ -135,7 +135,7 @@ void UpdateBrain(){
     if(!holding_weapon){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
-        float nearest_dist;
+        float nearest_dist = 0.0f;
         const float _max_dist = 30.0f;
         for(int i=0; i<num_items; i++){
             ItemObject @item_obj = ReadItem(i);
@@ -408,12 +408,7 @@ vec3 GetPatrolMovement(){
             waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
         }
     }
-    target_velocity = target_point - this_mo.position;
-    target_velocity.y = 0.0;
-    float dist = length(target_velocity);
-    float seek_dist = 1.0;
-    dist = max(0.0, dist-seek_dist);
-    target_velocity = normalize(target_velocity) * dist;
+    target_velocity = GetMovementToPoint(target_point, 0.0f, 0.0f);
     float target_speed = 0.2f;
     if(length_squared(target_velocity) > target_speed){
         target_velocity = normalize(target_velocity) * target_speed;
@@ -484,7 +479,7 @@ void MouseControlPathTest() {
     col.GetSweptSphereCollision(start, end, _leg_sphere_size);
     DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
     
-    if(GetInputDown("mouse0")){
+    if(GetInputDown(this_mo.controller_id, "mouse0")){
         goal = _navigate;
         nav_target = sphere_col.position;
     }

@@ -1,6 +1,8 @@
 void init() {
 }
 
+int controller_id = 0;
+
 vec3 old_position;
 float speed = 0.0f;
 float target_rotation = 0.0f;
@@ -49,7 +51,7 @@ void Update() {
         //MakeParticle("Data/Particles/bloodmist.xml",sprite_pos,vec3(0.0f));
     }*/
 
-    if(GetInputPressed("o") && GetInputDown("ctrl")){
+    if(GetInputPressed(controller_id, "o") && GetInputDown(controller_id, "ctrl")){
         camera_animation_reader.AttachTo("Data/Animations/test.canm");
         co.LoadParallaxScene("Data/Textures/twisted_paths.png",
                           "Data/Models/twisted_paths.obj");
@@ -75,7 +77,7 @@ void Update() {
         camera.SetVelocity(vel); 
         UpdateListener(camera.GetPos(),vel,camera.GetFacing(),camera.GetUpVector());            
         float lens = camera_animation_reader.GetLens();
-        float angle = (2.0f * atan(16.0f/lens)) / 3.1415 * 180.0f;
+        float angle = (2.0f * atan(16.0f/lens)) / 3.1415f * 180.0f;
         //Print(""+lens+"   "+angle+"\n");
         camera.SetFOV(angle*3/4*0.95f);
         camera_animation_reader.Update();
@@ -96,34 +98,17 @@ void Update() {
             vec3 flat_facing = camera.GetFlatFacing();
             vec3 flat_right = vec3(-flat_facing.z, 0.0f, flat_facing.x);
 
-            if(GetInputDown("move_right")) {
-                target_velocity += flat_right;
-                moving = true;
+            target_velocity += GetMoveXAxis(controller_id)*flat_right;
+            if(!GetInputDown(controller_id, "crouch")){
+                target_velocity -= GetMoveYAxis(controller_id)*camera.GetFacing();
+            } else {
+                target_velocity.y -= GetMoveYAxis(controller_id);
             }
             
-            if(GetInputDown("move_left")) {
-                target_velocity -= flat_right;
+            if(length_squared(target_velocity) > 0.0f){
                 moving = true;
             }
-        
-            if(GetInputDown("move_down") && GetInputDown("crouch")) {
-                target_velocity+=vec3(0,-1,0);
-                moving = true;
-            }
-            else if(GetInputDown("move_down")) {
-                target_velocity-=camera.GetFacing();
-                moving = true;
-            }
-            
-            if( GetInputDown("move_up") && GetInputDown("crouch")) {
-                target_velocity+=vec3(0,1,0);
-                moving = true;
-            }
-            else if(GetInputDown("move_up")) {
-                target_velocity+=camera.GetFacing();
-                moving = true;
-            }
-            
+
             if (moving) {
                 speed += time_step * _acceleration;
             } else {
@@ -143,14 +128,14 @@ void Update() {
             DebugDrawWireSphere(sphere_col.position, 0.05f, vec3(1.0f), _delete_on_update);
             */
              
-            if(GetInputDown("mouse0") && !co.ignore_mouse_input){
-                target_rotation -= GetLookXAxis();
-                target_rotation2 -= GetLookYAxis();
+            if(GetInputDown(controller_id, "mouse0") && !co.ignore_mouse_input){
+                target_rotation -= GetLookXAxis(controller_id);
+                target_rotation2 -= GetLookYAxis(controller_id);
             }
             SetGrabMouse(false);
         }
         
-        /*if(scenegraph && Camera::Instance()->getCollisionDetection()){
+        /*if(scenegraph && ActiveCamera::Get()->getCollisionDetection()){
             float _camera_collision_radius = 0.4f;
             vec3 old_new_position = position;
             position = scenegraph->bullet_world->CheckCapsuleCollisionSlide(old_position, position, _camera_collision_radius) ;

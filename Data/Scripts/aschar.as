@@ -139,7 +139,7 @@ void MouseControlJumpTest() {
             start_vel = vec3(0.0f);
         }
 
-        if(GetInputPressed("mouse0") && start_vel.y != 0.0f){
+        if(GetInputPressed(this_mo.controller_id, "mouse0") && start_vel.y != 0.0f){
             jump_info.StartJump(start_vel, true);
             SetOnGround(false);
         }
@@ -157,7 +157,7 @@ const float _max_blood_amount = 10.0f;
 float blood_amount = _max_blood_amount;
 const float _spurt_frequency = 7.0f;
 float spurt_sound_delay = 0.0f;
-const float _spurt_delay_amount = 6.283185/_spurt_frequency;
+const float _spurt_delay_amount = 6.283185f/_spurt_frequency;
 
 void UpdateCutThroatEffect() {
     if(blood_delay <= 0){
@@ -205,8 +205,10 @@ void Update(int _num_frames) {
     }*/
     if(in_animation){        
         if(this_mo.controlled){
-            UpdateAirWhooshSound();
-            ApplyCameraControls();
+            if(this_mo.controller_id == 0){
+                UpdateAirWhooshSound();
+                ApplyCameraControls();
+            }
         }
         HandleCollisions();
         return;
@@ -243,7 +245,7 @@ void Update(int _num_frames) {
     UpdateBrain(); //in playercontrol.as or enemycontrol.as
     UpdateState();
 
-    if(this_mo.controlled){
+    if(this_mo.controlled && this_mo.controller_id == 0){
         UpdateAirWhooshSound();
         ApplyCameraControls();
     }
@@ -252,7 +254,7 @@ void Update(int _num_frames) {
         new_slide_vel = this_mo.velocity;
         float new_friction = this_mo.GetFriction(this_mo.position + vec3(0.0f,_leg_sphere_size * -0.4f,0.0f));
         friction = max(0.01f, friction);
-        friction = pow(mix(pow(friction,0.01), pow(new_friction,0.01), 0.05f),100);
+        friction = pow(mix(pow(friction,0.01f), pow(new_friction,0.01f), 0.05f),100.0f);
         this_mo.velocity = mix(this_mo.velocity, old_slide_vel, pow(1.0f-friction, num_frames));
         old_slide_vel = this_mo.velocity;
         for(int i=0; i<2; ++i){
@@ -342,17 +344,17 @@ void Recover() {
 }
 
 void HandleSpecialKeyPresses() {
-    if(GetInputDown("z") && !GetInputDown("ctrl")){
+    if(GetInputDown(this_mo.controller_id, "z") && !GetInputDown(this_mo.controller_id, "ctrl")){
         GoLimp();
     }
-    if(GetInputDown("n")){                
+    if(GetInputDown(this_mo.controller_id, "n")){                
         if(state != _ragdoll_state){
             string sound = "Data/Sounds/hit/hit_hard.xml";
             PlaySoundGroup(sound, this_mo.position);
         }
         Ragdoll(_RGDL_INJURED);
     }
-    if(GetInputPressed(",")){   
+    if(GetInputPressed(this_mo.controller_id, ",")){   
         //this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
         
         if(!cut_throat){
@@ -378,40 +380,40 @@ void HandleSpecialKeyPresses() {
             } 
         }
     }
-    if(GetInputDown("m")){        
+    if(GetInputDown(this_mo.controller_id, "m")){        
         Ragdoll(_RGDL_LIMP);
     }
-    if(GetInputDown("x")){      
+    if(GetInputDown(this_mo.controller_id, "x")){      
         Recover();
     }
 
     if(this_mo.controlled){
-        if(GetInputPressed("v")){
+        if(GetInputPressed(this_mo.controller_id, "v")){
             string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
         }
-        if(GetInputPressed("1")){    
+        if(GetInputPressed(this_mo.controller_id, "1")){    
             SwitchCharacter("Data/Characters/guard.xml");
         }
-        if(GetInputPressed("2")){
+        if(GetInputPressed(this_mo.controller_id, "2")){
             SwitchCharacter("Data/Characters/guard2.xml");
         }
-        if(GetInputPressed("3")){
+        if(GetInputPressed(this_mo.controller_id, "3")){
             SwitchCharacter("Data/Characters/turner.xml");
         }
-        if(GetInputPressed("4")){
+        if(GetInputPressed(this_mo.controller_id, "4")){
             SwitchCharacter("Data/Characters/civ.xml");
         }
-        if(GetInputPressed("5")){
+        if(GetInputPressed(this_mo.controller_id, "5")){
             SwitchCharacter("Data/Characters/wolf.xml");
         }
-        if(GetInputPressed("6")){
+        if(GetInputPressed(this_mo.controller_id, "6")){
             SwitchCharacter("Data/Characters/rabbot.xml");
         }
-        if(GetInputPressed("7")){
+        if(GetInputPressed(this_mo.controller_id, "7")){
             SwitchCharacter("Data/Characters/cat.xml");
         }
-        if(GetInputPressed("b")){
+        if(GetInputPressed(this_mo.controller_id, "b")){
             /*for(int i=0; i<5; ++i){
                 MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
                     vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
@@ -448,11 +450,11 @@ void HandleSpecialKeyPresses() {
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
         }
-        if(GetInputPressed("h")){
+        if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
         } 
     }
-    if(GetInputPressed("p") && target_id != -1){
+    if(GetInputPressed(this_mo.controller_id, "p") && target_id != -1){
         Print("Getting path");
         NavPath temp = this_mo.GetPath(this_mo.position,
                                         ReadCharacterID(target_id).position);
@@ -605,9 +607,12 @@ void UpdateHeadLook() {
     head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
     this_mo.SetIKTargetOffset("head",head_dir);
     if(!stance_move){
-        stance_move_fade_val = mix(stance_move_fade,stance_move_fade_val,pow(0.9,num_frames));
+        stance_move_fade_val = mix(stance_move_fade,stance_move_fade_val,pow(0.9f,num_frames));
     } else {
-        stance_move_fade_val = mix(0.5f,stance_move_fade_val,pow(0.9,num_frames));
+        stance_move_fade_val = mix(0.5f,stance_move_fade_val,pow(0.9f,num_frames));
+    }
+    if(state != _movement_state || flip_info.IsFlipping()){
+        stance_move_fade_val = 0.0f;
     }
     vec3 flat_head_dir = head_dir;
     flat_head_dir.y = 0.0f;
@@ -1125,7 +1130,7 @@ void HandleWeaponCollision(int other_id, vec3 pos){
     mat4 trans_a = item_obj_a.GetPhysicsTransform();
     mat4 trans_b = item_obj_b.GetPhysicsTransform();
     vec3 mu, col_point;
-    float dist, closest_dist;
+    float dist, closest_dist = 0.0f;
     vec3 a_point, b_point;
     int closest_line_a = -1;
     int closest_line_b;
@@ -1259,7 +1264,7 @@ void AddBloodToStabWeapon(int attacker_id) {
         vec3 dist_point;
         bool found_dist_point = false;
         vec3 start, end;
-        float dist, far_dist;
+        float dist, far_dist = 0.0f;
         for(int i=0; i<num_lines; ++i){
             start = trans * item_obj.GetLineStart(i);
             end = trans * item_obj.GetLineEnd(i);
@@ -1292,7 +1297,7 @@ void AddBloodToCutPlaneWeapon(int attacker_id, vec3 dir) {
         vec3 char_pos = torso_transform * vec3(0.0f);
         vec3 point;
         vec3 col_point;
-        float closest_dist;
+        float closest_dist = 0.0f;
         float closest_line = -1;
         vec3 start, end;
         float dist;
@@ -2885,6 +2890,8 @@ void SetState(int _state) {
     state = _state;
     if(state == _movement_state){
         StartFootStance();
+    } else {
+        stance_move = false;
     }
     if(state == _ground_state){
         //Print("Setting state to ground state");
@@ -3241,39 +3248,27 @@ float target_rotation2 = 0.0f;
 float cam_rotation = 0.0f;
 float cam_rotation2 = 0.0f;
 float cam_distance = 1.0f;
+float auto_cam_override = 0.0f;
 
 vec3 ragdoll_cam_pos;
 vec3 cam_pos_offset;
 
+vec3 chase_cam_pos;
+float target_side_weight = 0.5f;
+float target_weight = 0.0f;
+float angle = 0.2f;
+
 void ApplyCameraControls() {
-    if(QueryLevelIntFunction("int HasFocus()")==0){   
-        SetGrabMouse(true);
-        target_rotation -= GetLookXAxis();
-        target_rotation2 -= GetLookYAxis();    
-    }
     const float _camera_rotation_inertia = 0.5f;
     const float _cam_follow_distance = 2.0f;
     const float _cam_collision_radius = 0.15f;
 
-    target_rotation2 = max(-90,min(50,target_rotation2));
-
-/*
-    vec3 true_pos = camera.GetPos() + camera.GetFacing() * cam_distance;
-    col.GetSweptSphereCollision(true_pos,
-                                    true_pos - vec3(0.0f,5.0f,0.0f),
-                                    _cam_collision_radius);
-    vec3 new_pos = sphere_col.position;
-    vec3 new_dir = normalize(new_pos - camera.GetPos());
-    float max_rotation2 = asin(new_dir.y)*-180/3.1415 - 2.0f;
-    Print(""+max_rotation2+"\n");
-
-    target_rotation2 = min(target_rotation2, max_rotation2);*/
-
-    vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
-
-    col.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
-    vec3 cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
-
+    vec3 cam_center;
+    {
+        vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
+        col.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
+        cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
+    }
 
     vec3 cam_pos = cam_center + cam_pos_offset;
     if(state != _ragdoll_state){
@@ -3289,33 +3284,92 @@ void ApplyCameraControls() {
         cam_pos += vec3(0.0f,0.3f,0.0f);
     }
 
-    ApplyCameraCones(cam_pos);
 
-    //this_mo.GetSlidingSphereCollision(sphere_col.adjusted_position, radius);
-    //DebugDrawWireSphere(sphere_col.adjusted_position, radius, vec3(0.0f,1.0f,0.5f), _delete_on_update);
+    if(!camera.GetAutoCamera() &&
+       QueryLevelIntFunction("int HasFocus()")==0){   
+        SetGrabMouse(true);
+        target_rotation -= GetLookXAxis(this_mo.controller_id);
+        target_rotation2 -= GetLookYAxis(this_mo.controller_id);    
+    } else {
+       float old_tr = target_rotation;
+       float old_tr2 = target_rotation2;
+       chase_cam_pos = mix(cam_pos - camera.GetFacing() * cam_distance, 
+                           chase_cam_pos, 
+                           pow(0.9f, num_frames));
+       
+       vec3 facing = normalize(cam_pos - chase_cam_pos);
+       if(target_id != -1){
+            MovementObject @char = ReadCharacterID(target_id);
+            float dist = distance(char.position, this_mo.position);
+            vec3 target_facing = (char.position - this_mo.position)/dist;
+            mat4 rotation_y;
+            float target_angle = max(0.2f, 1.2f / max(1.0f,dist)); 
+            if(target_weight == 0.0f){
+                angle = target_angle;
+            } else {
+                angle = mix(target_angle, angle, pow(0.98f, num_frames));
+            }
+            rotation_y.SetRotationY(angle);
+            vec3 target_facing_right = rotation_y * target_facing;
+            rotation_y.SetRotationY(-angle);
+            vec3 target_facing_left = rotation_y * target_facing;
 
-    /*
-    bool hit_something = false;
-    float radius = 1.0f;
-    vec3 offset;
-    while(!hit_something){
-        this_mo.GetSlidingSphereCollision(cam_pos, radius);
-        if(sphere_col.NumContacts() > 0){
-            hit_something = true;
-            offset = (sphere_col.adjusted_position - cam_pos)/radius;
-            break;
-        }
-        break;   
+            if(dot(target_facing_left, facing) > dot(target_facing_right, facing)){
+                target_facing = target_facing_left;
+                if(target_weight == 0.0f){
+                    target_side_weight = 0.0f;
+                } else {
+                    target_side_weight = mix(0.0f, target_side_weight, pow(0.95f, num_frames));
+                }
+            } else {
+                if(target_weight == 0.0f){
+                    target_side_weight = 1.0f;
+                } else {
+                    target_side_weight = mix(1.0f, target_side_weight, pow(0.95f, num_frames));
+                }
+            }
+            target_facing = mix(target_facing_left, target_facing_right, target_side_weight);
+            float target_target_weight = 1.0f/dist;
+            target_target_weight = max(0.0f,min(1.0f,target_target_weight*3.0f));
+            if(target_target_weight <= 0.3f){
+                target_target_weight = 0.0f;
+            }
+            target_weight = mix(target_target_weight, target_weight, pow(0.98f, num_frames));
+            if(target_weight < 0.01f && target_target_weight == 0.0f){
+                target_weight = 0.0f;
+            }
+            facing = InterpDirections(facing, target_facing, target_weight);
+       }
+       target_rotation2 = mix(asin(facing.y)/3.14159265f * 180.0f,
+                              target_rotation2,
+                              pow(0.95f, num_frames));
+       facing.y = 0.0f;
+       if(length_squared(facing) > 0.01f){
+            facing = normalize(facing);
+            target_rotation = atan2(-facing.x,-facing.z)/3.14159265f * 180.0f;
+       }
+       while(target_rotation < cam_rotation - 180.0f){
+            target_rotation += 360.0f;
+       } 
+       while(target_rotation > cam_rotation + 180.0f){
+            target_rotation -= 360.0f;
+       }
+
+        target_rotation = mix(target_rotation, old_tr, min(1.0f,auto_cam_override));
+        target_rotation2 = mix(target_rotation2, old_tr2, min(1.0f,auto_cam_override));
+
+       //cam_pos = chase_cam_pos + camera.GetFacing() * _cam_follow_distance;
+        target_rotation -= GetLookXAxis(this_mo.controller_id);
+        target_rotation2 -= GetLookYAxis(this_mo.controller_id); 
+
+        auto_cam_override *= pow(0.99f, num_frames);
+        auto_cam_override += abs(GetLookXAxis(this_mo.controller_id))*0.05f + abs(GetLookYAxis(this_mo.controller_id))*0.05f;
+        auto_cam_override = min(2.5f, auto_cam_override);
     }
-    Print("Targetrotation2: "+target_rotation2+"\n");
-    DebugDrawLine(cam_pos,
-                  cam_pos + offset,
-                  vec3(1.0f),
-                  _delete_on_update);
 
-    if(offset.y > 0.0f){
-        target_rotation2 = min(target_rotation2, max(-20,90 - offset.y*140.0f));
-    }*/
+    target_rotation2 = max(-90,min(50,target_rotation2));
+
+    ApplyCameraCones(cam_pos);
 
     float inertia = pow(_camera_rotation_inertia, num_frames);
     cam_rotation = cam_rotation * inertia + 
@@ -3324,17 +3378,6 @@ void ApplyCameraControls() {
                target_rotation2 * (1.0f - inertia);
 
 
-    mat4 rotationY_mat,rotationX_mat;
-    rotationY_mat.SetRotationY(cam_rotation*3.1415f/180.0f);
-    rotationX_mat.SetRotationX(cam_rotation2*3.1415f/180.0f);
-    mat4 rotation_mat = rotationY_mat * rotationX_mat;
-    vec3 facing = rotation_mat * vec3(0.0f,0.0f,-1.0f);
-    //vec3 facing = camera.GetFacing();
-    vec3 right = normalize(vec3(-facing.z,facing.y,facing.x));
-
-    //camera.SetZRotation(0.0f);
-    //camera.SetZRotation(dot(right,this_mo.velocity+accel_tilt)*-0.1f);
-    
 
     if(old_cam_pos == vec3(0.0f)){
         old_cam_pos = camera.GetPos();
@@ -3350,6 +3393,15 @@ void ApplyCameraControls() {
 
     camera.SetVelocity(this_mo.velocity); 
 
+    vec3 facing;
+    {
+        mat4 rotationY_mat,rotationX_mat;
+        rotationY_mat.SetRotationY(cam_rotation*3.1415f/180.0f);
+        rotationX_mat.SetRotationX(cam_rotation2*3.1415f/180.0f);
+        mat4 rotation_mat = rotationY_mat * rotationX_mat;
+        facing = rotation_mat * vec3(0.0f,0.0f,-1.0f);
+    }
+
     col.GetSweptSphereCollision(cam_pos,
                                     cam_pos - facing * 
                                                 _cam_follow_distance,
@@ -3361,29 +3413,6 @@ void ApplyCameraControls() {
     }
     cam_distance = min(cam_distance, target_cam_distance);
     cam_distance = mix(target_cam_distance, cam_distance, 0.95f);
-
-    //new_follow_distance = -0.1f;
-    /*
-    vec3 adjusted_pos = sphere_col.position;
-    if(distance(adjusted_pos, cam_pos) < 1.0f){
-        adjusted_pos -= facing * (1.0f - distance(adjusted_pos, cam_pos));
-    }
-    this_mo.GetSlidingSphereCollision(adjusted_pos, _cam_collision_radius);
-    cam_pos += sphere_col.adjusted_position - adjusted_pos;*/
-/*
-    if(new_follow_distance<5.0f){
-        new_follow_distance = 5.0f;
-        vec3 temp_pos = 
-            cam_pos - facing * new_follow_distance;
-        col.GetSweptSphereCollision(temp_pos + vec3(0.0f,5.0f,0.0f),
-                                        temp_pos,
-                                        _cam_collision_radius);
-        vec3 new_pos = sphere_col.position;
-        vec3 new_dir = normalize(new_pos - cam_pos);
-        cam_rotation2 = asin(new_dir.y)*-180/3.1415 - 2.0f;
-        //Print(""+cam_rotation2.x+" "+cam_rotation2.y+" "+cam_rotation2.z+"\n");
-        Print(""+cam_rotation2+"\n");
-    }*/
     
     camera.SetYRotation(cam_rotation);    
     camera.SetXRotation(cam_rotation2);
@@ -3400,7 +3429,6 @@ void ApplyCameraControls() {
     //camera.SetFOV(20);
     //camera.SetPos(cam_pos);
     
-
     old_cam_pos = cam_pos;
     camera.CalcFacing();
 
@@ -3488,10 +3516,10 @@ void ApplyCameraCones(vec3 cam_pos){
         //Print("Fixed rot_facing: "+rot_facing.x+" "+rot_facing.y+"\n");
 
         facing = bad_dir * rot_facing.x * -1.0f + new_right * rot_facing.y;
-        target_rotation2 = asin(facing.y)/3.14159265 * 180.0f;
+        target_rotation2 = asin(facing.y)/3.14159265f * 180.0f;
         facing.y = 0.0f;
         facing = normalize(facing);
-        target_rotation = atan2(-facing.x,-facing.z)/3.14159265 * 180.0f;
+        target_rotation = atan2(-facing.x,-facing.z)/3.14159265f * 180.0f;
         //Print("New target rotation: "+target_rotation+"\n");
         while(target_rotation > old_target_rotation + 180.0f){
             target_rotation -= 360.0f;
@@ -3873,8 +3901,11 @@ void MovementState_UpdateIKTargets() {
         l_foot_offset = foot[0].pos;
         r_foot_offset = foot[1].pos;
 
-        left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset+l_foot_offset,left_leg_anim);
-        right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset+r_foot_offset,right_leg_anim);
+        l_foot_offset.y = 0.0f;
+        r_foot_offset.y = 0.0f;
+
+        left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset,left_leg_anim);
+        right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset,right_leg_anim);
         
         l_foot_offset.y += foot[0].height;
         r_foot_offset.y += foot[1].height;
