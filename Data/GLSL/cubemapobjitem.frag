@@ -3,11 +3,15 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform sampler2DShadow tex5;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
 uniform float fade;
 uniform mat4 shadowmat;
+uniform int x_stipple_offset;
+uniform int y_stipple_offset;
+uniform int stipple_val;
 
 varying vec3 ws_vertex;
 
@@ -22,6 +26,10 @@ float rand(vec2 co){
 
 void main()
 {            
+    if(stipple_val != 1 &&
+       int(gl_FragCoord.x + x_stipple_offset) % 2 * int(gl_FragCoord.y + y_stipple_offset) % 2 == 0){
+        discard;
+    }
     if((rand(gl_FragCoord.xy)) < fade){
         discard;
     };
@@ -33,6 +41,7 @@ void main()
 
     // Get diffuse lighting
     vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).rgb;
+    shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
     vec3 diffuse_color = GetDirectColor(NdotL);
     diffuse_color += LookupCubemapSimple(ws_normal, tex3) *

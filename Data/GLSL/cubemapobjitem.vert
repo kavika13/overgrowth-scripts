@@ -3,10 +3,14 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform sampler2DShadow tex5;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float fade;
 uniform mat4 shadowmat;
+uniform int x_stipple_offset;
+uniform int y_stipple_offset;
+uniform int stipple_val;
 
 varying vec3 ws_vertex;
 

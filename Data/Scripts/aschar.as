@@ -410,15 +410,15 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/rabbot.xml");
         }
         if(GetInputPressed("b")){
-            for(int i=0; i<5; ++i){
+            /*for(int i=0; i<5; ++i){
                 MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
                     vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
-            }
+            }*/
             //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-            /*this_mo.StartAnimation("Data/Animations/r_bigdogswordattackover.anm",4.0f,_ANM_MOBILE);
+            this_mo.StartAnimation("Data/Animations/r_spearstabfarhigh.anm",20.0f,_ANM_MOBILE);
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
-            this_mo.velocity = vec3(0.0f);*/
+            this_mo.velocity = vec3(0.0f);
         }
     }
     if(GetInputPressed("p") && target_id != -1){
@@ -888,6 +888,7 @@ void Ragdoll(int type){
         return;
     }
     
+    ledge_info.on_ledge = false;
     this_mo.Ragdoll();
     SetState(_ragdoll_state);
     ragdoll_static_time = 0.0f;
@@ -1013,8 +1014,6 @@ int IsDucking(){
     }
 }
 
-
-
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(target_id == -1){
         target_id = attacker_id;
@@ -1046,28 +1045,49 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
          for(int i=0; i<100; ++i){
                 this_mo.CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
          }*/
-         if(attack_getter2.HasCutPlane()){
-                vec3 cut_plane_local = attack_getter2.GetCutPlane();
-                if(attack_getter2.GetMirrored() == 1){
-                    cut_plane_local.x *= -1.0f;
+        if(attack_getter2.HasCutPlane()){
+            vec3 cut_plane_local = attack_getter2.GetCutPlane();
+            int cut_plane_type = attack_getter2.GetCutPlaneType();
+            if(attack_getter2.GetMirrored() == 1){
+                cut_plane_local.x *= -1.0f;
+            }
+            vec3 facing = this_mo.ReadCharacterID(attacker_id).GetFacing();
+            vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
+            vec3 up(0.0f,1.0f,0.0f);
+            vec3 cut_plane_world = facing * cut_plane_local.z +
+                facing_right * cut_plane_local.x +
+                up * cut_plane_local.y;
+            this_mo.CutPlane(cut_plane_world, pos, facing, cut_plane_type);
+            const bool _draw_cut_plane = false;
+            if(_draw_cut_plane){
+                vec3 cut_plane_z = normalize(cross(up, cut_plane_world));
+                vec3 cut_plane_x = normalize(cross(cut_plane_world, cut_plane_z));
+                for(int i=-5; i<=5; ++i){
+                    DebugDrawLine(pos-cut_plane_z*0.5f+cut_plane_x*(i*0.1f), pos+cut_plane_z*0.5f+cut_plane_x*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
+                    DebugDrawLine(pos-cut_plane_x*0.5f+cut_plane_z*(i*0.1f), pos+cut_plane_x*0.5f+cut_plane_z*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
                 }
-                vec3 facing = this_mo.ReadCharacterID(attacker_id).GetFacing();
-                vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
-                vec3 up(0.0f,1.0f,0.0f);
-                vec3 cut_plane_world = facing * cut_plane_local.z +
-                                       facing_right * cut_plane_local.x +
-                                       up * cut_plane_local.y;
-                this_mo.CutPlane(cut_plane_world, pos, facing);
-                const bool _draw_cut_plane = false;
-                if(_draw_cut_plane){
-                    vec3 cut_plane_z = normalize(cross(up, cut_plane_world));
-                    vec3 cut_plane_x = normalize(cross(cut_plane_world, cut_plane_z));
-                    for(int i=-5; i<=5; ++i){
-                        DebugDrawLine(pos-cut_plane_z*0.5f+cut_plane_x*(i*0.1f), pos+cut_plane_z*0.5f+cut_plane_x*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
-                        DebugDrawLine(pos-cut_plane_x*0.5f+cut_plane_z*(i*0.1f), pos+cut_plane_x*0.5f+cut_plane_z*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
-                    }
-                }
-         }
+            }
+        }
+        if(attack_getter2.HasStabDir()){
+            int attack_weapon_id = this_mo.ReadCharacterID(attacker_id).weapon_id;
+            int stab_type = attack_getter2.GetStabDirType();
+            Print("Weapon id: "+attack_weapon_id);
+            this_mo.ReadItem(attack_weapon_id);
+            mat4 trans = item_object_getter.GetPhysicsTransform();
+            mat4 trans_rotate = trans;
+            trans_rotate.SetColumn(3, vec3(0.0f));
+            vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
+            vec3 stab_dir = trans_rotate * attack_getter2.GetStabDir();
+            stab_pos -= stab_dir * 5.0f;
+            const bool _draw_cut_line = false;
+            if(_draw_cut_line){
+                DebugDrawLine(stab_pos,
+                    stab_pos + stab_dir*10.0f,
+                    vec3(1.0f),
+                    _persistent);
+            }
+            this_mo.Stab(stab_pos, stab_dir, stab_type);
+        }
     } else {
         MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
         MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
@@ -1240,7 +1260,6 @@ int target_id = -1;
 int self_id;
 
 bool holding_weapon = false;
-int weapon_id = -1;
 
 vec3 last_seen_target_position;
 vec3 last_seen_target_velocity;
@@ -2093,9 +2112,13 @@ void UpdateAttacking() {
     }
     if(attack_animation_set){
         if(attack_getter.IsThrow() == 0){
+            float attack_facing_inertia = 0.9f;
+            if(attack_getter.GetSharpDamage() > 0.0f){
+                attack_facing_inertia = 0.8f;
+            }
             this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                            direction,
-                                                           1.0-pow(0.9f,num_frames)));
+                                                           1.0-pow(attack_facing_inertia,num_frames)));
         } else {
             if(target_id != -1){
                 this_mo.ReadCharacterID(target_id).velocity = this_mo.velocity;
@@ -2594,7 +2617,7 @@ void HandlePickUp() {
                 vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
                 if(distance(hand_pos, pos)<0.9f){ 
                     holding_weapon = true;
-                    weapon_id = i;
+                    this_mo.weapon_id = i;
                     range_extender = 0.0f;
                     range_extender = item_object_getter.GetRangeExtender();
                     this_mo.AttachItem(i);
@@ -2621,7 +2644,7 @@ void HandlePickUp() {
     } else {
         if(holding_weapon){
             this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-            this_mo.DetachItem(weapon_id);
+            this_mo.DetachItem(this_mo.weapon_id);
             item_object_getter.ActivatePhysics();
             holding_weapon = false;
             range_extender = 0.0f;
@@ -2969,6 +2992,7 @@ void UpdateAnimation() {
                 this_mo.SetCharAnimation("movement");
                 this_mo.SetBlendCoord("speed_coord",speed);
                 this_mo.SetBlendCoord("ground_speed",speed);
+                mirrored_stance = false;
             } else {
                 if(!mirrored_stance){
                     this_mo.SetCharAnimation("idle");

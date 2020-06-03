@@ -26,7 +26,8 @@ void main()
     // Get amount to blur shadow based on distance
     float how_ambient = GetAmbientMultiplierScaled();
     float ambient_blur_mult = (1.0+how_ambient*how_ambient*400.0);
-    float blur_offset = distance_fade*_fade_to_blur*ambient_blur_mult+_base_blur;
+    //float blur_offset = distance_fade*_fade_to_blur*ambient_blur_mult+_base_blur;
+    float blur_offset = 0.03*_fade_to_blur*ambient_blur_mult+_base_blur;
     
     // Clip decal to texture edges
     float edge_buffer = 0.01;
