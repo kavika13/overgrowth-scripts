@@ -14,18 +14,18 @@ void main()
 	
 	vec3 normal_vec = normalize((normal_map.xyz*vec3(2.0))-vec3(1.0));
 	
-	float NdotL = max(0.0,dot(light_pos, normal_vec));
+	float NdotL = max(0.0,dot(light_pos, normal_vec))*gl_LightSource[0].diffuse.a;
 
 	vec3 shadow_tex = texture2D(tex2,gl_TexCoord[0].xy).rgb;
 
 	NdotL = NdotL * shadow_tex.r;
 	
-	vec3 color = vec3(NdotL);
+	vec3 color = gl_LightSource[0].diffuse.xyz * vec3(NdotL);
 	
 	// Add ambient lighting to baked texture
 	vec3 diffuse_map_vec = normal_vec;
 	diffuse_map_vec.y *= -1.0;
-	color += textureCube(tex4,diffuse_map_vec).xyz * min(1.0,max(shadow_tex.g * 1.5, 0.5));
+	color += textureCube(tex4,diffuse_map_vec).xyz * min(1.0,max(shadow_tex.g * 1.5, 0.5)) * (1.5-gl_LightSource[0].diffuse.a*0.5);
 
 	// Combine diffuse color with baked texture
 	color *= texture2D(tex,gl_TexCoord[0].xy).xyz;
