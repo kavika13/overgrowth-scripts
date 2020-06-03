@@ -23,6 +23,8 @@ class FlipInfo {
     float flip_tuck;
     float wall_flip_protection;
     bool rolling;
+    float start_roll_angle;
+    float roll_face_angle;
 
     FlipInfo() {
         flip_progress = 0.0f;
@@ -244,6 +246,10 @@ class FlipInfo {
         roll_direction = GetFlipDir(target_velocity);
         flip_axis = AxisFromDir(roll_direction);
 
+        start_roll_angle = atan2(roll_direction.z, roll_direction.x);
+        vec3 roll_facing = this_mo.GetFacing();
+        roll_face_angle = atan2(roll_facing.z, roll_facing.x);
+            
         feet_moving = false;
         rolling = true;
     }
@@ -262,7 +268,9 @@ class FlipInfo {
             flat_ground_normal.y = 0.0f;
             roll_direction = InterpDirections(roll_direction,normalize(flat_ground_normal),mix(0.0f,0.1f,min(1.0f,(1.0f-ground_normal.y)*5.0f)));
             flip_axis = AxisFromDir(roll_direction);
-            this_mo.SetRotationFromFacing(roll_direction);
+            float roll_angle = atan2(roll_direction.z, roll_direction.x);
+            float angle = roll_face_angle;// + roll_angle - start_roll_angle;
+            this_mo.SetRotationFromFacing(vec3(cos(angle), 0.0f, sin(angle)));
             this_mo.velocity = mix(adjusted_vel * _roll_ground_speed,
                                 this_mo.velocity, 
                                 pow(0.95f,num_frames));

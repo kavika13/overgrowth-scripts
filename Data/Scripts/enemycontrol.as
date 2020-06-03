@@ -219,7 +219,7 @@ void UpdateBrain(){
         const float _max_dist = 30.0f;
         for(int i=0; i<num_items; i++){
             ItemObject @item_obj = ReadItem(i);
-            if(item_obj.IsHeld()){
+            if(item_obj.IsHeld() || item_obj.GetType() != _weapon){
                 continue;
             }
             vec3 pos = item_obj.GetPhysicsPosition();

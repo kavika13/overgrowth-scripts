@@ -40,7 +40,7 @@ void UpdateBrain(){
     if(!GetInputDown(this_mo.controller_id, "drop")){
         drop_key_state = _dks_nothing;
     } else if (drop_key_state == _dks_nothing){
-        if(held_weapon == -1){
+        if(held_weapon == -1 || (held_weapon_offhand == -1 && duck_amount < 0.5f)){
             drop_key_state = _dks_pick_up;
         } else {
             if(GetInputDown(this_mo.controller_id, "crouch") && 
@@ -60,7 +60,7 @@ void UpdateBrain(){
     } else if (item_key_state == _iks_nothing){
         if(held_weapon == -1 && sheathed_weapon != -1){
             item_key_state = _iks_unsheathe;
-        } else if(held_weapon != -1 && sheathed_weapon == -1){
+        } else {//if(held_weapon != -1 && sheathed_weapon == -1){
             item_key_state = _iks_sheathe;
         }
     }
