@@ -49,7 +49,7 @@ void main()
 	spec_map_vec = normalize(spec_map_vec);
 	spec_map_vec.y *= -1.0;
 	shade_mult = min(1.0,1.0-spec_map_vec.y+1.25) * (1.0*0.3+0.7);
-	spec_color += textureCube(tex3,spec_map_vec).xyz * 0.5 * shadow_tex.g;
+	spec_color += textureCube(tex3,spec_map_vec).xyz * 0.5 * min(1.0,max(shadow_tex.g * 1.5, 0.5));
 	
 	vec4 colormap = texture2D(tex,gl_TexCoord[0].st);
 	
@@ -60,9 +60,16 @@ void main()
 
 	color = mix(color, textureCube(tex4,normalize(rel_pos)).xyz, length(rel_pos)/far);
 
-	//color = normalmap.rgb;
+	//color = colormap.xyz;
+
+	//color = normal.rgb;
 
 	//color = vec3(NdotL);
+
+	/*if(gl_TexCoord[0].s>0.9||gl_TexCoord[0].s<0.1||
+		gl_TexCoord[0].t>0.9||gl_TexCoord[0].t<0.1) {
+		discard;
+	}*/
 
 	gl_FragColor = vec4(color,colormap.a);
 }
