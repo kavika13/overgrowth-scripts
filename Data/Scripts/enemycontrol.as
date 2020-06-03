@@ -1,5 +1,13 @@
 #include "aschar.as"
 
+bool hostile = false;
+
+void AIUpdate(){
+	if(GetInputPressed("c")){
+		hostile = !hostile;
+	}
+}
+
 bool WantsToCrouch() {
 	return false;
 }
@@ -12,8 +20,8 @@ bool WantsToJump() {
 	return false;
 }
 
-bool WantsToAttack() {
-	return false; 
+bool WantsToAttack() { 
+	return hostile;
 }
 
 bool WantsToRollFromRagdoll(){
@@ -40,13 +48,17 @@ bool WantsToFlipOffWall() {
 	return false;
 }
 
+bool WantsToCancelAnimation() {
+	return false;
+}
+
 vec3 GetTargetVelocity() {
 	//if(distance_squared(this_mo.position, target.position) < 9.0f){
 		vec3 target_velocity;
 		target_velocity = target.position - this_mo.position;
 		target_velocity.y = 0.0;
 		float dist = length(target_velocity);
-		float seek_dist = 3.0;
+		float seek_dist = 1.0;
 		dist = max(0.0, dist-seek_dist);
 		target_velocity = normalize(target_velocity) * dist;
 		if(length_squared(target_velocity) > 1.0){

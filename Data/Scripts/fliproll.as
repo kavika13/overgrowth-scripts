@@ -120,6 +120,14 @@ class FlipInfo {
 		flip_angle += 0.1f;
 		wall_flip_protection = _wall_flip_protection_time;
 	}
+	
+	void StartLegCannonFlip(vec3 dir, float leg_cannon_flip){
+		flip_vel = _wind_up_threshold;
+		StartFlip(dir);
+		flip_angle += leg_cannon_flip/-1.4*0.25f;
+		flip_tuck = 0.5f;
+		wall_flip_protection = _wall_flip_protection_time;
+	}
 
 	void StartFlip(vec3 dir){
 		rolling = false;

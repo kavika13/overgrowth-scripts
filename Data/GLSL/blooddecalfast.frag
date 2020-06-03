@@ -12,7 +12,9 @@ uniform vec3 ws_light;
 uniform float extra_ao;
 
 varying vec3 ws_vertex;
-varying vec3 tangent;
+varying vec3 tangent_to_world1;
+varying vec3 tangent_to_world2;
+varying vec3 tangent_to_world3;
 
 #include "lighting.glsl"
 #include "relativeskypos.glsl"
@@ -26,19 +28,13 @@ void main()
 		discard;
 	} else {
 		// Calculate normal
-		vec3 base_normal_tex = texture2D(tex5,gl_TexCoord[0].st).rgb;
-		vec3 base_normal = base_normal_tex*2.0-vec3(1.0);
-		vec3 base_tangent = tangent;
-		vec3 base_bitangent = normalize(cross(base_tangent,base_normal));
-		base_tangent = normalize(cross(base_normal,base_bitangent));
-
 		vec4 normalmap = texture2D(tex1,gl_TexCoord[0].st);
-		vec3 ws_normal = vec3(base_normal * normalmap.b +
-							  base_tangent * (normalmap.r*2.0-1.0) +
-							  base_bitangent * (normalmap.g*2.0-1.0));
+		vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+							  tangent_to_world1 * (normalmap.r*2.0-1.0) +
+							  tangent_to_world2 * (normalmap.g*2.0-1.0));
 		
 		// Calculate diffuse lighting
-		vec3 shadow_tex = texture2D(tex4,gl_TexCoord[0].st).rgb;
+		vec3 shadow_tex = vec3(1.0);//texture2D(tex4,gl_TexCoord[0].st).rgb;
 		float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
 		vec3 diffuse_color = GetDirectColor(NdotL);
 
@@ -54,8 +50,10 @@ void main()
 					  GetAmbientContrib(shadow_tex.g);
 
 		// Put it all together
-		vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(normalmap.a);
-		
+		vec3 blood_spec = vec3(GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r, 450.0));
+		vec3 color = diffuse_color * colormap.xyz;// + spec_color * GammaCorrectFloat(normalmap.a);
+		color += blood_spec;
+
 		color *= BalanceAmbient(NdotL);
 		
 		color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
@@ -65,6 +63,6 @@ void main()
 
 		//color = ws_normal;
 
-		gl_FragColor = vec4(color,colormap.a);
+		gl_FragColor = vec4(colormap.xyz,colormap.a);
 	}
 }

@@ -1,5 +1,8 @@
 #include "aschar.as"
 
+void AIUpdate(){
+}
+
 bool WantsToCrouch() {
 	if(!controlled) return false;
 	return GetInputDown("crouch");
@@ -48,6 +51,17 @@ bool WantsToFlipOffWall() {
 bool WantsToAccelerateJump() {
 	if(!controlled) return false;
 	return GetInputDown("jump");
+}
+
+bool WantsToCancelAnimation() {
+	return GetInputDown("jump") || 
+		   GetInputDown("crouch") ||
+		   GetInputDown("grab") ||
+		   GetInputDown("attack") ||
+		   GetInputDown("move_up") ||
+		   GetInputDown("move_left") ||
+		   GetInputDown("move_right") ||
+		   GetInputDown("move_down");
 }
 
 vec3 GetTargetVelocity() {
