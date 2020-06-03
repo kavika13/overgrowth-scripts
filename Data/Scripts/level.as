@@ -504,6 +504,17 @@ class ChallengeEndGUI {
                 }
                 mission_objective += "Reach the goal";
             }
+            if(objective == "must_visit_trigger"){
+                if(NumUnvisitedMustVisitTriggers() == 0){
+                    mission_objective += "v ";
+                    mission_objective_color = "green";
+                } else {
+                    mission_objective += "x ";
+                    mission_objective_color = "red";
+                    success = false;
+                }
+                mission_objective += "Visit all checkpoints";
+            }
             if(objective == "reach_a_trigger_with_no_pursuers"){
                 if(in_victory_trigger > 0 && NumActivelyHostileThreats() == 0){
                     mission_objective += "v ";
@@ -640,6 +651,9 @@ class ChallengeEndGUI {
     }
     void DrawGUI(){
         imui_context.UpdateControls();
+		if(visible < 0.01){
+            return;
+        }
         float ui_scale = 0.5f;
         
         if(DrawButton("Data/Textures/ui/challenge_mode/quit_icon_c.tga",
