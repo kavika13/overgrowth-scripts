@@ -26,6 +26,23 @@ vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz
     return vel;
 }
     
+void Collided(float impulse){
+    if(impulse < 5.0f){
+        return;
+    }
+    //Print("Collided: "+impulse+"\n");
+    int old_knocked_out = knocked_out;
+    TakeDamage(impulse*0.01f);
+    if(old_knocked_out == _awake && knocked_out == _unconscious){
+        string sound = "Data/Sounds/hit/hit_medium_juicy.xml";
+        PlaySoundGroup(sound, this_mo.position);
+    }
+    if(old_knocked_out != _dead && knocked_out == _dead){
+        string sound = "Data/Sounds/hit/hit_hard.xml";
+        PlaySoundGroup(sound, this_mo.position);
+    }
+}
+
 void MouseControlJumpTest() {
     vec3 start = camera.GetPos();
     vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
@@ -115,7 +132,7 @@ void MouseControlJumpTest() {
 const float _reset_delay = 4.0f;
 float reset_timer = _reset_delay;
 void VictoryCheck() {
-    if(ThreatsRemaining() <= 0){
+    if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
         reset_timer -= time_step * num_frames;
         if(reset_timer <= 0.0f){
             this_mo.ResetLevel();
@@ -155,7 +172,7 @@ void Update(bool _controlled, int _num_frames) {
         ApplyCameraControls();
     }
 }
-;
+
 
 void JumpTest(const vec3&in initial_pos, 
               const vec3&in initial_vel,
@@ -553,9 +570,16 @@ void UpdateRagDoll() {
     if(knocked_out == _awake){
         HandleRagdollRecovery();
     }
-    /*mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+    /*
+    mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
     vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
-    Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
+    //Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
+    DebugDrawLine(this_mo.position,
+                  this_mo.position + torso_vec,
+                  vec3(1.0f),
+                  _delete_on_update);
+    torso_vec = torso_transform.GetColumn(2);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
+    //Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
     DebugDrawLine(this_mo.position,
                   this_mo.position + torso_vec,
                   vec3(1.0f),
@@ -587,8 +611,19 @@ void UpdateRagdollDamping() {
 
 void SetActiveRagdollFallPose() {
     const float danger_radius = 4.0f;
-    this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
-    vec3 danger_vec = this_mo.position - sphere_col.adjusted_position;
+    vec3 danger_vec;
+    this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.25f); // Create sliding sphere at ragdoll center to detect nearby surfaces
+    danger_vec = this_mo.position - sphere_col.adjusted_position;
+    danger_vec += normalize(danger_vec) * danger_radius * 0.75f;
+    if(sphere_col.NumContacts() == 0){
+        this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.5f); // Create sliding sphere at ragdoll center to detect nearby surfaces
+        danger_vec = this_mo.position - sphere_col.adjusted_position;
+        danger_vec += normalize(danger_vec) * danger_radius * 0.5f;
+    }
+    if(sphere_col.NumContacts() == 0){
+        this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
+        danger_vec = this_mo.position - sphere_col.adjusted_position;
+    }
     float penetration = length(danger_vec);
     float penetration_ratio = penetration / danger_radius;
     float protect_amount = min(1.0f,max(0.0f,penetration_ratio*4.0f-2.0));
@@ -719,8 +754,15 @@ void NotifySound(int created_by_id, vec3 pos) {
         return;
     }
     if(target_id == -1){
-        target_id = created_by_id;
-        last_seen_target_position = pos;
+        bool same_team = false;
+        character_getter.Load(this_mo.char_path);
+        if(character_getter.OnSameTeam(this_mo.ReadCharacterID(created_by_id).char_path) == 1){
+            same_team = true;
+        }
+        if(!same_team){
+            target_id = created_by_id;
+            last_seen_target_position = pos;
+        }
     }
 }
 
@@ -1019,9 +1061,9 @@ void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos
 
 void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) {
     if(event == "golimp"){
-        if(attack_getter2.IsThrow() == 1){
-            TakeDamage(attack_getter2.GetDamage());
-        }
+        //if(attack_getter2.IsThrow() == 1){
+        //    TakeDamage(attack_getter2.GetDamage());
+        //}
         GoLimp();
     }
 
@@ -1341,6 +1383,22 @@ bool IsTargetInFOV(const vec3&in target_pos){
     return true;
 }
 
+int ThreatsPossible() {
+    int num = this_mo.GetNumCharacters();
+    int num_threats = 0;
+    for(int i=0; i<num; ++i){
+        vec3 target_pos = this_mo.ReadCharacter(i).position;
+        if(this_mo.position == target_pos){
+            continue;
+        }
+        if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
+        {
+            ++num_threats;
+        }
+    }
+    return num_threats;
+}
+
 int ThreatsRemaining() {
     int num = this_mo.GetNumCharacters();
     int num_threats = 0;
@@ -1371,7 +1429,13 @@ void TargetClosest(){
         if(this_mo.ReadCharacter(i).IsKnockedOut() != _awake){
             continue;
         }
-        if(target_id != this_mo.ReadCharacter(i).getID()){
+        
+        character_getter.Load(this_mo.char_path);
+        if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 1){
+            continue;
+        }
+
+        if(!controlled && target_id != this_mo.ReadCharacter(i).getID()){
             if(!IsTargetInFOV(target_pos)){
                 continue;
             }
@@ -1379,10 +1443,6 @@ void TargetClosest(){
             if(!this_mo.ReadCharacter(i).VisibilityCheck(head_pos)){
                 continue;
             }
-        }
-        character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 1){
-            continue;
         }
         
         if(closest_id == -1 || 
@@ -1423,8 +1483,8 @@ void Land(vec3 vel) {
 
     if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
         float slide_amount = 1.0f - (dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal)));
-        Print("Slide amount: "+slide_amount+"\n");
-        Print("Slide vel: "+slide_amount*length(this_mo.velocity)+"\n");
+        //Print("Slide amount: "+slide_amount+"\n");
+        //Print("Slide vel: "+slide_amount*length(this_mo.velocity)+"\n");
         this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 1.0f);
         if(slide_amount > 0.0f){
             float slide_vel = slide_amount*length(this_mo.velocity);
@@ -1509,6 +1569,24 @@ bool HandleStandingCollision() {
     return (sphere_col.position == lower_pos);
 }
 
+const float _shock_damage_threshold = 30.0f;
+const float _shock_damage_multiplier = 0.1f;
+void CheckForVelocityShock(float vert_vel) {
+    float shock = vert_vel * -1.0f;
+    Print("Velocity shock: "+shock+"\n");
+    if(shock > _shock_damage_threshold){
+        TakeDamage((shock-_shock_damage_threshold)*_shock_damage_multiplier);
+        if(knocked_out != _awake){
+            Ragdoll(_RGDL_INJURED);
+            string sound = "Data/Sounds/hit/hit_hard.xml";
+            PlaySoundGroup(sound, this_mo.position);
+        } else {
+            string sound = "Data/Sounds/hit/hit_medium_juicy.xml";
+            PlaySoundGroup(sound, this_mo.position);
+        }
+    }
+}
+
 void HandleGroundCollision() {
     vec3 air_vel = this_mo.velocity;
     if(on_ground){
@@ -1563,6 +1641,7 @@ void HandleGroundCollision() {
         this_mo.position = last_col_pos;
         bool landing = false;
         vec3 landing_normal;
+        vec3 old_vel = this_mo.velocity;
         for(int i=0; i<num_frames; ++i){
             if(on_ground){
                 break;
@@ -1594,10 +1673,13 @@ void HandleGroundCollision() {
             }
         }
         if(landing){
-            ground_normal = landing_normal;
-            Land(air_vel);
-            if(state != _ragdoll_state){
-                SetState(_movement_state);
+            CheckForVelocityShock(old_vel.y);
+            if(knocked_out == _awake){
+                ground_normal = landing_normal;
+                Land(air_vel);
+                if(state != _ragdoll_state){
+                    SetState(_movement_state);
+                }
             }
         }
     }
@@ -1884,14 +1966,23 @@ void UpdateHitReaction() {
 void SetState(int _state) {
     state = _state;
     if(state == _ground_state){
-        Print("Setting state to ground state");
+        //Print("Setting state to ground state");
+        if(wake_up_torso_front.y < 0){
+            this_mo.SetAnimation("Data/Animations/r_standfromfront.anm", 20.0f, _ANM_MOBILE|_ANM_FLIP_FACING);
+        } else {
+            this_mo.SetAnimation("Data/Animations/r_standfromback.anm", 20.0f, _ANM_MOBILE);
+        }
+        this_mo.SetAnimationCallback("void EndGetUp()");
+        this_mo.SetRotationFromFacing(normalize(vec3(wake_up_torso_up.x,0.0f,wake_up_torso_up.z))*-1.0f);
+
         //this_mo.StartAnimation("Data/Animations/kipup.anm");
-        if(!mirrored_stance){
+        /*if(!mirrored_stance){
             this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
         } else {
             this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
         }
         this_mo.SetAnimationCallback("void EndGetUp()");
+        */
         getting_up_time = 0.0f;    
     }
     if(state != _attack_state){
@@ -1904,8 +1995,18 @@ const int _wake_flip = 1;
 const int _wake_roll = 2;
 const int _wake_fall = 3;
 
+vec3 wake_up_torso_up;
+vec3 wake_up_torso_front;
+float ragdoll_cam_recover_time = 0.0f;
+float ragdoll_cam_recover_speed = 1.0f;
+
 // WakeUp is called when a character gets out of the ragdoll mode. 
 void WakeUp(int how) {
+    mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+    wake_up_torso_front = torso_transform.GetColumn(1);
+    wake_up_torso_up = torso_transform.GetColumn(2);
+    ragdoll_cam_recover_time = 1.0f;
+
     SetState(_movement_state);
     this_mo.UnRagdoll();
     
@@ -1914,9 +2015,9 @@ void WakeUp(int how) {
     this_mo.position = sphere_col.position;
 
     // No standing up animations yet
-    if(how == _wake_stand){
+    /*if(how == _wake_stand){
         how = _wake_fall;
-    }
+    }*/
 
     duck_amount = 1.0f;
     duck_vel = 0.0f;
@@ -1925,6 +2026,8 @@ void WakeUp(int how) {
         SetOnGround(true);
         flip_info.Land();
         SetState(_ground_state);
+        ragdoll_cam_recover_speed = 2.0f;
+        this_mo.SetRagdollFadeSpeed(4.0f); 
     } else if(how == _wake_fall){
         SetOnGround(true);
         flip_info.Land();
@@ -1933,12 +2036,16 @@ void WakeUp(int how) {
         } else {
             this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
         }
+        ragdoll_cam_recover_speed = 10.0f;
+        this_mo.SetRagdollFadeSpeed(10.0f);
     } else if (how == _wake_flip) {
         SetOnGround(false);
         jump_info.StartFall();
         flip_info.StartFlip();
         flip_info.FlipRecover();
         this_mo.StartAnimation(character_getter.GetAnimPath("jump"));
+        ragdoll_cam_recover_speed = 100.0f;
+        this_mo.SetRagdollFadeSpeed(10.0f);
     } else if (how == _wake_roll) {
         SetOnGround(true);
         flip_info.Land();
@@ -1953,6 +2060,8 @@ void WakeUp(int how) {
             roll_dir = normalize(flat_vel);
         }
         flip_info.StartRoll(roll_dir);
+        ragdoll_cam_recover_speed = 10.0f;
+        this_mo.SetRagdollFadeSpeed(10.0f);
     }
 }
 
@@ -2013,11 +2122,8 @@ void Nothing() {
 // Called only when state equals _ground_state
 void UpdateGroundState() {
     this_mo.velocity = vec3(0.0f);
+    //this_mo.velocity = GetTargetVelocity() * _walk_accel * 0.15f;
     
-    /*this_mo.SetAnimation("Data/Animations/onback.anm");
-    this_mo.SetAnimationCallback("void Nothing()");
-    this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel;
-    */
     HandleGroundStateCollision();
     getting_up_time += time_step * num_frames;
 }
@@ -2166,6 +2272,7 @@ float target_rotation2 = 0.0f;
 float cam_rotation = 0.0f;
 float cam_rotation2 = 0.0f;
 
+vec3 ragdoll_cam_pos;
 
 void ApplyCameraControls() {
     const float _camera_rotation_inertia = 0.5f;
@@ -2209,6 +2316,13 @@ void ApplyCameraControls() {
         old_cam_pos = camera.GetPos();
     }
     old_cam_pos += this_mo.velocity * time_step * num_frames;
+
+    
+    if(ragdoll_cam_recover_time > 0.0f){
+        cam_pos = mix(cam_pos, ragdoll_cam_pos, ragdoll_cam_recover_time);
+        ragdoll_cam_recover_time -= time_step * num_frames * ragdoll_cam_recover_speed;
+    }
+
     cam_pos = mix(cam_pos,old_cam_pos,0.8f);
 
     camera.SetVelocity(this_mo.velocity); 
@@ -2241,7 +2355,12 @@ void ApplyCameraControls() {
     camera.SetXRotation(cam_rotation2);
 
     camera.SetFOV(90);
+
     camera.SetPos(cam_pos);
+
+    if(state == _ragdoll_state){
+        ragdoll_cam_pos = cam_pos;
+    }
 
     //cam_pos = this_mo.GetAvgIKChainTransform("head") * vec3(0.0f,0.0f,0.0f);
     //camera.SetFOV(20);
@@ -2287,6 +2406,8 @@ void Reset() {
     if(state == _ragdoll_state){
         this_mo.UnRagdoll();
         this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+        ragdoll_cam_recover_speed = 1000.0f;
+        this_mo.SetRagdollFadeSpeed(1000.0f);
     }
     this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
     this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
@@ -2345,7 +2466,7 @@ void UpdateAnimation() {
 const float _check_up = 1.0f;
 const float _check_down = -1.0f;
     
-vec3 GetLegTargetOffset(vec3 initial_pos){
+vec3 GetLegTargetOffset(vec3 initial_pos, vec3 anim_pos){
     /*DebugDrawLine(initial_pos + vec3(0.0f,_check_up,0.0f),
                   initial_pos + vec3(0.0f,_check_down,0.0f),
                   vec3(1.0f),
@@ -2359,19 +2480,23 @@ vec3 GetLegTargetOffset(vec3 initial_pos){
     }
 
     float target_y_pos = sphere_col.position.y;
-    float height = initial_pos.y - this_mo.position.y + _leg_sphere_size - 0.05f;
+    float height = anim_pos.y + _leg_sphere_size + 0.2f;
     target_y_pos += height;
-    /*DebugDrawWireSphere(sphere_col.position,
+    /*DebugDrawWireSphere(initial_pos,
                   0.05f,
-                  vec3(1.0f),
+                  vec3(1.0f,0.0f,0.0f),
+                  _delete_on_draw);
+    DebugDrawWireSphere(sphere_col.position,
+                  0.05f,
+                  vec3(0.0f,1.0f,0.0f),
                   _delete_on_draw);*/
-    
+
     float offset_amount = target_y_pos - initial_pos.y;
     offset_amount /= max(0.0f,height)+1.0f;
 
-    //offset_amount = max(-0.15f,min(0.15f,offset_amount));
+    offset_amount = max(-0.15f,min(0.15f,offset_amount));
 
-    return vec3(0.0,offset_amount, 0.0f);
+    return vec3(0.0f,offset_amount,0.0f);
 }
 
 float offset_height = 0.0f;
@@ -2411,7 +2536,7 @@ void SetLimbTargetOffset(string name){
     vec3 pos = this_mo.GetIKTargetPosition(name);
     vec3 anim_pos = this_mo.GetIKTargetAnimPosition(name);
     vec3 offset = GetLimbTargetOffset(pos, anim_pos);
-    this_mo.SetIKTargetOffset(name,offset);
+    this_mo.SetIKTargetOffset(name,offset+vec3(0.0f,-0.15f,0.0f));
 }
 
 void GroundState_UpdateIKTargets() {
@@ -2421,7 +2546,7 @@ void GroundState_UpdateIKTargets() {
     SetLimbTargetOffset("right_leg");
     SetLimbTargetOffset("leftarm");
     SetLimbTargetOffset("rightarm");
-    this_mo.SetIKTargetOffset("full_body", vec3(0.0f,-0.1f,0.0f));
+    this_mo.SetIKTargetOffset("full_body", vec3(0.0f,-0.05f,0.0f));
     //this_mo.SetIKTargetOffset("full_body", ground_normal * 0.05);
     
     vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
@@ -2430,6 +2555,7 @@ void GroundState_UpdateIKTargets() {
     float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
     float angle = atan2(y_amount, x_amount);
 
+    getting_up_time = 0.0f;
     angle *= min(1.0f,max(0.0f,1.0f - (getting_up_time-0.3f) * 2.0f));
     this_mo.SetFlip(axis,-angle,0.0f);
 }
@@ -2454,6 +2580,9 @@ void MovementState_UpdateIKTargets() {
 
         vec3 left_leg = this_mo.GetIKTargetPosition("left_leg");
         vec3 right_leg = this_mo.GetIKTargetPosition("right_leg");
+        vec3 left_leg_anim = this_mo.GetIKTargetAnimPosition("left_leg");
+        vec3 right_leg_anim = this_mo.GetIKTargetAnimPosition("right_leg");
+
 
         vec3 foot_apart = right_leg - left_leg;
         foot_apart.y = 0.0f;
@@ -2473,8 +2602,8 @@ void MovementState_UpdateIKTargets() {
         vec3 left_leg_offset = foot_apart * bring_feet_together * 0.5f;
         vec3 right_leg_offset = foot_apart * bring_feet_together * -0.5f;
 
-        left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset);
-        right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset);
+        left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset,left_leg_anim);
+        right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset,right_leg_anim);
         
         this_mo.SetIKTargetOffset("left_leg",left_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f);
         this_mo.SetIKTargetOffset("right_leg",right_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f);
@@ -2506,11 +2635,7 @@ void MovementState_UpdateIKTargets() {
 }
 
 void UpdateIKTargets() {
-    if(state == _ground_state){
-        GroundState_UpdateIKTargets();
-    } else {
-        MovementState_UpdateIKTargets();
-    }
+    MovementState_UpdateIKTargets();
 }
 
 void UpdateVelocity() {
