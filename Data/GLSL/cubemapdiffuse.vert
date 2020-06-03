@@ -1,23 +1,28 @@
-#include "object_vert.glsl"
-#include "object_shared.glsl"
+#version 150
 
-UNIFORM_REL_POS
+in vec3 vertex_attrib;
+in vec2 tex_coords_attrib;
+in vec3 normal_attrib;
 
-VARYING_REL_POS
-varying vec3 normal;
-varying vec3 world_normal;
+uniform mat4 projection_view_mat;
+uniform mat4 model_mat;
+uniform mat3 model_rotation_mat;
+uniform vec3 cam_pos;
+uniform mat4 shadow_matrix[4];
 
-void main()
-{    
-    normal = normalize(gl_NormalMatrix * gl_Normal);  
-    mat3 obj2worldmat3 = GetPseudoInstanceMat3();
-    world_normal = obj2worldmat3 * normal;
-   
-    mat4 obj2worldmat4 = GetPseudoInstanceMat4();
-    vec3 transformed_vertex = (obj2worldmat4 * gl_ModelViewMatrix * gl_Vertex).xyz;
-    ws_vertex = transformed_vertex - cam_pos;
+out vec3 ws_vertex;
+out vec4 shadow_coords[4];
+out vec3 normal;
 
-    gl_Position = ftransform();
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-    gl_FrontColor = gl_Color;
+void main() {   
+	normal = model_rotation_mat * normal_attrib; 
+    vec4 transformed_vertex = model_mat * vec4(vertex_attrib, 1.0);
+    gl_Position = projection_view_mat * transformed_vertex;
+
+    ws_vertex = transformed_vertex.xyz - cam_pos;
+    
+    shadow_coords[0] = shadow_matrix[0] * vec4(transformed_vertex, 1.0);
+    shadow_coords[1] = shadow_matrix[1] * vec4(transformed_vertex, 1.0);
+    shadow_coords[2] = shadow_matrix[2] * vec4(transformed_vertex, 1.0);
+    shadow_coords[3] = shadow_matrix[3] * vec4(transformed_vertex, 1.0);
 } 

@@ -53,10 +53,10 @@ void main() {
     // Get specular lighting
     float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,100.0);
     spec *= 5.0;
-    vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
+    vec3 spec_color = gl_LightSourceDEPRECATED[0].diffuse.xyz * vec3(spec);
     
     vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
-    spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
+    spec_color += LookupCubemapSimpleLod(spec_map_vec, tex2, 0.0) * 0.5 *
                   GetAmbientContrib(shadow_tex.g);
     
     // Put it all together
@@ -67,8 +67,6 @@ void main() {
     
     color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
     AddHaze(color, ws_vertex, tex2);
-
-    color *= Exposure();
 
     //color = unpacked_normal;
 

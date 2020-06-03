@@ -1,6 +1,8 @@
+#version 150
+
 #pragma transparent
-#include "object_shared.glsl"
-#include "object_frag.glsl"
+#include "object_shared150.glsl"
+#include "object_frag150.glsl"
 
 #define base_normal_tex tex5
 
@@ -9,32 +11,40 @@ uniform sampler2D base_normal_tex;
 UNIFORM_LIGHT_DIR
 UNIFORM_EXTRA_AO
 UNIFORM_COLOR_TINT
+uniform float wetness;
 
-VARYING_REL_POS
-VARYING_SHADOW
-varying vec3 tangent;
+in vec4 shadow_coords[4];
+in vec3 tangent;
+in vec3 normal;
+in vec3 ws_vertex;
+in vec3 tex_coord;
+in vec3 base_tex_coord;
 
-#define shadow_tex_coords gl_TexCoord[0].xy
+out vec4 out_color;
+
+#define shadow_tex_coords gl_TexCoord[1].xy
 
 void main()
 {    
-    vec4 colormap = texture2D(tex0,gl_TexCoord[0].st);
-    if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
-       gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
-        colormap.a <= 0.01) {
+    vec4 colormap = texture(tex0, tex_coord.xy);
+    if(tex_coord.x<0.0 || tex_coord.x>1.0 ||
+       tex_coord.y<0.0 || tex_coord.y>1.0 ||
+       colormap.a <= 0.01) 
+    {
         discard;
     }
     // Calculate normal
-    vec3 base_normal_tex = texture2D(base_normal_tex,gl_TexCoord[0].st).rgb;
+    vec3 base_normal_tex = texture(base_normal_tex, base_tex_coord.xy).rgb;
     vec3 base_normal = base_normal_tex*2.0-vec3(1.0);
     vec3 base_tangent = tangent;
     vec3 base_bitangent = normalize(cross(base_tangent,base_normal));
     base_tangent = normalize(cross(base_normal,base_bitangent));
 
-    vec4 normalmap = texture2D(tex1,gl_TexCoord[0].st);
+    vec4 normalmap = texture(tex1, tex_coord.xy);
     vec3 ws_normal = vec3(base_normal * normalmap.b +
                           base_tangent * (normalmap.r*2.0-1.0) +
                           base_bitangent * (normalmap.g*2.0-1.0));
+    ws_normal = normalize(ws_normal);
     
     CALC_SHADOWED
     CALC_DIFFUSE_LIGHTING
@@ -42,7 +52,5 @@ void main()
     CALC_COMBINED_COLOR_WITH_TINT
     CALC_COLOR_ADJUST
     CALC_HAZE
-    CALC_EXPOSURE
     CALC_FINAL_ALPHA
-    //gl_FragColor = vec4(base_normal, 1.0);
 }

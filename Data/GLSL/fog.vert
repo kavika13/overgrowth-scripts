@@ -1,12 +1,16 @@
-uniform sampler2D tex0;
-uniform samplerCube tex3;
-uniform mat4 obj2world;
-uniform vec3 cam_pos;
+#version 150
 
-varying vec3 rel_pos;
+uniform mat4 model_mat;
+uniform mat4 mvp_mat;
+
+in vec3 vert_coord;
+in vec2 tex_coord;
+
+out vec3 rel_pos;
+out vec2 var_uv;
 
 void main() {    
-    rel_pos = vec3(obj2world * gl_Vertex);    
-    gl_Position = ftransform();
-    gl_TexCoord[0] = gl_MultiTexCoord0;
+    rel_pos = vec3(model_mat * vec4(vert_coord, 1.0));    
+    gl_Position = mvp_mat * vec4(vert_coord,1.0);
+    var_uv = tex_coord;
 } 

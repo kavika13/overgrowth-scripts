@@ -33,7 +33,7 @@ void main()
                               tangent_to_world1 * (normalmap.r*2.0-1.0) +
                               tangent_to_world2 * (normalmap.g*2.0-1.0));
 
-        colormap.a *= 2.0 * gl_Color.a * (gl_LightSource[0].diffuse.a * 0.4 + 0.3);
+        colormap.a *= 2.0 * gl_Color.a * (gl_LightSourceDEPRECATED[0].diffuse.a * 0.4 + 0.3);
         //ws_normal = tangent_to_world3;
         vec3 color = vec3(dot(ws_light, ws_normal)-dot(ws_light, tangent_to_world3)+1.0)*colormap.a;
         color *= colormap.xyz;

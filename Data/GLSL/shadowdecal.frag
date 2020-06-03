@@ -50,15 +50,15 @@ void main()
     
     color_tex = texture2D(tex0,gl_TexCoord[0].xy+tex_offset);
     
-    color = gl_LightSource[0].diffuse.xyz * NdotL *(0.4+shadowed*0.6) * color_tex.xyz;
-    color += spec * gl_LightSource[0].diffuse.xyz * normalmap.a * shadowed * 0.4;
+    color = gl_LightSourceDEPRECATED[0].diffuse.xyz * NdotL *(0.4+shadowed*0.6) * color_tex.xyz;
+    color += spec * gl_LightSourceDEPRECATED[0].diffuse.xyz * normalmap.a * shadowed * 0.4;
     
     NdotL = max(dot(normal,normalize(light2_pos)),0.0);
     H = normalize(normalize(vertex_pos*-1.0) + normalize(light2_pos));
     spec = max(pow(dot(normal,H),4.0),0.0);
     
-    color += gl_LightSource[1].diffuse.xyz * NdotL * color_tex.xyz;
-    color += spec * gl_LightSource[1].diffuse.xyz * normalmap.a * 0.2;
+    color += gl_LightSourceDEPRECATED[1].diffuse.xyz * NdotL * color_tex.xyz;
+    color += spec * gl_LightSourceDEPRECATED[1].diffuse.xyz * normalmap.a * 0.2;
 
     gl_FragColor = vec4(color,max(alpha-faded,0.0));
 }

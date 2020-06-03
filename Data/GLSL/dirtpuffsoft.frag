@@ -1,20 +1,25 @@
-#extension GL_ARB_texture_rectangle : enable
+#version 150
 
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex3;
-uniform sampler2DRect tex5;
+uniform sampler2D tex5;
 uniform float size;
 uniform float shadowed;
 uniform vec3 ws_light;
 uniform vec3 cam_pos;
+uniform vec2 viewport_dims;
+uniform vec4 color_tint;
 
-varying vec3 tangent_to_world1;
-varying vec3 tangent_to_world2;
-varying vec3 tangent_to_world3;
-varying vec3 ws_vertex;
+in vec3 ws_vertex;
+in vec2 tex_coord;
+in vec3 tangent_to_world1;
+in vec3 tangent_to_world2;
+in vec3 tangent_to_world3;
 
-#include "lighting.glsl"
+out vec4 out_color;
+
+#include "lighting150.glsl"
 
 float LinearizeDepth(float z)
 {
@@ -28,16 +33,16 @@ void main()
 {    
     vec3 up = vec3(0.0,1.0,0.0);
     
-    vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
-    vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
+    vec4 colormap = texture(tex0, tex_coord);
+    vec4 normalmap = texture(tex1, tex_coord);
 
-    float env_depth = LinearizeDepth(texture2DRect(tex5,gl_FragCoord.xy).r);
+    float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
     float particle_depth = LinearizeDepth(gl_FragCoord.z);
     float depth = env_depth - particle_depth;
     float depth_blend = depth / size * 1.0;
     depth_blend = max(0.0,min(1.0,depth_blend));
     depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
-    float alpha = min(1.0,pow(colormap.a*gl_Color.a*depth_blend,2.0)*2.0);
+    float alpha = min(1.0,pow(colormap.a*color_tint.a*depth_blend,2.0)*2.0);
 
     vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
                           tangent_to_world1 * (normalmap.r*2.0-1.0) +
@@ -49,12 +54,10 @@ void main()
     vec3 diffuse_color = GetDirectColor(NdotL);
     diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
                      GetAmbientContrib(1.0);
-    vec3 color = diffuse_color * colormap.xyz * gl_Color.xyz;
+    vec3 color = diffuse_color * colormap.xyz * color_tint.xyz;
     
     color *= BalanceAmbient(NdotL);
+    AddHaze(color, ws_vertex, tex3);
     
-    //color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
-
-    //color = vec3(NdotL);
-    gl_FragColor = vec4(color,alpha);
+    out_color = vec4(color,alpha);
 }

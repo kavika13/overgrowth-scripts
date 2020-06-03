@@ -125,17 +125,17 @@ class Situation {
         }
         look_targets.resize(0);
         for(uint i=0; i<known_chars.size(); ++i){
-            LookTarget lt;
-            lt.id = known_chars[i].id;
-            lt.interest = known_chars[i].interest;
-            lt.type= _character;
-            look_targets.push_back(lt);
+            LookTarget new_lt;
+            new_lt.id = known_chars[i].id;
+            new_lt.interest = known_chars[i].interest;
+            new_lt.type= _character;
+            look_targets.push_back(new_lt);
         }
         {
-            LookTarget lt;
-            lt.interest = 0.5f;
-            lt.type= _none;
-            look_targets.push_back(lt);
+            LookTarget new_lt;
+            new_lt.interest = 0.5f;
+            new_lt.type= _none;
+            look_targets.push_back(new_lt);
         }
 
         float pick_val = RangedRandomFloat(0.0f,1.0f);

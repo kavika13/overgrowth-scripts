@@ -244,7 +244,10 @@ void Notice(int character_id){
 }
 
 void NotifySound(int created_by_id, vec3 pos) {
-    if(!listening || awake_time < AWAKE_NOTICE_THRESHOLD || knocked_out != _awake || created_by_id == this_mo.GetID()){
+    if(!listening || static_char || 
+       awake_time < AWAKE_NOTICE_THRESHOLD || knocked_out != _awake || 
+       created_by_id == this_mo.GetID())
+    {
         return;
     }
     if(goal == _patrol || goal == _investigate){
@@ -550,6 +553,11 @@ void UpdateBrain(const Timestep &in ts){
         return;
     }
     awake_time += ts.step();
+
+    if(static_char){
+        return;
+    }
+
     const bool display_goals = false;
     if(display_goals){
         DisplayGoals();
@@ -734,8 +742,8 @@ void UpdateBrain(const Timestep &in ts){
                 }
                 NavPath path = GetPath(this_mo.position, investigate_points[i].pos);
                 float dist = 0.0f;
-                for(int i=0, len=path.NumPoints()-1; i<len; ++i){
-                    dist += distance(path.GetPoint(i), path.GetPoint(i+1));
+                for(int j=0, len2=path.NumPoints()-1; j<len2; ++j){
+                    dist += distance(path.GetPoint(j), path.GetPoint(j+1));
                 }
                 if(closest_point_id == -1 || dist < closest_dist){
                     closest_point_id = i;
@@ -1529,11 +1537,12 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
         target_point = NavPoint(point);
     }
     GetPath(target_point);
-    vec3 next_path_point = GetNextPathPoint();
-    if(next_path_point != vec3(0.0f)){
-        target_point = next_path_point;
+    {
+        vec3 next_path_point = GetNextPathPoint();
+        if(next_path_point != vec3(0.0f)){
+            target_point = next_path_point;
+        }
     }
-
     //for(int i=0; i<path.NumPoints()-1; ++i){
     //    DebugDrawLine(path.GetPoint(i), path.GetPoint(i+1), vec3(1.0f), _fade);
     //}

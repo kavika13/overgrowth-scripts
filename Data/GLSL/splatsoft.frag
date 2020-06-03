@@ -1,21 +1,26 @@
-#extension GL_ARB_texture_rectangle : enable
+#version 150
 
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex3;
-uniform sampler2DRect tex5;
+uniform sampler2D tex5;
 uniform float size;
 uniform float shadowed;
 uniform vec3 ws_light;
 uniform vec3 cam_pos;
+uniform vec2 viewport_dims;
+uniform vec4 color_tint;
 
-varying vec3 tangent_to_world1;
-varying vec3 tangent_to_world2;
-varying vec3 tangent_to_world3;
-varying vec3 ws_vertex;
+in vec3 ws_vertex;
+in vec2 tex_coord;
+in vec3 tangent_to_world1;
+in vec3 tangent_to_world2;
+in vec3 tangent_to_world3;
 
-#include "object_shared.glsl"
-#include "object_frag.glsl"
+out vec4 out_color;
+
+#include "object_shared150.glsl"
+#include "object_frag150.glsl"
 
 float LinearizeDepth(float z)
 {
@@ -25,10 +30,9 @@ float LinearizeDepth(float z)
   return (f-n)*depth + n;
 }
 
-void main()
-{        
-    vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
-    vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
+void main() {        
+    vec4 colormap = texture(tex0, tex_coord);
+    vec4 normalmap = texture(tex1, tex_coord);
     
     vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
                           tangent_to_world1 * (normalmap.r*2.0-1.0) +
@@ -39,28 +43,21 @@ void main()
     float NdotL = GetDirectContribSoft(ws_light, ws_normal, (1.0-shadowed));
     vec3 diffuse_color = GetDirectColor(NdotL);
     diffuse_color += LookupCubemapSimpleLod(ws_normal, tex3, 5.0) * GetAmbientContrib(1.0);
-    vec3 color = diffuse_color * colormap.xyz * gl_Color.xyz;
+    vec3 color = diffuse_color * colormap.xyz * color_tint.xyz;
     
     vec3 blood_spec = vec3(GetSpecContrib(ws_light, ws_normal, ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
     color += blood_spec;
 
     color *= BalanceAmbient(NdotL);
 
-    //color = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 10.0));
-
-    //color = colormap.xyz * GetDirectColor(1.0f) * 0.3f;
-    
-    //color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
-    //color = ws_normal;
-
-    float env_depth = LinearizeDepth(texture2DRect(tex5,gl_FragCoord.xy).r);
+    float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
     float particle_depth = LinearizeDepth(gl_FragCoord.z);
     float depth = env_depth - particle_depth;
     float depth_blend = depth / size * 1.0;
     depth_blend = max(0.0,min(1.0,depth_blend));
     depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
     
-    float alpha = min(1.0,pow(colormap.a*gl_Color.a*depth_blend,5.0)*20.0);
+    float alpha = min(1.0,pow(colormap.a*color_tint.a*depth_blend,5.0)*20.0);
 
-    gl_FragColor = vec4(color,alpha);
+    out_color = vec4(color,alpha);
 }

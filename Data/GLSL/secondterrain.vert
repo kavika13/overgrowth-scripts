@@ -1,13 +1,10 @@
-uniform vec3 light_pos;
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex3;
-uniform sampler2D tex4;
-varying vec3 normal;
+#version 150
 
-void main()
-{    
-    normal = normalize(gl_Normal);
-    gl_Position = ftransform();
-    gl_TexCoord[0] = gl_MultiTexCoord0;
+in vec2 uv;
+
+out vec2 var_uv;
+
+void main() {    
+    gl_Position = vec4(uv*2.0-vec2(1.0), 0.0, 1.0);
+    var_uv = uv;
 } 

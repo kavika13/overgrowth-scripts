@@ -1,15 +1,20 @@
+#version 150
+
 uniform sampler2D tex0;
+uniform vec4 color;
 
-void main()
-{    
-    vec4 color = vec4(texture2D(tex0,gl_TexCoord[0].xy));
+in vec2 frag_texcoord;
+
+out vec4 out_color;
+
+void main() {    
+    out_color = texture(tex0,frag_texcoord);
     #ifdef GAMMA_CORRECT
-        color.rgb *= 2.0;
-        color.a *= 1.5;
+        out_color.rgb *= 2.0;
+        out_color.a *= 1.5;
     #else
-        color.rgb *= 0.8;
-        color.a *= 0.8;
+        out_color.rgb *= 0.8;
+        out_color.a *= 0.8;
     #endif
-    gl_FragColor = color*gl_Color;
-
+    out_color *= color;
 }
