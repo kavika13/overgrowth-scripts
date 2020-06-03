@@ -58,6 +58,8 @@ void main()
 	AddHaze(color, rel_pos, tex4);
 
 	//color = shadow_tex.rgb;
+	
+	color *= Exposure();
 
 	gl_FragColor = vec4(color,colormap.a);
 }

@@ -62,6 +62,8 @@ void main()
 	
 	//color = vec3(gl_TexCoord[1]);
 	//color = vec3(shadow_tex.g);
+
+	color *= Exposure();
 	
 	gl_FragColor = vec4(color,colormap.a);
 }

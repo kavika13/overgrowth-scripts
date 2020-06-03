@@ -42,5 +42,7 @@ void main()
 	
 	AddHaze(color, rel_pos, tex4);
 
+	color *= Exposure();
+
 	gl_FragColor = vec4(color,1.0);
 }

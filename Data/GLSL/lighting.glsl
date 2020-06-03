@@ -69,3 +69,7 @@ void AddHaze( inout vec3 color,
 	float fog_opac = min(1.0,length(relative_position)/far);
 	color = mix(color, fog_color, fog_opac);
 }
+
+float Exposure() {
+	return gl_LightSource[0].ambient.a;
+}
