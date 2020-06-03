@@ -4,6 +4,9 @@ bool hostile = false;
 bool ai_attacking = false;
 bool hostile_switchable = true;
 
+void ControlUpdate(){
+}
+
 void AIUpdate(){
 	if(GetInputDown("c") && !GetInputDown("ctrl")){
 		if(hostile_switchable){

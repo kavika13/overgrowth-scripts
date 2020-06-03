@@ -167,6 +167,10 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
 		MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
 		TimedSlowMotion(0.1f,0.3f, 0.05f);
+		if(controlled){
+			camera.AddShake(0.5f);
+		}
+		return 3;
 	}
 	if(type == "blockprepare")
 	{
@@ -190,6 +194,9 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	}
 	if(type == "attackimpact")
 	{
+		if(controlled){
+			camera.AddShake(1.0f);
+		}
 		if(attack_getter2.GetHeight() == _high &&
 			duck_amount > 0.5f)
 		{
@@ -340,6 +347,9 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 							   event, attack_getter.GetPath(), dir, world_pos);
 		if(return_val == 1){
 			WasBlocked();
+		}
+		if((return_val == 2 || return_val ==3) && controlled){
+			camera.AddShake(0.5f);
 		}
 		if(return_val != 0 && attack_getter.GetSpecial() == "legcannon"){
 			this_mo.velocity += dir * -10.0f;
@@ -826,7 +836,7 @@ void Ragdoll(int type){
 	}
 
 	if(ragdoll_type == _RGDL_FALL) {
-		this_mo.DisableSleep();
+		this_mo.EnableSleep();
 		no_freeze = true;
 		//this_mo.StartAnimation("Data/Animations/r_idle.anm");
 		//int layer = this_mo.AddLayer("Data/Animations/r_catchfallright.anm",20.0f,_ANM_MIRRORED);
@@ -850,6 +860,8 @@ void Ragdoll(int type){
 		no_freeze = true;
 		this_mo.SetRagdollStrength(1.0);
 		this_mo.StartAnimation("Data/Animations/r_writhe.anm",4.0f);
+		//ragdoll_layer_fetal = 
+		//	this_mo.AddLayer("Data/Animations/r_grabface.anm",4.0f,0);
 		injured_mouth_open = 0.0f;
 	}
 }
@@ -1272,7 +1284,8 @@ void UpdateRagDoll() {
 		this_mo.SetRagdollStrength(ragdoll_strength);
 		injured_mouth_open = mix(injured_mouth_open, sin(time*4)*0.5f+sin(time*6.3)*0.5, ragdoll_strength);
 		this_mo.SetMorphTargetWeight("mouth_open",injured_mouth_open,1.0f);
-		if(ragdoll_strength < 0.01f){
+		if(ragdoll_time > 12.0f){
+			Print("Ragdoll time up: "+ragdoll_time+"\n");
 			ragdoll_type = _RGDL_LIMP;
 			no_freeze = false;
 			ragdoll_static_time = 0.0f;
@@ -1557,6 +1570,99 @@ void HandlePickUp() {
 	}
 }
 
+vec3 old_cam_pos;
+float target_rotation = 0.0f;
+float target_rotation2 = 0.0f;
+float cam_rotation = 0.0f;
+float cam_rotation2 = 0.0f;
+
+
+void ApplyCameraControls() {
+	if(!controlled){
+		return;
+	}
+	const float _camera_rotation_inertia = 0.5f;
+	const float _cam_follow_distance = 2.0f;
+	const float _cam_collision_radius = 0.15f;
+
+	SetGrabMouse(true);
+
+	target_rotation -= GetLookXAxis();
+	target_rotation2 -= GetLookYAxis();	
+
+	target_rotation2 = max(-90,min(50,target_rotation2));
+
+	cam_rotation = cam_rotation * _camera_rotation_inertia + 
+			   target_rotation * (1.0f - _camera_rotation_inertia);
+	cam_rotation2 = cam_rotation2 * _camera_rotation_inertia + 
+			   target_rotation2 * (1.0f - _camera_rotation_inertia);
+
+	mat4 rotationY_mat,rotationX_mat;
+	rotationY_mat.SetRotationY(cam_rotation*3.1415/180.0f);
+	rotationX_mat.SetRotationX(cam_rotation2*3.1415/180.0f);
+	mat4 rotation_mat = rotationY_mat * rotationX_mat;
+	vec3 facing = rotation_mat * vec3(0.0f,0.0f,-1.0f);
+
+	vec3 cam_pos = this_mo.position;
+
+	//vec3 facing = camera.GetFacing();
+	vec3 right = normalize(vec3(-facing.z,facing.y,facing.x));
+
+	//camera.SetZRotation(0.0f);
+	//camera.SetZRotation(dot(right,this_mo.velocity+accel_tilt)*-0.1f);
+	
+	if(!limp){
+		cam_pos += vec3(0.0f,0.35f,0.0f);
+	} else {
+		cam_pos += vec3(0.0f,0.1f,0.0f);
+	}
+
+	if(old_cam_pos == vec3(0.0f)){
+		old_cam_pos = camera.GetPos();
+	}
+	old_cam_pos += this_mo.velocity * time_step * num_frames;
+	cam_pos = mix(cam_pos,old_cam_pos,0.8f);
+
+	camera.SetVelocity(this_mo.velocity); 
+
+	this_mo.GetSweptSphereCollision(cam_pos,
+								    cam_pos - facing * 
+												_cam_follow_distance,
+									_cam_collision_radius);
+	
+	float new_follow_distance = _cam_follow_distance;
+	if(sphere_col.NumContacts() != 0){
+		new_follow_distance = distance(cam_pos, sphere_col.position);
+	}
+/*
+	if(new_follow_distance<5.0f){
+		new_follow_distance = 5.0f;
+		vec3 temp_pos = 
+			cam_pos - facing * new_follow_distance;
+		this_mo.GetSweptSphereCollision(temp_pos + vec3(0.0f,5.0f,0.0f),
+										temp_pos,
+										_cam_collision_radius);
+		vec3 new_pos = sphere_col.position;
+		vec3 new_dir = normalize(new_pos - cam_pos);
+		cam_rotation2 = asin(new_dir.y)*-180/3.1415 - 2.0f;
+		//Print(""+cam_rotation2.x+" "+cam_rotation2.y+" "+cam_rotation2.z+"\n");
+		Print(""+cam_rotation2+"\n");
+	}*/
+	
+	camera.SetYRotation(cam_rotation);	
+	camera.SetXRotation(cam_rotation2);
+
+	camera.CalcFacing();
+
+	camera.SetPos(cam_pos);
+	old_cam_pos = cam_pos;
+
+	 camera.SetDistance(new_follow_distance);
+	 UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+
+	 camera.SetFOV(90);
+}
+
 // THIS IS WHERE THE MAGIC HAPPENS.
 // update() function is called once per every time unit for every player and AI character, and most things that must be constantly updated will be called from this function.
 // the bool _controlled is true when character is controlled by a human, false when it's controlled by AI.
@@ -1565,6 +1671,7 @@ void update(bool _controlled, int _num_frames) {
 
 	HandleActiveBlock();
 
+	ControlUpdate();
 	AIUpdate();
 	time += time_step;
 	//this_mo.SetMorphTargetWeight("fist_l",min(1,max(0,sin(time*3))),0.0f);
@@ -1587,6 +1694,7 @@ void update(bool _controlled, int _num_frames) {
 	UpdateRagDoll();	
 	if(limp){
 		HandlePickUp();
+		ApplyCameraControls();
 		return;
 	}
 
@@ -1716,6 +1824,7 @@ void update(bool _controlled, int _num_frames) {
 	left_smear_time += time_step * num_frames;
 	right_smear_time += time_step * num_frames;
 	smear_sound_time += time_step * num_frames;
+	ApplyCameraControls();
 }
 
 void init(string character_path) {

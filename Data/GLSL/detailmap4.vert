@@ -24,6 +24,7 @@ uniform int weight_component;
 uniform vec3 ws_light;
 uniform float fade;
 uniform float detail_scale;
+uniform vec3 color_tint;
 
 varying vec3 tangent;
 varying vec3 ws_vertex;

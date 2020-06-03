@@ -1,5 +1,15 @@
 #include "aschar.as"
 
+float throw_key_time;
+
+void ControlUpdate(){
+	if(GetInputDown("grab")){
+		throw_key_time += time_step * num_frames;
+	} else {
+		throw_key_time = 0.0f;
+	}
+}
+
 void AIUpdate(){
 }
 
@@ -43,7 +53,7 @@ bool WantsToGrabLedge() {
 
 bool WantsToThrowEnemy() {
 	if(!controlled) return false;
-	return GetInputDown("grab");
+	return throw_key_time > 0.2f;
 }
 
 bool WantsToPickUpItem() {

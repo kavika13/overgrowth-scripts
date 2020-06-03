@@ -8,6 +8,7 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 varying vec3 tangent_to_world1;
@@ -32,7 +33,7 @@ void main()
 	ws_vertex = transformed_vertex.xyz - cam_pos;
 	
 	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-	
+
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
 } 

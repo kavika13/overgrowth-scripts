@@ -22,6 +22,7 @@ uniform int weight_component;
 uniform vec3 ws_light;
 uniform float extra_ao;
 uniform float detail_scale;
+uniform vec3 color_tint;
 
 varying vec3 tangent;
 varying vec3 ws_vertex;
@@ -92,7 +93,7 @@ void main()
 						 avg_color3 * weight_map[3];
 	vec3 terrain_color = texture2D(tex0,tc0).xyz;
 	average_color = max(average_color, vec3(0.01));
-	vec3 tint = terrain_color / average_color;
+	vec3 tint = terrain_color / average_color * color_tint;
 
 	// Get colormap
 	vec4 colormap = texture2D(tex6,tc2) * weight_map[0] +

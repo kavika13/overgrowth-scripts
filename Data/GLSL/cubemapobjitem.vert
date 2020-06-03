@@ -22,7 +22,7 @@ void main()
 
 	ws_vertex = transformed_vertex.xyz - cam_pos;
 	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-	
+
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
 	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;

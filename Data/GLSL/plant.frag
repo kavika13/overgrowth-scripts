@@ -12,6 +12,7 @@ uniform float time;
 uniform vec3 ws_light;
 uniform float extra_ao;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;
@@ -66,7 +67,8 @@ void main()
 	vec4 colormap = texture2D(tex0,tc0);
 	vec3 translucent_map = texture2D(tex5,tc0).xyz;
 	vec3 color = diffuse_color * colormap.xyz
-				 + translucent_lighting * translucent_map;
+				 + translucent_lighting * translucent_map ;
+	color *= color_tint;
 				 //+ spec_color * GammaCorrectFloat(normalmap.a);
 	
 

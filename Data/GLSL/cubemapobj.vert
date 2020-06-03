@@ -6,6 +6,7 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 

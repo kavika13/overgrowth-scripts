@@ -10,6 +10,7 @@ uniform vec3 cam_pos;
 uniform float time;
 uniform vec3 ws_light;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;

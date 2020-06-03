@@ -12,6 +12,7 @@ uniform float time;
 uniform vec3 ws_light;
 uniform float extra_ao;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;
@@ -57,7 +58,8 @@ void main()
 	vec4 colormap = texture2D(tex0,tc0);
 	vec3 translucent_map = texture2D(tex5,tc0).xyz;
 	vec3 color = diffuse_color * colormap.xyz + translucent_lighting * translucent_map;
-	
+	color *= color_tint;
+
 	color *= BalanceAmbient(NdotL);
 	color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));	
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);

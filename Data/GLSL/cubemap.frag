@@ -7,6 +7,7 @@ uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
 uniform float fade;
+uniform vec3 color_tint;
 
 varying vec3 ws_vertex;
 varying vec3 tangent_to_world1;
@@ -54,7 +55,7 @@ void main()
 	// Put it all together
 	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
 	
-	vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
+	vec3 color = diffuse_color * colormap.xyz  * color_tint + spec_color * GammaCorrectFloat(colormap.a);
 	
 	color *= BalanceAmbient(NdotL);
 	
