@@ -3,8 +3,6 @@
 bool limp = false;
 
 float air_time = 0.0f;
-bool attacking = false;
-float attacking_time;
 
 bool pre_jump = false;
 float pre_jump_time;
@@ -37,7 +35,12 @@ int run_phase = 1;
 
 const int _movement_state = 0;
 const int _ground_state = 1; 
+const int _attack_state = 2; 
+const int _hit_reaction_state = 3; 
 int state;
+
+bool attack_animation_set = false;
+bool hit_reaction_anim_set = false;
 
 const float _run_threshold = 0.8f;
 const float _walk_threshold = 0.6f;
@@ -61,7 +64,29 @@ vec3 com_offset;
 vec3 com_offset_vel;
 
 void EndAttack() {
-	attacking = false;
+	SetState(_movement_state);
+}
+
+void EndHitReaction() {
+	SetState(_movement_state);
+}
+
+void WasHit(vec3 dir, vec3 pos, string type) {
+	if((type == "spinkickrightimpact" ||
+		type == "sweeprightimpact") && duck_amount < 0.5f){
+		string sound = "Data/Sounds/FistImpact1.wav";
+		PlaySound(sound, pos);
+		MakeImpactParticle(pos);
+
+		SetState(_hit_reaction_state);
+		hit_reaction_anim_set = false;
+
+		dir.y = 0.0f;
+		dir = normalize(dir) * -1;
+		if(length_squared(dir)>0.0f){
+			this_mo.SetRotationFromFacing(dir);
+		}
+	}
 }
 
 void HandleAnimationEvent(string event, vec3 pos){
@@ -70,6 +95,18 @@ void HandleAnimationEvent(string event, vec3 pos){
 	if(event == "leftstep" || event == "rightstep"){
 		this_mo.MaterialEvent(event, world_pos);
 	}
+	if((event == "spinkickrightimpact" || event == "sweeprightimpact") && 
+	   distance(this_mo.position, target.position) < 2.0f){
+		vec3 facing = this_mo.GetFacing();
+		vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
+		vec3 dir = normalize(target.position - this_mo.position);
+		target.WasHit(dir, world_pos, event);
+		//target.velocity += facing;
+		//target.velocity += facing_right;
+	}
+	//DebugDrawText(world_pos,
+	//			  event,
+	//			  _persistent);
 }
 
 #include "aircontrols.as"
@@ -194,12 +231,11 @@ void ForceApplied(vec3 force) {
 }
 
 void UpdateGroundAttackControls() {
-	/*if(WantsToAttack() && distance_squared(this_mo.position,target.position) < 1.0){
-		attacking = true;
-		attacking_time = 0.0;
-		this_mo.StartAnimation("Data/Animations/kick.anm");
-		this_mo.SetAnimationCallback("void EndAttack()");
-	}*/
+	if(WantsToAttack()){// && distance_squared(this_mo.position,target.position) < 1.0){
+		SetState(_attack_state);
+		Print("Starting attack\n");
+		attack_animation_set = false;
+	}
 }
 
 void UpdateGroundControls() {
@@ -394,6 +430,7 @@ void HandleGroundCollision() {
 }
 
 void GoLimp() {
+	return;
 	SetState(_movement_state);
 	limp = true;
 	this_mo.Ragdoll();
@@ -434,17 +471,54 @@ void UpdateAirWhooshSound() {
 }
 
 void UpdateAttacking() {
+	if(!attack_animation_set){
+		if(!WantsToCrouch()){
+			this_mo.StartAnimation("Data/Animations/r_spinkickright.anm");
+		} else {
+			this_mo.StartAnimation("Data/Animations/r_sweep.anm");
+		}
+		this_mo.SetAnimationCallback("void EndAttack()");
+		attack_animation_set = true;
+	}
 	this_mo.velocity *= 0.95f;
 	vec3 direction = target.position - this_mo.position;
 	direction.y = 0.0f;
 	direction = normalize(direction);
 	this_mo.SetRotationFromFacing(direction);
-	float old_attacking_time = attacking_time;
+	/*float old_attacking_time = attacking_time;
 	attacking_time += time_step;
 	if(attacking_time > 0.25f && old_attacking_time <= 0.25f){
 		target.ApplyForce(direction*20);
 		TimedSlowMotion(0.1f,0.7f);
+	}*/
+}
+
+int choice = 0;
+void UpdateHitReaction() {
+	if(!hit_reaction_anim_set){
+		//int choice = rand()%4;
+		switch(choice){
+			case 0:
+				this_mo.StartMobileAnimation("Data/Animations/r_blockright.anm",20.0f);
+				break;
+			case 1:
+				this_mo.StartMobileAnimation("Data/Animations/r_blockrighthard.anm",20.0f);
+				break;
+			case 2:
+				this_mo.StartMobileAnimation("Data/Animations/r_hitspinright.anm",20.0f);
+				break;
+			case 3:
+				this_mo.StartMobileAnimation("Data/Animations/r_hitrightflip.anm",20.0f);
+				break;
+		}
+		choice++;
+		if(choice > 3) {
+			choice = 0;
+		}
+		this_mo.SetAnimationCallback("void EndHitReaction()");
+		hit_reaction_anim_set = true;
 	}
+	this_mo.velocity *= 0.95f;
 }
 
 void SetState(int _state) {
@@ -639,18 +713,19 @@ void update(bool _controlled) {
 	if(state == _movement_state){
 		UpdateDuckAmount();
 		UpdateGroundAndAirTime();
-
-		if(!attacking){ 
-			UpdateMovementControls();
-			UpdateAnimation();
-			ApplyPhysics();
-		} else {
-			UpdateAttacking();
-		}
+		UpdateMovementControls();
+		UpdateAnimation();
+		ApplyPhysics();
 		
 		HandleGroundCollision();
 	} else if(state == _ground_state){
 		UpdateGroundState();
+	} else if(state == _attack_state){
+		UpdateAttacking();
+		HandleGroundCollision();
+	} else if(state == _hit_reaction_state){
+		UpdateHitReaction();
+		HandleGroundCollision();
 	}
 
 	if(GetInputPressed("x")){

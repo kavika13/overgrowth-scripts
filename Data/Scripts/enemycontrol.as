@@ -13,7 +13,7 @@ bool WantsToJump() {
 }
 
 bool WantsToAttack() {
-	return false;
+	return false; 
 }
 
 bool WantsToRollFromRagdoll(){
