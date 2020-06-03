@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
 
 varying vec3 light_pos;
 varying vec3 vertex_pos;
@@ -20,13 +20,13 @@ void main()
 	vec4 color_tex;
 	float spec;
 	
-	normalmap = texture2D(tex2,texcoord);
+	normalmap = texture2D(tex1,texcoord);
 	normal = vec3((normalmap.x-0.5)*-2.0, (normalmap.y-0.5)*2.0, normalmap.z);
 	
 	NdotL = max(dot(normal,light_pos),0.0);
 	spec = pow(dot(normal,H),20.0);
 	
-	color_tex = texture2D(tex,texcoord);
+	color_tex = texture2D(tex0,texcoord);
 	
 	color = min((gl_LightSource[0].diffuse * NdotL * gl_Color  + gl_LightModel.ambient * gl_Color ),1.0)* vec4(color_tex.xyz,1.0);
 	color += spec * gl_Color * color_tex.a;

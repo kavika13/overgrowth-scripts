@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform samplerCube tex4;
+uniform sampler2D tex0;
+uniform samplerCube tex3;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 

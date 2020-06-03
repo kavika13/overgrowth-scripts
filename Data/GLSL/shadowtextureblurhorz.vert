@@ -1,4 +1,4 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 uniform float tex_size;
 
 void main()

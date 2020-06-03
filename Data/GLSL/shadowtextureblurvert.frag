@@ -1,4 +1,4 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 uniform float tex_size;
 
 void main()
@@ -8,31 +8,31 @@ void main()
 	vec4 color = vec4(0.0);
 	vec4 contrib;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy);
+	contrib = texture2D(tex0,gl_TexCoord[0].xy);
 	total_alpha += contrib.a*0.383;
 	color += contrib*contrib.a*0.383;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,offset_size));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,offset_size));
 	total_alpha += contrib.a*0.242;
 	color += contrib*contrib.a*0.242;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,-offset_size));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,-offset_size));
 	total_alpha += contrib.a*0.242;
 	color += contrib*contrib.a*0.242;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,offset_size*2.0));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,offset_size*2.0));
 	total_alpha += contrib.a*0.061;
 	color += contrib*contrib.a*0.061;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,-offset_size*2.0));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,-offset_size*2.0));
 	total_alpha += contrib.a*0.061;
 	color += contrib*contrib.a*0.061;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,offset_size*3.0));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,offset_size*3.0));
 	total_alpha += contrib.a*0.006;
 	color += contrib*contrib.a*0.006;
 	
-	contrib = texture2D(tex,gl_TexCoord[0].xy+vec2(0.0,-offset_size*3.0));
+	contrib = texture2D(tex0,gl_TexCoord[0].xy+vec2(0.0,-offset_size*3.0));
 	total_alpha += contrib.a*0.006;
 	color += contrib*contrib.a*0.006;
 	

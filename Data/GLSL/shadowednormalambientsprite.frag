@@ -1,6 +1,6 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
-uniform sampler2DShadow tex3;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform sampler2DShadow tex2;
 
 varying vec3 light_pos;
 varying vec3 light2_pos;
@@ -21,23 +21,23 @@ void main()
 	vec3 normal;
 	vec4 color_tex;
 	
-	normalmap = texture2D(tex2,gl_TexCoord[0].xy);
+	normalmap = texture2D(tex1,gl_TexCoord[0].xy);
 	normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
 	//normal = vec3(0,0,1);
 	
 	float offset = 1.0/4096.0/2.0*4.0;
 	float frac = 1.0/6.0;
-	float shadowed = shadow2DProj(tex3, ProjShadow).r*frac;
-	shadowed += shadow2DProj(tex3, ProjShadow2).r*frac;
-	shadowed += shadow2DProj(tex3, ProjShadow3).r*frac;
-	shadowed += shadow2DProj(tex3, ProjShadow4).r*frac;
-	shadowed += shadow2DProj(tex3, ProjShadow5).r*frac;
-	shadowed += shadow2DProj(tex3, ProjShadow6).r*frac;
+	float shadowed = shadow2DProj(tex2, ProjShadow).r*frac;
+	shadowed += shadow2DProj(tex2, ProjShadow2).r*frac;
+	shadowed += shadow2DProj(tex2, ProjShadow3).r*frac;
+	shadowed += shadow2DProj(tex2, ProjShadow4).r*frac;
+	shadowed += shadow2DProj(tex2, ProjShadow5).r*frac;
+	shadowed += shadow2DProj(tex2, ProjShadow6).r*frac;
 	
 	
 	NdotL = (dot(normal*-1.0,normalize(light_pos))+1.0)/2.0*shadowed;
 	
-	color_tex = texture2D(tex,gl_TexCoord[0].xy);
+	color_tex = texture2D(tex0,gl_TexCoord[0].xy);
 	
 	color = gl_LightSource[0].diffuse.xyz * NdotL * color_tex.xyz;
 	

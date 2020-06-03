@@ -1,14 +1,14 @@
 #extension GL_ARB_texture_rectangle : enable
 
-uniform sampler2DRect tex;
-uniform sampler2DRect tex2;
+uniform sampler2DRect tex0;
+uniform sampler2DRect tex1;
 
 void main()
 {	
 	vec3 color;
 	
-	vec3 color_map = texture2DRect( tex, gl_TexCoord[0].st ).rgb;
-	float depth = texture2DRect( tex2, gl_TexCoord[0].st ).r;
+	vec3 color_map = texture2DRect( tex0, gl_TexCoord[0].st ).rgb;
+	float depth = texture2DRect( tex1, gl_TexCoord[0].st ).r;
 	
 	float near = 0.1;
 	float far = 1000.0;
@@ -26,7 +26,7 @@ void main()
 	for (i=-10; i<10; i+=3){
 		for ( j=-10; j<10; j+=3){
 			if(length(vec2(float(i),float(j)))<10.0){
-				accum += texture2DRect( tex, gl_TexCoord[0].st + vec2(float(i),float(j)) * blur ).rgb;
+				accum += texture2DRect( tex0, gl_TexCoord[0].st + vec2(float(i),float(j)) * blur ).rgb;
 				num_samples++;
 			}
 		}

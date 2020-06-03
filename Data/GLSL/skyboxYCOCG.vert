@@ -1,4 +1,4 @@
-uniform samplerCube tex3;
+uniform samplerCube tex2;
 
 varying vec3 normal;
 varying float opac;

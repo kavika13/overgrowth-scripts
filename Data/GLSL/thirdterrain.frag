@@ -1,8 +1,8 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
-uniform sampler2D tex5;
+uniform sampler2D tex4;
 uniform vec3 cam_pos;
 
 varying vec3 normal;
@@ -12,17 +12,17 @@ varying vec3 light_pos;
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
 
-//#include "lighting.glsl"
+#include "lighting.glsl"
  
 void main()
 {	
-	vec4 terrain_color = texture2D(tex5,gl_TexCoord[0].xy);// + vec2(0.0,0.002));
+	vec4 terrain_color = texture2D(tex4,gl_TexCoord[0].xy);// + vec2(0.0,0.002));
 	vec3 diffuse_color = terrain_color.xyz;
 	
 	//vec4 terrain_color = texture2D(tex5,gl_TexCoord[0].xy);
-	vec4 detail = texture2D(tex,gl_TexCoord[1].xy);
-	vec4 detail2 = texture2D(tex,gl_TexCoord[1].xy*0.25);
-	vec4 detail3 = texture2D(tex,gl_TexCoord[1].xy*0.25*0.25);
+	vec4 detail = texture2D(tex0,gl_TexCoord[1].xy);
+	vec4 detail2 = texture2D(tex0,gl_TexCoord[1].xy*0.25);
+	vec4 detail3 = texture2D(tex0,gl_TexCoord[1].xy*0.25*0.25);
 
 	//diffuse_color *= (0.5 + detail.z + detail2.z);
 	//diffuse_color *= 0.7;
@@ -36,7 +36,7 @@ void main()
 	
 	vec3 color = diffuse_color;
 	
-	AddHaze(color, rel_pos, tex4);
+	AddHaze(color, rel_pos, tex3);
 
 	color *= Exposure();
 

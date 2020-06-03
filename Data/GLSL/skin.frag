@@ -1,6 +1,6 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
-uniform sampler2DShadow tex3;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform sampler2DShadow tex2;
 
 varying vec3 light_pos;
 varying vec3 light2_pos;
@@ -20,18 +20,18 @@ void main()
 	vec4 color_tex;
 	float spec;
 	
-	normalmap = texture2D(tex2,gl_TexCoord[0].xy);
+	normalmap = texture2D(tex1,gl_TexCoord[0].xy);
 	normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
 	
 	
 	float offset = 1.0/4096.0;
-	float shadowed = shadow2DProj(tex3, ProjShadow).r*.2;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(-offset*2.0,offset,0.0,0.0)).r*.2;
-	shadowed += shadow2DProj(tex3, ProjShadow - vec4(offset*2.0,-offset,0.0,0.0)).r*.2;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(-offset,offset*2.0,0.0,0.0)).r*.2;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(offset,-offset*2.0,0.0,0.0)).r*.2;
+	float shadowed = shadow2DProj(tex2, ProjShadow).r*.2;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(-offset*2.0,offset,0.0,0.0)).r*.2;
+	shadowed += shadow2DProj(tex2, ProjShadow - vec4(offset*2.0,-offset,0.0,0.0)).r*.2;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(-offset,offset*2.0,0.0,0.0)).r*.2;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(offset,-offset*2.0,0.0,0.0)).r*.2;
 	
-	color_tex = texture2D(tex,gl_TexCoord[0].xy);
+	color_tex = texture2D(tex0,gl_TexCoord[0].xy);
 
 	vec3 diffusion = vec3(0.3,0.15,0.0);
 	

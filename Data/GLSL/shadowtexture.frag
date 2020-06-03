@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform sampler2DShadow tex3;
+uniform sampler2D tex0;
+uniform sampler2DShadow tex2;
 uniform vec4 emission;
 
 varying vec3 normal;
@@ -17,11 +17,11 @@ void main()
 	//vec3 color = shadow2DProj(tex3, ProjShadow).r;
 	
 	float offset = 1.0/2048.0;
-	float shadowed = shadow2DProj(tex3, ProjShadow).r*.4;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(-offset*2.0,offset,0.0,0.0)).r*.15;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(offset*2.0,-offset,0.0,0.0)).r*.15;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(-offset,offset*2.0,0.0,0.0)).r*.15;
-	shadowed += shadow2DProj(tex3, ProjShadow + vec4(offset,-offset*2.0,0.0,0.0)).r*.15;
+	float shadowed = shadow2DProj(tex2, ProjShadow).r*.4;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(-offset*2.0,offset,0.0,0.0)).r*.15;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(offset*2.0,-offset,0.0,0.0)).r*.15;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(-offset,offset*2.0,0.0,0.0)).r*.15;
+	shadowed += shadow2DProj(tex2, ProjShadow + vec4(offset,-offset*2.0,0.0,0.0)).r*.15;
 	
 	vec3 color = vec3(shadowed);
 	

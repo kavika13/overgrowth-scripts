@@ -1,28 +1,28 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
+uniform sampler2D tex4;
 uniform sampler2D tex5;
-uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform float in_light;
 uniform float time;
 
-varying vec3 vertex_pos;
-varying vec3 light_pos;
+varying vec3 light_pos; // light position in tangent space
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
-varying vec3 world_light;
-varying mat3 obj2worldmat3;
+varying float backlit;
 
-//#include "transposemat3.glsl"
-//#include "relativeskypos.glsl"
-//#include "pseudoinstance.glsl"
+#include "transposemat3.glsl"
+#include "relativeskypos.glsl"
+#include "pseudoinstance.glsl"
+#include "texturepack.glsl"
+#include "shadowpack.glsl"
 
 void main()
 {	
 	mat4 obj2world = GetPseudoInstanceMat4();
-	obj2worldmat3 = GetPseudoInstanceMat3();
+	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
 
 	vec4 world_pos = obj2world*gl_Vertex;
 	vec4 vertex_offset = vec4(0.0);
@@ -43,24 +43,31 @@ void main()
 	vec3 temp_tangent = normalize(gl_MultiTexCoord1.xyz)+vertex_offset.yzx*5.0;
 	vec3 bitangent = normalize(gl_MultiTexCoord2.xyz)+vertex_offset.zxy*5.0;
 	
-	tangent_to_world = mat3(temp_tangent, bitangent, normal);
+	tangent_to_world = obj2worldmat3 * mat3(temp_tangent, bitangent, normal);
 	
 	vec3 eyeSpaceVert = (gl_ModelViewMatrix * obj2world * gl_Vertex).xyz;
-	vertex_pos = transposeMat3(gl_NormalMatrix * obj2worldmat3 * tangent_to_world) * eyeSpaceVert;
+	vec3 vertex_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * eyeSpaceVert;
 		
 	mat3 light_to_world = mat3(obj2world[0].xyz,obj2world[1].xyz,obj2world[2].xyz) * transposeMat3(gl_NormalMatrix*obj2worldmat3);
 	
-	world_light = normalize(light_to_world * gl_LightSource[0].position.xyz);
+	vec3 world_light = normalize(light_to_world * gl_LightSource[0].position.xyz);
 
-	light_pos = normalize(transposeMat3(gl_NormalMatrix * obj2worldmat3 *  tangent_to_world) * gl_LightSource[0].position.xyz);
+	light_pos = normalize(transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz);
  
 	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
+	
+	vec3 fixed_world_light = world_light;
+	fixed_world_light.x *= -1.0;
+	fixed_world_light.y *= -1.0;
+	backlit = max(0.0,dot(fixed_world_light,normalize(rel_pos)));
 	
 	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world* (gl_Vertex + vertex_offset);
 	
 	//gl_Position = vec4((gl_MultiTexCoord0.st - vec2(0.5)) * vec2(2.0),0.0,1.0);
 	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
-	gl_TexCoord[1] = gl_MultiTexCoord3;//+vertex_offset;
+	vec2 tex_coords = gl_MultiTexCoord0.xy;
+	
+	tc0 = tex_coords;
+	tc1 = GetShadowCoords();
 //	gl_TexCoord[2] = gl_MultiTexCoord4;
 } 

@@ -1,8 +1,8 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
-uniform sampler2D tex5;
+uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform mat3 test;
 
@@ -11,9 +11,9 @@ varying vec3 light_pos;
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
 
-//#include "transposemat3.glsl"
-//#include "relativeskypos.glsl"
-//#include "pseudoinstance.glsl"
+#include "transposemat3.glsl"
+#include "relativeskypos.glsl"
+#include "pseudoinstance.glsl"
 
 void main()
 {	
@@ -31,6 +31,5 @@ void main()
 	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;;
 	
 	gl_TexCoord[0] = gl_MultiTexCoord0;
-	//gl_TexCoord[1] = gl_MultiTexCoord3;
-	gl_TexCoord[2] = gl_MultiTexCoord1;
+	gl_TexCoord[1] = gl_MultiTexCoord1;
 } 

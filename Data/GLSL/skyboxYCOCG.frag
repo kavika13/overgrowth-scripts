@@ -1,9 +1,9 @@
-uniform samplerCube tex3;
+uniform samplerCube tex2;
 
 varying vec3 normal;
 varying float opac;
 
-//#include "lighting.glsl"
+#include "lighting.glsl"
 
 vec3 YCOCGtoRGB(in vec4 YCoCg) {
 	float Co = YCoCg.r - 0.5;
@@ -22,7 +22,7 @@ void main()
 {	
 	vec3 color;
 	
-	color = YCOCGtoRGB(textureCube(tex3,normal));
+	color = YCOCGtoRGB(textureCube(tex2,normal));
 	//color = textureCube(tex3,normal).xyz;
 	
 	color *= Exposure();

@@ -1,4 +1,4 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 uniform float time;
 
 varying vec3 light_vertex;
@@ -26,7 +26,7 @@ void main()
 	color = (pow(horizon,2.0)*0.5+0.6)*vec3(0.36,0.40,0.35);
 	color = mix(color,gl_LightSource[0].diffuse.xyz,bright*horizon-0.2);
 	
-	vec4 cloud_tex = texture2D(tex,uv)*texture2D(tex,uv*1.5+vec2(time*-0.5,time*-1.3))*texture2D(tex,uv*2.0+vec2(time*-0.4,time*0.5));
+	vec4 cloud_tex = texture2D(tex0,uv)*texture2D(tex0,uv*1.5+vec2(time*-0.5,time*-1.3))*texture2D(tex0,uv*2.0+vec2(time*-0.4,time*0.5));
 	float cloud_density = min((cloud_tex.a)*1.2,1.0)*pow(horizon,2.0);
 	cloud_density=pow(cloud_density,0.8);
 	vec3 cloud_normal = normalize(vec3(cloud_tex.r*2.0, cloud_tex.g*2.0, cloud_tex.b*-1.0));

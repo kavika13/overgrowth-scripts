@@ -1,4 +1,4 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 
 varying vec3 normal;
 varying vec3 shadows;

@@ -1,9 +1,9 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
+uniform sampler2D tex4;
 uniform sampler2D tex5;
-uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform float in_light;
 uniform float time;
@@ -13,9 +13,11 @@ varying mat3 tangent_to_world;
 varying vec3 rel_pos;
 varying float backlit;
 
-//#include "transposemat3.glsl"
-//#include "relativeskypos.glsl"
-//#include "pseudoinstance.glsl"
+#include "transposemat3.glsl"
+#include "relativeskypos.glsl"
+#include "pseudoinstance.glsl"
+#include "shadowpack.glsl"
+#include "texturepack.glsl"
 
 void main()
 {	
@@ -53,10 +55,12 @@ void main()
 
 	light_pos = normalize(transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz);
  
-	
 	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * (gl_Vertex + vertex_offset);
 	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
-	gl_TexCoord[1] = gl_MultiTexCoord3;
+	vec2 tex_coords = gl_MultiTexCoord0.xy;
+
+	tc0 = tex_coords;
+	tc1 = GetShadowCoords();
+
 	gl_FrontColor = gl_Color;
 } 

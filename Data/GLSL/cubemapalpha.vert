@@ -1,7 +1,7 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
 uniform vec3 cam_pos;
 uniform float in_light;
 
@@ -9,27 +9,26 @@ varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
-varying mat3 obj2worldmat3;
 
-//#include "transposemat3.glsl"
-//#include "relativeskypos.glsl"
-//#include "pseudoinstance.glsl"
+#include "transposemat3.glsl"
+#include "relativeskypos.glsl"
+#include "pseudoinstance.glsl"
 
 void main()
 {	
 	mat4 obj2world = GetPseudoInstanceMat4();
-	obj2worldmat3 = GetPseudoInstanceMat3();
+	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
 
 	vec3 normal = normalize(gl_Normal);
 	vec3 temp_tangent = normalize(gl_MultiTexCoord1.xyz);
 	vec3 bitangent = normalize(gl_MultiTexCoord2.xyz);
 	
-	tangent_to_world = /*transposeMat3mat3(obj2world[0].xyz, obj2world[1].xyz, obj2world[2].xyz) * */mat3(temp_tangent, bitangent, normal);
+	tangent_to_world = obj2worldmat3 * mat3(temp_tangent, bitangent, normal);
 	
 	vec3 eyeSpaceVert = (gl_ModelViewMatrix * obj2world * gl_Vertex).xyz;
-	vertex_pos = transposeMat3(gl_NormalMatrix * obj2worldmat3 * tangent_to_world) * eyeSpaceVert;
+	vertex_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * eyeSpaceVert;
 	
-	light_pos = normalize(transposeMat3(gl_NormalMatrix * obj2worldmat3 * tangent_to_world) * gl_LightSource[0].position.xyz);
+	light_pos = normalize(transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz);
  
 	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
 	

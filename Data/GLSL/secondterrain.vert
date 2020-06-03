@@ -1,8 +1,8 @@
 uniform vec3 light_pos;
-uniform sampler2D tex;
-uniform sampler2D tex2;
-uniform samplerCube tex4;
-uniform sampler2D tex5;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex3;
+uniform sampler2D tex4;
 varying vec3 normal;
 
 void main()

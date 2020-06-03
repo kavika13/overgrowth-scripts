@@ -1,6 +1,6 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
 uniform vec4 emission;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
@@ -9,7 +9,7 @@ varying vec3 normal;
 varying vec3 world_normal;
 varying vec3 rel_pos;
 
-//#include "lighting.glsl"
+#include "lighting.glsl"
 
 void main()
 {	
@@ -17,7 +17,7 @@ void main()
 	
 	vec3 color = GetDirectColor(NdotL);
 
-	color += textureCube(tex4,world_normal).xyz	* GetAmbientContrib(1.0);
+	color += textureCube(tex3,world_normal).xyz	* GetAmbientContrib(1.0);
 	
 	color *= BalanceAmbient(NdotL);
 	
@@ -25,7 +25,7 @@ void main()
 	
 	color += emission.xyz;
 	
-	AddHaze(color, rel_pos, tex4);
+	AddHaze(color, rel_pos, tex3);
 
 	color *= Exposure();
 

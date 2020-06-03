@@ -73,14 +73,18 @@ float BalanceAmbient ( const float direct_contrib ) {
 	return 1.0-direct_contrib*0.2;
 }
 
+float GetHazeAmount( in vec3 relative_position ) { 
+	float near = 0.1;
+	float far = 1000.0;
+	float fog_opac = min(1.0,length(relative_position)/far);
+	return fog_opac;
+}
+
 void AddHaze( inout vec3 color, 
 			  in vec3 relative_position,
 			  in samplerCube fog_cube ) { 
-	float near = 0.1;
-	float far = 1000.0;
 	vec3 fog_color = textureCube(fog_cube,normalize(relative_position)).xyz;
-	float fog_opac = min(1.0,length(relative_position)/far);
-	color = mix(color, fog_color, fog_opac);
+	color = mix(color, fog_color, GetHazeAmount(relative_position));
 }
 
 float Exposure() {

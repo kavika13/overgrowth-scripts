@@ -1,6 +1,6 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
-uniform sampler2DShadow tex3;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform sampler2DShadow tex2;
 
 varying vec4 ProjShadow;
 varying vec3 normal;
@@ -17,8 +17,8 @@ void main()
 	vec4 color_tex;
 	float spec;
 	
-	color_tex = texture2D(tex,gl_TexCoord[0].xy);
-	normalmap = texture2D(tex2,gl_TexCoord[0].xy);
+	color_tex = texture2D(tex0,gl_TexCoord[0].xy);
+	normalmap = texture2D(tex1,gl_TexCoord[0].xy);
 	map_normal = normalize(gl_NormalMatrix*(vec3(normalmap.x, normalmap.z, normalmap.y)*2.0-1.0));
 	
 	vec3 tangent_normal;

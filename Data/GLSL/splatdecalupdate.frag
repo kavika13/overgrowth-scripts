@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
 
 const float _flow_speed = 0.001;
 const float _pixel_size = 1.0 / 512.0;

@@ -1,8 +1,8 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
-uniform sampler2D tex5;
+uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform float in_light;
 
@@ -13,9 +13,9 @@ varying vec3 world_light;
 varying mat3 obj2worldmat3;
 //varying vec3 normal_var;
 
-//#include "transposemat3.glsl"
-//#include "relativeskypos.glsl"
-//#include "pseudoinstance.glsl"
+#include "transposemat3.glsl"
+#include "relativeskypos.glsl"
+#include "pseudoinstance.glsl"
 
 void main()
 {	

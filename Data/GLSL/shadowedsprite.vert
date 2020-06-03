@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform sampler2DShadow tex3;
+uniform sampler2D tex0;
+uniform sampler2DShadow tex2;
 
 varying vec3 normal;
 varying vec4 ProjShadow;

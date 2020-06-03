@@ -1,12 +1,12 @@
-uniform sampler2DShadow tex;
+uniform sampler2DShadow tex0;
+uniform sampler2D tex4;
 uniform sampler2D tex5;
-uniform sampler2D tex6;
 uniform mat4 obj2world_normal;
 
 varying vec3 light_pos;
 varying vec3 normal;
 varying vec4 ProjShadow;
-//#include "transposemat3.glsl"
+#include "transposemat3.glsl"
 
 void main()
 {	

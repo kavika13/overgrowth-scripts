@@ -1,8 +1,8 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 
 void main()
 {	
-	if(texture2D(tex,gl_TexCoord[0].xy).a < 0.1) {
+	if(texture2D(tex0,gl_TexCoord[0].xy).a < 0.1) {
 		discard;
 	}
 	if(int(mod(gl_FragCoord.x+gl_FragCoord.y,2.0))==0){

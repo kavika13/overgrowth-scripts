@@ -1,10 +1,10 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 
 void main()
 {	
 	vec3 color;
 	
-	vec4 color_tex = texture2D(tex,gl_TexCoord[0].xy);
+	vec4 color_tex = texture2D(tex0,gl_TexCoord[0].xy);
 	
 	color = gl_Color.xyz * color_tex.xyz;
 

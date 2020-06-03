@@ -1,5 +1,5 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
 
 void main()
 {	
@@ -8,8 +8,8 @@ void main()
 	vec4 normalmap;
 	vec4 color_tex;
 	
-	normalmap = texture2D(tex2,gl_TexCoord[1].xy);
-	color_tex = texture2D(tex,gl_TexCoord[0].xy);
+	normalmap = texture2D(tex1,gl_TexCoord[1].xy);
+	color_tex = texture2D(tex0,gl_TexCoord[0].xy);
 	
 	//color = color_tex.xyz + vec3(normalmap.a);
 		

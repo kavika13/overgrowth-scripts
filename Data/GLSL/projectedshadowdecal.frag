@@ -1,6 +1,6 @@
-uniform sampler2DShadow tex;
+uniform sampler2DShadow tex0;
+uniform sampler2D tex4;
 uniform sampler2D tex5;
-uniform sampler2D tex6;
 uniform mat4 obj2world_normal;
 
 varying vec3 light_pos;
@@ -10,7 +10,7 @@ varying vec4 ProjShadow;
 const float shadow_depth = 20.0;
 const float half_shadow_depth = shadow_depth * 0.5;
 
-//#include "lighting.glsl"
+#include "lighting.glsl"
 
 void main()
 {
@@ -27,11 +27,11 @@ void main()
 		discard;
 	}
 
-	color.a += (1.0-shadow2DProj(tex,ProjShadow).r)*0.2;
-	color.a += (1.0-shadow2DProj(tex,ProjShadow+vec4(offset,0.0,0.0,0.0)).r)*0.2;
-	color.a += (1.0-shadow2DProj(tex,ProjShadow+vec4(-offset,0.0,0.0,0.0)).r)*0.2;
-	color.a += (1.0-shadow2DProj(tex,ProjShadow+vec4(0.0,offset,0.0,0.0)).r)*0.2;
-	color.a += (1.0-shadow2DProj(tex,ProjShadow+vec4(0.0,-offset,0.0,0.0)).r)*0.2;
+	color.a += (1.0-shadow2DProj(tex0,ProjShadow).r)*0.2;
+	color.a += (1.0-shadow2DProj(tex0,ProjShadow+vec4(offset,0.0,0.0,0.0)).r)*0.2;
+	color.a += (1.0-shadow2DProj(tex0,ProjShadow+vec4(-offset,0.0,0.0,0.0)).r)*0.2;
+	color.a += (1.0-shadow2DProj(tex0,ProjShadow+vec4(0.0,offset,0.0,0.0)).r)*0.2;
+	color.a += (1.0-shadow2DProj(tex0,ProjShadow+vec4(0.0,-offset,0.0,0.0)).r)*0.2;
 
 
 	//color = texture2D(tex,vec2(gl_TexCoord[0].x,gl_TexCoord[0].y));
@@ -45,7 +45,7 @@ void main()
 	/*shadow = baked + (1.0-baked)*dynamic;
 	dynamic = (shadow-baked)/(1.0-baked)*/
 
-	color.a *= pow(texture2D(tex5,gl_TexCoord[1].xy).r,0.25);
+	color.a *= pow(texture2D(tex4,gl_TexCoord[1].xy).r,0.25);
 	color.a *= (1.0-GetAmbientMultiplierScaled())*1.1;
 	color.a *=max(0.0,(1.0 - sub_amt));
 

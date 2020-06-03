@@ -1,4 +1,4 @@
-uniform sampler2D tex;
+uniform sampler2D tex0;
 uniform vec4 emission;
 varying vec3 normal;
 
@@ -8,7 +8,7 @@ void main()
 	vec3 color;
 	
 	NdotL = max(dot(normal,gl_LightSource[0].position.xyz),0.0);
-	vec4 color_tex = texture2D(tex,gl_TexCoord[0].xy);
+	vec4 color_tex = texture2D(tex0,gl_TexCoord[0].xy);
 	
 	color = gl_LightSource[0].diffuse.xyz * NdotL * gl_Color.xyz;// * color_tex.xyz;
 	

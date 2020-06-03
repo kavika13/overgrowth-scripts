@@ -1,36 +1,33 @@
-uniform sampler2D tex;
-uniform sampler2D tex2;
+uniform sampler2D tex0;
+uniform sampler2D tex1;
+uniform samplerCube tex2;
 uniform samplerCube tex3;
-uniform samplerCube tex4;
-uniform sampler2D tex5;
+uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform float in_light;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
+varying mat3 tangent_to_world;
 varying vec3 rel_pos;
-varying mat3 obj2worldmat3;
 
-//#include "lighting.glsl"
+#include "lighting.glsl"
+#include "texturepack.glsl"
 
 void main()
 {	
-	mat3 tangent_to_world;
-
 	vec3 color;
 	
-	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[1].xy).rgb;
+	vec3 shadow_tex = texture2D(tex4,tc1).rgb;
 	
-	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
+	vec4 normalmap = texture2D(tex1,tc0);
 	vec3 normal = UnpackTanNormal(normalmap);
 	
-	normal = vec3(0,0,1);
-
 	float NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
 	vec3 diffuse_color = GetDirectColor(NdotL);
 	
 	vec3 diffuse_map_vec = tangent_to_world*normal;
-	diffuse_color += LookupCubemap(obj2worldmat3, diffuse_map_vec, tex4) *
+	diffuse_color += LookupCubemapSimple(diffuse_map_vec, tex3) *
 					 GetAmbientContrib(shadow_tex.g);
 	
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
@@ -38,16 +35,16 @@ void main()
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
 	vec3 spec_map_vec = tangent_to_world * reflect(vertex_pos,normal);
-	spec_color += LookupCubemap(obj2worldmat3, spec_map_vec, tex3) * 0.5 *
+	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
 				  GetAmbientContrib(shadow_tex.g);
 	 
-	vec4 colormap = texture2D(tex,gl_TexCoord[0].xy);
+	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
 	
 	color = diffuse_color * colormap.xyz + spec_color * colormap.a;
 	
 	color *= BalanceAmbient(NdotL);
 	
-	AddHaze(color, rel_pos, tex4);
+	AddHaze(color, rel_pos, tex3);
 
 	color *= Exposure();
 
