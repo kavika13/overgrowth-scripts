@@ -522,7 +522,29 @@ void UpdateRagDoll() {
 	}
 }
 
+
+bool testing_mocap = false;
+void TestMocap(){
+	this_mo.SetAnimation("Data/Animations/mocapsit.anm");
+	this_mo.SetAnimationCallback("void EndTestMocap()");
+	testing_mocap = true;
+	this_mo.velocity = vec3(0.0f);
+	this_mo.position += vec3(0.0f,-0.1f,0.0f);
+	this_mo.position = vec3(16.23, 109.45, 11.71);
+	this_mo.SetRotationFromFacing(vec3(0.0f,0.0f,1.0f));
+}
+
+void EndTestMocap() {
+	testing_mocap = false;
+}
+
+int count = 0;
+
 void update(bool _controlled) {
+	if(testing_mocap) {
+		this_mo.cam_rotation += 0.05f;
+		return;
+	}
 	controlled = _controlled;
 
 	UpdateAirWhooshSound();
@@ -551,6 +573,17 @@ void update(bool _controlled) {
 						  _persistent);
 		}
 	}
+
+	if(GetInputPressed("c")){
+//		TestMocap();
+	}
+
+	/*count++;
+	if(count % 300 == 0){
+		Print(""+this_mo.position.x + ", "+
+			     this_mo.position.y + ", "+
+				 this_mo.position.z + "\n");
+	}*/
 /*
 	vec3 dimensions(1.0f,1.0f,1.0f);
 	this_mo.GetSlidingScaledSphereCollision(this_mo.position,

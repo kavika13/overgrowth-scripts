@@ -195,10 +195,16 @@ class FlipInfo {
 	}
 
 	void StartedJump() {
-		flipped = false;
-		flip_angle = 1.0f;
-		flip_tuck = 0.0f;
-		this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
+		if(!flipping){
+			flipped = false;
+			flip_angle = 1.0f;
+			flip_tuck = 0.0f;
+			this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
+		} else {
+			//flip_tuck = 1.0f;
+			flip_progress = 0.0f;
+			target_flip_angle = 1.0f;
+		}
 	}
 
 	float GetTuck() {
