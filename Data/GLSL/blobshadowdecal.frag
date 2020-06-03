@@ -10,7 +10,5 @@ void main()
 	
 	color.a = max(0.0,color.a * (1.0 - sub_amt)); 
 	
-	color.xyz = vec3(1.0);
-
 	gl_FragColor = color;
 }
