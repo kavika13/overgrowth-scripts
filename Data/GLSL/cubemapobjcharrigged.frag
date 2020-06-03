@@ -26,7 +26,6 @@ void main()
 	
 	vec3 shadow_tex = vec3(1.0);
 	shadow_tex.x = shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
-;
 	
 	vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
 	
@@ -59,8 +58,6 @@ void main()
 	
 	color *= BalanceAmbient(NdotL);
 	
-	AddHaze(color, rel_pos, tex3);
-
 	color *= Exposure();
 
 	vec3 view = normalize(vertex_pos*-1.0);
@@ -71,6 +68,8 @@ void main()
 	//rim_lit *= min(1.0,max(0.0,(obj2world*vec4(normal,0.0)).y+0.5));
 	rim_lit *= pow((dot(light_pos,normal)+1.0)*0.5,0.5);
 	color += vec3(back_lit*rim_lit) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
+	
+	AddHaze(color, rel_pos, tex3);
 	
 	//color = diffuse_color;
 

@@ -32,7 +32,7 @@ void main()
 	color.y = pow(color.y,2.2);
 	color.z = pow(color.z,2.2);
 
-	//color *= Exposure();
+	color *= Exposure();
 
 	gl_FragColor = vec4(color.xyz,opac);
 }

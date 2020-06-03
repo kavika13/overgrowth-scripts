@@ -7,7 +7,6 @@ uniform sampler2DShadow tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
-uniform mat4 shadowmat;
 //uniform mat4 bones[64];
 
 varying vec3 vertex_pos;
@@ -49,9 +48,8 @@ void main()
 
 	light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
 
-	rel_pos = CalcRelativePositionForSky(obj2world * concat_bone, cam_pos);
+	rel_pos = CalcRelativePositionForSky(concat_bone, cam_pos);
  
 	gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
 	gl_TexCoord[0] = gl_MultiTexCoord0;
-	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * concat_bone * gl_Vertex;
 } 
