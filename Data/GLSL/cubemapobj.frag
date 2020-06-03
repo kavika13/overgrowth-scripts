@@ -3,13 +3,13 @@ uniform sampler2D tex2;
 uniform samplerCube tex3;
 uniform samplerCube tex4;
 uniform sampler2D tex5;
-uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
+varying mat3 obj2worldmat3;
 
 //#include "lighting.glsl"
 
@@ -24,14 +24,14 @@ void main()
 
 	float NdotL = GetDirectContrib(light_pos, normal, shadow_tex.r);
 	vec3 diffuse_color = GetDirectColor(NdotL);
-	diffuse_color += LookupCubemap(obj2world, normal, tex4) *
+	diffuse_color += LookupCubemap(obj2worldmat3, normal, tex4) *
 					 GetAmbientContrib(shadow_tex.g);
 	
 	float spec = GetSpecContrib(light_pos, normal, vertex_pos, shadow_tex.r);
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
 	vec3 spec_map_vec = reflect(vertex_pos,normal);
-	spec_color += LookupCubemap(obj2world, spec_map_vec, tex3) * 0.5 *
+	spec_color += LookupCubemap(obj2worldmat3, spec_map_vec, tex3) * 0.5 *
 				  GetAmbientContrib(shadow_tex.g);
 	
 	vec4 colormap = texture2D(tex,gl_TexCoord[0].xy);
@@ -43,8 +43,6 @@ void main()
 	AddHaze(color, rel_pos, tex4);
 
 	color *= Exposure();
-
-	//color = gl_Color.xyz;
 
 	gl_FragColor = vec4(color,1.0);
 }

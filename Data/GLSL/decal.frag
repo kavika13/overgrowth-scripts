@@ -8,7 +8,6 @@ uniform sampler2D tex5;
 uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform mat3 test;
-uniform mat4 obj2world;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;

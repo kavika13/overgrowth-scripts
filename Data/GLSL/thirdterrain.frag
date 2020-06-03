@@ -3,7 +3,6 @@ uniform sampler2D tex2;
 uniform samplerCube tex3;
 uniform samplerCube tex4;
 uniform sampler2D tex5;
-uniform mat4 obj2world;
 uniform vec3 cam_pos;
 
 varying vec3 normal;

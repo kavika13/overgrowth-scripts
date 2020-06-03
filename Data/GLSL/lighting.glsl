@@ -24,13 +24,18 @@ vec3 GetDirectColor(const float intensity) {
 	return gl_LightSource[0].diffuse.xyz * vec3(intensity);
 }
 
-vec3 LookupCubemap(const mat4 obj2world, 
+vec3 LookupCubemap(const mat3 obj2world_mat3, 
 				   const vec3 vec, 
 				   const samplerCube cube_map) {
-	mat3 obj2world_mat3 = mat3(obj2world[0].xyz,
-							   obj2world[1].xyz,
-							   obj2world[2].xyz);
 	vec3 world_space_vec = normalize(obj2world_mat3 * vec);
+	world_space_vec.xy *= -1.0;
+	return textureCube(cube_map,world_space_vec).xyz;
+}
+
+vec3 LookupCubemapMat4(const mat4 obj2world, 
+				   const vec3 vec, 
+				   const samplerCube cube_map) {
+	vec3 world_space_vec = normalize((obj2world * vec4(vec,0.0)).xyz);
 	world_space_vec.xy *= -1.0;
 	return textureCube(cube_map,world_space_vec).xyz;
 }
