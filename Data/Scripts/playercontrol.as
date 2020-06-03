@@ -1,7 +1,7 @@
 #include "aschar.as"
 #include "situationawareness.as"
 
-float throw_key_time;
+float grab_key_time;
 bool listening = false;
 bool delay_jump;
 
@@ -11,8 +11,7 @@ int IsUnaware() {
     return 0;
 }
 
-void NotifySound(int created_by_id, float max_dist, vec3 pos) {
-}
+void NotifySound(int created_by_id, float max_dist, vec3 pos) {}
 
 enum DropKeyState {_dks_nothing, _dks_pick_up, _dks_drop, _dks_throw};
 DropKeyState drop_key_state = _dks_nothing;
@@ -22,9 +21,9 @@ ItemKeyState item_key_state = _iks_nothing;
 
 void UpdateBrain(){
     if(GetInputDown(this_mo.controller_id, "grab")){
-        throw_key_time += time_step * num_frames;
+        grab_key_time += time_step * num_frames;
     } else {
-        throw_key_time = 0.0f;
+        grab_key_time = 0.0f;
     }
 
     array<int> characters;
@@ -40,7 +39,9 @@ void UpdateBrain(){
     if(!GetInputDown(this_mo.controller_id, "drop")){
         drop_key_state = _dks_nothing;
     } else if (drop_key_state == _dks_nothing){
-        if(held_weapon == -1 || (held_weapon_offhand == -1 && duck_amount < 0.5f)){
+        if((weapon_slots[primary_weapon_slot] == -1 || (weapon_slots[secondary_weapon_slot] == -1 && duck_amount < 0.5f)) &&
+            GetNearestPickupableWeapon(this_mo.position, _pick_up_range) != -1)
+        {
             drop_key_state = _dks_pick_up;
         } else {
             if(GetInputDown(this_mo.controller_id, "crouch") && 
@@ -58,7 +59,7 @@ void UpdateBrain(){
     if(!GetInputDown(this_mo.controller_id, "item")){
         item_key_state = _iks_nothing;
     } else if (item_key_state == _iks_nothing){
-        if(held_weapon == -1 && sheathed_weapon != -1){
+        if(weapon_slots[primary_weapon_slot] == -1 ){
             item_key_state = _iks_unsheathe;
         } else {//if(held_weapon != -1 && sheathed_weapon == -1){
             item_key_state = _iks_sheathe;
@@ -131,8 +132,8 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-    if(held_weapon != -1){
-        ItemObject@ item_obj = ReadItemID(held_weapon);
+    if(weapon_slots[primary_weapon_slot] != -1){
+        ItemObject@ item_obj = ReadItemID(weapon_slots[primary_weapon_slot]);
         if(item_obj.GetMass() > 1.0f){
             return false;
         }
@@ -143,7 +144,7 @@ bool WantsToGrabLedge() {
 bool WantsToThrowEnemy() {
     if(!this_mo.controlled) return false;
     //if(holding_weapon) return false;
-    return throw_key_time > 0.2f;
+    return grab_key_time > 0.2f;
 }
 
 bool WantsToDragBody() {
