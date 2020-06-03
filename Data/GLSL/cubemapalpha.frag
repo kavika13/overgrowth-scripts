@@ -1,3 +1,4 @@
+#pragma transparent
 #include "object_shared.glsl"
 #include "object_frag.glsl"
 
@@ -21,7 +22,7 @@ void main()
     CALC_DIFFUSE_LIGHTING
     CALC_SPECULAR_LIGHTING(0.5)
     CALC_COLOR_MAP
-    CALC_COMBINED_COLOR_WITH_NORMALMAP_TINT
+    CALC_COMBINED_COLOR_WITH_TINT
     CALC_COLOR_ADJUST
     CALC_HAZE
     CALC_EXPOSURE
