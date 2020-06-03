@@ -24,13 +24,16 @@ class FlipInfo {
 	float wall_flip_protection;
 
 	FlipInfo() {
+		flip_progress = 0.0f;
 		flip_angle = 1.0f;
 		target_flip_angle = 1.0f;
+		flip_vel = 0.0f;
 		old_target_flip_angle = 0.0f;
 		target_flip_tuck = 0.0f;
 		flip_tuck = 0.0f;
 		wall_flip_protection = 0.0f;
 		flipping = false;
+		flipped = false;
 	}
 
 	bool IsFlipping() {

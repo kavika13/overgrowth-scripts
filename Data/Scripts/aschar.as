@@ -50,6 +50,8 @@ const float _roll_ground_speed = 12.0f;
 float recovery_time;
 vec3 roll_direction;
 
+bool controlled = false;
+
 vec3 com_offset;
 vec3 com_offset_vel;
 
@@ -184,14 +186,27 @@ void UpdateMovementControls() {
 		flip_info.UpdateRoll();
 	} else {
 		jump_info.UpdateAirControls();
-		flip_info.UpdateFlip();
-		
-		target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z)*2.0f;
-		if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
-			target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
-		}
-		if(this_mo.velocity.y<0.0f || flip_info.HasFlipped()){
-			target_tilt *= -1.0f;
+		if(jump_info.ClimbedUp()){
+			SetOnGround(true);
+			duck_amount = 1.0f;
+			duck_vel = 2.0f;
+			target_duck_amount = 1.0f;
+			this_mo.StartAnimation("Data/Animations/idle.xml",20.0f);
+			HandleBumperCollision();
+			HandleStandingCollision();
+			this_mo.position = sphere_col.position;
+			this_mo.velocity = vec3(0.0f);
+			feet_moving = false;
+		} else {
+			flip_info.UpdateFlip();
+			
+			target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z)*2.0f;
+			if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
+				target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
+			}
+			if(this_mo.velocity.y<0.0f || flip_info.HasFlipped()){
+				target_tilt *= -1.0f;
+			}
 		}
 	}
 	
@@ -237,7 +252,6 @@ void Land(vec3 vel) {
 const float offset = 0.05f;
 
 vec3 HandleBumperCollision(){
-	this_mo.position.y -= offset;
 	this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
 	this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
 	return (sphere_col.adjusted_position - sphere_col.position);
@@ -255,11 +269,6 @@ bool HandleStandingCollision() {
 void HandleGroundCollision() {
 	vec3 air_vel = this_mo.velocity;
 	if(on_ground){
-		this_mo.position.y -= offset;
-		this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
-		this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
-		this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
-		
 		this_mo.velocity += HandleBumperCollision() / time_step;
 
 		if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
@@ -285,7 +294,6 @@ void HandleGroundCollision() {
 				GoLimp();	
 			}
 		}
-		this_mo.position.y += offset;
 	} else {
 		this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
 		this_mo.position = sphere_col.adjusted_position;
@@ -450,7 +458,9 @@ void UpdateRagDoll() {
 	}
 }
 
-void update() {
+void update(bool _controlled) {
+	controlled = _controlled;
+
 	UpdateAirWhooshSound();
 	UpdateRagDoll();
 	UpdateDuckAmount();
