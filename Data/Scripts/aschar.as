@@ -521,7 +521,7 @@ void HandleGroundCollision() {
 
 			
 			if(flipping && flip_progress > 0.4f &&
-			   dot(this.GetFacing(),ground_normal) < -0.5f){
+			   dot(this.GetFacing(),ground_normal) < -0.6f){
 				GoLimp();	
 			}
 		}
