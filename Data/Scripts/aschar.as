@@ -348,7 +348,7 @@ void Update(int _num_frames) {
         }
     }*/
     /*if(holding_weapon){
-        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+        ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
         int num_lines = item_obj.GetNumLines();
         for(int i=0; i<num_lines; ++i){
             vec3 start, end;
@@ -4059,18 +4059,20 @@ void NoWeapon() {
 }
 
 void DeletedWeapon(int id){
-    if(this_mo.GetAttachedWeaponID(0) == id){
+    if(this_mo.GetNumAttachedWeapons() != 0 &&
+       this_mo.GetAttachedWeaponID(0) == id)
+    {
         this_mo.DetachItem(id);
         NoWeapon();
     }
 }
 
 void DropWeapon() {
-    if(holding_weapon){
+    if(holding_weapon && this_mo.GetNumAttachedWeapons() != 0){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.GetAttachedWeaponID(0));
-        NoWeapon();
     }
+    NoWeapon();
     if(pickup_layer != -1){
         this_mo.RemoveLayer(pickup_layer, 4.0f);
         pickup_layer = -1;
