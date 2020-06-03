@@ -450,6 +450,8 @@ void UpdateAttacking() {
 void SetState(int _state) {
 	state = _state;
 	if(state == _ground_state){
+		this_mo.StartAnimation("Data/Animations/kipup.anm");
+		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
 	}
 }
@@ -604,8 +606,6 @@ void UpdateGroundState() {
 	this_mo.SetAnimationCallback("void Nothing()");
 	this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel;
 	*/
-	this_mo.SetAnimation("Data/Animations/kipup.anm");
-	this_mo.SetAnimationCallback("void EndGetUp()");
 	HandleGroundStateCollision();
 	getting_up_time += time_step;
 }
@@ -770,6 +770,7 @@ void SetLimbTargetOffset(string name){
 	vec3 offset = GetLimbTargetOffset(pos, anim_pos);
 	this_mo.SetIKTargetOffset(name,offset);
 }
+
 void GroundState_UpdateIKTargets() {
 	vec3 offset = vec3(0.0f,0.0f,0.0f);
 
@@ -778,6 +779,7 @@ void GroundState_UpdateIKTargets() {
 	SetLimbTargetOffset("leftarm");
 	SetLimbTargetOffset("rightarm");
 	this_mo.SetIKTargetOffset("full_body", vec3(0.0f));
+	//this_mo.SetIKTargetOffset("full_body", ground_normal * 0.05);
 	
 	vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
 
@@ -785,8 +787,7 @@ void GroundState_UpdateIKTargets() {
 	float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
 	float angle = atan2(y_amount, x_amount);
 
-	angle *= max(0.0f,1.0f - getting_up_time * 1.5f);
-
+	angle *= min(1.0f,max(0.0f,1.0f - (getting_up_time-0.3f) * 2.0f));
 	this_mo.SetFlip(axis,-angle,0.0f);
 }
 
