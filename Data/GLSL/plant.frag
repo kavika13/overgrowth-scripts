@@ -16,7 +16,7 @@ varying vec3 ws_vertex;
 
 #include "lighting.glsl"
 #include "texturepack.glsl"
-#include "relativeskyposfrag.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {	

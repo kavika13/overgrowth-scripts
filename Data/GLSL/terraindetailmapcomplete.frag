@@ -26,7 +26,7 @@ varying float alpha;
 
 #include "lighting.glsl"
 #include "texturepack.glsl"
-#include "relativeskyposfrag.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {	

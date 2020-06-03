@@ -1,3 +1,6 @@
+#ifndef LIGHTING_GLSL
+#define LIGHTING_GLSL
+
 float GetDirectContrib( const vec3 light_pos,
 					    const vec3 normal, 
 					    const float unshadowed ) {
@@ -9,25 +12,21 @@ float GetDirectContrib( const vec3 light_pos,
 }
 
 vec3 UnpackObjNormal(const vec4 normalmap) {
-	return normalize(vec3((normalmap.x-0.5)*2.0, 
-						  (normalmap.z-0.5)*2.0, 
-						  (normalmap.y-0.5)*-2.0));
+	return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
 }
 
 vec3 UnpackTanNormal(const vec4 normalmap) {
-	return normalize(vec3((normalmap.x-0.5)*2.0,
-						  (normalmap.y-0.5)*-2.0, 
-						   normalmap.z));
+	return normalize(vec3(vec2(2.0,-2.0)*normalmap.xy + vec2(-1.0,1.0),normalmap.z));
 }
 
 vec3 GetDirectColor(const float intensity) {
-	return gl_LightSource[0].diffuse.xyz * vec3(intensity);
+	return gl_LightSource[0].diffuse.xyz * intensity;
 }
 
 vec3 LookupCubemap(const mat3 obj2world_mat3, 
 				   const vec3 vec, 
 				   const samplerCube cube_map) {
-	vec3 world_space_vec = normalize(obj2world_mat3 * vec);
+	vec3 world_space_vec = obj2world_mat3 * vec;
 	world_space_vec.xy *= -1.0;
 	return textureCube(cube_map,world_space_vec).xyz;
 }
@@ -35,14 +34,14 @@ vec3 LookupCubemap(const mat3 obj2world_mat3,
 vec3 LookupCubemapMat4(const mat4 obj2world, 
 				   const vec3 vec, 
 				   const samplerCube cube_map) {
-	vec3 world_space_vec = normalize((obj2world * vec4(vec,0.0)).xyz);
+	vec3 world_space_vec = (obj2world * vec4(vec,0.0)).xyz;
 	world_space_vec.xy *= -1.0;
 	return textureCube(cube_map,world_space_vec).xyz;
 }
 
 vec3 LookupCubemapSimple(const vec3 vec, 
 				   const samplerCube cube_map) {
-	vec3 world_space_vec = normalize(vec);
+	vec3 world_space_vec = vec;
 	world_space_vec.xy *= -1.0;
 	return textureCube(cube_map,world_space_vec).xyz;
 }
@@ -83,7 +82,7 @@ float GetHazeAmount( in vec3 relative_position ) {
 void AddHaze( inout vec3 color, 
 			  in vec3 relative_position,
 			  in samplerCube fog_cube ) { 
-	vec3 fog_color = textureCube(fog_cube,normalize(relative_position)).xyz;
+	vec3 fog_color = textureCube(fog_cube,relative_position).xyz;
 	color = mix(color, fog_color, GetHazeAmount(relative_position));
 }
 
@@ -113,3 +112,5 @@ float GammaCorrectFloat(in float val) {
 	return val;
 #endif
 }
+
+#endif

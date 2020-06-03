@@ -67,7 +67,7 @@ void main()
 	rim_lit *= pow((dot(light_pos,normal)+1.0)*0.5,0.5);
 	color += vec3(back_lit*rim_lit) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
 	
-	AddHaze(color, rel_pos, tex3);
+	//AddHaze(color, rel_pos, tex3);
 	//color = diffuse_color;
 
 	//color = back_lit;

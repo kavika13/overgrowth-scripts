@@ -13,7 +13,7 @@ varying vec3 concat_bone1;
 varying vec3 concat_bone2;
 
 #include "lighting.glsl"
-#include "relativeskyposfrag.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {	

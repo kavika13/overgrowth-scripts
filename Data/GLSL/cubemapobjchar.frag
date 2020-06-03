@@ -4,65 +4,48 @@ uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform vec3 cam_pos;
-uniform float in_light;
+uniform vec3 ws_light;
 
-varying vec3 vertex_pos;
-varying vec3 light_pos;
+varying vec3 ws_vertex;
 varying vec3 rel_pos;
-varying vec3 world_light;
-varying mat3 obj2worldmat3;
-//varying vec3 normal_var;
 
+#include "pseudoinstance.glsl"
 #include "lighting.glsl"
+#include "texturepack.glsl"
+#include "relativeskypos.glsl"
 
 void main()
-{	
-	vec3 color;
-	
-	vec3 shadow_tex = vec3(1.0);
-	
-	vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
-	vec3 normal = UnpackObjNormal(normalmap);
+{		
+	// Get normal
+	vec4 normalmap = texture2D(tex1,tc0);
+	vec3 os_normal = UnpackObjNormal(normalmap);
+	vec3 ws_normal = normalMatrix * os_normal;
+	ws_normal = normalize(ws_normal);
 
-	float NdotL = GetDirectContrib(light_pos, normal, shadow_tex.r);
-	
+	// Get diffuse lighting
+	vec3 shadow_tex = texture2D(tex4,tc1).rgb;
+	float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
 	vec3 diffuse_color = GetDirectColor(NdotL);
-	diffuse_color += LookupCubemap(obj2worldmat3, normal, tex3) *
+	diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
 					 GetAmbientContrib(shadow_tex.g);
 	
-	float spec = GetSpecContrib(light_pos, normal, vertex_pos, shadow_tex.r);
+	// Get specular lighting
+	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
-	vec3 spec_map_vec = reflect(vertex_pos,normal);
-	spec_color += LookupCubemap(obj2worldmat3, spec_map_vec, tex2) * 0.5 *
+	vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
+	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
 				  GetAmbientContrib(shadow_tex.g);
 	
+	// Put it all together
 	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
-	
-	color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
+	vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
 	
 	color *= BalanceAmbient(NdotL);
 	
+	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
+
 	color *= Exposure();
-
-	vec3 view = normalize(vertex_pos*-1.0);
-	float back_lit = max(0.0,dot(normalize(rel_pos),world_light)); 
-	//float back_lit = (dot(normalize(rel_pos),world_light)+1.0)*0.5; 
-	float rim_lit = max(0.0,(1.0-dot(view,normal)));
-	//rim_lit = pow(rim_lit,0.8);
-	//rim_lit *= min(1.0,max(0.0,(obj2world*vec4(normal,0.0)).y+0.5));
-	rim_lit *= pow((dot(light_pos,normal)+1.0)*0.5,0.5);
-	color += vec3(back_lit*rim_lit) * normalmap.a * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
-	
-	AddHaze(color, rel_pos, tex3);
-
-	//color = spec_color;
-
-	//color = vec3(dot(light_pos,normal));
-
-	//color = vec3(NdotL*0.6);
-
-	//color = gl_Color.xyz;
 
 	gl_FragColor = vec4(color,1.0);
 }

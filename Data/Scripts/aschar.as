@@ -47,7 +47,7 @@ const float _duck_vel_inertia = 0.89f;
 
 const float _roll_speed = 2.0f;
 const float _roll_accel = 50.0f;
-const float _ragdoll_recovery_time = 1.0f;
+const float _ragdoll_recovery_time = 5.0f;
 const float _roll_ground_speed = 12.0f;
 float recovery_time;
 vec3 roll_direction;
@@ -280,6 +280,13 @@ void GoLimp() {
 	limp = true;
 	this_mo.Ragdoll();
 	recovery_time = _ragdoll_recovery_time;
+	pose_handler.clear();
+	pose_handler.AddLayer("Data/Animations/run.pos",
+						  1.0f,
+						  false);
+	pose_handler.AddLayer("Data/Animations/test.pos",
+						  1.0f,
+						  false);
 }
 
 void UpdateDuckAmount() {
@@ -322,7 +329,11 @@ void UpdateAttacking() {
 	}
 }
 
-void WakeUp(bool with_flip) {
+const int _wake_stand = 0;
+const int _wake_flip = 1;
+const int _wake_roll = 2;
+
+void WakeUp(int how) {
 	this_mo.UnRagdoll();
 	this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
 	this_mo.position = sphere_col.adjusted_position;
@@ -330,15 +341,24 @@ void WakeUp(bool with_flip) {
 	duck_amount = 1.0f;
 	duck_vel = 0.0f;
 	target_duck_amount = 1.0f;
-	if(!with_flip){
+	if(how == _wake_stand){
 		SetOnGround(true);
 		flip_info.Land();
 		this_mo.StartAnimation("Data/Animations/idle.xml");
-	} else {
+	} else if (how == _wake_flip) {
 		SetOnGround(false);
 		flip_info.StartFlip();
 		flip_info.FlipRecover();
 		this_mo.StartAnimation("Data/Animations/jump.xml");
+	} else if (how == _wake_roll) {
+		SetOnGround(true);
+		this_mo.StartAnimation("Data/Animations/idle.xml");
+		vec3 roll_dir = GetTargetVelocity();
+		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
+		if(length(flat_vel)>1.0f){
+			roll_dir = normalize(flat_vel);
+		}
+		flip_info.StartRoll(roll_dir);
 	}
 }
 
@@ -349,10 +369,36 @@ void UpdateRagDoll() {
 	if(limp == true){
 		recovery_time -= time_step;
 		if(recovery_time < 0.0f){
-			WakeUp(false);
+			WakeUp(_wake_stand);
 		} else {
 			if(GetInputPressed("crouch")){
-				WakeUp(true);
+				vec3 sphere_center = this_mo.position;
+				float radius = 1.0f;
+				this_mo.GetSlidingSphereCollision(sphere_center, radius);
+				bool can_roll = true;
+				vec3 roll_point;
+				if(sphere_col.NumContacts() == 0){
+					can_roll = false;
+				} else {
+					can_roll = false;
+					roll_point = sphere_col.GetContact(0).position;
+					for(int i=0; i<sphere_col.NumContacts(); i++){
+						const CollisionPoint contact = sphere_col.GetContact(i);
+						if(contact.position.y < roll_point.y){
+							roll_point = contact.position;
+						}
+						if(contact.normal.y > 0.5f){
+							can_roll = true;
+						}
+					}
+				}
+				if(!can_roll){
+					WakeUp(_wake_flip);
+				} else {
+					WakeUp(_wake_roll);
+					this_mo.position = roll_point + 
+									   vec3(0.0f,_leg_sphere_size,0.0f);
+				}
 			}
 			return;
 		}

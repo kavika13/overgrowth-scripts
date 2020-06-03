@@ -6,25 +6,20 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 
-varying vec3 obj2world1;
-varying vec3 obj2world2;
 varying vec3 ws_vertex;
 varying vec3 rel_pos;
 
+#include "pseudoinstance.glsl"
 #include "lighting.glsl"
 #include "texturepack.glsl"
-#include "relativeskyposfrag.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {		
-	vec3 obj2world3 = normalize(cross(obj2world1,obj2world2));
-
 	// Get normal
 	vec4 normalmap = texture2D(tex1,tc0);
 	vec3 os_normal = UnpackObjNormal(normalmap);
-	vec3 ws_normal = os_normal.x * obj2world1 + 
-					 os_normal.y * obj2world2 + 
-					 os_normal.z * obj2world3;
+	vec3 ws_normal = normalMatrix * os_normal;
 	ws_normal = normalize(ws_normal);
 
 	// Get diffuse lighting

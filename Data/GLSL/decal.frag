@@ -14,7 +14,7 @@ varying vec3 ws_vertex;
 varying vec3 tangent;
 
 #include "lighting.glsl"
-#include "relativeskyposfrag.glsl"
+#include "relativeskypos.glsl"
 
 void main()
 {	

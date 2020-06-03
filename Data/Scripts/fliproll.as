@@ -43,10 +43,9 @@ class FlipInfo {
 		return new_angle;
 	}
 
-	vec3 GetFlipDir(){
+	vec3 GetFlipDir(vec3 target_velocity){
 		// Flip direction is based on target velocity, or facing if
 		// target velocity is too small
-		vec3 target_velocity = GetTargetVelocity();
 		if(length_squared(target_velocity)>0.2f){
 			return normalize(target_velocity);
 		} else {
@@ -61,7 +60,7 @@ class FlipInfo {
 	}
 
 	vec3 ChooseFlipAxis() {
-		return AxisFromDir(GetFlipDir());
+		return AxisFromDir(GetFlipDir(GetTargetVelocity()));
 	}
 
 	bool NeedWindup(){
@@ -71,6 +70,7 @@ class FlipInfo {
 
 	void FlipRecover() {
 		vec3 axis = this_mo.GetAvgAngularVelocity();
+		axis.y = 0.0f;
 		if(length(axis)>2.0f){
 			axis = normalize(axis);
 			flip_info.target_flip_axis = axis;
@@ -90,7 +90,7 @@ class FlipInfo {
 			rotation_amount = 1.0f-rotation_amount;
 		}
 		
-		if(rotation_amount > 0.8f){
+		if(rotation_amount > 0.7f){
 			rotation_amount = 0.0f;
 		}
 
@@ -182,7 +182,7 @@ class FlipInfo {
 		flip_angle = PrepareFlipAngle(flip_angle);
 		flip_vel = 0.0f;
 
-		roll_direction = GetFlipDir();
+		roll_direction = GetFlipDir(target_velocity);
 		flip_axis = AxisFromDir(roll_direction);
 
 		feet_moving = false;

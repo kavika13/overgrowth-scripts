@@ -6,8 +6,6 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 
-varying vec3 obj2world1;
-varying vec3 obj2world2;
 varying vec3 ws_vertex;
 
 #include "pseudoinstance.glsl"
@@ -17,9 +15,6 @@ varying vec3 ws_vertex;
 void main()
 {	
 	mat4 obj2world = GetPseudoInstanceMat4();
-	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
-	obj2world1 = normalize(obj2worldmat3[0]);
-	obj2world2 = normalize(obj2worldmat3[1]);
 
 	vec4 transformed_vertex = obj2world * gl_Vertex;
 

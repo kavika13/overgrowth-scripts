@@ -18,7 +18,6 @@ void main()
 	tangent = gl_MultiTexCoord1.xyz;
 
 	mat4 obj2world = GetPseudoInstanceMat4();
-	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
 	
 	vec4 transformed_vertex = obj2world * gl_Vertex;
 
