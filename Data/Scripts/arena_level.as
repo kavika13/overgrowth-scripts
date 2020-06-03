@@ -770,7 +770,7 @@ float GetRandomDifficultyNearPlayerSkill() {
     return var;
 }
 
-void EndMatch(bool victory){            
+void EndMatch(bool victory){
     float win_prob = ProbabilityOfWin(player_skill, curr_difficulty);
     float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
     const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
@@ -809,6 +809,7 @@ void EndMatch(bool victory){
     AddMetaEvent(kMessage, "wait_for_click");
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "new_match");
+
 }
 
 // Check if level should be reset

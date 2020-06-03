@@ -7719,7 +7719,7 @@ void DrawArms(const BoneTransform &in chest_transform, const BoneTransform &in l
             float softness_override = rigged_object.GetStatusKeyValue(right==1?"rightarm_blend":"leftarm_blend");
             //softness_override = mix(softness_override, 1.0f, min(1.0f, flip_ik_fade));
             
-            //We want to make the arms stiff when the character is climbing wiht arms,
+            //We want to make the arms stiff when the character is climbing with arms,
             if(ledge_info.on_ledge){
                 softness_override = 1.0f;
             }
@@ -7808,14 +7808,16 @@ void DrawArms(const BoneTransform &in chest_transform, const BoneTransform &in l
         vec3 collar_tip = chain_points[kCollarTipPoint+point_offset];
         vec3 collar = chain_points[kCollarPoint+point_offset];
 
+
         { // Apply arm physics to actual elbow, hand and wrist positions
             int start = right*3;
             quaternion hand_rotation;
             GetRotationBetweenVectors(elbow-wrist, arm_points[start+1]-arm_points[start+2], hand_rotation);
             
             vec3 hand_offset = hand-wrist;
-            elbow = arm_points[start+1];
-            wrist = arm_points[start+2];
+            // Enforce arm length
+            elbow = arm_points[start] + normalize(arm_points[start+1] - arm_points[start]) * upper_arm_length[right];
+            wrist = elbow + normalize(arm_points[start+2] - arm_points[start+1]) * lower_arm_length[right];
             hand = wrist + Mult(hand_rotation, hand_offset);
         }
 
@@ -8108,9 +8110,11 @@ void DrawTail(int num_frames){
         for(int i=0; i<chain_length+1; ++i){
             temp_old_tail_points[i] = tail_points[i];
         }
+        // Damping
         for(int i=0; i<chain_length; ++i){
             tail_points[i] += (tail_points[i] - old_tail_points[i]) * 0.95f;
         }
+        // Gravity
         for(int i=0; i<chain_length; ++i){
             tail_points[i].y -= time_step * num_frames * 0.1f;
         }
@@ -8151,9 +8155,17 @@ void DrawTail(int num_frames){
         }
     }
 
+    // Enforce tail lengths for drawing
+    vec3 root = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 0);
+    vec3 root_tail = rigged_object.GetTransformedBonePoint(ik_chain_elements[chain_start+chain_length-1], 1);
+    float root_len = distance(root, root_tail);
+    temp_old_tail_points[chain_length-1] = root + normalize(tail_points[chain_length-1] - root) * root_len;
+    for(int i=chain_length-1; i>0; --i){
+        temp_old_tail_points[i-1] = temp_old_tail_points[i] + normalize(tail_points[i-1] - tail_points[i]) * tail_section_length[i-1];
+    }
 
     for(int i=0; i<chain_length; ++i){
-        rigged_object.RotateBoneToMatchVec(tail_points[i+1], tail_points[i], ik_chain_elements[chain_start+i]);        
+        rigged_object.RotateBoneToMatchVec(temp_old_tail_points[i+1], temp_old_tail_points[i], ik_chain_elements[chain_start+i]);        
     }
     if(draw_skeleton_lines){
         for(int i=0; i<chain_length; ++i){
@@ -8470,7 +8482,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         local_to_world.origin = offset;
 
         rigged_object.TransformAllFrameMats(local_to_world);
-
+        
         vec3 frame_com = rigged_object.GetFrameCenterOfMass();
 
         BoneTransform flip_modifier;

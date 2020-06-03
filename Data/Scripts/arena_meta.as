@@ -1,20 +1,59 @@
 #include "ui_effects.as"
 #include "arena_meta_persistence.as"
 #include "ui_tools.as"
+#include "utility/ticker.as"
 
 // enum for the statemachine (Someday I'll write something to make this easier )
 enum ArenaGUIState {
     agsInvalidState,
-    agsFirstTime,
+    agsMainMenu,
     agsSelectProfile,
     agsNewProfile,
-    agsConfirmDelete
+    agsConfirmDelete,
+    agsCharacterIntro,
+    agsMetaChoice,
+    agsMessage,
+    agsMapScreen,
+    agsEndScreen,
 };
+
+int top_margin = 100;
+int left_margin = 300;
+
+int screen_height = 1400;
+int left_status_pane_height = 1200;
+int status_pane_column_width = 320;
+int status_pane_column_padding = 25;
+int status_pane_glyph_height = 250;
+
+
+int title_font_size = 100;
+int label_font_size = 75;
+int menu_button_font_size = 100;
+int infotext_font_size = 75;
+int body_font_size = 75;
+int query_font_size = 50;
+int world_map_font_size = 50;
 
 string title_font = "edosz";
 string label_font = "edosz";
 string button_font = "edosz";
-string body_font = "OpenSans-Regular";
+string body_font = "edosz";
+string infotext_font = "edosz";
+string query_font = "edosz";
+string world_map_font = "edosz";
+
+vec4 title_color = HexColor("#9e0000");
+vec4 label_color = HexColor("#fff");
+vec4 button_color = HexColor("#fff");
+vec4 infotext_color = HexColor("#fff");
+//vec4 body_color = HexColor("#000");
+vec4 body_color = HexColor("#fff");
+vec4 query_color =  HexColor("#000");
+vec4 world_map_color = HexColor("#fff");
+
+vec4 activatedButton = HexColor("#ffffff");
+vec4 deactivatedButton = HexColor("#888888");
 
 // Some data for the GUI
 
@@ -26,29 +65,49 @@ array<vec3> furColorChoices = { vec3(1.0,1.0,1.0),
                                 vec3(53.0/255.0,28.0/255.0,10.0/255.0), 
                                 vec3(172.0/255.0,124.0/255.0,62.0/255.0) };
 
-// array<string> arenaLevels = {"Cave_Arena.xml", 
-//                              "stucco_courtyard_arena.xml", 
-//                              "waterfall_arena.xml"};
-//                              "Magma_Arena.xml"};
-// array<string> arenaNames = { "Cave", "Stucco Courtyard", "Waterfall", "Magma" };
-// array<string> arenaImages = {"Textures/arenamenu/cave_arena.tga", 
-//                              "Textures/arenamenu/stucco_arena.tga", 
-//                              "Textures/arenamenu/waterfall_arena.tga",
-//                              "Textures/arenamenu/magma_arena.tga"};
-
 array<string> arenaLevels = {"Cave_Arena.xml", 
                              "waterfall_arena.xml"};
                              
 array<string> arenaNames = { "Cave", "Waterfall" };
 array<string> arenaImages = {"Textures/arenamenu/cave_arena.tga", 
-                             "Textures/arenamenu/waterfall_arena.tga"};                             
+                             "Textures/arenamenu/waterfall_arena.tga"};
+
+AHGUI::MouseOverPulseColor buttonHover( 
+                                        HexColor("#ffde00"), 
+                                        HexColor("#ffe956"), .25 );
+
 
 float limitDecimalPoints( float n, int points ) {
     return float( float(int( n * pow( 10, points ) )) / pow( 10, points ) );
+
 }                            
 
+class WorldMapNodeMouseOverBehavior: AHGUI::MouseOverBehavior 
+{
+    void onStart( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        Log( info, "Enter" );
+        AHGUI::Image@ img = cast<AHGUI::Image>( element );
+        img.setImageFile("Textures/world_map/map_marker_hover.png");
+    }
+
+    void onContinue( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+
+    }
+
+    bool onFinish( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        AHGUI::Image@ img = cast<AHGUI::Image>( element );
+        img.setImageFile("Textures/world_map/map_marker.png");
+        return true;
+    }
+}
+
+WorldMapNodeMouseOverBehavior mouse_world_map_hover_behavior;
 
 class ArenaGUI : AHGUI::GUI {
+
+    bool forceReloadState = false;
+    //New profile
+    WrappingTicker characterSelection(1);
 
     // fancy ribbon background stuff 
     float visible = 0.0f;
@@ -64,12 +123,11 @@ class ArenaGUI : AHGUI::GUI {
 
     array<AHGUI::Element@> furColorSelected; // Keep track of which fur color element is selected
 
-    // Selection screen
-    AHGUI::Element@ selectedProfile = null;// Which profile label is selected 
-    int selectedProfileNum = -1;       // Which profile number is selected  
-    int showingProfileNum = -1;       // Which profile number is shown
-    bool showingProfileDetails = false; // Are we showing profile details?
-    int selectedArena = 0;      // Which arena are we going to load
+    // New selection
+    WrappingTicker currentProfile(1);
+
+    // Intro page
+    BlockingTicker currentIntroPage(1);
 
     /*******************************************************************************************/
     /**
@@ -79,6 +137,8 @@ class ArenaGUI : AHGUI::GUI {
     ArenaGUI() {
         // Call the superclass to set things up
         super();
+
+        characterSelection.setMax( global_data.getCharacters().size() );
 
         // initialize the background
         ribbon_background.Init();
@@ -92,60 +152,67 @@ class ArenaGUI : AHGUI::GUI {
         // see if we already have some profiles
         profileData = global_data.getProfiles();
 
-        if( profileData.size() != 0 ) {
-            currentState = agsSelectProfile;
+        if( global_data.getSessionProfile() == -1 )
+        {
+            currentState = agsMainMenu;
         }
-        else {
-            currentState = agsFirstTime;
+        else
+        {
+            UpdateStateBasedOnCurrentWorldNode();
         }
-
     }
 
-    /*******************************************************************************************/
-    /**
-     * @brief  Add the footer to the layout — all screens will have this
-     * 
-     */
-    void addFooter() {
-
-        
-        // Create a divider for our footer 300px high (using a convenience factory in the divider)
-        // The UNDEFINEDSIZE will tell it to expand to the size of it's container
-        // So we take up the whole bottom of the screen
-        AHGUI::Divider@ footer = root.addDivider( DDBottomRight, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+    AHGUI::Divider@ addFooter(bool showback = true, bool showcontinue = true)
+    {
+        AHGUI::Divider@ footer = root.addDivider( DDBottomRight, DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
         footer.setName("footerdiv");
 
-        // Add some space on the left
         footer.addSpacer( 175, DDLeft );
-
-        // Create the 'main menu' text
-        AHGUI::Text mainMenu( "Main Menu", title_font, 50, 0.6, 0.8, 0.6, 0.7 );
-        
-        // Add a little special effect
-        mainMenu.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-
-        // Have it send a message to indicate we should go back to the main menu
-        mainMenu.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mainmenu") );
-
-
-        // Make it pulse when we mouse over 
-        mainMenu.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ), 
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-        
-        // Add some space on the left
         footer.addSpacer( 175, DDRight );
-        
-        // Manually add it to the divider
-        footer.addElement( mainMenu, DDLeft );
-        
-        // Add the version text
-        AHGUI::Text verText( "Arena (ver 2.0)", body_font, 50, 1.0, 1.0, 1.0, 0.5 );     
-        verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
 
-        footer.addElement( verText ,DDRight );
+        if( showback )
+        {
+            AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
 
+            backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
 
+            AHGUI::Image backImage("Textures/ui/arena_mode/left_arrow.png");
+            backImage.scaleToSizeX(75);
+            backImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+            backImage.addMouseOverBehavior( buttonHover );
+
+            backDivider.addElement( backImage, DDLeft);  
+            backDivider.addSpacer(30, DDLeft);
+
+            AHGUI::Text backText( "Back", title_font, 60, button_color );
+            backText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+            backText.addMouseOverBehavior( buttonHover );
+            
+            backDivider.addElement( backText, DDLeft );
+        }
+
+        if( showcontinue )
+        {
+            AHGUI::Divider@ nextDivider = footer.addDivider( DDRight, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
+
+            nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next") );
+
+            AHGUI::Image nextImage("Textures/ui/arena_mode/right_arrow.png");
+            nextImage.scaleToSizeX(75);
+            nextImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+            nextImage.addMouseOverBehavior( buttonHover );
+
+            nextDivider.addElement(nextImage, DDRight);  
+            nextDivider.addSpacer(30, DDRight);
+
+            AHGUI::Text nextText( "Next", title_font, 60, button_color );
+            nextText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+            nextText.addMouseOverBehavior( buttonHover );
+            
+            nextDivider.addElement( nextText, DDRight );
+        }
+
+        return footer;
     }
 
     /*******************************************************************************************/
@@ -153,12 +220,31 @@ class ArenaGUI : AHGUI::GUI {
      * @brief  Change the contents of the GUI based on the state
      *
      */
-    void handleStateChange() {
-        
+    void handleStateChange() 
+    {
+        if( IsKeyDown( GetCodeForKey( "f9" ) ) )
+        {
+            currentState = agsMapScreen;
+            global_data.world_map_id = "fighter_map";
+            global_data.states = array<string>();
+            global_data.states.insertLast("rabbit");
+            global_data.states.insertLast("well_nourished");
+            global_data.states.insertLast("contender");
+        }
+
+        if( IsKeyDown( GetCodeForKey("f5") ) ) 
+        {
+            forceReloadState = true;
+            global_data.ReloadJSON();
+        }
 
         //see if anything has changed
-        if( lastState == currentState ) {
+        if( not forceReloadState && lastState == currentState ) {
             return;
+        }
+
+        if( forceReloadState ) {
+            forceReloadState = false;
         }
 
         // Record the change
@@ -167,8 +253,7 @@ class ArenaGUI : AHGUI::GUI {
         // First clear the old screen 
         clear();
 
-        // first add the footer as all screens have the same footer
-        addFooter();
+        ArenaCampaignSanityCheck( global_data );
 
         // Now we switch on the state
         switch( currentState ) {
@@ -180,697 +265,665 @@ class ArenaGUI : AHGUI::GUI {
             }
             break;
 
-            case agsFirstTime: {
+            case agsMainMenu: {
 
-                // We just need to display a message to the player
-                
-                // Create a divider for the non-footer
-                AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
-                                                            DOVertical, 
+                addFooter(true,false);
+
+                AHGUI::Divider@ mainpane = root.addDivider( DDTop,
+                                                            DOHorizontal, 
                                                             ivec2( UNDEFINEDSIZE, 1140 ) );
 
-                mainpane.setName("mainpane");
+                mainpane.addSpacer(left_margin, DDLeft);
+                AHGUI::Divider@ menulist = mainpane.addDivider( DDTop,
+                                                                DOVertical,
+                                                                ivec2(400, UNDEFINEDSIZE) );
+                menulist.addSpacer(top_margin, DDTop);
 
-                // Create the text
-                AHGUI::Text newProfile( "Create a new profile", button_font, 100, 1.0, 7.0, 0.0, 0.8 );
+                mainpane.setName("mainpane");
+                menulist.setName("menulist");
+
+                AHGUI::Text arenaModeTitle( "Arena Mode", title_font, title_font_size, title_color );
+                
+                menulist.addElement(arenaModeTitle, DDTop);
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                menulist.addElement(titleUnderline, DDTop); 
+
+                AHGUI::Text newProfile( "Continue", button_font, 100, activatedButton );
+
+                if( global_data.getProfiles().size() > 0 )
+                {
+                    newProfile.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("continue") );
+                    newProfile.addMouseOverBehavior( buttonHover );
+                }
+                else
+                {
+                    newProfile.setColor(deactivatedButton);
+                }
+
+                menulist.addSpacer(150, DDTop);
+                menulist.addElement( newProfile, DDTop );
+
+                AHGUI::Text newCampaignButton( "New Campaign", button_font, 100, activatedButton );
 
                 // Have it send a message to indicate we should go to create profile state
-                newProfile.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("createprofile") );
+                newCampaignButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("new") );
 
                 // Make it pulse when we mouse over 
-                newProfile.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                                        vec4( 0.8, 0.5, 0.0, 0.5 ), 
-                                                        vec4( 1.0, 1.0, 0.0, 0.9 ), .25 ) );
+                newCampaignButton.addMouseOverBehavior( buttonHover );
                 
-                // Fade it in just a little after the footer/image
-                newProfile.addUpdateBehavior( AHGUI::FadeIn( 2000, @inSine ) );
+                // Add this to the main pane  
+                menulist.addSpacer(60, DDTop);
+                menulist.addElement( newCampaignButton, DDTop );
+
+
+                AHGUI::Text instantActionButton( "Instant Action", button_font, 100, deactivatedButton );
 
                 // Add this to the main pane  
-                mainpane.addElement( newProfile, DDCenter );
+                menulist.addSpacer(60, DDTop);
+                menulist.addElement( instantActionButton, DDTop );
+
+                AHGUI::Text customMatchButton( "Custom Match", button_font, 100, deactivatedButton );
+
+                // Add this to the main pane  
+                menulist.addSpacer(60, DDTop);
+                menulist.addElement( customMatchButton, DDTop );
 
                 // For fun let's put an image on the screen 
-                AHGUI::Image topImage("Textures/ui/versus_mode/fight_glyph.tga");
-                topImage.scaleToSizeX(400);
-                topImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+                //AHGUI::Image topImage("Textures/ui/versus_mode/fight_glyph.tga");
+                //topImage.scaleToSizeX(400);
+                //topImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
 
                 // Add this to the main pane 
-                mainpane.addElement( topImage, DDTop );    
-
-
+                //mainpane.addElement( topImage, DDTop );    
             }
             break;
 
             case agsNewProfile: {
 
-                // Initialize a new character from the global persistence structure
+                addFooter();
+
                 newCharacter = global_data.generateNewProfile();
 
-                // Create a divider for the non-footer
-                AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
-                                                            DOHorizontal, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
-
-                // I see we have a cool portrait, let's use it 
-                AHGUI::Image rabbitImage("Textures/ui/versus_mode/rabbit_2_portrait.tga");
-                rabbitImage.scaleToSizeX(800);
-                
-                // Show off combining behaviors
-                rabbitImage.addUpdateBehavior( AHGUI::FadeIn( 2000, @inSine ) );
-                rabbitImage.addUpdateBehavior( AHGUI::MoveIn( ivec2( 400, 0 ), 2000 , @linear ) );
-
-                // Align this with the top of the divider cell instead of the usual center
-                rabbitImage.setVeritcalAlignment( BATop );
-
-                // Add this to the main pane 
-                mainpane.addElement( rabbitImage, DDRight );  
-
-                // Add some space on the left to push over our main text 
-                mainpane.addSpacer( 700, DDLeft );
-
-                // Create a divider for the new character interface
-                // This will automatically expand vertically for us
-                AHGUI::Divider@ characterpane = mainpane.addDivider( DDLeft,  
-                                                                     DOVertical, 
-                                                                     ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-
-                // Push the character attributes down 
-                characterpane.addSpacer( 150, DDTop );
-
-                // Build a Divider for the name -- so we can have a fixed size border
-                AHGUI::Divider@ nameBox = characterpane.addDivider( DDTop, DOHorizontal, ivec2( 1000, UNDEFINEDSIZE ) );
-                
-                // Set up the attributes for the border (it has sane defaults though)
-                nameBox.setBorderSize( 10 );
-                nameBox.setBorderColor( 0.9, 7.0, 0.0, 0.6 );
-                nameBox.showBorder();
-
-                // Build the text for the name
-                AHGUI::Text nameText( newCharacter["character_name"].asString(), 
-                                      body_font, 75, 1.0, 7.0, 0.0, 0.9 );
-
-                // Give it a name so we can find it again 
-                // (we could also keep a reference, but I wanted to show off this feature)
-                nameText.setName( "newNameText" );
-
-                // Give some padding so that it's not cramped 
-                nameText.setPadding(30,15,45,15);
-
-                // Fade it in
-                nameText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-
-                // Add it to the container
-                nameBox.addElement( nameText ,DDTop );
-
-                // Create a re-randomize text button
-                AHGUI::Text newRandomName( "New Random Name", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
-
-                // Have it send a message to indicate we should go back to the main menu
-                newRandomName.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("newrandomname") );
-                  
-                // Make it pulse when we mouse over 
-                newRandomName.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                              vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                              vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-
-                // Align it to the left
-                newRandomName.setHorizontalAlignment( BARight );
-
-                // Add a little more space
-                characterpane.addSpacer( 15, DDTop );         
-
-                // Add our text 
-                characterpane.addElement( newRandomName, DDTop );
-
-                // Add a little more space
-                characterpane.addSpacer( 55, DDTop );     
-
-                // Set up the storage for the selected colors
-                furColorSelected.resize(0);
-
-                // Make sure the colors match the default selections
-                newCharacter[ "player_colors" ][0][0] = furColorChoices[0].x;
-                newCharacter[ "player_colors" ][0][1] = furColorChoices[0].y;
-                newCharacter[ "player_colors" ][0][2] = furColorChoices[0].z;
-
-                newCharacter[ "player_colors" ][1][0] = furColorChoices[0].x;
-                newCharacter[ "player_colors" ][1][1] = furColorChoices[0].y;
-                newCharacter[ "player_colors" ][1][2] = furColorChoices[0].z;
-
-                newCharacter[ "player_colors" ][2][0] = furColorChoices[0].x;
-                newCharacter[ "player_colors" ][2][1] = furColorChoices[0].y;
-                newCharacter[ "player_colors" ][2][2] = furColorChoices[0].z;
-
-                newCharacter[ "player_colors" ][3][0] = furColorChoices[0].x;
-                newCharacter[ "player_colors" ][3][1] = furColorChoices[0].y;
-                newCharacter[ "player_colors" ][3][2] = furColorChoices[0].z;
-
-                // Now add the fur color selection options
-                for( uint i = 0; i < 4; i++ ) {
-                    // Add some space
-                    characterpane.addSpacer( 20, DDTop ); 
-
-                    // Create a divider for the color
-                    AHGUI::Divider@ colorPanel = characterpane.addDivider( DDLeft, DOHorizontal );
-
-                    // Create the text 
-                    AHGUI::Text furColorLabel( "Fur Color " + i, label_font, 50, 1.0, 7.0, 0.0, 0.9 );
-
-                    // Align it to the left
-                    furColorLabel.setHorizontalAlignment( BALeft );
-
-                    // Add some space
-                    colorPanel.addSpacer( 75, DDLeft );
-
-                    // Add our text 
-                    colorPanel.addElement( furColorLabel, DDLeft );
-
-                    // Add some space
-                    colorPanel.addSpacer( 50, DDLeft );
-
-                    // Add the colors
-                    for( uint j = 0; j < furColorChoices.length(); j++ ) {
-                        // Add the image
-                        AHGUI::Image colorImage("Textures/ui/whiteblock.tga");
-                        colorImage.scaleToSizeX(60);
-                        
-                        // For fun have them appear left to right
-                        colorImage.addUpdateBehavior( AHGUI::FadeIn( 250 + 250 * j, @inSine ) );
-                        
-                        // Set the color of the (normally white) image to be our selected color
-                        vec4 newColor( furColorChoices[j].x, furColorChoices[j].y, furColorChoices[j].z, 0.9 );
-                        colorImage.setColor( newColor );
-                        colorImage.setPadding(5);
-
-                        colorImage.setName("colorSelect" + i + "" + j);
-
-                        // Automatically select the first one 
-                        if( j == 0 ) {
-                            colorImage.showBorder();
-                            colorImage.setBorderColor( 0.2, 0.0, 1.0, 1.0 );
-                            colorImage.setBorderSize(12);
-                            furColorSelected.insertLast( @colorImage );
-                        }
-                        else {
-                            colorImage.setBorderColor( 1.0, 1.0, 1.0, 1.0 );
-                            colorImage.setBorderSize(6);
-                        }
-
-                        // Add a mouseover to indicate a new selection
-                        colorImage.addMouseOverBehavior( AHGUI::MouseOverShowBorder() );
-                        colorImage.addUpdateBehavior( AHGUI::PulseBorderAlpha( 0.5, 1.0, 0.5f ) );
-
-                        // Construct a message to send when this color is selected
-                        AHGUI::Message selectMessage( "colorselected" );
-
-                        // write in the color number 
-                        selectMessage.intParams.insertLast( i );
-
-                        // write in the colors themselves 
-                        selectMessage.floatParams.insertLast( furColorChoices[j].x);
-                        selectMessage.floatParams.insertLast( furColorChoices[j].y);
-                        selectMessage.floatParams.insertLast( furColorChoices[j].z);                        
-
-                        // Attach this as message sending behavior
-                        colorImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
-
-                        // Add the image
-                        colorPanel.addElement( colorImage, DDLeft );
-
-                        // Add some space (except on the last one)
-                        if( j != furColorChoices.length() - 1 ) {
-                            colorPanel.addSpacer( 30, DDLeft );
-                        }
-                    }
-                }
-
-                // Add a little more space
-                characterpane.addSpacer( 125, DDTop ); 
-
-                // Make a divider for the buttons 
-                AHGUI::Divider@ buttonDivider = characterpane.addDivider( DDLeft, DOHorizontal, ivec2(700,UNDEFINEDSIZE) );
-
-                // Create the text 
-                AHGUI::Text okText( "Accept", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
-                AHGUI::Text cancelText( "Back", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
-
-                // Turn them into buttons
-                okText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("ok") );
-                cancelText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("cancel") );
-
-                // Add the effects
-                okText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                             vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                             vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-
-                cancelText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                                 vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                                 vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-
-                // Add them to the divider with some space 
-                //buttonDivider.addSpacer( 25, DDLeft );
-                buttonDivider.addElement( okText, DDLeft );
-                //buttonDivider.addSpacer( 25, DDRight );
-                buttonDivider.addElement( cancelText, DDRight );
-
-
-            }
-            break;
-
-            case agsSelectProfile: {
-
-                // Reset our state data
-                @selectedProfile = null;
-                selectedProfileNum = -1;
-                showingProfileDetails = false;
-
-                // Get (a copy of) the current profiles        
-                profileData = global_data.getProfiles();
-
-                // Create a divider for the non-footer
-                AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
-                                                            DOHorizontal, 
-                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
-
-                // I see we have a cool portrait, let's use it 
-                AHGUI::Image rabbitImage("Textures/ui/versus_mode/rabbit_1_portrait.tga");
-                rabbitImage.scaleToSizeX(800);
-                
-                // Show off combining behaviors
-                rabbitImage.addUpdateBehavior( AHGUI::FadeIn( 2000, @inSine ) );
-                rabbitImage.addUpdateBehavior( AHGUI::MoveIn( ivec2( -400, 0 ), 2000 , @linear ) );
-
-                // Align this with the top of the divider cell instead of the usual center
-                rabbitImage.setVeritcalAlignment( BATop );
-
-                // Add this to the main pane 
-                mainpane.addElement( rabbitImage, DDLeft );
-
-                // Now we can build the space for the info panel
-                mainpane.addSpacer(150, DDRight );
-                AHGUI::Divider@ infoPanel = mainpane.addDivider( DDRight, DOVertical );
-                // Give it a name so we can find it as we update it
-                infoPanel.setName("infopane");
-                infoPanel.setVeritcalAlignment(BATop);
-                // We will populate this when the appropriate message is received
-
-                // Add a divider 
-                mainpane.addDivider( DDTop, DOHorizontal );
-
-                // Create a divider for the new character interface
-                // This will automatically expand vertically for us
-                AHGUI::Divider@ characterSelectPane = mainpane.addDivider( DDLeft, DOVertical );
-
-                // Push the character selection down 
-                characterSelectPane.addSpacer( 100, DDTop );
-
-                // Add a direction label
-                AHGUI::Text selectText( "Select Profile", button_font, 70, 1.0, 7.0, 0.0, 0.9 );
-                selectText.setHorizontalAlignment( BALeft );
-                characterSelectPane.addElement( selectText, DDTop );
-
-                // Add some space
-                characterSelectPane.addSpacer( 50, DDTop );
-
-                // Write the profiles
-                for( uint i = 0; i < profileData.size(); i++ ) {
-                    // Add the character name and data in divider
-                    AHGUI::Divider@ characterPane = characterSelectPane.addDivider( DDTop, DOVertical, ivec2( 650, 150 ) );
-                    AHGUI::Text nameText( profileData[i]["character_name"].asString(), body_font, 85, 1.0, 7.0, 0.0, 0.9 );
-                    nameText.setHorizontalAlignment( BALeft );
-                    // add some padding
-                    nameText.setPadding( 15, 0, 15, 40 );
-                    characterPane.addElement( nameText, DDTop );
-                    AHGUI::Text battlesText( "Total battles: " + 
-                            (profileData[i]["player_wins"].asInt() + profileData[i]["player_loses"].asInt() ), 
-                            body_font, 40, 1.0, 7.0, 0.0, 0.7 );
-                    battlesText.setHorizontalAlignment( BALeft );
-                    battlesText.setPadding( 10, 5, 30, 40 );
-
-                    // Turn the character pane into a button
-
-                    // Do some special effects
-                    // Add a mouseover to indicate a new selection
-                    characterPane.addMouseOverBehavior( AHGUI::MouseOverShowBorder() );
-                    characterPane.addUpdateBehavior( AHGUI::PulseBorderAlpha( 0.5, 1.0, 0.5f ) );
-                    
-                    // Attach this as message sending behavior
-                    characterPane.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("profileselected", i) );
-                    // Send messages according to mouse over events 
-                    characterPane.addMouseOverBehavior( AHGUI::FixedMessageOnMouseOver( AHGUI::Message( "overprofile", i ),
-                                                                                        null,
-                                                                                        AHGUI::Message( "leaveprofile", i ) ) );
-                    characterPane.addElement( battlesText, DDTop );
-
-                    int sessionId = global_data.getSessionProfile();
-
-                    if( sessionId != -1 && sessionId == profileData[i]["id"].asInt() ) {
-                        @selectedProfile = @characterPane;
-
-                        // Set the border to indicate the selection of the element
-                        characterPane.setBorderSize(15);
-                        characterPane.setBorderColor(1.0, 7.0, 0.0, 0.9);
-                        characterPane.showBorder( true );
-
-                        // record the index of this element 
-                        selectedProfileNum = i;
-
-                        populateInfoPanel( i );   
-                    }
-                }
-
-                // If we haven't reached the maximum profiles, add the option to add a new one
-                if( profileData.size() < 6 ) {
-                    // Create the text 
-                    AHGUI::Text newText( "New Profile", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
-                    
-                    // Turn it into a button
-                    newText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("new") );
-                    
-
-                    // Add the effects
-                    newText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                                 vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                                 vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-
-                    // Add them to the divider with some space 
-                    characterSelectPane.addSpacer( 30, DDBottom );
-                    characterSelectPane.addElement( newText, DDBottom );
-
-                }
-
-            }
-            break;
-
-            case agsConfirmDelete: {
-
-                // We just need to display a message to the player
-
-                // Create a divider for the non-footer
                 AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
                                                             DOVertical, 
                                                             ivec2( UNDEFINEDSIZE, 1140 ) );
-                
-                // For fun let's put an image on the screen 
-                AHGUI::Image topImage("Textures/ui/versus_mode/fight_glyph.tga");
-                topImage.scaleToSizeX(400);
-                topImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
 
-                // Add this to the main pane 
-                mainpane.addElement( topImage, DDTop ); 
+                mainpane.addSpacer( top_margin, DDTop );
                 
+                AHGUI::Text title = AHGUI::Text( "Select Character", title_font, title_font_size, title_color );
+
+                mainpane.addElement( title, DDTop );
+
+                 
+                mainpane.addElement(AHGUI::Image("Textures/ui/arena_mode/main_menu_title_underline.png"), DDTop); 
+                
+                mainpane.addSpacer(40,DDTop);
+
+                AHGUI::Divider@ profileNamediv = mainpane.addDivider( DDTop,
+                                                                      DOHorizontal,
+                                                                      ivec2(500, 70) ); 
+
+                AHGUI::Text profileNameLabel = AHGUI::Text( "Profile Name: ", label_font, label_font_size, label_color );
+                profileNamediv.addElement( profileNameLabel, DDLeft );
+
+                AHGUI::Text profileNameValue = AHGUI::Text( newCharacter["character_name"].asString(), label_font, label_font_size, label_color );
+                profileNameValue.setName("newnametext");
+                profileNameValue.addMouseOverBehavior( buttonHover );
+                profileNameValue.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("newrandomname") );
+                profileNamediv.addElement( profileNameValue, DDLeft );
+                
+                mainpane.addSpacer( 30, DDTop );
+
+
+                mainpane.addElement(AHGUI::Image("Textures/ui/arena_mode/select_character_divider.png"), DDTop); 
+
+                AHGUI::Divider@ centerpane = mainpane.addDivider( DDTop,
+                                                                  DOHorizontal,
+                                                                  ivec2(1700, 700) );
+
+                AHGUI::Divider@ characterdiv = centerpane.addDivider( DDLeft,
+                                                                      DOHorizontal,
+                                                                      ivec2(700,UNDEFINEDSIZE) );
+
+                
+                AHGUI::Image leftarrow = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
+                leftarrow.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("previous_character") );
+                leftarrow.addMouseOverBehavior( buttonHover );
+                characterdiv.addElement(leftarrow, DDLeft);
+
+                AHGUI::Divider@ characterImagediv = characterdiv.addDivider( DDCenter,
+                                                                             DOVertical,
+                                                                             ivec2(250, UNDEFINEDSIZE) );
+                
+                AHGUI::Image rightarrow = AHGUI::Image("Textures/ui/arena_mode/right_arrow.png");
+                rightarrow.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next_character") );
+                rightarrow.addMouseOverBehavior( buttonHover );
+                characterdiv.addElement(rightarrow, DDRight);
+
+                centerpane.addSpacer(75, DDRight);
+                AHGUI::Divider@ infodiv = centerpane.addDivider( DDRight,
+                                                                 DOVertical,
+                                                                 ivec2(600, UNDEFINEDSIZE) );
+
+                AHGUI::Image@ portrait = AHGUI::Image();
+                portrait.setName("portrait");
+
+                characterImagediv.addElement(portrait,DDCenter);
+
+                infodiv.setSize(900, 700);
+                
+                infodiv.addSpacer(50, DDTop);
+
+                AHGUI::Text charactername = AHGUI::Text("", label_font, label_font_size, label_color);
+                charactername.setName("title");
+                infodiv.addElement(charactername, DDTop);
+
+                AHGUI::Text descriptiontext = AHGUI::Text("", infotext_font, infotext_font_size, infotext_color);
+                descriptiontext.setName("description");
+                infodiv.addElement(descriptiontext, DDTop);
+
+                infodiv.addSpacer(50,DDBottom);
+                AHGUI::Divider@ iconListdiv = infodiv.addDivider(DDBottom, DOHorizontal, ivec2(250, UNDEFINEDSIZE));
+                iconListdiv.setName("statediv");
+
+                mainpane.addElement(AHGUI::Image("Textures/ui/arena_mode/select_character_divider.png"), DDTop); 
+
+                ChangeToCharacter(int(characterSelection));
+
+                }
+            break;
+            case agsSelectProfile: {
+
+                currentProfile.setMax( global_data.getProfiles().size() ); 
+
+                AHGUI::Divider@ footer = addFooter();
+
+                AHGUI::Text deleteButton( "Delete Profile", label_font, label_font_size, label_color );
+                deleteButton.addMouseOverBehavior( buttonHover );
+                deleteButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("delete") );
+                deleteButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+
+                footer.addElement( deleteButton, DDCenter );
+                
+
+                AHGUI::Divider@ mainpane = root.addDivider( DDTop,
+                                                            DOHorizontal, 
+                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+
+                mainpane.addSpacer(left_margin, DDLeft);
+                AHGUI::Divider@ menulist = mainpane.addDivider( DDTop,
+                                                                DOVertical,
+                                                                ivec2(400, UNDEFINEDSIZE) );
+                menulist.addSpacer(top_margin, DDTop);
+
+                mainpane.setName("mainpane");
+                menulist.setName("menulist");
+
+                AHGUI::Text arenaModeTitle( "Arena Mode", title_font, title_font_size, title_color );
+                
+                menulist.addElement(arenaModeTitle, DDTop);
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                menulist.addElement(titleUnderline, DDTop); 
+
+                AHGUI::Divider@ characterdiv = menulist.addDivider( DDLeft,
+                                                                      DOHorizontal,
+                                                                      ivec2(700,UNDEFINEDSIZE) );
+                
+                AHGUI::Image leftarrow = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
+                leftarrow.setName( "leftarrow" );
+                leftarrow.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("previous_profile") );
+                leftarrow.addMouseOverBehavior( buttonHover );
+                characterdiv.addElement(leftarrow, DDLeft);
+
+                AHGUI::Divider@ infodiv = characterdiv.addDivider( DDCenter,
+                                                                   DOVertical,
+                                                                   ivec2(250, UNDEFINEDSIZE) );
+                infodiv.addSpacer(100,DDTop);
+
+                AHGUI::Text profileName = AHGUI::Text( "", label_font, label_font_size, label_color );
+                profileName.setName("profilename"); 
+                infodiv.addElement(profileName, DDTop);
+
+                infodiv.addSpacer(100,DDTop);
+
+                AHGUI::Divider@ battlesFoughtdiv = infodiv.addDivider(  DDTop, 
+                                                                        DOHorizontal,
+                                                                        ivec2( 0, 0 ) );
+
+
+                AHGUI::Text battlesFoughtLabel = AHGUI::Text( "Battles Fought: ", label_font, label_font_size, label_color );
+                battlesFoughtdiv.addElement( battlesFoughtLabel, DDLeft );
+
+                AHGUI::Text battlesFought = AHGUI::Text( "0", label_font, label_font_size, label_color );
+                battlesFought.setName("battlesfought");
+                battlesFoughtdiv.addElement( battlesFought, DDLeft );
+
+                infodiv.addSpacer(30,DDTop);
+                
+                AHGUI::Divider@ totalFansdiv = infodiv.addDivider(  DDTop, 
+                                                                        DOHorizontal,
+                                                                        ivec2( 0,0 ) );
+
+                AHGUI::Text totalFansLabel = AHGUI::Text( "Total Fans: ", label_font, label_font_size, label_color );
+                totalFansdiv.addElement( totalFansLabel, DDLeft );
+
+                AHGUI::Text totalFans = AHGUI::Text( "0", label_font, label_font_size, label_color );
+                totalFans.setName("totalfans");
+                totalFansdiv.addElement( totalFans, DDLeft );
+
+                infodiv.addSpacer(30,DDTop);
+
+                AHGUI::Divider@ skillAssesmentdiv = infodiv.addDivider(  DDTop, 
+                                                                        DOHorizontal,
+                                                                        ivec2( 0,0 ) );
+
+                AHGUI::Text skillAssesmentLabel = AHGUI::Text( "Skill Assesment: ", label_font, label_font_size, label_color );
+                skillAssesmentdiv.addElement( skillAssesmentLabel, DDLeft );
+
+                AHGUI::Text skillAssesment = AHGUI::Text( "0", label_font, label_font_size, label_color );
+                skillAssesment.setName( "skillassesment" );
+                skillAssesmentdiv.addElement( skillAssesment, DDLeft );
+
+                infodiv.addSpacer(30,DDTop);
+                
+                AHGUI::Divider@ statesdiv = infodiv.addDivider(  DDTop, 
+                                                                    DOHorizontal,
+                                                                    ivec2( 0,100 ) );
+                statesdiv.setName( "states" );
+
+                
+                AHGUI::Image rightarrow = AHGUI::Image("Textures/ui/arena_mode/right_arrow.png");
+                rightarrow.setName( "rightarrow" );
+                rightarrow.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next_profile") );
+                rightarrow.addMouseOverBehavior( buttonHover );
+                characterdiv.addElement(rightarrow, DDRight);
+
+                ChangeToProfile( int(currentProfile) ); 
+            }
+            break;
+            case agsCharacterIntro: {
+
+                currentIntroPage = 0;
+                currentIntroPage.setMax(global_data.getCurrentCharacter()["intro"]["pages"].size());
+
+                addFooter();
+
+                AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
+                                                            DOVertical, 
+                                                            ivec2( UNDEFINEDSIZE, 1140 ) );
+
+                mainpane.addSpacer( top_margin, DDTop );
+
+                AHGUI::Text title = AHGUI::Text("", title_font, title_font_size, title_color );
+                title.setName( "title" );
+                mainpane.addElement( title, DDTop );  
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                mainpane.addElement(titleUnderline, DDTop); 
+        
                 mainpane.addSpacer( 50, DDTop );
 
-                // Make a little container for the message
-                AHGUI::Divider@ messagepane = mainpane.addDivider( DDTop, DOVertical );
+                AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
+                                             DOHorizontal,
+                                             ivec2(1409, 823) ); 
 
-                // Create the text
-                AHGUI::Text promptText( "Are you sure you want to delete?", body_font, 75, 1.0, 7.0, 0.0, 0.8 );
+                bodydiv.setBackgroundImage( "Textures/ui/arena_mode/intro_background.png" );
 
-                messagepane.addElement( promptText, DDTop );
-
-                // Add some space
-                messagepane.addSpacer( 175, DDTop );
-
-                AHGUI::Divider@ buttonpane = messagepane.addDivider( DDCenter, DOHorizontal, ivec2( 600, UNDEFINEDSIZE ) );
-                buttonpane.setName("buttonpane");
-
-                // Create the buttons
-                AHGUI::Text okText( "Ok", button_font, 75, 1.0, 7.0, 0.0, 0.8 );
-                okText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("ok") );
-                // Make it pulse when we mouse over 
-                okText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                                        vec4( 0.8, 0.5, 0.0, 0.5 ), 
-                                                        vec4( 1.0, 1.0, 0.0, 0.9 ), .25 ) );
-                // Fade it in 
-                okText.addUpdateBehavior( AHGUI::FadeIn( 500, @inSine ) );
-
-
-                AHGUI::Text cancelText( "Cancel", button_font, 75, 1.0, 7.0, 0.0, 0.8 );
-                cancelText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("cancel") );
-                // Make it pulse when we mouse over 
-                cancelText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                                        vec4( 0.8, 0.5, 0.0, 0.5 ), 
-                                                        vec4( 1.0, 1.0, 0.0, 0.9 ), .25 ) );
-                // Fade it in 
-                cancelText.addUpdateBehavior( AHGUI::FadeIn( 500, @inSine ) );
+                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDCenter,
+                                             DOVertical,
+                                             ivec2(1409, UNDEFINEDSIZE) ); 
                 
-                // Add the buttons to the layout 
-                buttonpane.addElement( okText, DDLeft );
-                buttonpane.addElement( cancelText, DDRight );
-                cancelText.setName("cancelText");
+
+                subbodydiv.addSpacer( 100, DDTop );
+                AHGUI::Divider@ descriptiondiv = subbodydiv.addDivider( DDTop,
+                                                    DOVertical,
+                                                    ivec2(1409, 600));
+                descriptiondiv.setName("descriptiondiv");
+
+                subbodydiv.addSpacer( 100, DDBottom );
+                AHGUI::Image glyph = AHGUI::Image("Textures/ui/arena_mode/black_glyphs/two_characters_chained_by_one.png");
+                glyph.setName("glyph");
+                subbodydiv.addElement( glyph, DDBottom );
+            
+
+                mainpane.addSpacer(50, DDTop );
+
+                AHGUI::Divider@ pagediv = mainpane.addDivider( DDTop,
+                                            DOHorizontal,
+                                            ivec2(100, UNDEFINEDSIZE) ); 
+
+                AHGUI::Image prevImage = AHGUI::Image("Textures/ui/arena_mode/left_arrow.png");
+
+                prevImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("previous_page") );
+
+                prevImage.scaleToSizeX(75);
+
+                prevImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+
+                prevImage.addMouseOverBehavior( buttonHover );
                 
+                pagediv.addElement(prevImage, DDLeft);
+
+                pagediv.addSpacer(40,DDLeft);
+
+                AHGUI::Divider@ pagecounterwrapper = pagediv.addDivider( DDLeft,
+                                                        DOVertical,
+                                                        ivec2(200, UNDEFINEDSIZE));  
+                AHGUI::Text pagecounter = AHGUI::Text("0/0", label_font, label_font_size, label_color );
+                pagecounter.setName( "pagecounter" );
+                pagecounterwrapper.addElement(pagecounter, DDLeft);
+
+                pagediv.addSpacer(40,DDLeft);
+
+                AHGUI::Image nextPageImage = AHGUI::Image("Textures/ui/arena_mode/right_arrow.png");
+
+                nextPageImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next_page") );
+
+                nextPageImage.scaleToSizeX(75);
+
+                nextPageImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+
+                nextPageImage.addMouseOverBehavior( buttonHover );
                 
+                pagediv.addElement(nextPageImage, DDLeft);
+
+                RefreshStoryPage(); }
+            break;
+            case agsMetaChoice: {
+                AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
+                                                                 DOVertical,
+                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                toppadwrapper.addSpacer( top_margin, DDTop );
+
+                AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
+                                                               DOHorizontal,
+                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
+                                                                   DOHorizontal,
+                                                                   ivec2(status_pane_column_width*2+status_pane_column_padding, left_status_pane_height) );
+                leftpane.setName("statuspane");
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Image verticaldivider("Textures/ui/arena_mode/vertical_divider.png");
+                wrapperpane.addElement(verticaldivider, DDLeft );
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ mainpane = wrapperpane.addDivider( DDLeft,  
+                                                            DOVertical, 
+                                                            ivec2( 1600, screen_height-top_margin ) );
+
+                AHGUI::Text title = AHGUI::Text("Title", title_font, title_font_size, title_color );
+                title.setName( "title" );
+                mainpane.addElement( title, DDTop );  
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                mainpane.addElement(titleUnderline, DDTop); 
+        
+                mainpane.addSpacer( 100, DDTop );
+
+                AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
+                                             DOHorizontal,
+                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                bodydiv.addSpacer(100, DDLeft);
+
+                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
+                                             DOVertical,
+                                             ivec2(1407, 961) ); 
+                subbodydiv.setBackgroundImage( "Textures/ui/arena_mode/meta_background.png" );
+                subbodydiv.addSpacer(100,DDTop);
+
+                AHGUI::Divider@ descriptiondiv = subbodydiv.addDivider( DDTop,
+                                             DOVertical,
+                                             ivec2(1207, 500) );
+
+                descriptiondiv.setName("description");
+
+                subbodydiv.addSpacer(100,DDTop);
+
+                AHGUI::Divider@ optionsdiv = subbodydiv.addDivider( DDTop,
+                                             DOVertical,
+                                             ivec2(800, UNDEFINEDSIZE) ); 
+                optionsdiv.setName("options");
+                
+                RefreshMetaPage();
+            }
+            break;
+            case agsMessage: {
+
+                AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
+                                                                 DOVertical,
+                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                toppadwrapper.addSpacer( top_margin, DDTop );
+
+                AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
+                                                               DOHorizontal,
+                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
+                                                                   DOHorizontal,
+                                                                   ivec2(status_pane_column_width*2+status_pane_column_padding, left_status_pane_height) );
+                leftpane.setName("statuspane");
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Image verticaldivider("Textures/ui/arena_mode/vertical_divider.png");
+                wrapperpane.addElement(verticaldivider, DDLeft );
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ mainpane = wrapperpane.addDivider( DDLeft,  
+                                                            DOVertical, 
+                                                            ivec2( 1600, screen_height-top_margin ) );
+
+                AHGUI::Text title = AHGUI::Text("Title", title_font, title_font_size, title_color );
+                title.setName( "title" );
+                mainpane.addElement( title, DDTop );  
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                mainpane.addElement(titleUnderline, DDTop); 
+        
+                mainpane.addSpacer( 100, DDTop );
+
+                AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
+                                             DOHorizontal,
+                                             ivec2(800, 500) ); 
+
+                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDTop,
+                                             DOVertical,
+                                             ivec2(800, UNDEFINEDSIZE) ); 
+
+                AHGUI::Divider@ descriptiondiv = subbodydiv.addDivider( DDTop,
+                                             DOVertical,
+                                             ivec2(800, UNDEFINEDSIZE) );
+
+                descriptiondiv.setName("description");
+
+                subbodydiv.addSpacer(100,DDTop);
+
+                AHGUI::Divider@ optionsdiv = subbodydiv.addDivider( DDTop,
+                                             DOVertical,
+                                             ivec2(800, UNDEFINEDSIZE) ); 
+                optionsdiv.setName("options");
+                
+                RefreshMessage();
+            }
+            break;
+            case agsEndScreen: {
+
+                AHGUI::Divider@ footer = addFooter(false,false);
+
+                AHGUI::Divider@ backDivider = footer.addDivider( DDCenter, DOHorizontal, ivec2( 0, UNDEFINEDSIZE ) );
+                backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
+                AHGUI::Text backText( "The End", button_font, 100, button_color );
+                backText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+                backText.addMouseOverBehavior( buttonHover );
+                backDivider.addElement( backText, DDLeft );
+
+                AHGUI::Divider@ mainpane = root.addDivider( DDTop,  
+                                                            DOVertical, 
+                                                            ivec2( UNDEFINEDSIZE, 1000 ) );
+
+                mainpane.addSpacer( 100, DDTop );
+
+                int tabwidth = 700;
+
+                AHGUI::Text title = AHGUI::Text("Title", title_font, title_font_size, title_color );
+                title.setName( "title" );
+                mainpane.addElement( title, DDTop );  
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+                mainpane.addElement(titleUnderline, DDTop); 
+
+                AHGUI::Divider@ subtitleDiv = mainpane.addDivider( DDTop, DOHorizontal, ivec2(0,100) );
+                AHGUI::Image grayLeftUnderline = AHGUI::Image("Textures/ui/arena_mode/gray_underline_left.png");
+                subtitleDiv.addElement( grayLeftUnderline, DDLeft );  
+                subtitleDiv.addSpacer(50,DDLeft);
+                AHGUI::Text subtitle = AHGUI::Text("DEFEAT!", body_font, body_font_size, body_color);
+                subtitle.setName("subtitle");
+                subtitleDiv.addElement( subtitle, DDCenter );
+                AHGUI::Image grayRightUnderline = AHGUI::Image("Textures/ui/arena_mode/gray_underline_right.png");
+                subtitleDiv.addSpacer(50,DDLeft);
+                subtitleDiv.addElement( grayRightUnderline, DDRight );  
+
+
+                int mainInfoDivHeight = 600;
+                AHGUI::Divider@ mainInfoDiv = mainpane.addDivider( DDTop, DOHorizontal, ivec2(0,mainInfoDivHeight) );
+                
+                {
+                    int spacerHeight = 60;
+                    AHGUI::Divider@ characterDiv = mainInfoDiv.addDivider(DDLeft, DOVertical, ivec2(tabwidth,mainInfoDivHeight) );
+                    AHGUI::Text characterTitle = AHGUI::Text( "Slave", label_font, label_font_size, label_color );
+                    characterTitle.setName("charactertitle");
+                    characterDiv.addElement( characterTitle, DDTop );
+                    characterDiv.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Image characterImage = AHGUI::Image("Textures/ui/arena_mode/character_image/slave.png");
+                    characterImage.setName("characterimage");
+                    characterImage.scaleToSizeY(mainInfoDivHeight-200);
+                    characterDiv.addElement( characterImage, DDTop );
+                }
+
+                {
+                    int spacerHeight = 40;
+                    AHGUI::Divider@ killInfoDiv = mainInfoDiv.addDivider( DDCenter, DOVertical, ivec2(tabwidth,mainInfoDivHeight) );
+                    killInfoDiv.addSpacer(spacerHeight*2,DDTop); 
+                    AHGUI::Text killcount = AHGUI::Text("----", label_font, label_font_size, label_color ); 
+                    killcount.setName("killcount");
+                    killInfoDiv.addElement(killcount, DDTop);
+                    killInfoDiv.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Divider@ killsDiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(UNDEFINEDSIZE,60));
+                    killsDiv.setName("killsdiv");
+                    killInfoDiv.addSpacer(spacerHeight*2,DDTop);
+                    AHGUI::Text kocount = AHGUI::Text("----", label_font, label_font_size, label_color );
+                    kocount.setName("kocount");
+                    killInfoDiv.addElement(kocount,DDTop);
+                    killInfoDiv.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Divider@ kodiv = killInfoDiv.addDivider(DDTop,DOHorizontal,ivec2(UNDEFINEDSIZE,60));
+                    kodiv.setName("kodiv");
+                }
+                {
+                    int spacerHeight = 100;
+                    AHGUI::Divider@ generalStats = mainInfoDiv.addDivider( DDRight, DOVertical, ivec2(tabwidth,mainInfoDivHeight) );
+                    generalStats.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Text battleswon = AHGUI::Text("Battles Won", label_font, label_font_size, label_color );
+                    battleswon.setName("battleswon");
+                    generalStats.addElement(battleswon, DDTop);
+
+                    generalStats.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Text battleslost = AHGUI::Text("Battles Lost" , label_font, label_font_size, label_color );
+                    battleslost.setName("battleslost");
+                    generalStats.addElement(battleslost, DDTop);
+
+                    generalStats.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Text mortalwounds = AHGUI::Text("Mortal Wounds" , label_font, label_font_size, label_color );
+                    mortalwounds.setName("mortalwound");
+                    generalStats.addElement(mortalwounds, DDTop);
+
+                    generalStats.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Text playtime = AHGUI::Text("Play Time", label_font, label_font_size, label_color );
+                    playtime.setName("playtime");
+                    generalStats.addElement(playtime, DDTop);
+
+                    /*
+                    generalStats.addSpacer(spacerHeight,DDTop);
+                    AHGUI::Text wealth = AHGUI::Text("Wealth", label_font, label_font_size, label_color );
+                    wealth.setName("wealth");
+                    generalStats.addElement(wealth, DDTop);
+                    */
+                }
+                {
+                    AHGUI::Divider@ statediv = mainpane.addDivider( DDTop, DOHorizontal, ivec2(0,100) );
+                    statediv.setName( "statediv" );
+                }
+                RefreshEndScreen();
+            }
+            break;
+            case agsMapScreen:{
+                AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
+                                                                 DOVertical,
+                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                toppadwrapper.addSpacer( top_margin, DDTop );
+
+                AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
+                                                               DOHorizontal,
+                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
+                                                                   DOHorizontal,
+                                                                   ivec2(status_pane_column_width*2+status_pane_column_padding, left_status_pane_height) );
+                leftpane.setName("statuspane");
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Image verticaldivider("Textures/ui/arena_mode/vertical_divider.png");
+                wrapperpane.addElement(verticaldivider, DDLeft );
+
+                wrapperpane.addSpacer( 30, DDLeft );
+
+                AHGUI::Divider@ mainpane = wrapperpane.addDivider( DDLeft,  
+                                                            DOVertical, 
+                                                            ivec2( 1600, screen_height-top_margin ) );
+
+                AHGUI::Text title = AHGUI::Text("Title", title_font, title_font_size, title_color );
+                title.setName( "title" );
+                mainpane.addElement( title, DDTop );  
+
+                AHGUI::Image titleUnderline("Textures/ui/arena_mode/main_menu_title_underline.png");
+
+                mainpane.addElement(titleUnderline, DDTop); 
+        
+                mainpane.addSpacer( 100, DDTop );
+
+                AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
+                                             DOHorizontal,
+                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                bodydiv.addSpacer(100, DDLeft);
+
+                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
+                                             DOVertical,
+                                             ivec2(1500, 700) ); 
+                //subbodydiv.setBackgroundImage( "Textures/world_map/arena_world_map.png" );
+                subbodydiv.addSpacer(100,DDTop);
+                subbodydiv.setPadding(100,100,100,100);
+                subbodydiv.setName("subbodydiv");
+        
+                RefreshWorldMap();
             }
             break;
         }
     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Populates the info pane based on the given profile number (-1 for none)
-     * 
-     * @param profileNum index of profile to display  
-     *
-     */
-     void populateInfoPanel( int profileNum ) {
-        
-        // If we're already showing it -- let's be lazy and get out of here
-        if( showingProfileNum == profileNum and showingProfileDetails ) {
-            return;
-        }
-
-        // Get a reference to the pane
-        AHGUI::Element@ infoElement = root.findElement("infopane");
-
-        if( infoElement is null  ) {
-            DisplayError("GUI Error", "Unable to find info pane");
-        }
-
-        // Cast it to a divider so we can work with it
-        AHGUI::Divider@ infoPane = cast<AHGUI::Divider>(infoElement);
-
-        // Get rid of the old contents
-        infoPane.clear();
-
-        // Remove any update behaviors 
-        infoPane.clearUpdateBehaviors();
-        infoPane.setDisplacement();
-
-        // Record that we're showing this
-        showingProfileNum = profileNum;
-
-        // If we're asked to display no profile, just stop here
-        if( profileNum == -1 ) {
-            return;
-        }
-
-        // Push the character selection down 
-        infoPane.addSpacer( 100, DDTop );
-
-        // build a divider to show this and the colors
-        AHGUI::Divider@ statsPane = infoPane.addDivider( DDTop, DOHorizontal );
-
-        // another divider for the numerical stats
-        AHGUI::Divider@ attributePane = statsPane.addDivider( DDLeft, DOVertical );
-
-        // Add the information text
-        AHGUI::Text winsText( "Wins: " + profileData[profileNum]["player_wins"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
-        winsText.setHorizontalAlignment( BALeft );
-        AHGUI::Text losesText( "Loses: " + profileData[profileNum]["player_loses"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
-        losesText.setHorizontalAlignment( BALeft );
-        AHGUI::Text fanText( "Fan Base: " + profileData[profileNum]["fan_base"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
-        fanText.setHorizontalAlignment( BALeft );
-        float limitedSkill = limitDecimalPoints( profileData[profileNum]["player_skill"].asFloat(), 2 );
-
-        AHGUI::Text skillText( "Skill Rating: " +  limitedSkill, body_font, 50, 1.0, 7.0, 0.0, 0.9 );
-        skillText.setHorizontalAlignment( BALeft );
-
-        attributePane.addElement( winsText, DDTop );
-        attributePane.addElement( losesText, DDTop );
-        attributePane.addElement( fanText, DDTop );
-        attributePane.addElement( skillText, DDTop );
-
-        // add a divider for the colors
-        AHGUI::Divider@ colorPane = statsPane.addDivider( DDRight, DOVertical );
-
-        // add a row for the first two colors
-        AHGUI::Divider@ firstRow = colorPane.addDivider( DDTop, DOHorizontal );        
-
-        AHGUI::Image ULImage("Textures/ui/whiteblock.tga");
-        ULImage.scaleToSizeX(80);
-        ULImage.setPadding(15);
-        ULImage.setBorderColor( 1.0, 6.0, 0.0, 0.6 );
-        ULImage.setBorderSize( 5 );
-        ULImage.showBorder();
-        
-        // Set the color of the (normally white) image to be our selected color
-        vec4 ULColor( profileData[profileNum]["player_colors"][0][0].asFloat(), 
-                      profileData[profileNum]["player_colors"][0][1].asFloat(),
-                      profileData[profileNum]["player_colors"][0][2].asFloat(),
-                      0.9 );
-
-        ULImage.setColor( ULColor );
-
-        firstRow.addElement( ULImage, DDLeft );
-
-        AHGUI::Image URImage("Textures/ui/whiteblock.tga");
-        URImage.scaleToSizeX(80);
-        URImage.setPadding(15);
-        URImage.setBorderColor( 1.0, 6.0, 0.0, 0.6 );
-        URImage.setBorderSize( 5 );
-        URImage.showBorder();
-        
-        // Set the color of the (normally white) image to be our selected color
-        vec4 URColor( profileData[profileNum]["player_colors"][1][0].asFloat(), 
-                      profileData[profileNum]["player_colors"][1][1].asFloat(),
-                      profileData[profileNum]["player_colors"][1][2].asFloat(),
-                      0.9 );
-
-        URImage.setColor( URColor );
-
-        firstRow.addElement( URImage, DDRight );
-
-
-        // add a row for the second two colors
-        AHGUI::Divider@ secondRow = colorPane.addDivider( DDTop, DOHorizontal );        
-
-        AHGUI::Image LLImage("Textures/ui/whiteblock.tga");
-        LLImage.scaleToSizeX(80);
-        LLImage.setPadding(15);
-        LLImage.setBorderColor( 1.0, 6.0, 0.0, 0.6 );
-        LLImage.setBorderSize( 5 );
-        LLImage.showBorder();
-        
-        // Set the color of the (normally white) image to be our selected color
-        vec4 LLColor( profileData[profileNum]["player_colors"][2][0].asFloat(), 
-                      profileData[profileNum]["player_colors"][2][1].asFloat(),
-                      profileData[profileNum]["player_colors"][2][2].asFloat(),
-                      0.9 );
-
-        LLImage.setColor( LLColor );
-
-        secondRow.addElement( LLImage, DDLeft );
-
-        AHGUI::Image LRImage("Textures/ui/whiteblock.tga");
-        LRImage.scaleToSizeX(80);
-        LRImage.setPadding(15);
-        LRImage.setBorderColor( 1.0, 6.0, 0.0, 0.6 );
-        LRImage.setBorderSize( 5 );
-        LRImage.showBorder();
-        
-        // Set the color of the (normally white) image to be our selected color
-        vec4 LRColor( profileData[profileNum]["player_colors"][3][0].asFloat(), 
-                      profileData[profileNum]["player_colors"][3][1].asFloat(),
-                      profileData[profileNum]["player_colors"][3][2].asFloat(),
-                      0.9 );
-
-        LRImage.setColor( LRColor );
-
-        secondRow.addElement( LRImage, DDRight );
-
-        // Put some space between the two 
-        statsPane.addSpacer( 125, DDLeft );
-
-        // See if this is the selected profile
-        if( profileNum != selectedProfileNum ) {
-            // if not, fly it in
-            infoPane.addUpdateBehavior( AHGUI::MoveIn( ivec2( 400, 0 ), 500 , @linear ) );
-            showingProfileDetails = false;
-        }
-        else {
-
-            showingProfileDetails = true;
-
-            // Add the delete profile at the bottom
-            AHGUI::Text deleteText( "Delete Profile", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
-            //deleteText.setHorizontalAlignment( BARight );
-                    
-            // Turn it into a button
-            deleteText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("delete") );
-            
-
-            // Add the effects
-            deleteText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                         vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                         vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-            deleteText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
-
-            // Add them to the divider with some space 
-            infoPane.addSpacer( 30, DDBottom );
-            infoPane.addElement( deleteText, DDTop );
-
-
-            // if so, we can add the battle options 
-            infoPane.addSpacer( 75, DDTop );
-        
-            // Make a divider for the battle selector 
-            AHGUI::Divider@ battleSelect = infoPane.addDivider( DDTop, DOHorizontal );
-
-            AHGUI::Image goLeftImage("Textures/arenamenu/left_arrow.tga");
-            goLeftImage.scaleToSizeX(150);
-            
-            // Turn it into a button
-            goLeftImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("battledecrease") );
-
-            // Add the effects
-            goLeftImage.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                               vec4( 0.5, 6.0, 0.0, 0.3 ), 
-                                               vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
-            goLeftImage.addUpdateBehavior( AHGUI::FadeIn( 1250, @inSine ) );
-
-            battleSelect.addElement( goLeftImage, DDLeft );
-
-            AHGUI::Image battleImage(arenaImages[selectedArena]);
-            battleImage.scaleToSizeX(450);
-            battleImage.addUpdateBehavior( AHGUI::FadeIn( 750, @inSine ) );
-            battleImage.setName( "battleimage" );
-            battleSelect.addElement( battleImage, DDCenter );
-
-            AHGUI::Image goRightImage("Textures/arenamenu/right_arrow.tga");
-            goRightImage.scaleToSizeX(150);
-            
-            // Turn it into a button
-            goRightImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("battleincrease") );
-
-            // Add the effects
-            goRightImage.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                               vec4( 0.5, 6.0, 0.0, 0.3 ), 
-                                               vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
-            goRightImage.addUpdateBehavior( AHGUI::FadeIn( 1250, @inSine ) );
-
-            battleSelect.addElement( goRightImage, DDRight );
-
-            // Add the effects
-            battleSelect.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                               vec4( 0.5, 6.0, 0.0, 0.3 ), 
-                                               vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
-
-            AHGUI::Text battleNameText( arenaNames[selectedArena], label_font, 50, 1.0, 6.0, 0.1, 0.9 );
-            battleNameText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            battleNameText.setName( "battlename" );
-            infoPane.addElement( battleNameText, DDTop );
-
-            infoPane.addSpacer( 125, DDTop );
-
-            // Add the begin battle 
-            AHGUI::Text fightText( "Start Fight!", button_font, 75, 1.0, 7.0, 0.0, 0.9 );
-            infoPane.addElement( fightText, DDTop );
-
-            // Turn it into a button
-            fightText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("start") );
-            
-
-            // Add the effects
-            fightText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                         vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                         vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-            fightText.addUpdateBehavior( AHGUI::FadeIn( 2000, @inSine ) );
-
-
-                      
-
-        }
-     } 
 
 
     /*******************************************************************************************/
@@ -881,202 +934,184 @@ class ArenaGUI : AHGUI::GUI {
      *
      */
     void processMessage( AHGUI::Message@ message ) {
-
+        Log( info, "Got message: " + message.name + "\n" );
         // Check to see if an exit has been requested 
         if( message.name == "mainmenu" ) {
             global_data.WritePersistentInfo( false );
+            global_data.clearSessionProfile();
             this_ui.SendCallback("back");
         }
 
         // switch on the state -- though the messages should be unique
         switch( currentState ) {
+            case agsMainMenu: {
+                if( message.name == "continue" ) {
+                    currentState = agsSelectProfile; 
+                }
+                else if( message.name == "new" ) {
+                    currentState = agsNewProfile;
+                }
+                else if( message.name == "back" ) {
+                    processMessage(AHGUI::Message("mainmenu"));
+                }
+            }
+            break;
             case agsInvalidState: {
                 // For completeness -- throw an error and move on
                 DisplayError("GUI Error", "GUI in invalid state");
             }
             break;
-            case agsFirstTime: {
-                if( message.name == "createprofile" ) {
-                    currentState = agsNewProfile;
-                }
-            }
-            break;
-
             case agsNewProfile: {
                 if( message.name == "newrandomname") {
-
                     // Generate a new random name
                     newCharacter["character_name"] = JSONValue( global_data.generateRandomName() );
 
                     // Find the element in the layout, by name
-                    AHGUI::Text@ nameText = cast<AHGUI::Text>(root.findElement("newNameText"));
+                    AHGUI::Text@ nameText = cast<AHGUI::Text>(root.findElement("newnametext"));
 
-                    // Do a pseudo-cross fade onto the new text
-                    nameText.addUpdateBehavior( AHGUI::ChangeTextFadeOutIn( 250, newCharacter["character_name"].asString(), outSine, inSine ), "textchange" );
-
-                }
-                else if( message.name == "colorselected" ) {
-
-                    // reset the border of the now deselected element
-                    int colorNum = message.intParams[0];
-
-                    furColorSelected[colorNum].setBorderColor( 1.0, 1.0, 1.0, 1.0 );
-                    furColorSelected[colorNum].setBorderSize(5);
-                    furColorSelected[colorNum].showBorder( false );
-
-                    // write the color into new profile
-                    newCharacter["player_colors"][colorNum][0] = JSONValue( message.floatParams[0] );
-                    newCharacter["player_colors"][colorNum][1] = JSONValue( message.floatParams[1] );
-                    newCharacter["player_colors"][colorNum][2] = JSONValue( message.floatParams[2] );
-
-                    // set the border for the newly selected element
-                    message.sender.setBorderColor( 0.2, 0.0, 1.0, 1.0 );
-                    message.sender.setBorderSize(10);
-                    message.sender.showBorder(true);
-
-                    // now store this element for future reference 
-                    @furColorSelected[colorNum] = @message.sender;
-
+                    nameText.setText(newCharacter["character_name"].asString());
                 }
                 else if( message.name == "cancel" ) {
                     // We can throw this all away and go back (depending on if we have profiles)
                     if( profileData.size() != 0 ) {
                         currentState = agsSelectProfile;
                     }
-                    else {
-                        currentState = agsFirstTime;
+                    else
+                    {
+                        currentState = agsMainMenu;
                     }
                 }
-                else if( message.name == "ok" ) {
-                    // Excellent, we can write in this profile and get on with things
+                else if( message.name == "back" ) {
+                    currentState = agsMainMenu;
+                }
+                else if( message.name == "next" ) {
+                    JSONValue cur_character = global_data.getCharacters()[int(characterSelection)];
+
+                    newCharacter["character_id"]    = cur_character["id"];
+                    newCharacter["states"]          = cur_character["states"];
+                    newCharacter["world_map_id"]    = cur_character["world_map_id"];
+
                     global_data.addProfile( newCharacter );
+                    global_data.setDataFrom( newCharacter["id"].asInt() );
+
+                    global_data.queued_world_node_id = cur_character["world_node_id"].asString();
+                    global_data.ResolveWorldNode();
                     global_data.WritePersistentInfo( false );
-                    currentState = agsSelectProfile;
+
+                    currentProfile.setMax( global_data.getProfiles().size() );
+                    currentProfile = global_data.getProfileIndexFromId(newCharacter["id"].asInt());
+
+                    currentState = agsCharacterIntro;
+                }
+                else if( message.name == "next_character" ) {
+                    characterSelection++;
+                    ChangeToCharacter(int(characterSelection));
+                }
+                else if( message.name == "previous_character" ) {
+                    characterSelection--;
+                    ChangeToCharacter(int(characterSelection));
                 }
             }
             break;
-
             case agsSelectProfile: {
-                if( message.name == "new") {
-                    // just change state 
-                    currentState = agsNewProfile;
-                }
-                else if( message.name == "profileselected" ) {
-                    // if we have a profile already selected, clear the indication from 
-                    //  the old one
-                    // It would be pretty easy to create a widget that did this kind of
-                    //  selection automatically -- but one thing at a time
-                    if( selectedProfile !is null ) {
-                        // reset the border size/style 
-                        selectedProfile.setBorderSize(1);
-                        selectedProfile.setBorderColor(1.0, 1.0, 1.0, 1.0);
-                        selectedProfile.showBorder( false );
-                    }
-
-                    @selectedProfile = @message.sender;
-
-                    // Set the border to indicate the selection of the element
-                    selectedProfile.setBorderSize(15);
-                    selectedProfile.setBorderColor(1.0, 7.0, 0.0, 0.9);
-                    selectedProfile.showBorder( true );
-
-                    // record the index of this element 
-                    selectedProfileNum = message.intParams[0];
-                }
-                else if( message.name == "overprofile" ) {
-                    // Show this in the info pane
-                    populateInfoPanel( message.intParams[0] );
-
-                }
-                else if( message.name == "leaveprofile" ) {
-                    // See if we're still showing this profile
-                    if( showingProfileNum == message.intParams[0] ) {
-                        // if we are just show the selectedProfile
-                        if( selectedProfileNum != -1 || showingProfileNum != selectedProfileNum  ) {
-                            populateInfoPanel( selectedProfileNum );    
-                        }
-                    }
-                }
-                else if( message.name == "battleincrease" ) {
-                    selectedArena = ( selectedArena + 1 ) % arenaImages.length();
-
-                    // Find the picture in the layout, by name
-                    AHGUI::Image@ battleImage = cast<AHGUI::Image>(root.findElement("battleimage"));
-                    // Change the image
-                    battleImage.setImageFile( arenaImages[selectedArena] );
-                    battleImage.scaleToSizeX(450);
-                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
-
-                    // Find the text in the layout, by name
-                    AHGUI::Text@ battleText = cast<AHGUI::Text>(root.findElement("battlename"));
-                    // Change the text
-                    battleText.setText( arenaNames[selectedArena] );
-                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
-
-                }
-                else if( message.name == "battledecrease" ) {
-                    selectedArena = ( arenaImages.length() + selectedArena - 1 ) % arenaImages.length();
-
-                    // Find the picture in the layout, by name
-                    AHGUI::Image@ battleImage = cast<AHGUI::Image>(root.findElement("battleimage"));
-                    // Change the image
-                    battleImage.setImageFile( arenaImages[selectedArena] );
-                    battleImage.scaleToSizeX(450);
-                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
-
-                    // Find the text in the layout, by name
-                    AHGUI::Text@ battleText = cast<AHGUI::Text>(root.findElement("battlename"));
-                    // Change the text
-                    battleText.setText( arenaNames[selectedArena] );
-                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
-
-                }
-                else if( message.name == "delete" ) {
-                    // Change to the confirmation screen
-                    currentState = agsConfirmDelete;
-                }
-                else if( message.name == "start" ) {
-                    if( selectedProfileNum != -1 ) {
-                        global_data.setSessionProfile( profileData[selectedProfileNum]["id"].asInt() );
-
-                        // Start the level!
-                        this_ui.SendCallback("arenas/" + arenaLevels[selectedArena] );
-                    }
-                }
-
-            }
-            break;
-
-            case agsConfirmDelete: {
-                if( message.name == "ok" ) {
-
-                    if( selectedProfileNum != -1 ) {
-                        // delete the profile
-                        global_data.removeProfile( profileData[selectedProfileNum]["id"].asInt() );
+                if( message.name == "delete" ) {
+                    if( global_data.getProfiles().size() > 0 )
+                    {
+                        global_data.removeProfile( global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
                         global_data.WritePersistentInfo( false );
                     }
-
-                    // Refresh our profile data
-                    profileData = global_data.getProfiles();
-
-                    if( profileData.size() != 0 ) {
-                        currentState = agsSelectProfile;
+                
+                    if( global_data.getProfiles().size() == 0 )
+                    {
+                        currentState = agsMainMenu;
                     }
-                    else {
-                        currentState = agsFirstTime;
-                    }
-                    
+
+                    currentProfile.setMax( global_data.getProfiles().size() );
+                    ChangeToProfile( int(currentProfile) ); 
                 }
-                else if( message.name == "cancel" ) {
-                    // Just go back to the selection screen
+                else if( message.name == "next" ) {
+                    global_data.setDataFrom(  global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
+                    global_data.setSessionProfile( global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
+                    UpdateStateBasedOnCurrentWorldNode();
+                }
+                else if( message.name == "back" ) {
+                    currentState = agsMainMenu;
+                }
+                else if( message.name == "next_profile" ) {
+                    currentProfile++; 
+                    ChangeToProfile( int(currentProfile) ); 
+                }
+                else if( message.name == "previous_profile" ) {
+                    currentProfile--; 
+                    ChangeToProfile( int(currentProfile) ); 
+                }
+            }
+            break;
+            case agsCharacterIntro: {
+                if( message.name == "back" ) {
+                    currentState = agsNewProfile;
+                }
+                else if( message.name == "next" ) {
                     currentState = agsSelectProfile;
+                }
+                else if( message.name == "next_page" ) {
+                    currentIntroPage++;
+                    RefreshStoryPage();
+                }
+                else if( message.name == "previous_page" ) {
+                    currentIntroPage--;
+                    RefreshStoryPage();
+                }
+            }
+            break;
+            case agsMetaChoice:
+            {
+                if( message.name == "back" ) {
+                    currentState = agsSelectProfile;
+                }
+                else if( message.name == "next" ) {
+                    // Start the level!
+                }
+                else if( message.name == "option" ) {
+                    int option = message.intParams[0]; 
+
+                    global_data.meta_choice_option = option;
+                    global_data.done_with_current_node = true;
+                    global_data.ResolveWorldNode();
+                    global_data.WritePersistentInfo();
+
+                    UpdateStateBasedOnCurrentWorldNode();
+                }
+            }
+            break;
+            case agsMessage:
+            { 
+                if( message.name == "continue" ) {
+                    global_data.done_with_current_node = true;
+                    global_data.ResolveWorldNode();
+                    global_data.WritePersistentInfo();
+                    UpdateStateBasedOnCurrentWorldNode();
+                } 
+            }
+            break;
+            case agsEndScreen:
+            {
+                if( message.name == "back" ) {
+                    currentState = agsMainMenu;
+                }
+            }
+            break;
+            case agsMapScreen:
+            {
+                if( message.name == "back" ) {
+                    currentState = agsMainMenu;
                 }
             }
             break;
         }
-
     }
 
+    bool prev_state = true;
 
     /*******************************************************************************************/
     /**
@@ -1086,16 +1121,13 @@ class ArenaGUI : AHGUI::GUI {
     void update() {
         
         // Do state machine stuff
-        handleStateChange();
-
-        AHGUI::Divider@ bp = cast<AHGUI::Divider>(root.findElement("buttonpane"));
-
-        if( bp !is null ){
-            Print("buttonpane size: " + bp.getSize().toString() + "\n" );
-            Print("buttonpane boundary size: " + bp.boundarySize.toString() + "\n" );
-            Print("buttonpane boundary offset: " + bp.boundaryOffset.toString() + "\n" );
-            Print("buttonpane bottomRightBoundStart: " + bp.bottomRightBoundStart + "\n" );
+        if(IsKeyDown(GetCodeForKey("esc")) && prev_state == false) {
+            processMessage(AHGUI::Message("back"));
         }
+        prev_state = IsKeyDown(GetCodeForKey("esc"));
+        
+
+        handleStateChange();
 
         // Update the GUI 
         AHGUI::GUI::update();
@@ -1104,10 +1136,10 @@ class ArenaGUI : AHGUI::GUI {
 
     /*******************************************************************************************/
     /**
-     * @brief  Render the gui
-     * 
-     */
-     void render() {
+    * @brief  Render the gui
+    * 
+    */
+    void render() {
 
         // Update the background 
         // TODO: fold this into AHGUI
@@ -1118,15 +1150,884 @@ class ArenaGUI : AHGUI::GUI {
 
         // Update the GUI 
         AHGUI::GUI::render();
+    }
 
-     }
+    void ChangeToProfile( int id ) {
+        if( currentState == agsSelectProfile ) {
+            AHGUI::Text@ profilenametext = cast<AHGUI::Text>(root.findElement("profilename"));
+            AHGUI::Text@ battlesfought = cast<AHGUI::Text>(root.findElement("battlesfought"));
+            AHGUI::Text@ totalfans = cast<AHGUI::Text>(root.findElement("totalfans"));
+            AHGUI::Text@ skillassesment = cast<AHGUI::Text>(root.findElement("skillassesment"));
+            AHGUI::Divider@ statesdiv = cast <AHGUI::Divider>(root.findElement("states"));
+            AHGUI::Image@ rightarrow = cast<AHGUI::Image>(root.findElement("rightarrow"));
+            AHGUI::Image@ leftarrow = cast<AHGUI::Image>(root.findElement("leftarrow"));
 
+            JSONValue cur_profile = global_data.getProfiles()[id];
+
+            if( profilenametext !is null
+                && battlesfought !is null
+                && totalfans !is null
+                && skillassesment !is null
+                && statesdiv !is null
+                && leftarrow !is null
+                && rightarrow !is null ) {
+
+                leftarrow.setVisible( global_data.getProfiles().size() > 1 );
+                rightarrow.setVisible( global_data.getProfiles().size() > 1 );
+                 
+                profilenametext.setText(cur_profile["character_name"].asString());
+                battlesfought.setText( "" + (cur_profile["player_wins"].asInt() 
+                                        + cur_profile["player_loses"].asInt()));
+                totalfans.setText( "" + cur_profile["fans"].asInt());
+                skillassesment.setText( "" + cur_profile["player_skill"].asDouble() );
+
+                statesdiv.clear();
+                for( uint i = 0; i < cur_profile["states"].size(); i++ )
+                {
+                    JSONValue state = global_data.getState(cur_profile["states"][i].asString());
+
+                    if( i > 0 ) statesdiv.addSpacer(100,DDLeft);
+
+                    AHGUI::Divider@ icon1div = statesdiv.addDivider(DDLeft, DOVertical, ivec2(100, UNDEFINEDSIZE));  
+                
+                    icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
+                    icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                }
+            }
+        }
+    }
+
+    void ChangeToCharacter(int id) {
+        if( currentState == agsNewProfile ) {
+            AHGUI::Divider @statediv = cast<AHGUI::Divider>(root.findElement("statediv"));
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement("title"));
+            AHGUI::Text@ description = cast<AHGUI::Text>(root.findElement("description"));
+            AHGUI::Image@ portrait = cast<AHGUI::Image>(root.findElement("portrait"));
+
+            if( statediv !is null 
+                && title !is null 
+                && description !is null
+                && portrait !is null ) {
+                statediv.clear();
+                
+                JSONValue cur_character = global_data.getCharacters()[id];
+
+                title.setText(cur_character["title"].asString());
+                description.setText(cur_character["description"].asString());
+                portrait.setImageFile(cur_character["portrait"].asString());
+
+                for( uint i = 0; i < cur_character["states"].size(); i++ )
+                {
+                    JSONValue state = global_data.getState(cur_character["states"][i].asString());
+
+                    if( i > 0 ) statediv.addSpacer(100,DDLeft);
+
+                    AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(100, UNDEFINEDSIZE));  
+                
+                    icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
+                    icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                }
+            }
+        }
+    }
+
+    void RefreshStoryPage()
+    {
+        if( currentState == agsCharacterIntro )
+        {
+            int page = int(currentIntroPage);
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement( "title" ));
+            AHGUI::Divider@ descriptiondiv = cast<AHGUI::Divider>(root.findElement( "descriptiondiv" ));
+            AHGUI::Image@ glyph = cast<AHGUI::Image>(root.findElement("glyph"));
+            AHGUI::Text@ pagecounter = cast<AHGUI::Text>(root.findElement("pagecounter"));
+
+            if( title !is null 
+                && descriptiondiv !is null
+                && glyph !is null
+                && pagecounter !is null )
+            {
+                JSONValue jtitle = global_data.getCurrentCharacter()["story_title"];
+                JSONValue jpage = global_data.getCurrentCharacter()["intro"]["pages"][page];
+                title.setText(jtitle.asString());
+
+                descriptiondiv.clear();
+                for( uint i = 0; i < jpage["description"].size(); i++ )
+                {
+                    AHGUI::Text bodytext = AHGUI::Text(global_data.resolveString(jpage["description"][i].asString()), query_font, query_font_size, query_color );
+                    bodytext.setHorizontalAlignment( BALeft );
+                    descriptiondiv.addElement( bodytext, DDLeft );
+                }
+                descriptiondiv.doRelayout();
+
+                glyph.setImageFile(jpage["glyph"].asString());
+                pagecounter.setText("" + (page+1) + "/" + currentIntroPage.getMax());
+            }
+            else
+            {
+                Log(error, "unable to update intro page, missing element" );
+            }
+        }
+    }
+
+    void RefreshMetaPage()
+    {
+        if( currentState == agsMetaChoice )
+        {
+            JSONValue world_map = global_data.getWorldMap(global_data.world_map_id);
+            JSONValue world_map_node = global_data.getWorldNode(global_data.world_node_id);
+             
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement( "title" ));
+            AHGUI::Divider@ description = cast<AHGUI::Divider>(root.findElement( "description" ));
+            AHGUI::Divider@ options = cast<AHGUI::Divider>(root.findElement( "options" ));
+
+            RefreshStatusPane();
+            
+            description.clear();
+            options.clear();
+
+
+            int curdivindex = 0;
+            JSONValue meta_choice = global_data.getMetaChoice( world_map_node["target_id"].asString() );
+
+            title.setText(meta_choice["title"].asString());
+
+            for( uint j = 0; j < meta_choice["description"].size(); j++ )
+            {
+                AHGUI::Divider@ descriptionlinewrapper = description.addDivider( DDTop,
+                                                                                 DOHorizontal,
+                                                                                 ivec2(1200,UNDEFINEDSIZE ));
+                AHGUI::Text descriptionline(global_data.resolveString(meta_choice["description"][j].asString()), query_font, query_font_size, query_color);
+                descriptionlinewrapper.setHorizontalAlignment( BALeft );
+                descriptionlinewrapper.addElement(descriptionline,DDLeft);
+            }
+
+            for( uint j = 0; j < meta_choice["options"].size(); j++ )
+            {
+                AHGUI::Divider@ optionlinewrapper = options.addDivider( DDTop,
+                                                                        DOHorizontal,
+                                                                        ivec2( 1200, UNDEFINEDSIZE ));
+                AHGUI::Text optionline( "" + (j+1) + ". " + meta_choice["options"][j]["description"].asString(), query_font, query_font_size, query_color);
+                optionline.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("option", j));
+                optionline.addMouseOverBehavior( buttonHover );
+                optionlinewrapper.setHorizontalAlignment( BALeft );
+                optionlinewrapper.addElement(optionline,DDLeft);
+            }
+        }
+    }
+
+    void RefreshMessage()
+    {
+        if( currentState == agsMessage )
+        {
+            JSONValue world_map_node = global_data.getWorldNode(global_data.world_node_id);
+
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement( "title" ));
+            AHGUI::Divider@ description = cast<AHGUI::Divider>(root.findElement( "description" ));
+            AHGUI::Divider@ options = cast<AHGUI::Divider>(root.findElement( "options" ));
+
+            RefreshStatusPane();
+            
+            description.clear();
+            options.clear();
+
+            description.setSizeX( 1500 );
+            options.setSizeX( 1500 );
+
+            int curdivindex = 0;
+
+            JSONValue message = global_data.getMessage( world_map_node["target_id"].asString() );
+
+            title.setText(message["title"].asString());
+
+            for( uint j = 0; j < message["description"].size(); j++ )
+            {
+                AHGUI::Divider@ descriptionlinewrapper = description.addDivider( DDTop,
+                                                                                 DOHorizontal,
+                                                                                 ivec2(1500,UNDEFINEDSIZE ));
+                AHGUI::Text descriptionline(global_data.resolveString(message["description"][j].asString()), body_font, body_font_size, body_color);
+                descriptionlinewrapper.addElement(descriptionline,DDLeft);
+            }
+
+            AHGUI::Divider@ optionlinewrapper = options.addDivider( DDTop,
+                                                                    DOHorizontal,
+                                                                    ivec2( 1500, UNDEFINEDSIZE ));
+            AHGUI::Text optionline( "Continue", body_font, body_font_size, body_color);
+            optionline.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
+            optionline.addMouseOverBehavior(buttonHover);
+            optionlinewrapper.addElement(optionline,DDLeft);
+        }
+    }
+
+    void RefreshEndScreen()
+    {
+        if( currentState == agsEndScreen )
+        {
+            JSONValue character = global_data.getCurrentCharacter();
+
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement("title"));
+            AHGUI::Image@ characterimage = cast<AHGUI::Image>(root.findElement("characterimage"));
+            AHGUI::Text@ subtitle = cast<AHGUI::Text>(root.findElement("subtitle"));
+            AHGUI::Text@ charactertitle = cast<AHGUI::Text>(root.findElement("charactertitle"));
+            AHGUI::Text@ killcount = cast<AHGUI::Text>(root.findElement("killcount"));
+            AHGUI::Divider@ killsdiv = cast<AHGUI::Divider>(root.findElement("killsdiv"));
+            AHGUI::Text@ kocount = cast<AHGUI::Text>(root.findElement("kocount"));
+            AHGUI::Divider@ kodiv = cast<AHGUI::Divider>(root.findElement("kodiv"));
+            AHGUI::Text@ battleswon = cast<AHGUI::Text>(root.findElement("battleswon"));
+            AHGUI::Text@ battleslost = cast<AHGUI::Text>(root.findElement("battleslost"));
+            AHGUI::Text@ mortalwounds = cast<AHGUI::Text>(root.findElement("mortalwound"));
+            AHGUI::Text@ playtime = cast<AHGUI::Text>(root.findElement("playtime"));
+            //AHGUI::Text@ wealth = cast<AHGUI::Text>(root.findElement("wealth"));
+            AHGUI::Divider@ statediv = cast<AHGUI::Divider>(root.findElement("statediv"));
+
+            if( title !is null )
+            {
+                title.setText(character["story_title"].asString());
+            }
+
+            if( characterimage !is null )
+            {
+                characterimage.setImageFile(character["portrait"].asString());
+            }
+
+            if( subtitle !is null )
+            {
+                if( global_data.hasState("won") )
+                {
+                    subtitle.setText("SUCCESS!");
+                }
+                else if( global_data.hasState("lost") )
+                {
+                    subtitle.setText("DEFEAT!");
+                }
+                else
+                {
+                    subtitle.setText("NEITHER!");
+                }
+            }
+        
+            if( charactertitle !is null )
+            {
+                charactertitle.setText( character["title"].asString() ); 
+            }
+       
+            if( killcount !is null )
+            {
+                killcount.setText( global_data.player_kills + " Kills" );
+            }
+            
+            if( killsdiv !is null )
+            {
+                killsdiv.clear();
+                int c = 0;
+                while( c < global_data.player_kills )
+                {
+                    if( c + 10 <= global_data.player_kills )
+                    {
+                        AHGUI::Image k10 = AHGUI::Image( "Textures/ui/arena_mode/10_kills.png" );
+                        killsdiv.addElement( k10, DDLeft );
+                        c += 10;    
+                    }
+                    else
+                    {
+                        AHGUI::Image k1 = AHGUI::Image( "Textures/ui/arena_mode/1_kills.png" );
+                        killsdiv.addElement( k1, DDLeft );
+                        c++;
+                    }
+                }
+            }
+            
+            if( kocount !is null )
+            {
+                kocount.setText( global_data.player_kos + " Knockouts" );
+            }
+
+            if( kodiv !is null )
+            {
+                kodiv.clear();
+                int c = 0;
+                while( c < global_data.player_kos )
+                {
+                    if( c + 10 <= global_data.player_kos )
+                    {
+                        AHGUI::Image k10 = AHGUI::Image( "Textures/ui/arena_mode/10_kos.png" );
+                        kodiv.addElement( k10, DDLeft );
+                        c += 10;    
+                    }
+                    else
+                    {
+                        AHGUI::Image k1 = AHGUI::Image( "Textures/ui/arena_mode/1_kos.png" );
+                        kodiv.addElement( k1, DDLeft );
+                        c++;
+                    }
+                }
+            }
+
+            if( battleswon !is null )
+            {
+                battleswon.setText( "Battles Won: " + global_data.player_wins ); 
+            }
+
+            if( battleslost !is null )
+            {
+                battleslost.setText( "Battles Lost: " + global_data.player_loses );
+            }
+
+            if( mortalwounds !is null )
+            {
+                mortalwounds.setText( "Mortal Wounds: " + global_data.player_deaths );
+            }
+
+            if( playtime !is null )
+            {
+                playtime.setText( "Play Time: " + global_data.play_time/60 + ":" + global_data.play_time%60 );
+            }
+            //wealth.setText("");
+
+            if( statediv !is null )
+            {
+                statediv.clear();
+                for( uint i = 0; i < global_data.states.length(); i++ )
+                {
+                    if( i != 0 )
+                        statediv.addSpacer(40,DDLeft);
+                    JSONValue state = global_data.getState(global_data.states[i]);
+
+                    AHGUI::Image glyph = AHGUI::Image( state["glyph"].asString() ); 
+                    glyph.scaleToSizeY(100);
+                    statediv.addElement( glyph, DDLeft );
+                }
+            }
+        }
+    }
+
+    void RefreshStatusPane()
+    {
+        AHGUI::Divider@ statuspane = cast<AHGUI::Divider>(root.findElement("statuspane"));
+        statuspane.clear();
+
+        int height = left_status_pane_height;
+        statuspane.setSizeY( height );
+        statuspane.setSizeX( status_pane_column_width*2+status_pane_column_padding );
+
+        int curdivindex = 0;
+
+        AHGUI::Divider@ leftpane = statuspane.addDivider( DDLeft, DOVertical, ivec2( status_pane_column_width, height ) );
+        statuspane.addSpacer(  status_pane_column_padding, DDLeft );
+        AHGUI::Divider@ rightpane = statuspane.addDivider( DDLeft, DOVertical, ivec2( status_pane_column_width, height ) );
+
+        for( uint i = 0; i < global_data.states.length(); i++ )
+        {
+            AHGUI::Divider@ curdivider = @rightpane;
+            if( i % 2 == 0 )
+            {
+                @curdivider = @leftpane; 
+            } 
+
+            AHGUI::Divider@ glyphcontainer = curdivider.addDivider( DDTop, DOVertical, ivec2( status_pane_column_width, status_pane_glyph_height ) );
+
+            JSONValue state = global_data.getState(global_data.states[i]);
+
+            if( state.type() == JSONobjectValue )
+            {
+                AHGUI::Image glyphimg( state["glyph"].asString() );
+                glyphcontainer.addElement( glyphimg, DDTop );
+
+                AHGUI::Text glyphtitle( state["title"].asString(), label_font, label_font_size, label_color );
+                glyphcontainer.addElement( glyphtitle, DDTop );
+            }
+            else
+            {
+                DisplayError("Unknown state", "Unknown state \"" + global_data.states[i] + "\"");
+            }
+        }
+    }
+
+    void RefreshWorldMap()
+    {
+        if( currentState == agsMapScreen )
+        {
+            Log( info, "Showing world map: " + global_data.world_map_id);
+            JSONValue world_map = global_data.getCurrentWorldMap();
+
+            AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement( "title" ));
+            AHGUI::Divider@ subbodydiv = cast<AHGUI::Divider>(root.findElement("subbodydiv"));
+            
+            
+            RefreshStatusPane();
+
+            subbodydiv.setBackgroundImage( world_map["map"].asString() );
+
+            int linecount = 0;
+            for( uint i = 0; i < world_map["nodes"].size(); i++ )
+            {
+                JSONValue node = world_map["nodes"][i];
+                  
+                float xpos = node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX());
+                float ypos = node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY());
+        
+                vec2 title_offset = vec2( node["title_offset"]["x"].asFloat(),node["title_offset"]["y"].asFloat()) * float(subbodydiv.getSizeX());
+
+                AHGUI::Text node_title( node["title"].asString(), world_map_font, world_map_font_size, world_map_color);
+                //subbodydiv.addElement(node_title, DDTop);
+                int node_title_width = node_title.getSizeX();
+                subbodydiv.addFloatingElement(node_title, "world_map_node_title_" + node["id"].asString(), ivec2(title_offset)+ivec2(int(xpos)-node_title_width/2, int(ypos)-75), 5);
+        
+                AHGUI::Image node_marker( "Textures/world_map/map_marker.png" );
+                int node_marker_width = 50;
+                int node_marker_height = 50;
+                node_marker.setSize( node_marker_width,node_marker_height );
+                node_marker.addMouseOverBehavior(mouse_world_map_hover_behavior);
+                node_marker.addMouseOverBehavior( buttonHover );
+                node_marker.setName("world_map_node_image_" + node["id"].asString());
+                //subbodydiv.addElement( node_marker, DDTop);
+                subbodydiv.addFloatingElement( node_marker, "world_map_node_image_" + node["id"].asString(), ivec2(int(xpos)-node_marker_width/2, int(ypos)-node_marker_height/2));
+            }
+
+            AHGUI::Image line_( "Textures/world_map/line_segment.png" );
+            int line_segment_width = line_.getSizeX();
+            float safe_zone = 50;
+
+            JSONValue connections = world_map["connections"];
+            for( uint i = 0; i < connections.size(); i++ )
+            { 
+                JSONValue from_node = getWithId(world_map["nodes"], connections[i]["from"].asString());
+                JSONValue to_node = getWithId(world_map["nodes"], connections[i]["to"].asString());
+
+                vec2 from_node_pos(
+                    from_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
+                    from_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
+                );
+                vec2 to_node_pos(
+                    to_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
+                    to_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
+                );
+
+                float dist = length( from_node_pos - to_node_pos );
+                vec2 dir = normalize( from_node_pos - to_node_pos );
+
+                const float pi = 3.141592f;
+                float rotation = -atan2(dir.y, dir.x) * (180/pi);
+
+                float step = 0;
+                float optimal_step = 0;
+                float missing = 3.402823466e+38;
+                 
+                for( int k = 100; k < 200; k++ )
+                {
+                    step = line_segment_width + k*0.10;
+
+                    float curdist = safe_zone;
+                    while( curdist + step < (dist - safe_zone) )
+                    {
+                        curdist += step;
+                    }
+                    
+                    if( dist-curdist < missing )
+                    {
+                        missing = dist-curdist;
+                        optimal_step = step;
+                    }
+                }
+            
+                step = optimal_step;
+
+                float curdist = safe_zone;
+
+                while( curdist < (dist - safe_zone) )
+                {
+                    vec2 curpos = to_node_pos + dir * curdist;
+                        
+                    AHGUI::Image line( "Textures/world_map/line_segment.png" );
+                    line.setRotation( rotation );
+                    subbodydiv.addFloatingElement( line, "mapline" + linecount++, ivec2(curpos)-ivec2(line_segment_width/2,line_segment_width/2) );
+
+                    curdist += step;
+                }
+            }
+        }
+    }
+
+    void UpdateStateBasedOnCurrentWorldNode()
+    {
+        JSONValue world_map_node = global_data.getCurrentWorldNode();
+
+        if( world_map_node["type"].asString() == "meta_choice" )
+        {
+            currentState = agsMetaChoice;
+        }
+        else if( world_map_node["type"].asString() == "message" )
+        {
+            currentState = agsMessage;
+        } 
+        else if( world_map_node["type"].asString() == "arena_instance" )
+        {
+            JSONValue arena_instance = global_data.getArenaInstance(world_map_node["target_id"].asString());      
+            
+            this_ui.SendCallback( arena_instance["level"].asString() );
+        }
+        else if( world_map_node["type"].asString() == "end_game" )
+        {
+            currentState = agsEndScreen; 
+        }
+        else if( world_map_node["type"].asString() == "world_map" )
+        {
+            currentState = agsMapScreen;
+        }
+        else
+        {
+            Log( error, "Unknown world map node type: \"" + world_map_node["type"].asString() + "\"\n" );
+            currentState = agsMainMenu;
+        }
+
+        //If we move to the same screen again, just force the reload.
+        forceReloadState = true;
+    }
+}
+
+/*******
+ *  
+ * BEGIN NEW FEATURE DISPLAY (Delete this eventually)
+ *
+ */
+
+class NewFeaturesExampleGUI : AHGUI::GUI {
+
+    // fancy ribbon background coordinates
+    ivec2 fgUpper1Position;
+    ivec2 fgUpper2Position;
+    ivec2 fgLower1Position;
+    ivec2 fgLower2Position;
+    ivec2 bgRibbonUp1Position;
+    ivec2 bgRibbonUp2Position;
+    ivec2 bgRibbonDown1Position;
+    ivec2 bgRibbonDown2Position;
+    AHGUI::Container@ centerContainer;
+
+    int flyingTextY = 0;
+    int flyingTextDir = 1;
+    array<int> flyingImagesX = {0,0,0,0,0}; 
+    array<int> flyingImagesDir = {1,1,1,1,1}; 
+
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Constructor
+     * 
+     */
+    NewFeaturesExampleGUI() {
+        // Call the superclass to set things up
+        super();
+
+        // Fill the screen ( no letterboxing - *not* 16x9 anymore )
+        restrict16x9( false );
+
+        // Initialize the extra layers (one in front, one behind)
+        setBackgroundLayers(1);
+        setForegroundLayers(1);
+
+        // given that this has to fill the whole screen this is one of the few places 
+        //  where you should ever have to reference the size of the screen
+        fgUpper1Position =      ivec2( 0,    0 );
+        fgUpper2Position =      ivec2( 2560, 0 );
+        fgLower1Position =      ivec2( 0,    AHGUI::screenMetrics.GUISpaceY/2 );
+        fgLower2Position =      ivec2( 2560, AHGUI::screenMetrics.GUISpaceY/2 );
+        bgRibbonUp1Position =   ivec2( 0, 0 );
+        bgRibbonUp2Position =   ivec2( 0, AHGUI::screenMetrics.GUISpaceY );
+        bgRibbonDown1Position = ivec2( 0, 0 );
+        bgRibbonDown2Position = ivec2( 0, -AHGUI::screenMetrics.GUISpaceY );
+
+        // get references to the foreground and background containers
+        AHGUI::Container@ background = getBackgroundLayer( 0 );
+        AHGUI::Container@ foreground = getForegroundLayer( 0 );
+
+        // Make a new image 
+        AHGUI::Image blueBackground("Textures/ui/challenge_mode/blue_gradient_c.tga");
+        // fill the screen
+        blueBackground.setSize(2560, AHGUI::screenMetrics.GUISpaceY);
+        blueBackground.setColor( 1.0,1.0,1.0,0.8 );
+        // Call it blueBG and give it a z value of 1 to put it furthest behind
+        background.addFloatingElement( blueBackground, "blueBG", ivec2( 0, 0 ), 1 );  
+
+
+        // Note (as I didn't do an example of this)
+        // AHGUI::Divider now inherits from AHGUI::Container
+        // Dividers work the same as they always did, but all the feature of Container
+        // (as demonstrated here) are available in Divider as well -- such as addFloatingElement 
+        // and setBackgroundImage
+
+        // Make a new image for half the upper image
+        AHGUI::Image fgImageUpper1("Textures/ui/challenge_mode/red_gradient_border_c.tga");
+        fgImageUpper1.setSize(2560, AHGUI::screenMetrics.GUISpaceY/2);
+        fgImageUpper1.setColor( 0.7,0.7,0.7,1.0 );
+        // use only the top half(ish) of the image
+        fgImageUpper1.setImageOffset( ivec2(0,0), ivec2(1024, 600) );
+        // flip it upside down 
+        fgImageUpper1.setRotation( 180 );
+        // Call it gradientUpper1 
+        foreground.addFloatingElement( fgImageUpper1, "gradientUpper1", fgUpper1Position, 2 );
+
+        // repeat for a second image so we can scroll unbrokenly  
+        AHGUI::Image fgImageUpper2("Textures/ui/challenge_mode/red_gradient_border_c.tga");
+        fgImageUpper2.setSize(2560, AHGUI::screenMetrics.GUISpaceY/2);
+        fgImageUpper2.setColor( 0.7,0.7,0.7,1.0 );
+        fgImageUpper2.setImageOffset( ivec2(0,0), ivec2(1024, 600) );
+        fgImageUpper2.setRotation( 180 );
+        foreground.addFloatingElement( fgImageUpper2, "gradientUpper2", fgUpper2Position, 2 );        
+
+        // repeat again for the bottom image(s) (not flipped this time)
+        AHGUI::Image bgImageLower1("Textures/ui/challenge_mode/red_gradient_border_c.tga");
+        bgImageLower1.setSize(2560, AHGUI::screenMetrics.GUISpaceY/2);
+        bgImageLower1.setColor( 0.7,0.7,0.7,1.0 );
+        bgImageLower1.setImageOffset( ivec2(0,0), ivec2(1024, 600) );
+        foreground.addFloatingElement( bgImageLower1, "gradientLower1", fgLower1Position, 2 ); 
+
+        AHGUI::Image fgImageLower2("Textures/ui/challenge_mode/red_gradient_border_c.tga");
+        fgImageLower2.setSize(2560, AHGUI::screenMetrics.GUISpaceY/2);
+        fgImageLower2.setColor( 0.7,0.7,0.7,1.0 );
+        fgImageLower2.setImageOffset( ivec2(0,0), ivec2(1024, 600) );
+        foreground.addFloatingElement( fgImageLower2, "gradientLower2", fgLower2Position, 2 );   
+
+        // Repeat this same process for the two 'ribbons' which will, instead' go up and down
+        AHGUI::Image bgRibbonUp1("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
+        bgRibbonUp1.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
+        // Fill the left half of the screen
+        bgRibbonUp1.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
+        bgRibbonUp1.setColor( 0.0,0.0,0.0,1.0 );
+        // Put this at the front of the blue background (z=3)
+        background.addFloatingElement( bgRibbonUp1, "ribbonUp1", bgRibbonUp1Position, 3 );
+
+        AHGUI::Image bgRibbonUp2("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
+        bgRibbonUp2.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
+        bgRibbonUp2.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
+        bgRibbonUp2.setColor( 0.0,0.0,0.0,1.0 );
+        background.addFloatingElement( bgRibbonUp2, "ribbonUp2", bgRibbonUp2Position, 3 );
+        
+        AHGUI::Image bgRibbonDown1("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
+        bgRibbonDown1.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
+        bgRibbonDown1.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
+        bgRibbonDown1.setColor( 0.0,0.0,0.0,1.0 );
+        background.addFloatingElement( bgRibbonDown1, "ribbonDown1", bgRibbonDown1Position, 3 );
+
+        AHGUI::Image bgRibbonDown2("Textures/ui/challenge_mode/giometric_ribbon_c.tga");
+        bgRibbonDown2.setImageOffset( ivec2(256,0), ivec2(768, 1024) );
+        bgRibbonDown2.setSize(1280, AHGUI::screenMetrics.GUISpaceY);
+        bgRibbonDown2.setColor( 0.0,0.0,0.0,1.0 );
+        background.addFloatingElement( bgRibbonDown2, "ribbonDown2", bgRibbonDown2Position, 3 );
+
+
+        // Now construct main pane
+        
+        // First a footer
+        AHGUI::Divider@ footer = root.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        footer.setName("footerdiv");
+
+        // Add some text to put something here
+        AHGUI::Text footerText( "Footer", "edosz", 120, HexColor("#fff") );
+
+        // Manually add it to the divider
+        footer.addElement( footerText, DDLeft );
+
+        // Repeat for a header
+        AHGUI::Divider@ header = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        footer.setName("headerdiv");
+
+        // Add some text to put something here
+        AHGUI::Text headerText( "Header", "edosz", 120, HexColor("#fff") );
+
+        // Manually add it to the divider
+        header.addElement( headerText, DDRight );
+
+        // Now build the main part of the body 
+        // Use a special function to avoid having to mess with variable screen dimensions 
+        // This will eat up all the space remaining y space (thus having to call it last)
+        AHGUI::Divider@ mainPane = root.addDividerFillCenter( DOHorizontal );
+
+        // Add some fun self-descriptive text 
+        AHGUI::Text sideText( "This is rotated text", "edosz", 120, HexColor("#fff") );
+        sideText.setRotation( 90 );
+        mainPane.addElement( sideText, DDRight );
+        // (are you having fun yet?)
+
+        // Create a fixed sized container 
+        @centerContainer = @AHGUI::Container( "mainpanel", ivec2( 900, 900 ) );
+
+        // Set a background to this container (will be sized to the container automatically)
+        centerContainer.setBackgroundImage( "Textures/ui/challenge_mode/background_map.tga" );
+        centerContainer.showBorder(true);
+
+        mainPane.addElement( centerContainer, DDCenter );
+
+        // Add some flying images to show off the container clipping
+        for( uint i = 0; i < flyingImagesX.length(); ++i ) {
+
+            AHGUI::Image newImage( "Textures/ui/versus_mode/fight_glyph.tga" );
+            newImage.setSize( 300,300 );
+            // Vary the color 
+            newImage.setColor( 1.0/float(i+1), 1.0/float(i+1), 1.0/float(i+1), 1.0 );
+
+            centerContainer.addFloatingElement( newImage, "flyingImage" + i, ivec2(flyingImagesX[i],150*i), int(i*2) );
+        }
+
+        // Finally a bit of text 
+        AHGUI::Text flyingText( "Z Sorted Text", "edosz", 120, HexColor("#fff") );
+        centerContainer.addFloatingElement( flyingText, "flyingText", ivec2(170, flyingTextY ), 5 );
+
+    }
+
+
+    /*******************************************************************************************/
+    /**
+     * @brief Called for each message received 
+     * 
+     * @param message The message in question  
+     *
+     */
+    void processMessage( AHGUI::Message@ message ) {
+        Log( info, "Got message: " + message.name + "\n" );
+        // Check to see if an exit has been requested 
+        if( message.name == "mainmenu" ) {
+            global_data.WritePersistentInfo( false );
+            this_ui.SendCallback("back");
+        }
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Update the menu
+     *
+     */
+    void update() {
+        
+        // have a way to get out of here
+        if(IsKeyDown(GetCodeForKey("esc"))) {   
+            processMessage(AHGUI::Message("mainmenu"));
+        }
+
+        // Update the background images (we could have made this into a behavior)
+    
+        // Calculate the new positions
+        fgUpper1Position.x -= 2;
+        fgUpper2Position.x -= 2;
+        fgLower1Position.x -= 1;
+        fgLower2Position.x -= 1;
+        bgRibbonUp1Position.y -= 1;
+        bgRibbonUp2Position.y -= 1;
+        bgRibbonDown1Position.y += 1;
+        bgRibbonDown2Position.y += 1;
+
+        // wrap the images around
+        if( fgUpper1Position.x == 0 ) {
+            fgUpper2Position.x = 2560;
+        }
+
+        if( fgUpper2Position.x == 0 ) {
+            fgUpper1Position.x = 2560;
+        }
+
+        if( fgLower1Position.x == 0 ) {
+            fgLower2Position.x = 2560;
+        }
+
+        if( fgLower2Position.x == 0 ) {
+            fgLower1Position.x = 2560;
+        }
+
+        if( bgRibbonUp1Position.y == 0 ) {
+            bgRibbonUp2Position.y = AHGUI::screenMetrics.GUISpaceY;
+        }
+
+        if( bgRibbonUp2Position.y == 0 ) {
+            bgRibbonUp1Position.y = AHGUI::screenMetrics.GUISpaceY;
+        }
+
+        if( bgRibbonDown1Position.y == 0 ) {
+            bgRibbonDown2Position.y = -AHGUI::screenMetrics.GUISpaceY;
+        }
+
+        if( bgRibbonDown2Position.y == 0 ) {
+            bgRibbonDown1Position.y = -AHGUI::screenMetrics.GUISpaceY;
+        }
+
+        // Get a reference to the first (and only) background container
+        AHGUI::Container@ background = getBackgroundLayer( 0 );
+        AHGUI::Container@ foreground = getForegroundLayer( 0 );
+
+        // Update the images position in the container
+        foreground.moveElement( "gradientUpper1", fgUpper1Position );
+        foreground.moveElement( "gradientUpper2", fgUpper2Position );
+        foreground.moveElement( "gradientLower1", fgLower1Position );
+        foreground.moveElement( "gradientLower2", fgLower2Position );
+        background.moveElement( "ribbonUp1",      bgRibbonUp1Position );
+        background.moveElement( "ribbonUp2",      bgRibbonUp2Position );
+        background.moveElement( "ribbonDown1",    bgRibbonDown1Position );
+        background.moveElement( "ribbonDown2",    bgRibbonDown2Position );
+
+        // Update our flying things 
+        for( uint i = 0; i < flyingImagesX.length(); ++i ) {
+
+            AHGUI::Image@ flyingImage = cast<AHGUI::Image>(centerContainer.findElement("flyingImage"+i));
+
+            // Rotate the image just for fun (you must being having lots of fun by now)
+            flyingImage.setRotation( flyingImage.getRotation() + float(i) );
+
+            // Update our x values
+            flyingImagesX[i] += (flyingImagesDir[i] * (i+1));
+
+            // Make sure we stay *roughly* in bounds 
+            if( flyingImagesX[i] > 950 ) {
+                flyingImagesDir[i] = - 1;
+            }
+
+            if( flyingImagesX[i] < -250 ) {
+                flyingImagesDir[i] = 1;
+            }
+
+            centerContainer.moveElement( "flyingImage" + i, ivec2(flyingImagesX[i],int(150*i)) );
+        }
+
+        // Finally move our text
+        flyingTextY += flyingTextDir * 3;
+        if( flyingTextY < -100 ) {
+            flyingTextDir = 1;
+        }
+        if( flyingTextY > 1000 ) {
+            flyingTextDir = -1;
+        }
+
+        centerContainer.moveElement( "flyingText", ivec2(170, flyingTextY ) );
+
+        // Update the GUI 
+        AHGUI::GUI::update();
+
+    }
+
+    /*******************************************************************************************/
+    /**
+    * @brief  Render the gui
+    * 
+    */
+    void render() {
+        // Update the GUI 
+        AHGUI::GUI::render();
+    }
 
 }
 
-ArenaGUI arenaGUI;
 
-bool HasFocus(){
+
+/*******
+ *  
+ * END NEW FEATURE DISPLAY (Delete this eventually)
+ *
+ */
+
+
+
+ArenaGUI arenaGUI;
+// Comment out the above and uncomment to enable the new feature demo
+//NewFeaturesExampleGUI exampleGUI;
+
+bool HasFocus(){    
     return false;
 }
 
@@ -1136,10 +2037,17 @@ void Initialize(){
 
 void Update(){
     arenaGUI.update();
+    // Comment out the above and uncomment to enable the new feature demo
+    //exampleGUI.update();
 }
 
+int counter = 0;
+int offset = 0;
+
 void DrawGUI(){
-    arenaGUI.render(); 
+    arenaGUI.render();
+    // Comment out the above and uncomment to enable the new feature demo
+    //exampleGUI.render();
 }
 
 void Draw(){
@@ -1151,5 +2059,4 @@ void Init(string str){
 void StartArenaMeta(){
 
 }
-
 
