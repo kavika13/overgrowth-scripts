@@ -23,7 +23,7 @@ void main()
 	diffuse_color += textureCube(tex4,diffuse_map_vec).xyz * 0.5;
 	
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
-	float spec = min(1.0, max(0.0,pow(dot(normal,H),800.0)*10.0 * NdotL)) ;
+	float spec = min(1.0, pow(max(0.0,dot(normal,H)),800.0)*10.0 * NdotL) ;
 	vec3 spec_color = vec3(spec);
 	
 	vec3 spec_map_vec = reflect(vertex_pos,normal);

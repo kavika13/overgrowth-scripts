@@ -34,7 +34,7 @@ void main()
 	
 	NdotL = max(dot(normal,normalize(light_pos)),0.0);
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
-	float spec = max(0.0,min(1.0,pow(dot(normal,H),20.0)));
+	float spec = min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0 * NdotL) ;
 	
 	color = min((gl_LightSource[0].diffuse * NdotL * gl_Color),1.0);//* vec4(color_tex.xyz,1.0);
 	color += NdotL * spec * gl_Color * color_tex.a * gl_LightSource[0].diffuse;
