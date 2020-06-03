@@ -3862,6 +3862,9 @@ void ReceiveMessage(string msg){
     string token = token_iter.GetToken(msg);
     if(token == "restore_health"){
         RecoverHealth();
+	} else if(token == "remove_health"){
+        TakeDamage(9999.0f);
+		Ragdoll(_RGDL_LIMP);
     } else if(token == "start_talking"){
         test_talking = true;
     } else if(token == "stop_talking"){

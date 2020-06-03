@@ -1,16 +1,13 @@
 
-const int grid_x = 8;
-const int grid_y = 8;
-const int grid_z = 8;
-const int num_clusters = grid_x * grid_y * grid_z;
-const vec3 grid_size = vec3(grid_x, grid_y, grid_z);
-
-
 layout (std140) uniform DecalInfo {
-    uniform vec3 decal_cluster_size;
+    uvec3 grid_size;
     uniform int num_decals;
-    uniform vec4 decal_grid_min;
-    uniform vec4 decal_grid_max;
+    mat4 inv_proj_mat;
+    vec4 viewport;
+    float z_near;
+    float z_mult;
+    int pad1;
+    int pad2;
 };
 
 
@@ -28,57 +25,49 @@ uniform sampler2D decal_normal_tex; // decal normal texture
 uniform sampler2D decal_color_tex; // decal color texture
 
 uniform samplerBuffer decal_buffer;
-uniform isamplerBuffer decal_cluster_buffer;
+uniform usamplerBuffer decal_cluster_buffer;
 
 
 void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_vert) {
-	if (any(lessThan(world_vert, decal_grid_min.xyz))) {
-	    return;
-	}
+	uint num_z_clusters = grid_size.z;
 
-	if (any(greaterThan(world_vert, decal_grid_max.xyz))) {
-	    return;
-	}
+	vec4 ndcPos;
+	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+	ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
+	ndcPos.w = 1.0;
 
-	ivec3 g = ivec3((world_vert - decal_grid_min.xyz) / decal_cluster_size);
+	vec4 clipPos = ndcPos / gl_FragCoord.w;
+	vec4 eyePos = inv_proj_mat * clipPos;
+
+	float zVal = log(-1.0 * eyePos.z - z_near + 1.0) * z_mult;
+
+	zVal = max(0u, min(zVal, num_z_clusters - 1u));
+
+	uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
 
 	// index of cluster we're in
-	int decal_cluster_index = (g.z * grid_y + g.y) * grid_x + g.x;
-
-	// FIXME: testing hax to avoid gpu hang, remove
-	decal_cluster_index = max(0, decal_cluster_index);
-	decal_cluster_index = min(decal_cluster_index, num_clusters);
-
-
-	int major = decal_cluster_index / 4;
-	int minor = decal_cluster_index % 4;
-
-
-	int val = texelFetch(decal_cluster_buffer, major)[minor];
-
+	uint decal_cluster_index = (g.y * grid_size.x + g.x) * num_z_clusters + g.z;
+	uint val = texelFetch(decal_cluster_buffer, int(decal_cluster_index)).x;
 
 	// number of decals in current cluster
-	int decal_count = (val >> 16) & 0xFFFF;
+	uint decal_count = (val >> 16) & 0xFFFFU;
 
-	// FIXME: testing hax to avoid gpu hang, remove
-	decal_count = max(0, decal_count);
-	decal_count = min(decal_count, 30);
+	// debug option, uncomment to visualize clusters
+	//colormap.xyz = vec3(min(decal_count, num_decals) / 63.0);
+	//colormap.xyz = vec3(g.z / num_z_clusters);
 
 	// index into cluster_decals
-	int first_decal_index = val & 0xFFFF;
-
-	// FIXME: testing hax to avoid gpu hang, remove
-	first_decal_index = max(0, first_decal_index);
+	uint first_decal_index = val & 0xFFFFU;
 
 	// decal list data is immediately after cluster lookup data
+	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
 	first_decal_index = first_decal_index + num_clusters;
 
 	vec3 world_dx = dFdx(world_vert);
 	vec3 world_dy = dFdy(world_vert);
-	for (int i = 0; i < decal_count; ++i) {
-    	major = (first_decal_index + i) / 4;
-    	minor = (first_decal_index + i) % 4;
-		int decal_index = texelFetch(decal_cluster_buffer, major)[minor];
+	for (uint i = 0u; i < decal_count; ++i) {
+		// texelFetch takes int
+		int decal_index = int(texelFetch(decal_cluster_buffer, int(first_decal_index + i)).x);
 
 		mat4 decal_transform;
 		decal_transform[0] = texelFetch(decal_buffer, 7 * decal_index + 0);
@@ -99,24 +88,32 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_ve
 		vec2 size_normal = temp_normal.zw;
 
 		vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
+
+		// we must supply texture gradients here since we have non-uniform control flow
+		// non-uniformness happens when we have z cluster discontinuities
+
+		vec2 color_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_uv;
+		vec2 color_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_uv;
+
+		vec2 color_tex_coord = start_uv + size_uv * (temp.xz + vec2(0.5));
+		vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
+
+#ifdef DECAL_NORMALS
+
+		vec2 normal_tex_coord = start_normal + size_normal * (temp.xz + vec2(0.5));
+
+		vec2 normal_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_normal;
+		vec2 normal_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_normal;
+
+		vec4 decal_normal = textureGrad(decal_normal_tex, normal_tex_coord, normal_tex_dx, normal_tex_dy);
+
+#endif  // DECAL_NORMALS
+
 		if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
             
 		} else {
-			// we must supply texture gradients here since we have non-uniform control flow
-			vec2 color_tex_coord = start_uv + size_uv * (temp.xz + vec2(0.5));
-
-			vec2 color_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_uv;
-			vec2 color_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_uv;
-
-			vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
 			colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal_tint.xyz, decal_color.a);
 #ifdef DECAL_NORMALS
-			vec2 normal_tex_coord = start_normal + size_normal * (temp.xz + vec2(0.5));
-
-			vec2 normal_tex_dx = (test * vec4(world_dx, 0.0)).xz * size_normal;
-			vec2 normal_tex_dy = (test * vec4(world_dy, 0.0)).xz * size_normal;
-
-			vec4 decal_normal = textureGrad(decal_normal_tex, normal_tex_coord, normal_tex_dx, normal_tex_dy);
 
 			vec3 decal_tan = normalize(cross(ws_normal, (decal_transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
 			vec3 decal_bitan = cross(ws_normal, decal_tan);

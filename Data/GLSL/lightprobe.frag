@@ -19,6 +19,12 @@ out vec4 out_color;
 
 void main()
 {    
+#ifdef STIPPLE
+    if(mod(gl_FragCoord.x + gl_FragCoord.y, 2.0) == 0.0){
+        discard;
+    }
+#endif
+
     vec3 acc[6];
     acc[0] = ambient_cube_color[instance_id * 6 + 0].xyz;
     acc[1] = ambient_cube_color[instance_id * 6 + 1].xyz;

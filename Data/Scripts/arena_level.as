@@ -185,7 +185,7 @@ void DeleteObjectsInList(array<int> &inout ids){
 // Instantiate an object at the location of another object
 // E.g. create a character at the location of a placeholder spawn point
 Object@ SpawnObjectAtSpawnPoint(Object@ spawn, string &in path){
-    int obj_id = CreateObject(path);
+    int obj_id = CreateObject(path, true);
     spawned_object_ids.push_back(obj_id);
     Object @new_obj = ReadObjectFromID(obj_id);
     new_obj.SetTranslation(spawn.GetTranslation());

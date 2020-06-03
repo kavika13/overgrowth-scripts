@@ -87,6 +87,8 @@ class Dialogue {
     int set_animation_char_select;
     int set_animation_pose_select;
 	float last_key_update;
+	bool edit_mode;
+	string edit_text;
 
     void SetRecording(bool val){
         if(recording != val){
@@ -149,6 +151,11 @@ class Dialogue {
 					}
 				}
 			}
+		}
+		// To be sure...
+		if (edit_mode) {
+			StopTextInput();
+			edit_mode = false;
 		}
     }
 
@@ -276,6 +283,8 @@ class Dialogue {
         set_animation_char_select = -1;
         set_animation_pose_select = -1;
 		last_key_update = 0.0f;
+		edit_mode = false;
+		edit_text = "";
 
         Print("Loading dialogue poses file\n");
         if(!LoadFile("Data/Animations/dialogue_poses.txt")){
@@ -501,6 +510,10 @@ class Dialogue {
         selected_line = 1;
     }
 
+	void DeleteLine(int index){
+        strings.removeAt(index);
+    }
+
     void AddLine(const string &in str, int index){
         strings.resize(strings.size() + 1);
         int num_lines = strings.size();
@@ -675,11 +688,19 @@ class Dialogue {
             }
         }
 
+		if(edit_mode) {
+			string input = GetTextInput();
+			if (input.length() == 1) {
+				edit_text += input;
+			}
+			text_dirty = true;
+		}
+
         if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
             // Handle up/down dialogue editor navigation
-			if((the_time - last_key_update) > 0.1f) {
+			if((the_time - last_key_update) > 0.05f) {
 				last_key_update = the_time;
-				if(GetInputDown(controller_id, "down") || selected_line < 0 || !strings[selected_line].visible){
+				if((GetInputDown(controller_id, "down") || selected_line < 0 || !strings[selected_line].visible) && !edit_mode){
 					int num_lines = int(strings.size());
 					int i = selected_line + 1;
 					if(GetInputDown(controller_id, "shift")){
@@ -701,7 +722,7 @@ class Dialogue {
 					}
 					ClearUnselectedObjects();
 				}
-				if(GetInputDown(controller_id, "up") || selected_line >= int(strings.size())){
+				if((GetInputDown(controller_id, "up") || selected_line >= int(strings.size())) && !edit_mode){
 					int i = selected_line - 1;
 					if(GetInputDown(controller_id, "shift")){
 						while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
@@ -721,6 +742,34 @@ class Dialogue {
 						UpdateRecordLocked();
 					}
 					ClearUnselectedObjects();
+				}
+				if(GetInputDown(controller_id, "return")){
+					if (!edit_mode) {
+						StartTextInput();
+						edit_mode = true;
+						edit_text = strings[selected_line].str;
+					} else {
+						StopTextInput();
+						edit_mode = false;
+						strings[selected_line].str = edit_text;
+						UpdateParams(edit_text, dialogue_obj_id);
+						SetupDialogueObjectConnectors(dialogue_obj_id);
+					}
+				}
+				if(GetInputDown(controller_id, "backspace") && edit_mode) {
+					edit_text = edit_text.substr(0, edit_text.length - 1);
+					text_dirty = true;
+				}
+				if(GetInputDown(controller_id, "keypad+")) {
+					// add new line
+					AddLine("", selected_line + 1);
+					text_dirty = true;
+				}
+				if(GetInputDown(controller_id, "keypad-")) {
+					// delete line
+					DeleteLine(selected_line);
+					edit_mode = false;
+					text_dirty = true;
 				}
 			}
         }
@@ -1057,7 +1106,7 @@ class Dialogue {
         switch(se.obj_command){
         case kCamera: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/camera_placeholder.xml");
+                se.spawned_id = CreateObject("Data/Objects/placeholder/camera_placeholder.xml", false);
             }
             vec3 pos(atof(se.params[0]), atof(se.params[1]), atof(se.params[2]));
             vec3 rot(atof(se.params[3]), atof(se.params[4]), atof(se.params[5]));
@@ -1079,7 +1128,7 @@ class Dialogue {
             break;}
         case kCharacter: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
             }
             int char_id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1095,7 +1144,7 @@ class Dialogue {
             break; }
         case kHeadTarget: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1113,7 +1162,7 @@ class Dialogue {
             break; }
         case kChestTarget: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1131,7 +1180,7 @@ class Dialogue {
             break; }
         case kEyeTarget: {           
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1393,6 +1442,22 @@ class Dialogue {
         }
     }
 
+	void SetupDialogueObjectConnectors(int id){
+		Object @obj = ReadObjectFromID(id);
+		ScriptParams@ params = obj.GetScriptParams();
+		int num_connectors = params.GetInt("NumParticipants");
+        for(int j=1; j<=num_connectors; ++j){
+            if(!params.HasParam("obj_"+j)){
+                int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
+                params.AddInt("obj_"+j, obj_id);
+                Object@ object = ReadObjectFromID(obj_id);
+                PlaceholderObject@ inner_placeholder_object = cast<PlaceholderObject@>(object);
+                inner_placeholder_object.SetSpecialType(kPlayerConnect);
+            }
+        }
+        UpdateDialogueObjectConnectors(id);
+	}
+
     void MovedObject(int id){
         if(id == -1){
             return;
@@ -1407,6 +1472,26 @@ class Dialogue {
         }
         UpdateDialogueObjectConnectors(id);
     }
+
+	void UpdateParams(string str, int id) {
+		Object @obj = ReadObjectFromID(id);
+		ScriptParams@ params = obj.GetScriptParams();
+		TokenIterator token_iter;
+		token_iter.Init();
+		if(token_iter.FindNextToken(str)){
+			string token = token_iter.GetToken(str);
+			if(token == "#name"){
+				if(token_iter.FindNextToken(str)){
+					params.SetString("DisplayName", token_iter.GetToken(str));
+				}
+			}
+			if(token == "#participants"){
+				if(token_iter.FindNextToken(str)){
+					params.SetInt("NumParticipants", atoi(token_iter.GetToken(str)));
+				}
+			}
+		}
+	}
 
     void AddedObject(int id){
         if(id == -1){
@@ -1437,21 +1522,7 @@ class Dialogue {
 					if(new_str == "end"){
 						break;
 					}
-					TokenIterator token_iter;
-					token_iter.Init();
-					if(token_iter.FindNextToken(new_str)){
-						string token = token_iter.GetToken(new_str);
-						if(token == "#name"){
-							if(token_iter.FindNextToken(new_str)){
-								params.SetString("DisplayName", token_iter.GetToken(new_str));
-							}
-						}
-						if(token == "#participants"){
-							if(token_iter.FindNextToken(new_str)){
-								params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
-							}
-						}
-					}
+					UpdateParams(new_str, id);
 				}
 			}
         }
@@ -1461,17 +1532,7 @@ class Dialogue {
         //    DrawDialogueTextCanvas(id);
         //}
         // Set up dialogue connectors
-        int num_connectors = params.GetInt("NumParticipants");
-        for(int j=1; j<=num_connectors; ++j){
-            if(!params.HasParam("obj_"+j)){
-                int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
-                params.AddInt("obj_"+j, obj_id);
-                Object@ object = ReadObjectFromID(obj_id);
-                PlaceholderObject@ inner_placeholder_object = cast<PlaceholderObject@>(object);
-                inner_placeholder_object.SetSpecialType(kPlayerConnect);
-            }
-        }
-        UpdateDialogueObjectConnectors(id);
+        SetupDialogueObjectConnectors(id);
     }
 
     void ReceiveMessage(const string &in msg) {
@@ -1493,6 +1554,10 @@ class Dialogue {
             int obj_id = atoi(token_iter.GetToken(msg));
             MovedObject(obj_id);
         } else if(token == "stop_editing_dialogue") {
+			if (edit_mode) {
+				StopTextInput();
+				edit_mode = false;
+			}
             ClearEditor();
         } else if(token == "dialogue_set_recording") {
 		    token_iter.FindNextToken(msg);
@@ -1659,8 +1724,13 @@ class Dialogue {
                         editor_text.SetPenColor(0,0,0,opac);
                     }
                     editor_text.SetPenRotation(0.0f);
-                    if(uint(selected_line) == i){
-                        editor_text.AddText(strings[i].str, big_style);
+					if(uint(selected_line) == i){
+						if(edit_mode){
+							editor_text.SetPenColor(0,125,0,opac);
+							editor_text.AddText(edit_text, big_style);
+						} else {
+							editor_text.AddText(strings[i].str, big_style);
+						}
                     } else {
                         editor_text.AddText(strings[i].str, small_style);
                     }
