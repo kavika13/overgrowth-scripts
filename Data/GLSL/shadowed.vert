@@ -15,5 +15,7 @@ void main()
 	
 	ProjShadow = gl_TextureMatrix[0] * gl_ModelViewMatrix * gl_Vertex;
 	
+	//ProjShadow.z -= 0.001;
+	
 	gl_FrontColor = gl_Color;
 } 
