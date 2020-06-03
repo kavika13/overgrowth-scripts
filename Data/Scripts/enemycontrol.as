@@ -24,7 +24,7 @@ bool going_to_block = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
 
-enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle};
+enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
 vec3 nav_target;
@@ -113,7 +113,13 @@ void HandleAIEvent(AIEvent event){
         }
     }
     if(event == _choking){
-        SetGoal(_struggle);
+        MovementObject@ char = ReadCharacterID(tether_id);
+        int weap_id = char.GetWeapon();
+        if(weap_id == -1){
+            SetGoal(_struggle);
+        } else {
+            SetGoal(_hold_still);
+        }
     }
 }
 
@@ -173,7 +179,7 @@ void UpdateBrain(){
         return;
     }
 
-    if(!holding_weapon && goal != _struggle && hostile){
+    if(!holding_weapon && goal != _struggle && goal != _hold_still && hostile){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;
@@ -276,6 +282,11 @@ void UpdateBrain(){
             }
             break;
         case _struggle:
+            if(tethered == _TETHERED_FREE){
+                SetGoal(_patrol);
+            }
+            break;
+        case _hold_still:
             if(tethered == _TETHERED_FREE){
                 SetGoal(_patrol);
             }
