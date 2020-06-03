@@ -13,6 +13,13 @@ varying vec3 rel_pos;
 
 void main()
 {	
+	/*if(int(mod(gl_FragCoord.x+gl_FragCoord.y,2.0))==0){
+		discard;
+	}*/
+	if(int(mod(gl_FragCoord.x,2.0))!=0||int(mod(gl_FragCoord.y,2.0))!=0){
+		discard;
+	}
+
 	float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
 	
 	vec3 color = GetDirectColor(NdotL);

@@ -45,8 +45,6 @@ void main()
 	vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
 				  GetAmbientContrib(shadow_tex.g);
-
-	spec_color = vec3(0.0);
 	
 	// Put it all together
 	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);

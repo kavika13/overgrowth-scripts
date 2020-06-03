@@ -14,5 +14,7 @@ void main()
 
 	//color_map = vec3(dot(gl_LightSource[0].position.xyz,vec3(0,0,-1)));
 
+	//color_map *= 2.5;
+	//color_map -= vec3(0.05);
 	gl_FragColor = vec4(color_map,1.0);
 }
