@@ -43,8 +43,8 @@ class MovingGrip {  // This class handles grip positions (IK targets) as they mo
         }
     }
 
-    void Update() {
-        time += time_step * speed * num_frames;                                 // Timer increments based on speed
+    void Update(const Timestep &in ts) {
+        time += speed * ts.step();                                 // Timer increments based on speed
         if(time >= end_time){
             if(id < 2 && distance(start_pos, end_pos)>0.1f){                    // Hands play grip sound at the end of their movements
                 if(id==0){
@@ -125,15 +125,15 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         old_ik_offset[1] = vec3(0.0f);
     }
 
-    void Update(vec3 _target_pos, vec3 dir){
+    void Update(vec3 _target_pos, vec3 dir, const Timestep &in ts){
         hand_pos[0].SetEndPos(_target_pos);                                     // Update gripper targets
         hand_pos[1].SetEndPos(_target_pos);
         foot_pos[0].SetEndPos(_target_pos);
         foot_pos[1].SetEndPos(_target_pos);
-        hand_pos[0].Update();                                                   // Update gripper movement
-        hand_pos[1].Update();
-        foot_pos[0].Update();
-        foot_pos[1].Update();
+        hand_pos[0].Update(ts);                                                   // Update gripper movement
+        hand_pos[1].Update(ts);
+        foot_pos[0].Update(ts);
+        foot_pos[1].Update(ts);
 
         float speed = sqrt(this_mo.velocity.x * this_mo.velocity.x              // Gripper speed is proportional to sqrt of
                           +this_mo.velocity.z * this_mo.velocity.z)*3.0f;       // character's horizontal velocity
@@ -144,24 +144,24 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         foot_pos[0].SetSpeed(speed);
         foot_pos[1].SetSpeed(speed);
 
-        lag_vel = mix(this_mo.velocity, lag_vel, pow(0.95f,num_frames));        // Update lagged velocity clone
+        lag_vel = mix(this_mo.velocity, lag_vel, pow(0.95f,ts.frames()));        // Update lagged velocity clone
 
         ledge_dir = dir;                                                        // Update ledge direction
     }
 
-    void UpdateIKTargets() {
+    void UpdateIKTargets(const PassLedgeState &in pls) {
         const float _dist_limit = 0.4f;
         const float _dist_limit_squared = _dist_limit*_dist_limit;
 
-        vec3 transition_offset = ledge_grab_origin - this_mo.position;          // Offset used for transitioning into ledge climb
+        vec3 transition_offset = pls.ledge_grab_origin - this_mo.position;          // Offset used for transitioning into ledge climb
         vec3[] offset(4);
         offset[0] = hand_pos[0].GetPos() - this_mo.position;                    // Get gripper offsets relative to leg_sphere origin
         offset[1] = hand_pos[1].GetPos() - this_mo.position;
         offset[2] = foot_pos[0].GetPos() - this_mo.position;
         offset[3] = foot_pos[1].GetPos() - this_mo.position;
 
-        offset[2].y *= leg_ik_mult;                                             // Flatten out foot positions if needed
-        offset[3].y *= leg_ik_mult;
+        offset[2].y *= pls.leg_ik_mult;                                             // Flatten out foot positions if needed
+        offset[3].y *= pls.leg_ik_mult;
 
         vec3[] old_offset(2);
         old_offset[0] = offset[0];
@@ -243,9 +243,9 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         weight_offset.z += ik_shift.z*0.5f;
         weight_offset -= ledge_dir * 0.1f;
 
-        weight_offset *= ik_mult;     
-        weight_offset.y += height_offset * (1.0f-ik_mult);
-        this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,transition_progress)); // Apply weight offset to torso
+        weight_offset *= pls.ik_mult;     
+        weight_offset.y += pls.height_offset * (1.0f-pls.ik_mult);
+        this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,pls.transition_progress)); // Apply weight offset to torso
 
         for(int i=0; i<4; i++){
             offset[i] -= weight_offset;
@@ -256,16 +256,16 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         }
 
         for(int i=0; i<4; ++i){  
-            offset[i] *= ik_mult;
-            offset[i].y += height_offset * (1.0f-ik_mult);
+            offset[i] *= pls.ik_mult;
+            offset[i].y += pls.height_offset * (1.0f-pls.ik_mult);
         }
 
         //Print("IK mult: " + ik_mult + "\n"); 
 
-        this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],transition_progress));  // Set IK target offsets
-        this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],transition_progress));
-        this_mo.SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],transition_progress));
-        this_mo.SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],transition_progress));
+        this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],pls.transition_progress));  // Set IK target offsets
+        this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],pls.transition_progress));
+        this_mo.SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],pls.transition_progress));
+        this_mo.SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],pls.transition_progress));
     }
 }
 
@@ -451,14 +451,14 @@ LedgeGrabInfo GetLedgeGrabInfo(vec3 &in pos, vec3 &in ledge_dir, float ledge_hei
     return ledge_grab_info;
 }
 
-
-vec3 ledge_grab_origin;             // Where was leg sphere origin when ledge grab started
-float transition_speed;             // How fast to transition to new position
-float transition_progress;          // How far along the transition is (0-1)
-float leg_ik_mult;                  // How much we are allowing vertical leg IK displacement
-float ik_mult;
-bool ghost_movement;
-float height_offset;
+class PassLedgeState {
+    vec3 ledge_grab_origin;             // Where was leg sphere origin when ledge grab started
+    float transition_speed;             // How fast to transition to new position
+    float transition_progress;          // How far along the transition is (0-1)
+    float leg_ik_mult;                  // How much we are allowing vertical leg IK displacement
+    float ik_mult;
+    float height_offset;
+}
 
 class LedgeInfo {
     bool on_ledge;                  // Grabbing ledge or not
@@ -469,6 +469,8 @@ class LedgeInfo {
     bool playing_animation;         // Are we currently playing an animation?
     bool allow_ik;
     vec3 disp_ledge_dir;
+    bool ghost_movement;
+    PassLedgeState pls;
 
     ShimmyAnimation shimmy_anim;    // Hand and foot animation class
 
@@ -496,7 +498,7 @@ class LedgeInfo {
             this_mo.SetIKTargetOffset("full_body",offset);
             return;
         }*/
-        shimmy_anim.UpdateIKTargets();
+        shimmy_anim.UpdateIKTargets(pls);
     }
 
     vec3 WallRight() {              // Get the vector that points right when facing the ledge
@@ -612,20 +614,20 @@ class LedgeInfo {
                 }
                 this_mo.SetAnimation("Data/Animations/r_ledge_barely_reach.anm",8.0f,flags);
                 this_mo.SetAnimationCallback("void EndClimbAnim()");
-                leg_ik_mult = 0.0f;
+                pls.leg_ik_mult = 0.0f;
             } else {
                 playing_animation = false;                                      // Otherwise go straight into ledge pose
-                leg_ik_mult = 1.0f;
+                pls.leg_ik_mult = 1.0f;
             }
-            ik_mult = 1.0f;
+            pls.ik_mult = 1.0f;
 
-            ledge_grab_origin = this_mo.position;                               // Record current position for smooth transition
-            transition_progress = 0.0f;
-            transition_speed = 10.0f/(abs(ledge_height - this_mo.position.y)+0.05f);
+            pls.ledge_grab_origin = this_mo.position;                               // Record current position for smooth transition
+            pls.transition_progress = 0.0f;
+            pls.transition_speed = 10.0f/(abs(ledge_height - this_mo.position.y)+0.05f);
             
             allow_ik = true;
             on_ledge = true;                                                    // Set up ledge grab starting conditions
-            height_offset = 0.0f;
+            pls.height_offset = 0.0f;
             disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
             this_mo.velocity = vec3(0.0f);
@@ -652,7 +654,7 @@ class LedgeInfo {
         ghost_movement = false;
     }
     
-    void UpdateLedge() {
+    void UpdateLedge(const Timestep &in ts) {
         if(playing_animation){
             if(this_mo.GetStatusKeyValue("cancel")>=1.0f && 
                WantsToCancelAnimation())
@@ -661,22 +663,22 @@ class LedgeInfo {
             }
         }
         if(playing_animation){
-            this_mo.position.y += height_offset * 0.02f * num_frames;
-            height_offset *= pow(0.98f, num_frames);
+            this_mo.position.y += pls.height_offset * 0.02f * ts.frames();
+            pls.height_offset *= pow(0.98f, ts.frames());
             allow_ik = false;
             target_duck_amount = 1.0f;
         }
 
         if(allow_ik){
-            ik_mult = min(1.0f, ik_mult + time_step * num_frames * 5.0f);
+            pls.ik_mult = min(1.0f, pls.ik_mult + ts.step() * 5.0f);
         } else {
-            ik_mult = max(0.0f, ik_mult - time_step * num_frames * 5.0f);
+            pls.ik_mult = max(0.0f, pls.ik_mult - ts.step() * 5.0f);
         }
 
-        if(transition_progress < 1.0f){
-            transition_progress += time_step * num_frames * transition_speed;   // Update transition to ledge grab
-            transition_progress = min(1.0f, transition_progress); 
-            cam_pos_offset = (ledge_grab_origin - this_mo.position)*(1.0f-transition_progress);
+        if(pls.transition_progress < 1.0f){
+            pls.transition_progress += ts.step() * pls.transition_speed;   // Update transition to ledge grab
+            pls.transition_progress = min(1.0f, pls.transition_progress); 
+            cam_pos_offset = (pls.ledge_grab_origin - this_mo.position)*(1.0f-pls.transition_progress);
         }
 
         if(ghost_movement){
@@ -699,17 +701,17 @@ class LedgeInfo {
                                  // not on ledge
         }
 
-        this_mo.velocity += ledge_dir * 0.1f * num_frames;                      // Pull towards wall
+        this_mo.velocity += ledge_dir * 0.1f * ts.frames();                      // Pull towards wall
 
         float target_height = ledge_height - _height_under_ledge;
-        this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f * num_frames;      // Move height towards ledge height
-        this_mo.velocity.y *= pow(0.92f, num_frames);
+        this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f * ts.frames();      // Move height towards ledge height
+        this_mo.velocity.y *= pow(0.92f, ts.frames());
         
         this_mo.position.y = min(this_mo.position.y, target_height + 0.5f);
         this_mo.position.y = max(this_mo.position.y, target_height - 0.1f);
         
         if(!playing_animation){
-            leg_ik_mult = min(1.0f, leg_ik_mult + time_step * num_frames * 5.0f);
+            pls.leg_ik_mult = min(1.0f, pls.leg_ik_mult + ts.step() * 5.0f);
         }
 
         vec3 target_velocity = GetTargetVelocity();
@@ -724,12 +726,12 @@ class LedgeInfo {
             real_velocity.y = 0.0f;
         }
 
-        this_mo.velocity += real_velocity * time_step * num_frames * _ledge_move_speed; // Apply target velocity
-        this_mo.velocity.x *= pow(_ledge_move_damping, num_frames);             // Damp horizontal movement
-        this_mo.velocity.z *= pow(_ledge_move_damping, num_frames);
+        this_mo.velocity += real_velocity * ts.step() * _ledge_move_speed; // Apply target velocity
+        this_mo.velocity.x *= pow(_ledge_move_damping, ts.frames());             // Damp horizontal movement
+        this_mo.velocity.z *= pow(_ledge_move_damping, ts.frames());
 
         vec3 new_ledge_grab_pos = CalculateGrabPos();                           
-        shimmy_anim.Update(new_ledge_grab_pos, ledge_dir);                      // Update hand and foot animation
+        shimmy_anim.Update(new_ledge_grab_pos, ledge_dir, ts);                      // Update hand and foot animation
 
         //DebugDrawWireSphere(this_mo.position, _leg_sphere_size, vec3(1.0f), _delete_on_update); 
 
@@ -740,10 +742,10 @@ class LedgeInfo {
         float inertia = mix(0.95f,0.8f,pow(val,4.0));
         disp_ledge_dir= InterpDirections(ledge_dir,
                          disp_ledge_dir,
-                         pow(inertia,num_frames));
+                         pow(inertia,ts.frames()));
         this_mo.SetRotationFromFacing(disp_ledge_dir); 
         if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
-            if(this_mo.velocity.y >= 3.0f + num_frames * 0.25f){
+            if(this_mo.velocity.y >= 3.0f + ts.frames() * 0.25f){
                 on_ledge = false;    
                 climbed_up = true;
                 jump_info.hit_wall = false;
@@ -751,7 +753,7 @@ class LedgeInfo {
                 this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
                 this_mo.position += ledge_dir * 0.7f;
             } else {
-                height_offset = target_height - this_mo.position.y;
+                pls.height_offset = target_height - this_mo.position.y;
                 //this_mo.position.y = target_height;
                 playing_animation = true;
                 allow_ik = false;

@@ -110,13 +110,10 @@ class TargetHistory {
         elements.resize(kTargetHistorySize);
         index = 0;
         first_update = true;
-        for(int i=0; i<kTargetHistorySize; ++i){
-            elements[i].time_elapsed += time_step * num_frames;
-        }
     }
-    void Update(const vec3 &in pos, const vec3 &in vel){
+    void Update(const vec3 &in pos, const vec3 &in vel, const Timestep &in ts){
         for(int i=0; i<kTargetHistorySize; ++i){
-            elements[i].time_elapsed += time_step * num_frames;
+            elements[i].time_elapsed += ts.step();
         }
         if(first_update){
             for(int i=0; i<kTargetHistorySize; ++i){
@@ -253,26 +250,28 @@ void SetGoal(AIGoal new_goal){
 
 float move_delay = 0.0f;
 
-enum MsgType {_escort_me = 0, _excuse_me = 1};
-
-void ReceiveMessage(int source_id, int _msg_type){
-    MsgType type = MsgType(_msg_type);
-    //Print("Message received: Character " + source_id + " says \"");
-    if(type == _escort_me){
-        //Print("Escort me!");
+void ReceiveMessage(string msg){
+    TokenIterator token_iter;
+    token_iter.Init();
+    if(!token_iter.FindNextToken(msg)){
+        return;
     }
-    if(type == _excuse_me){
-        //Print("Excuse me!");
-    }
-    //Print("\"\n");
-    
-    if(type == _escort_me && goal == _patrol){
+    string token = token_iter.GetToken(msg);
+    if(token == "escort_me"){
+        token_iter.FindNextToken(msg);
+        int id = atoi(token_iter.GetToken(msg));
         SetGoal(_escort);
-        escort_id = source_id;
-    }
-    if(type == _excuse_me && (goal == _patrol || goal == _investigate)){
-        //Print("\"Ok, I'll wait a second before continuing my goal.\"\n");
+        escort_id = id;
+    } else if(token == "excuse_me"){
         move_delay = 1.0f;
+    } else if(token == "set_hostile"){
+        token_iter.FindNextToken(msg);
+        string second_token = token_iter.GetToken(msg);
+        if(second_token == "true"){
+            SetHostile(true);
+        } else if(second_token == "false"){
+            SetHostile(false);
+        }
     }
 }
 
@@ -300,27 +299,31 @@ void SetSubGoal(AISubGoal sub_goal_) {
     sub_goal = sub_goal_;
 }
 
-bool CheckRangeChange() {
+bool CheckRangeChange(const Timestep &in ts) {
     bool change = false;
-    if(instant_range_change || rand()%(150/num_frames)==0){
+    if(instant_range_change || rand()%(150/ts.frames())==0){
         change = true;
     }
     instant_range_change = false;
     return change;
 }
 
-void UpdateBrain(){
+void SetHostile(bool val){
+    hostile = val;
+    if(hostile){
+        ai_attacking = true;
+        listening = true;
+    } else {
+        SetGoal(_patrol);
+        ResetWaypointTarget();
+        listening = false;
+    }
+}
+
+void UpdateBrain(const Timestep &in ts){
     if(GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
         if(hostile_switchable){
-            hostile = !hostile;
-            if(hostile){
-                ai_attacking = true;
-                listening = true;
-            } else {
-                SetGoal(_patrol);
-                ResetWaypointTarget();
-                listening = false;
-            }
+            SetHostile(!hostile);
         }
         hostile_switchable = false;
     } else {
@@ -329,13 +332,14 @@ void UpdateBrain(){
 
     if(startled){
         ai_attacking = false;
-        startle_time -= time_step * num_frames;
+        startle_time -= ts.step();
         if(startle_time <= 0.0f){
             startled = false;
             AchievementEvent("enemy_alerted");
         }
         return;
     }
+    move_delay = max(0.0f, move_delay - ts.step());
 
     if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile){
         int num_items = GetNumItems();
@@ -403,7 +407,7 @@ void UpdateBrain(){
         notice_target_aggression_id = target_id;
         float target_threat_amount = target.GetFloatVar("threat_amount");
         if(target_threat_amount > 0.6f && length_squared(target.velocity) < 1.0){
-            notice_target_aggression_delay += time_step * num_frames;
+            notice_target_aggression_delay += ts.step();
         } else {
             notice_target_aggression_delay = 0.0f;   
         }
@@ -414,7 +418,7 @@ void UpdateBrain(){
                 
         AISubGoal target_goal = _unknown;
                 
-        if(rand()%(150/num_frames)==0){
+        if(rand()%(150/ts.frames())==0){
             switch(sub_goal){
                 case _wait_and_attack:
                 case _rush_and_attack:
@@ -444,47 +448,62 @@ void UpdateBrain(){
                 
         switch(sub_goal){
         case _wait_and_attack:
-            if(CheckRangeChange()){
+            if(CheckRangeChange(ts)){
                 target_attack_range = RangedRandomFloat(1.5f, 3.0f);
             }
             ai_attacking = true;
             break;
         case _punish_fall:
         case _rush_and_attack:
-            if(CheckRangeChange()){
+            if(CheckRangeChange(ts)){
                 target_attack_range = 0.0f;
             }
             ai_attacking = true;
             break;
         case _defend:
-            if(CheckRangeChange()){
+            if(CheckRangeChange(ts)){
                 target_attack_range = RangedRandomFloat(1.5f, 3.0f);
             }
             ai_attacking = false;
             break;
         case _provoke_attack:
-            if(CheckRangeChange()){
+            if(CheckRangeChange(ts)){
                 target_attack_range = 0.0f;
             }
             ai_attacking = false;
             break;
         case _avoid_jump_kick:
-            if(CheckRangeChange()){
+            if(CheckRangeChange(ts)){
                 target_attack_range = RangedRandomFloat(3.0f, 4.0f);
             }
             ai_attacking = false;
             break;
         }
-        if(rand()%(150/num_frames)==0){
+        if(rand()%(150/ts.frames())==0){
             strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
         }
         if(temp_health < 0.5f){
-            ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
+            ally_id = GetClosestCharacterID(1000.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
             if(ally_id != -1){
                 //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
                 SetGoal(_get_help);
             }
         }
+
+        // Assume target is moving in a straight line at slowly-decreasing velocity
+        last_seen_target_position += last_seen_target_velocity * ts.step();
+        last_seen_target_velocity *= pow(0.995f, ts.frames());
+
+        // If ray check is successful, update knowledge of target position and velocity
+        vec3 real_target_pos = ReadCharacterID(target_id).position;
+        vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+        if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
+            last_seen_target_position = real_target_pos;
+            last_seen_target_velocity = ReadCharacterID(target_id).velocity;
+        }
+    
+        target_history.Update(last_seen_target_position, last_seen_target_velocity, ts);
+
         break;}
     case _get_help: {
         if(ally_id == -1){
@@ -494,7 +513,7 @@ void UpdateBrain(){
         MovementObject@ char = ReadCharacterID(ally_id);
         if(distance_squared(this_mo.position, char.position) < 5.0f){
             SetGoal(_attack);
-            char.ReceiveMessage(this_mo.getID(), int(_escort_me));
+            char.ReceiveMessage("escort_me "+this_mo.getID());
         }
         break; }
     case _get_weapon:
@@ -510,6 +529,18 @@ void UpdateBrain(){
         if(tethered == _TETHERED_FREE){
             SetGoal(_patrol);
         }
+        struggle_change_time = max(0.0f, struggle_change_time - ts.step());
+        if(struggle_change_time <= 0.0f){
+            struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 
+                                     0.0f, 
+                                     RangedRandomFloat(-1.0f,1.0f)));
+            struggle_change_time = RangedRandomFloat(0.1f,0.3f);
+        }
+        struggle_crouch_change_time = max(0.0f,  struggle_crouch_change_time - ts.step());
+        if(struggle_crouch_change_time <= 0.0f){
+            struggle_crouch = (rand()%2==0);
+            struggle_crouch_change_time = RangedRandomFloat(0.1f,0.3f);
+        }
         break;
     case _hold_still:
         if(tethered == _TETHERED_FREE){
@@ -519,7 +550,7 @@ void UpdateBrain(){
     }
 
     if(path_find_type != _pft_nav_mesh){
-        path_find_give_up_time -= time_step * num_frames;
+        path_find_give_up_time -= ts.step();
         if(path_find_give_up_time <= 0.0f){
             path_find_type = _pft_nav_mesh;
         }
@@ -596,12 +627,6 @@ float struggle_crouch_change_time = 0.0f;
 
 bool WantsToCrouch() {
     if(goal == _struggle){
-        if(struggle_crouch_change_time <= 0.0f){
-            struggle_crouch = (rand()%2==0);
-            struggle_crouch_change_time = RangedRandomFloat(0.1f,0.3f);
-        }
-        struggle_crouch_change_time = max(0.0f, 
-            struggle_crouch_change_time - time_step * num_frames);
         return struggle_crouch;
     }
     return false;
@@ -673,7 +698,7 @@ bool ShouldBlock(){
     }
 }
 
-bool WantsToStartActiveBlock(){
+bool WantsToStartActiveBlock(const Timestep &in ts){
     bool should_block = ShouldBlock();
     if(should_block && !going_to_block){
         MovementObject @char = ReadCharacterID(target_id);
@@ -694,7 +719,7 @@ bool WantsToStartActiveBlock(){
         }
     }
     if(going_to_block){
-        block_delay -= time_step * num_frames;
+        block_delay -= ts.step();
         block_delay = min(1.0f, block_delay);
         if(block_delay <= 0.0f){
             going_to_block = false;
@@ -1059,20 +1084,6 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
 }
 
 vec3 GetAttackMovement() {
-    // Assume target is moving in a straight line at slowly-decreasing velocity
-    last_seen_target_position += last_seen_target_velocity * time_step * num_frames;
-    last_seen_target_velocity *= pow(0.995f, num_frames);
-
-    // If ray check is successful, update knowledge of target position and velocity
-    vec3 real_target_pos = ReadCharacterID(target_id).position;
-    vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-    if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
-        last_seen_target_position = real_target_pos;
-        last_seen_target_velocity = ReadCharacterID(target_id).velocity;
-    }
-    
-    target_history.Update(last_seen_target_position, last_seen_target_velocity);
-    
     vec3 move_vel = GetMovementToPoint(target_history.GetPos(0.3), max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
     
     //CheckJumpTarget(last_seen_target_position);
@@ -1099,7 +1110,6 @@ vec3 struggle_dir;
 
 int last_seen_sphere = -1;
 vec3 GetBaseTargetVelocity() {
-    move_delay = max(0.0f, move_delay - time_step * num_frames);
     if(startled){
         return vec3(0.0f);
     } else if(goal == _patrol){
@@ -1123,14 +1133,6 @@ vec3 GetBaseTargetVelocity() {
             return GetMovementToPoint(this_mo.position, 0.0f) * 0.2f;
         }
     } else if(goal == _struggle){
-        if(struggle_change_time <= 0.0f){
-            struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 
-                                     0.0f, 
-                                     RangedRandomFloat(-1.0f,1.0f)));
-            struggle_change_time = RangedRandomFloat(0.1f,0.3f);
-        }
-        struggle_change_time = max(0.0f, 
-            struggle_change_time - time_step * num_frames);
         return struggle_dir; 
     } else {
         return vec3(0.0f);
@@ -1158,7 +1160,7 @@ vec3 GetRepulsorForce(){
         }
         vec3 repulsion = (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
         if(length_squared(repulsion) > 0.0f && move_delay <= 0.0f){
-            char.ReceiveMessage(this_mo.getID(), int(_excuse_me));
+            char.ReceiveMessage("excuse_me "+this_mo.getID());
         }
         repulsor_total += repulsion;
     }

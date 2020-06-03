@@ -131,6 +131,8 @@ void Reset(){
 void ReceiveMessage(string msg) {
     if(msg == "reset"){
         Reset();
+    } else if(msg == "dispose_level"){
+        gui.RemoveAll();
     }
 }
 
@@ -372,7 +374,8 @@ class ChallengeEndGUI {
     }
    
     bool DrawButton(const string &in path, const vec2 &in pos, float ui_scale, int widget_id) {
-        HUDImage @image = hud.AddImage(path, vec3(0,0,0));
+        HUDImage @image = hud.AddImage();
+        image.SetImageFromPath(path);
         float scale = ui_scale * 0.5f;
         image.position.x = pos.x;
         image.position.y = pos.y;

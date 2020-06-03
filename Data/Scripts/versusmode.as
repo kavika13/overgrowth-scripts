@@ -92,51 +92,59 @@ class VersusGUI {
     void DrawGUI(){
         float ui_scale = GetScreenWidth() / 2560.0f;
         
-        HUDImage @top_crete_image = hud.AddImage("Data/Textures/ui/versus_mode/top_crete.tga", vec3(0,0,0));
+        HUDImage @top_crete_image = hud.AddImage();
+        top_crete_image.SetImageFromPath("Data/Textures/ui/versus_mode/top_crete.tga");
         top_crete_image.position.y = GetScreenHeight() - 256 * ui_scale;
         top_crete_image.position.x = GetScreenWidth() * 0.5 - 1024 * ui_scale;
         top_crete_image.scale = vec3(ui_scale);
         
-        HUDImage @left_portrait_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_portrait.tga", vec3(0,0,0));
+        HUDImage @left_portrait_image = hud.AddImage();
+        left_portrait_image.SetImageFromPath("Data/Textures/ui/versus_mode/rabbit_1_portrait.tga");
         left_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
         left_portrait_image.position.x = GetScreenWidth() * 0.5 - 850 * ui_scale;
         left_portrait_image.position.z = 1.0f;
         left_portrait_image.scale = vec3(ui_scale * 0.6f);
         
-        HUDImage @right_portrait_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_portrait.tga", vec3(0,0,0));
+        HUDImage @right_portrait_image = hud.AddImage();
+        right_portrait_image.SetImageFromPath("Data/Textures/ui/versus_mode/rabbit_2_portrait.tga");
         right_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
         right_portrait_image.position.x = GetScreenWidth() * 0.5 + 530 * ui_scale;
         right_portrait_image.position.z = 1.0f;
         right_portrait_image.scale = vec3(ui_scale * 0.6f);
         
-        HUDImage @left_vignette_image = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
+        HUDImage @left_vignette_image = hud.AddImage();
+        left_vignette_image.SetImageFromPath("Data/Textures/ui/versus_mode/corner_vignette.tga");
         left_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
         left_vignette_image.position.x = 0.0f;
         left_vignette_image.position.z = -1.0f;
         left_vignette_image.scale = vec3(ui_scale * 2.0f);
         
-        HUDImage @right_vignette_image = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
+        HUDImage @right_vignette_image = hud.AddImage();
+        right_vignette_image.SetImageFromPath("Data/Textures/ui/versus_mode/corner_vignette.tga");
         right_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
         right_vignette_image.position.x = GetScreenWidth();
         right_vignette_image.position.z = -1.0f;
         right_vignette_image.scale = vec3(ui_scale * 2.0f);
         right_vignette_image.scale.x *= -1.0f;        
         
-        HUDImage @blackout_image = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
+        HUDImage @blackout_image = hud.AddImage();
+        blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
         blackout_image.position.y = (GetScreenWidth() + GetScreenHeight())*-1.0f;
         blackout_image.position.x = (GetScreenWidth() + GetScreenHeight())*-1.0f;
         blackout_image.position.z = -2.0f;
         blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight())*2.0f;
         blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
         
-        HUDImage @blackout_over_image = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
+        HUDImage @blackout_over_image = hud.AddImage();
+        blackout_over_image.SetImageFromPath("Data/Textures/diffuse.tga");
         blackout_over_image.position.y = 0;
         blackout_over_image.position.x = 0;
         blackout_over_image.position.z = 2.0f;
         blackout_over_image.scale = vec3(GetScreenWidth() + GetScreenHeight());
         blackout_over_image.color = vec4(0.0f,0.0f,0.0f,max(player_one_win_alpha,player_two_win_alpha)*0.5f);
         
-        HUDImage @player_one_win_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_win.tga", vec3(0,0,0));
+        HUDImage @player_one_win_image = hud.AddImage();
+        player_one_win_image.SetImageFromPath("Data/Textures/ui/versus_mode/rabbit_1_win.tga");
         float player_one_scale = 1.5f + sin(player_one_win_alpha*1.570796f) * 0.2f;
         player_one_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_one_scale;
         player_one_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_one_scale;
@@ -144,7 +152,8 @@ class VersusGUI {
         player_one_win_image.scale = vec3(ui_scale * player_one_scale);
         player_one_win_image.color.a = player_one_win_alpha;
         
-        HUDImage @player_two_win_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_win.tga", vec3(0,0,0));
+        HUDImage @player_two_win_image = hud.AddImage();
+        player_two_win_image.SetImageFromPath("Data/Textures/ui/versus_mode/rabbit_2_win.tga");
         float player_two_scale = 1.5f + sin(player_two_win_alpha*1.570796f) * 0.2f;
         player_two_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_two_scale;
         player_two_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_two_scale;
@@ -154,12 +163,14 @@ class VersusGUI {
         
         for(int i=0; i<5; ++i){
             float special_scale = 1.0f;
-            HUDImage @hud_image = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
+            HUDImage @hud_image = hud.AddImage();
+            hud_image.SetImageFromPath("Data/Textures/ui/versus_mode/match_mark.tga");
             hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
             hud_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
             hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
             special_scale = right_score_marks[i].scale_mult;
-            HUDImage @glow_image = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
+            HUDImage @glow_image = hud.AddImage();
+            glow_image.SetImageFromPath("Data/Textures/ui/versus_mode/match_win.tga");
             glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
             glow_image.position.z = 0.1f;
             glow_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
@@ -168,13 +179,15 @@ class VersusGUI {
         }
         for(int i=0; i<5; ++i){
             float special_scale = 1.0f;
-            HUDImage @hud_image = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
+            HUDImage @hud_image = hud.AddImage();
+            hud_image.SetImageFromPath("Data/Textures/ui/versus_mode/match_mark.tga");
             hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
             hud_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;
             hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
             hud_image.scale.x *= -1.0f;
             special_scale = left_score_marks[i].scale_mult;
-            HUDImage @glow_image = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
+            HUDImage @glow_image = hud.AddImage();
+            glow_image.SetImageFromPath("Data/Textures/ui/versus_mode/match_win.tga");
             glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
             glow_image.position.z = 0.1f;
             glow_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;

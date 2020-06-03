@@ -12,10 +12,10 @@ const float _wall_run_friction = 0.1f; // used to let wall running pull the char
 // at the end of this file, JumpInfo is instantiated as jump_info
 // aschar.as uses jump_info to execute code in aircontrol.as
 
-bool left_foot_jump = false;
-bool to_jump_with_left = false;
-
 class JumpInfo {
+    bool left_foot_jump;
+    bool to_jump_with_left;
+
     array<vec3> jump_path;
     float jump_path_progress;
     bool follow_jump_path;
@@ -37,6 +37,8 @@ class JumpInfo {
         jetpack_fuel = 0.0f;
         jump_launch = 0.0f;
         hit_wall = false;
+        left_foot_jump = false;
+        to_jump_with_left = false;
     }
 
     bool ClimbedUp() {
@@ -158,8 +160,8 @@ class JumpInfo {
         return wall_right;        
     }
 
-    void UpdateWallRun() {
-        wall_hit_time += time_step * num_frames;
+    void UpdateWallRun(const Timestep &in ts) {
+        wall_hit_time += ts.step();
         if(wall_hit_time > 0.1f && this_mo.velocity.y < -1.0f && !ledge_info.on_ledge){
             LostWallContact();
         }
@@ -208,20 +210,20 @@ class JumpInfo {
         }
     }
 
-    void UpdateAirControls() {
+    void UpdateAirControls(const Timestep &in ts) {
         if(!follow_jump_path){
             if(WantsToAccelerateJump()){
                 // if there's fuel left and character is not moving down, height can still be increased
                 if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
-                    jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
-                    this_mo.velocity.y += time_step * _jump_fuel_burn * num_frames;
+                    jetpack_fuel -= _jump_fuel_burn * ts.step();
+                    this_mo.velocity.y += _jump_fuel_burn * ts.step();
                 }
             } else {
                 jetpack_fuel = 0.0f; // Don't allow releasing jump and then pressing it again
                 // the character is pushed downwards to allow for smaller, controlled jumps
                 if(down_jetpack_fuel > 0.0){
-                    down_jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
-                    this_mo.velocity.y -= time_step * _jump_fuel_burn * num_frames;
+                    down_jetpack_fuel -= _jump_fuel_burn * ts.step();
+                    this_mo.velocity.y -= _jump_fuel_burn * ts.step();
                 }
             }
         }
@@ -235,7 +237,7 @@ class JumpInfo {
         }
 
         if(hit_wall){
-            UpdateWallRun();
+            UpdateWallRun(ts);
         }
 
         if(WantsToGrabLedge() && (ledge_info.on_ledge || ledge_delay <= 0.0f)){
@@ -251,14 +253,14 @@ class JumpInfo {
 
         // if not holding a ledge, the character is airborne and can get controlled by arrow keys
         if(!ledge_info.on_ledge){
-            ledge_delay -= time_step * num_frames;
+            ledge_delay -= ts.step();
             if(!follow_jump_path){
                 vec3 target_velocity = GetTargetVelocity();
-                this_mo.velocity += time_step * target_velocity * _air_control * num_frames;
+                this_mo.velocity += target_velocity * _air_control * ts.step();
             }
         }
 
-        jump_launch -= _jump_launch_decay * time_step * num_frames;
+        jump_launch -= _jump_launch_decay * ts.step();
         jump_launch = max(0.0f, jump_launch);
     }
 
@@ -359,6 +361,3 @@ class JumpInfo {
         return jump_vel;
     }
 };
-
-JumpInfo jump_info;
-LedgeInfo ledge_info;

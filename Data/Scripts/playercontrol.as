@@ -22,9 +22,9 @@ ItemKeyState item_key_state = _iks_nothing;
 void AIMovementObjectDeleted(int id) {
 }
 
-void UpdateBrain(){
+void UpdateBrain(const Timestep &in ts){
     if(GetInputDown(this_mo.controller_id, "grab")){
-        grab_key_time += time_step * num_frames;
+        grab_key_time += ts.step();
     } else {
         grab_key_time = 0.0f;
     }
@@ -100,7 +100,7 @@ void HandleAIEvent(AIEvent event){
     }
 }
 
-void ReceiveMessage(int source, int msg_type){
+void ReceiveMessage(string msg){
 }
 
 bool WantsToCrouch() {
@@ -190,7 +190,7 @@ bool WantsToUnSheatheItem(int &out src) {
 }
 
 
-bool WantsToStartActiveBlock(){
+bool WantsToStartActiveBlock(const Timestep &in ts){
     if(!this_mo.controlled) return false;
     return GetInputPressed(this_mo.controller_id, "grab");
 }

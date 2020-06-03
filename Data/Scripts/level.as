@@ -39,8 +39,12 @@ void ReceiveMessage(string msg) {
             gui.RemoveGUI(display_text_id);
             has_display_text = false;
         }
+    } else if(token == "dispose_level"){
+        gui.RemoveAll();
+        has_gui = false;
     } else if(token == "go_to_main_menu"){
-        GoToMainMenu();
+        level.SendMessage("dispose_level");
+        LoadLevel("mainmenu");
     } else if(token == "clearhud"){
 	    hotspot_image_string.resize(0);
 	} else if(token == "manual_reset"){
@@ -65,6 +69,7 @@ void ReceiveMessage(string msg) {
             hotspot_image_string = token_iter.GetToken(msg);
 		}
     } else if(token == "loadlevel"){
+        level.SendMessage("dispose_level");
 		token_iter.FindNextToken(msg);
         LoadLevel(token_iter.GetToken(msg));
     }
@@ -72,14 +77,10 @@ void ReceiveMessage(string msg) {
 
 void DrawGUI() {
     if(hotspot_image_string.length() != 0){
-        hud.AddImage(hotspot_image_string, vec3(700,200,0));   
+        HUDImage@ image = hud.AddImage();   
+        image.SetImageFromPath(hotspot_image_string);
+        image.position = vec3(700,200,0);
     }
-}
-
-void GoToMainMenu(){
-    gui.RemoveAll();
-    has_gui = false;
-    LoadLevel("mainmenu");
 }
 
 void Update() {  
