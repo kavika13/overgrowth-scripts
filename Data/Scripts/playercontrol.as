@@ -113,10 +113,7 @@ bool WantsToDodge() {
     if(!this_mo.controlled) return false;
 
     bool movement_key_down = false;
-    if(GetInputDown(this_mo.controller_id, "move_up") ||
-       GetInputDown(this_mo.controller_id, "move_left") ||
-       GetInputDown(this_mo.controller_id, "move_down") ||
-       GetInputDown(this_mo.controller_id, "move_right"))
+    if(length_squared(GetTargetVelocity()) > 0.1f)
     {
         movement_key_down = true;
     }

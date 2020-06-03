@@ -16,12 +16,12 @@ void main()
 {    
     normal = normalize(gl_NormalMatrix * gl_Normal);
     
-    mat4 obj2world = GetPseudoInstanceMat4();
-    world_normal = normalize(gl_Normal);
-    world_normal = mat3(obj2world[0].xyz, obj2world[1].xyz, obj2world[2].xyz)*world_normal;
+    mat3 obj2worldmat3 = GetPseudoInstanceMat3();
+    world_normal = obj2worldmat3 * normal;
     world_normal.xy *= -1.0;
-    vec4 transformed_vertex = obj2world * gl_Vertex;
-    
+    //vec4 transformed_vertex = obj2world * gl_Vertex;
+    vec4 transformed_vertex = gl_Vertex;
+   
     rel_pos = CalcRelativePositionForSkySimple2(transformed_vertex.xyz, cam_pos);
 
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;

@@ -135,7 +135,7 @@ void Update() {
             SetGrabMouse(false);
         }
         
-        /*if(scenegraph && ActiveCamera::Get()->getCollisionDetection()){
+        /*if(scenegraph && ActiveCamera::Get()->GetCollisionDetection()){
             float _camera_collision_radius = 0.4f;
             vec3 old_new_position = position;
             position = scenegraph->bullet_world->CheckCapsuleCollisionSlide(old_position, position, _camera_collision_radius) ;

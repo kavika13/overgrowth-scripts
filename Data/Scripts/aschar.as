@@ -207,8 +207,8 @@ void Update(int _num_frames) {
         if(this_mo.controlled){
             if(this_mo.controller_id == 0){
                 UpdateAirWhooshSound();
-                ApplyCameraControls();
             }
+            ApplyCameraControls();
         }
         HandleCollisions();
         return;
@@ -245,11 +245,13 @@ void Update(int _num_frames) {
     UpdateBrain(); //in playercontrol.as or enemycontrol.as
     UpdateState();
 
-    if(this_mo.controlled && this_mo.controller_id == 0){
-        UpdateAirWhooshSound();
+    if(this_mo.controlled){
+        if(this_mo.controller_id == 0){
+            UpdateAirWhooshSound();
+        }
         ApplyCameraControls();
     }
-    
+
     if(on_ground){
         new_slide_vel = this_mo.velocity;
         float new_friction = this_mo.GetFriction(this_mo.position + vec3(0.0f,_leg_sphere_size * -0.4f,0.0f));
@@ -871,6 +873,10 @@ void UpdateRagdollDamping() {
     } else {
         this_mo.SetRagdollDamping(0.0f);
     }
+
+    /*if(!this_mo.controlled){
+        Print("Ragdoll static time: "+ragdoll_static_time+"\n");
+    }*/
 }
 
 void SetActiveRagdollFallPose() {
@@ -888,9 +894,16 @@ void SetActiveRagdollFallPose() {
         col.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
         danger_vec = this_mo.position - sphere_col.adjusted_position;
     }
+
+    float ragdoll_strength = length(this_mo.GetAvgVelocity())*0.1f;
+    ragdoll_strength = min(0.8f, ragdoll_strength);
+    ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+    this_mo.SetRagdollStrength(ragdoll_strength);
+
     float penetration = length(danger_vec);
     float penetration_ratio = penetration / danger_radius;
     float protect_amount = min(1.0f,max(0.0f,penetration_ratio*4.0f-2.0));
+    protect_amount = mix(1.0f, protect_amount, ragdoll_strength / 0.8f);
     this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount); // How much to try to curl up into a ball
     /*if(this_mo.controlled){
         Print("Protect amount: "+protect_amount+"\n");
@@ -905,10 +918,6 @@ void SetActiveRagdollFallPose() {
     float front_protect_amount = max(0.0f,dot(torso_vec, hazard_dir) * protect_amount);
     this_mo.SetLayerOpacity(ragdoll_layer_catchfallfront, front_protect_amount); // How much to put arms out front to catch fall
 
-    float ragdoll_strength = length(this_mo.GetAvgVelocity())*0.1f;
-    ragdoll_strength = min(0.8f, ragdoll_strength);
-    ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
-    this_mo.SetRagdollStrength(ragdoll_strength);
 }
 
 void SetActiveRagdollInjuredPose(){
@@ -985,7 +994,7 @@ void SetRagdollType(int type) {
             this_mo.StartAnimation("Data/Animations/r_idle.anm",4.0f);
             break;
         case _RGDL_FALL:
-            no_freeze = true;
+            no_freeze = false;
             this_mo.EnableSleep();
             this_mo.SetRagdollStrength(1.0);
             this_mo.StartAnimation("Data/Animations/r_flail.anm",4.0f);
@@ -1007,6 +1016,7 @@ void SetRagdollType(int type) {
 }
 
 void Ragdoll(int type){
+    this_mo.SetRagdollDamping(0.0f);
     HandleAIEvent(_ragdolled);
     const float _ragdoll_recovery_time = 1.0f;
     recovery_time = _ragdoll_recovery_time;
@@ -1701,7 +1711,7 @@ void AttachWeapon(int which){
 }
 
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
-    if(event == "grabitem" && !holding_weapon)
+    if(event == "grabitem" && !holding_weapon && knocked_out == _awake )
     {
         Print("Grabbing item\n");
         int num_items = GetNumItems();
@@ -3120,10 +3130,11 @@ void DecalCheck(){
 }
 
 void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
-    if(state == _attack_state && attack_getter.IsThrow() == 1){
-        return;
-    }
-    if(state == _hit_reaction_state && attack_getter2.IsThrow() == 1){
+    if(state == _ragdoll_state || 
+       other.QueryIntFunction("int GetState()") == _ragdoll_state ||
+       (state == _attack_state && attack_getter.IsThrow() == 1) ||
+       (state == _hit_reaction_state && attack_getter2.IsThrow() == 1))
+    {
         return;
     }
 
@@ -3285,9 +3296,11 @@ void ApplyCameraControls() {
     }
 
 
+    if(QueryLevelIntFunction("int HasFocus()")==0){
+        SetGrabMouse(true);
+    }
     if(!camera.GetAutoCamera() &&
        QueryLevelIntFunction("int HasFocus()")==0){   
-        SetGrabMouse(true);
         target_rotation -= GetLookXAxis(this_mo.controller_id);
         target_rotation2 -= GetLookYAxis(this_mo.controller_id);    
     } else {
@@ -3604,6 +3617,7 @@ void StartFootStance() {
          foot[i].target_pos = this_mo.position;
          foot[i].old_pos = this_mo.position;
          foot[i].height = 0.0f;
+         foot[i].progress = 0.0f;
     }
 }
 
@@ -3639,6 +3653,7 @@ void HandleFootStance() {
             foot[0].planted = false;
         }
     }
+
     for(int i=0; i<2; ++i){
         if(!foot[i].planted){
             foot[i].progress += time_step * num_frames * step_speed;
