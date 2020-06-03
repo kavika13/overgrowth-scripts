@@ -19,7 +19,7 @@ const float _tilt_inertia = 0.9f;
 
 const float _duck_speed_mult = 0.5f;
 
-const float _ground_normal_y_threshold = 0.7f;
+const float _ground_normal_y_threshold = 0.5f;
 const float _leg_sphere_size = 0.45f;
 const float _bumper_size = 0.5f;
 
@@ -122,19 +122,44 @@ void UpdateGroundMovementControls() {
 		}
 	}
 	
+	vec3 flat_ground_normal = ground_normal;
+	flat_ground_normal.y = 0.0f;
+	float flat_ground_length = length(flat_ground_normal);
+	flat_ground_normal = normalize(flat_ground_normal);
+	if(flat_ground_length > 0.9f){
+		if(dot(target_velocity, flat_ground_normal)<0.0f){
+			target_velocity -= dot(target_velocity, flat_ground_normal) *
+							   flat_ground_normal;
+		}
+	}
+	if(flat_ground_length > 0.6f){
+		if(dot(this_mo.velocity, flat_ground_normal)>-0.8f){
+			target_velocity -= dot(target_velocity, flat_ground_normal) *
+							   flat_ground_normal;
+			target_velocity += flat_ground_normal * flat_ground_length;
+			feet_moving = true;
+		}
+		if(length(target_velocity)>1.0f){
+			target_velocity = normalize(target_velocity);
+		}
+	}
+
 	vec3 adjusted_vel = WorldToGroundSpace(target_velocity);
 
 	// Adjust speed based on ground slope
 	max_speed = _run_speed;
+	float curr_speed = length(this_mo.velocity);
 	if(adjusted_vel.y>0.0){
 		max_speed *= 1.0 - adjusted_vel.y;
 	} else if(adjusted_vel.y<0.0){
 		max_speed *= 1.0 - adjusted_vel.y;
 	}
+	max_speed = max(curr_speed * 0.98f, max_speed);
 
 	float speed = _walk_accel * run_phase;
 	speed = mix(speed,speed*_duck_speed_mult,duck_amount);
 	this_mo.velocity += adjusted_vel * time_step * speed;
+
 }
 
 void DrawIKTarget(string str) {
@@ -225,21 +250,22 @@ void SetOnGround(bool _on_ground){
 void Land(vec3 vel) {
 	if(flip_info.ShouldRagdollOnLanding()){
 		GoLimp();
+		return;
 	}
 
-	if(!limp){
-		string sound = "Data/Sounds/Impact-Grass2.wav";
-		PlaySound(sound, this_mo.position);
-	}
 	SetOnGround(true);
-
 	
 	float land_speed = 10.0f;//min(30.0f,max(10.0f, -vel.y));
 	this_mo.SetAnimation("Data/Animations/idle.xml",land_speed);
 	
-	duck_amount = 1.0;
-	target_duck_amount = 1.0;
-	duck_vel = land_speed * 0.3f;
+	if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
+		string sound = "Data/Sounds/Impact-Grass2.wav";
+		PlaySound(sound, this_mo.position);
+		duck_amount = 1.0;
+		target_duck_amount = 1.0;
+		duck_vel = land_speed * 0.3f;
+	}
+
 	if(WantsToCrouch()){
 		duck_vel = max(6.0f,duck_vel);
 	}
@@ -259,7 +285,7 @@ vec3 HandleBumperCollision(){
 
 bool HandleStandingCollision() {
 	vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
-	vec3 lower_pos = this_mo.position+vec3(0,-0.1f,0);
+	vec3 lower_pos = this_mo.position+vec3(0,-0.2f,0);
 	this_mo.GetSweptSphereCollision(upper_pos,
 								 lower_pos,
 								 _leg_sphere_size);
@@ -267,6 +293,16 @@ bool HandleStandingCollision() {
 }
 
 void HandleGroundCollision() {
+	/*vec3 ground_vel;
+	if(on_ground) {
+		vec3 y_vec = ground_normal;
+		vec3 x_vec = normalize(cross(y_vec,vec3(0,0,1)));
+		vec3 z_vec = cross(y_vec, x_vec);
+		ground_vel = vec3(dot(x_vec, this_mo.velocity),
+						  dot(y_vec, this_mo.velocity),
+						  dot(z_vec, this_mo.velocity));
+	}*/
+
 	vec3 air_vel = this_mo.velocity;
 	if(on_ground){
 		this_mo.velocity += HandleBumperCollision() / time_step;
@@ -275,19 +311,40 @@ void HandleGroundCollision() {
 			GoLimp();	
 		}
 
+		if((sphere_col.NumContacts() != 0 ||
+			ground_normal.y < _ground_normal_y_threshold)
+			&& this_mo.velocity.y > 0.2f){
+			SetOnGround(false);
+			jump_info.StartFall();
+		}
+
 		bool in_air = HandleStandingCollision();
-		if(in_air || ground_normal.y < _ground_normal_y_threshold){
+		if(in_air){
 			SetOnGround(false);
 			jump_info.StartFall();
 		} else {
+			this_mo.position = sphere_col.position;
+			/*DebugDrawWireSphere(sphere_col.position,
+								sphere_col.radius,
+								vec3(1.0f,0.0f,0.0f),
+								_delete_on_update);*/
 			for(int i=0; i<sphere_col.NumContacts(); i++){
 				const CollisionPoint contact = sphere_col.GetContact(i);
-				ground_normal = ground_normal * 0.9f +
-								contact.normal * 0.1f;
-				ground_normal = normalize(ground_normal);
-			}
-			this_mo.position = sphere_col.position;
-
+				if(distance(contact.position, this_mo.position)<=_leg_sphere_size+0.01f){
+					ground_normal = ground_normal * 0.9f +
+									contact.normal * 0.1f;
+					ground_normal = normalize(ground_normal);
+					/*DebugDrawLine(sphere_col.position,
+								  sphere_col.position-contact.normal,
+								  vec3(1.0f,0.0f,0.0f),
+								  _delete_on_update);*/
+				}
+			}/*
+			DebugDrawLine(sphere_col.position,
+							  sphere_col.position-ground_normal,
+							  vec3(0.0f,1.0f,0.0f),
+							  _delete_on_update);
+			*/
 			
 			if(flip_info.ShouldRagdollIntoSteepGround() &&
 			   dot(this_mo.GetFacing(),ground_normal) < -0.6f){
@@ -300,7 +357,7 @@ void HandleGroundCollision() {
 		this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
 		for(int i=0; i<sphere_col.NumContacts(); i++){
 			const CollisionPoint contact = sphere_col.GetContact(i);
-			if(contact.normal.y < 0.5f){
+			if(contact.normal.y < _ground_normal_y_threshold){
 				jump_info.HitWall(normalize(contact.position-this_mo.position));
 			}
 		}	
@@ -308,20 +365,27 @@ void HandleGroundCollision() {
 		if(sphere_col.NumContacts() != 0 && flip_info.RagdollOnImpact()){
 			GoLimp();	
 		}
-	}
-
-	for(int i=0; i<sphere_col.NumContacts(); i++){
-		const CollisionPoint contact = sphere_col.GetContact(i);
-		if(contact.normal.y > _ground_normal_y_threshold){
-			if(!on_ground && air_time > 0.1f){
-				Land(air_vel);
-				ground_normal = contact.normal;
+		
+		for(int i=0; i<sphere_col.NumContacts(); i++){
+			const CollisionPoint contact = sphere_col.GetContact(i);
+			if(contact.normal.y > _ground_normal_y_threshold ||
+			   (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f)){
+				if(air_time > 0.1f){
+					ground_normal = contact.normal;
+					Land(air_vel);
+				}
 			}
-			ground_normal = ground_normal * 0.9f +
-							contact.normal * 0.1f;
-			ground_normal = normalize(ground_normal);
 		}
 	}
+/*
+	if(on_ground){
+		vec3 y_vec = ground_normal;
+		vec3 x_vec = normalize(cross(y_vec,vec3(0,0,1)));
+		vec3 z_vec = cross(y_vec, x_vec);
+		this_mo.velocity = x_vec * ground_vel.x +
+						   y_vec * ground_vel.y +
+						   z_vec * ground_vel.z;
+	}*/
 }
 
 void GoLimp() {
@@ -487,6 +551,30 @@ void update(bool _controlled) {
 						  _persistent);
 		}
 	}
+/*
+	vec3 dimensions(1.0f,1.0f,1.0f);
+	this_mo.GetSlidingScaledSphereCollision(this_mo.position,
+							  1.0f,
+							  dimensions);
+
+	DebugDrawWireScaledSphere(this_mo.position,
+						1.0f,
+						dimensions,
+						vec3(1.0f,0.0f,0.0f),
+						_delete_on_update);
+
+	vec3 slid = sphere_col.adjusted_position;
+	vec3 new_pos = ApplyScaledSphereSlide(this_mo.position,
+									1.0f,
+									dimensions);
+	DebugDrawWireScaledSphere(new_pos,
+						1.0f,
+						dimensions,
+						vec3(1.0f,1.0f,1.0f),
+						_delete_on_update);*/
+
+	//this_mo.velocity += (new_pos-this_mo.position)/time_step;
+	//this_mo.position = new_pos;
 }
 
 void init() {

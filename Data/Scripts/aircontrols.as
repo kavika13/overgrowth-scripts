@@ -103,6 +103,7 @@ class JumpInfo {
 			this_mo.SetIKTargetOffset("rightarm",no_offset);
 			this_mo.SetIKTargetOffset("left_leg",no_offset);
 			this_mo.SetIKTargetOffset("right_leg",no_offset);
+			this_mo.SetIKTargetOffset("full_body",no_offset);
 		}
 	}
 
