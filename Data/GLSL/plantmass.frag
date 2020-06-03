@@ -81,4 +81,9 @@ void main()
 	color *= Exposure();
 
 	gl_FragColor = vec4(color,colormap.a);
+/*
+	float front_view = dot(normalize(vertex_pos),vec3(0,0,-1));
+	front_view = max(0.0,min(1.0,(front_view-0.2)*3.0));
+
+	gl_FragColor = vec4(color,colormap.a*front_view);*/
 }
