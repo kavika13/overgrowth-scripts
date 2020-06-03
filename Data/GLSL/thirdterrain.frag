@@ -12,6 +12,8 @@ varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
+
+//#include "lighting.glsl"
  
 void main()
 {	
@@ -35,10 +37,7 @@ void main()
 	
 	vec3 color = diffuse_color;
 	
-	float near = 1.0;
-	float far = 1000.0;
-
-	color = mix(color, textureCube(tex4,normalize(rel_pos)).xyz, min(1.0,length(rel_pos)/far));
+	AddHaze(color, rel_pos, tex4);
 
 	gl_FragColor = vec4(color,terrain_color.a);
 }

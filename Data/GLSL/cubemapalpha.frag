@@ -13,40 +13,40 @@ varying vec3 light_pos;
 varying mat3 tangent_to_world;
 varying vec3 rel_pos;
 
+//#include "lighting.glsl"
+
 void main()
 {	
 	mat3 obj2world3 = mat3(obj2world[0].xyz, obj2world[1].xyz, obj2world[2].xyz);
 	vec3 color;
 	
-	float shade_mult;
-	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
-	vec3 normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
-
-	float NdotL = max(0.0,dot(light_pos, normal))*gl_LightSource[0].diffuse.a;
-	vec3 diffuse_color = gl_LightSource[0].diffuse.xyz * vec3(NdotL);
+	vec3 shadow_tex = vec3(1.0);
 	
-	vec3 diffuse_map_vec = normal;
-	diffuse_map_vec = obj2world3 * tangent_to_world * diffuse_map_vec;
-	diffuse_map_vec.y *= -1.0;
-	diffuse_color += textureCube(tex4,diffuse_map_vec).xyz * (1.0-NdotL) * (1.5-gl_LightSource[0].diffuse.a*0.5);
+	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
+	vec3 normal = UnpackTanNormal(normalmap);
+	
+	float NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
+	vec3 diffuse_color = GetDirectColor(NdotL);
+	
+	vec3 diffuse_map_vec = tangent_to_world*normal;
+	diffuse_color += LookupCubemap(obj2world, diffuse_map_vec, tex4) *
+					 GetAmbientContrib(shadow_tex.g);
 	
 	vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
 	float spec = min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0 * NdotL) ;
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
-	vec3 spec_map_vec = reflect(vertex_pos,normal);
-	spec_map_vec = normalize(obj2world3 * tangent_to_world * spec_map_vec);
-	spec_map_vec.y *= -1.0;
-	spec_color += textureCube(tex3,spec_map_vec).xyz * 0.5;
-	
+	vec3 spec_map_vec = tangent_to_world * reflect(vertex_pos,normal);
+	spec_color += LookupCubemap(obj2world, spec_map_vec, tex3) * 0.5 *
+				  GetAmbientContrib(shadow_tex.g);
+	 
 	vec4 colormap = texture2D(tex,gl_TexCoord[0].xy);
 	
-	color = diffuse_color * colormap.xyz + spec_color * normalmap.a;
+	color = diffuse_color * colormap.xyz + spec_color * colormap.a;
 	
-	float near = 0.1;
-	float far = 1000.0;
+	color *= BalanceAmbient(NdotL);
 	
-	color = mix(color, textureCube(tex4,normalize(rel_pos)).xyz, length(rel_pos)/far);
-	
+	AddHaze(color, rel_pos, tex4);
+
 	gl_FragColor = vec4(color,colormap.a);
 }

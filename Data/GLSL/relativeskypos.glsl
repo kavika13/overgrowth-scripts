@@ -3,3 +3,9 @@ vec3 CalcRelativePositionForSky(const mat4 obj2world, const vec3 cam_pos) {
 	position.xy *= -1.0;
 	return position;
 }
+
+vec3 CalcRelativePositionForSkySimple(const vec3 cam_pos) {
+	vec3 position = gl_Vertex.xyz - cam_pos;
+	position.xy *= -1.0;
+	return position;
+}

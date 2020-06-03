@@ -21,7 +21,7 @@ void main()
 	
 	light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
 	
-	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
+	rel_pos = CalcRelativePositionForSkySimple(cam_pos);
 	
 	gl_Position = ftransform();
 	

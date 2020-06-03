@@ -3,25 +3,27 @@ uniform samplerCube tex3;
 uniform samplerCube tex4;
 uniform vec4 emission;
 uniform mat4 obj2world;
+uniform vec3 cam_pos;
 
 varying vec3 normal;
 varying vec3 world_normal;
+varying vec3 rel_pos;
+
+//#include "lighting.glsl"
 
 void main()
 {	
-	float NdotL;
-	vec3 color;
+	float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
 	
-	NdotL = max(dot(normal,gl_LightSource[0].position.xyz),0.0)*gl_LightSource[0].diffuse.a;
-	vec4 color_tex = texture2D(tex,gl_TexCoord[0].xy);
-	
-	color = gl_LightSource[0].diffuse.xyz * NdotL * gl_Color.xyz;
+	vec3 color = GetDirectColor(NdotL);
 	
 	color += emission.xyz;
 
-	color += textureCube(tex4,world_normal).xyz	* (1.5-gl_LightSource[0].diffuse.a*0.5) * 0.8;
+	color += textureCube(tex4,world_normal).xyz	* GetAmbientContrib(1.0);
 	
-	color *= (1.0-NdotL*0.2);
+	color *= BalanceAmbient(NdotL);
 	
+	AddHaze(color, rel_pos, tex4);
+
 	gl_FragColor = vec4(color,1.0);
 }
