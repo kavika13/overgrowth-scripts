@@ -31,5 +31,6 @@ void main()
  
 	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
 	gl_TexCoord[0] = gl_MultiTexCoord0;
+	gl_TexCoord[1] = gl_MultiTexCoord0 + gl_MultiTexCoord5;
 	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
 } 

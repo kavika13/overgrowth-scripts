@@ -55,15 +55,17 @@ void main()
 					 GetAmbientContrib(shadow_tex.g);
 	
 	// Get specular lighting
-	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
+	//float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
+	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,200.0);
+	spec *= 5.0;
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * 0.3;
 	
 	vec3 spec_map_vec = reflect(ws_vertex, ws_normal);
-	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
+	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.25 *
 				  GetAmbientContrib(shadow_tex.g);
 
 	// Put it all together
-	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
+	vec4 colormap = texture2D(tex0,gl_TexCoord[1].xy);
 	vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
 	
 	color *= BalanceAmbient(NdotL);

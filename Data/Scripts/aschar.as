@@ -159,10 +159,8 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		SetState(_hit_reaction_state);
 		hit_reaction_anim_set = true;
 		if(!controlled){
-			string sound = "Data/Sounds/voice/torikamal/losefooting.xml";
-			this_mo.PlaySoundGroupVoice(sound, 0.3f);
-			sound = "Data/Sounds/voice/torikamal/land_fall.xml";
-			this_mo.PlaySoundGroupVoice(sound, 0.6f);
+			this_mo.PlaySoundGroupVoice("surprise", 0.3f);
+			this_mo.PlaySoundGroupVoice("land_hit", 0.6f);
 		}
 	}
 	if(type == "attackblocked")
@@ -213,8 +211,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		}
 	
 		if(!controlled){
-			string sound = "Data/Sounds/voice/torikamal/facehit.xml";
-			this_mo.PlaySoundGroupVoice(sound,0.0f);
+			this_mo.PlaySoundGroupVoice("hit",0.0f);
 		}
 
 		block_health -= attack_getter2.GetBlockDamage();
@@ -252,10 +249,9 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 				string sound = "Data/Sounds/hit/hit_medium.xml";
 				PlaySoundGroup(sound, pos);
 				if(!controlled){
-					string sound = "Data/Sounds/voice/torikamal/groan.xml";
-					this_mo.PlaySoundGroupVoice(sound,0.4f);
-					sound = "Data/Sounds/voice/torikamal/sleeping.xml";
-					this_mo.PlaySoundGroupVoice(sound,1.5f);
+					this_mo.PlaySoundGroupVoice("death",0.4f);
+					//sound = "Data/Sounds/voice/torikamal/sleeping.xml";
+					//this_mo.PlaySoundGroupVoice(sound,1.5f);
 				}
 			} else {
 				string sound = "Data/Sounds/hit/hit_medium.xml";
@@ -265,10 +261,10 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 		} else {
 			string sound = "Data/Sounds/hit/hit_normal.xml";
 			PlaySoundGroup(sound, pos);
-			if(!controlled && rand()%2==0){
+			/*if(!controlled && rand()%2==0){
 				string sound = "Data/Sounds/voice/torikamal/was_hit_taunt.xml";
 				this_mo.PlaySoundGroupVoice(sound,0.2f);
-			}
+			}*/
 			//MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
 			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
 			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
@@ -377,7 +373,7 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 			//if(this_mo.ReadCharacter(target_id).IsKnockedOut() == 0){
 			/*if(rand()%2==0){
 				string sound = "Data/Sounds/voice/torikamal/hit_taunt.xml";
-				this_mo.PlaySoundGroupVoice(sound);
+				this_mo.PlaySoundGroupVoice(sound,0.2f);
 			}*/
 		}
 		if(return_val != 0 && attack_getter.GetSpecial() == "legcannon"){
@@ -551,8 +547,7 @@ void UpdateGroundAttackControls() {
 		attack_animation_set = false;
 		attacking_with_throw = false;
 		if(!controlled){
-			string sound = "Data/Sounds/voice/torikamal/throwingpunch.xml";
-			this_mo.PlaySoundGroupVoice(sound,0.0f);
+			this_mo.PlaySoundGroupVoice("attack",0.0f);
 		}
 
 		/*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
@@ -1162,7 +1157,7 @@ void SetState(int _state) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
 		}
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
@@ -1205,7 +1200,7 @@ void WakeUp(int how) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
 		}
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
@@ -1219,7 +1214,7 @@ void WakeUp(int how) {
 		if(!mirrored_stance){
 			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
 		}
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
@@ -1688,21 +1683,146 @@ void ApplyCameraControls() {
 	camera.SetYRotation(cam_rotation);	
 	camera.SetXRotation(cam_rotation2);
 
+	camera.SetFOV(90);
+	camera.SetPos(cam_pos);
+
+	/*camera.SetFOV(30);
+	cam_pos.y+=0.05f;
+	camera.SetPos(cam_pos);
+	*/
+
+	old_cam_pos = cam_pos;
 	camera.CalcFacing();
 
-	camera.SetPos(cam_pos);
-	old_cam_pos = cam_pos;
+	camera.SetDistance(new_follow_distance);
+	UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+}
 
-	 camera.SetDistance(new_follow_distance);
-	 UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+const float _target_look_threshold_sqrd = 7.0f * 7.0f;
+const float _head_inertia = 0.8f;
+vec3 head_dir;
+vec3 target_head_dir;
 
-	 camera.SetFOV(90);
+void UpdateHeadLook() {
+	bool look_at_target = false;
+	vec3 target_dir;
+	if(target_id != -1){
+		vec3 target_pos = this_mo.ReadCharacter(target_id).position;
+		if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
+			look_at_target = true;
+			target_dir = normalize(target_pos - this_mo.position);
+		}
+	}
+	if(controlled){
+		if(!look_at_target){
+			target_head_dir = camera.GetFacing();
+		} else {
+			target_head_dir = target_dir;
+		}
+	} else {
+		if(!look_at_target){
+			target_head_dir = this_mo.GetFacing();
+		} else {
+			target_head_dir = target_dir;
+		}
+	}
+
+	head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
+	this_mo.SetIKTargetOffset("head",head_dir);
+}
+
+vec3 eye_dir;
+vec3 target_eye_dir;
+const float _eye_inertia = 0.85f;
+const float _eye_min_delay = 0.5f;
+const float _eye_max_delay = 2.0f;
+float eye_delay = 0.0f;
+
+void UpdateEyeLook(){
+	if(eye_delay <= 0.0f){
+		eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
+		target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);		
+		target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);		
+		target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);	
+		normalize(target_eye_dir);
+	}
+	eye_delay -= time_step * num_frames;
+	eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
+
+	// Set weights for carnivore
+	this_mo.SetMorphTargetWeight("look_r",max(0.0f,eye_dir.x),1.0f);
+	this_mo.SetMorphTargetWeight("look_l",max(0.0f,-eye_dir.x),1.0f);
+	this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
+
+	// Set weights for herbivore
+	this_mo.SetMorphTargetWeight("look_u",max(0.0f,eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_d",max(0.0f,-eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_f",max(0.0f,eye_dir.z),1.0f);
+	this_mo.SetMorphTargetWeight("look_b",max(0.0f,-eye_dir.z),1.0f);
+
+	// Set weights for independent-eye herbivoe
+	this_mo.SetMorphTargetWeight("look_u_l",max(0.0f,eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_u_r",max(0.0f,eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_d_l",max(0.0f,-eye_dir.y),1.0f);
+	this_mo.SetMorphTargetWeight("look_d_r",max(0.0f,-eye_dir.y),1.0f);
+
+	float right_front = eye_dir.z;
+	float left_front = eye_dir.z;
+	this_mo.SetMorphTargetWeight("look_f_r",max(0.0f,right_front),1.0f);
+	this_mo.SetMorphTargetWeight("look_b_r",max(0.0f,-right_front),1.0f);
+	this_mo.SetMorphTargetWeight("look_f_l",max(0.0f,left_front),1.0f);
+	this_mo.SetMorphTargetWeight("look_b_l",max(0.0f,-left_front),1.0f);
+}
+
+const float _blink_speed = 5.0f;
+const float _blink_min_delay = 1.0f;
+const float _blink_max_delay = 5.0f;
+bool blinking = false;
+float blink_progress = 0.0f;
+float blink_delay = 0.0f;
+float blink_amount = 0.0f;
+void UpdateBlink() {
+	bool unconscious = (limp && ragdoll_type == _RGDL_LIMP);
+	if(!unconscious){
+		if(blink_delay < 0.0f){
+			blink_delay = RangedRandomFloat(_blink_min_delay,
+											_blink_max_delay);
+			blinking = true;
+			blink_progress = 0.0f;
+		}
+		if(blinking){
+			blink_progress += time_step * num_frames * 5.0f;
+			blink_amount = sin(blink_progress*3.14);
+			if(blink_progress > 1.0f){
+				blink_amount = 0.0f;
+				blinking = false;
+			}
+		} else {
+			blink_amount = 0.0f;
+		}
+		blink_delay -= time_step * num_frames;
+	} else {
+		blink_amount = mix(blink_amount, 1.0f, 0.1f);
+	}
+	this_mo.SetMorphTargetWeight("wink_r",blink_amount,1.0f);
+	this_mo.SetMorphTargetWeight("wink_l",blink_amount,1.0f);
 }
 
 // THIS IS WHERE THE MAGIC HAPPENS.
 // update() function is called once per every time unit for every player and AI character, and most things that must be constantly updated will be called from this function.
 // the bool _controlled is true when character is controlled by a human, false when it's controlled by AI.
 void update(bool _controlled, int _num_frames) {
+	UpdateHeadLook();
+	UpdateBlink();
+	UpdateEyeLook();
+
+	if(controlled && GetInputPressed("v")){
+		//string sound = "Data/Sounds/voice/kill_intent.xml";
+		string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
+		this_mo.ForceSoundGroupVoice(sound, 0.0f);
+	}
+
 	num_frames = _num_frames;
 
 	HandleActiveBlock();
@@ -1790,40 +1910,42 @@ void update(bool _controlled, int _num_frames) {
 	if(controlled && GetInputPressed("1")){	
 		this_mo.char_path = "Data/Characters/guard.xml";
 		character_getter.Load(this_mo.char_path);
-		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-									 character_getter.GetSkeletonPath());
+		this_mo.RecreateRiggedObject(this_mo.char_path);
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("2")){
 		this_mo.char_path = "Data/Characters/guard2.xml";
 		character_getter.Load(this_mo.char_path);
-		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-									 character_getter.GetSkeletonPath());
+		this_mo.RecreateRiggedObject(this_mo.char_path);
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("3")){
 		this_mo.char_path = "Data/Characters/turner.xml";
 		character_getter.Load(this_mo.char_path);
-		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-									 character_getter.GetSkeletonPath());
+		this_mo.RecreateRiggedObject(this_mo.char_path);
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("4")){
 		this_mo.char_path = "Data/Characters/civ.xml";
 		character_getter.Load(this_mo.char_path);
-		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-									 character_getter.GetSkeletonPath());
+		this_mo.RecreateRiggedObject(this_mo.char_path);
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("5")){
 		this_mo.char_path = "Data/Characters/wolf.xml";
 		character_getter.Load(this_mo.char_path);
-		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-									 character_getter.GetSkeletonPath());
+		this_mo.RecreateRiggedObject(this_mo.char_path);
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
+	}
+	if(controlled && GetInputPressed("6")){
+		this_mo.char_path = "Data/Characters/rabbot.xml";
+		character_getter.Load(this_mo.char_path);
+		this_mo.RecreateRiggedObject(this_mo.char_path);
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
@@ -1867,8 +1989,7 @@ void update(bool _controlled, int _num_frames) {
 void init(string character_path) {
 	this_mo.char_path = character_path;
 	character_getter.Load(this_mo.char_path);
-	this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
-								 character_getter.GetSkeletonPath());
+	this_mo.RecreateRiggedObject(this_mo.char_path);
 	for(int i=0; i<5; ++i){
 		HandleBumperCollision();
 		HandleStandingCollision();
@@ -1913,7 +2034,7 @@ void UpdateAnimation() {
 				if(!mirrored_stance){
 					this_mo.SetAnimation(character_getter.GetAnimPath("idle"));
 				} else {
-					this_mo.SetAnimation(character_getter.GetAnimPath("idle"),20.0f,_ANM_MIRRORED);
+					this_mo.SetAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
 				}
 				this_mo.SetIKEnabled(true);
 			}
