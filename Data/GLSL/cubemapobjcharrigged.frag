@@ -9,6 +9,7 @@ uniform samplerCube tex3;
 #endif
 uniform sampler2DShadow tex5;
 uniform sampler2D tex6;
+uniform sampler2D tex7;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;
@@ -97,6 +98,6 @@ void main()
     AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 
     //color = texture2D(tex6,gl_TexCoord[1].xy).xyz;
-
-    gl_FragColor = vec4(color,1.0);
+    float alpha = texture2D(tex7,gl_TexCoord[3].xy).a;//vec3(frac(gl_TexCoord[3].x));
+    gl_FragColor = vec4(color,alpha);
 }

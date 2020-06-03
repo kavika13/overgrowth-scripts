@@ -9,6 +9,7 @@ uniform samplerCube tex3;
 #endif
 uniform sampler2DShadow tex5;
 uniform sampler2D tex6;
+uniform sampler2D tex7;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;
@@ -44,6 +45,7 @@ void main()
     gl_TexCoord[0] = gl_MultiTexCoord0;
     gl_TexCoord[1] = gl_MultiTexCoord0 + gl_MultiTexCoord5;
     gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
+    gl_TexCoord[3] = gl_MultiTexCoord6;
 #ifndef BAKED_SHADOWS
     SetCascadeShadowCoords(transformed_vertex, shadow_coords);
 #endif
