@@ -11,3 +11,4 @@ mat3 transposeMat3(const mat3 matrix) {
 	temp[2][2] = matrix[2][2];
 	return temp;
 }
+

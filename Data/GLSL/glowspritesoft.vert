@@ -2,6 +2,7 @@
 
 uniform sampler2D tex0;
 uniform sampler2DRect tex3;
+uniform float size;
 
 void main()
 {	

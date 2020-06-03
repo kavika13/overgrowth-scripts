@@ -4,3 +4,4 @@ vec2 GetShadowCoords() {
 	shadow_coords += gl_MultiTexCoord7.xy;
 	return shadow_coords;
 }
+

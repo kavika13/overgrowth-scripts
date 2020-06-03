@@ -1,4 +1,4 @@
-//#pragma-transparent
+#pragma transparent
 
 uniform sampler2D tex0;
 uniform sampler2D tex1;

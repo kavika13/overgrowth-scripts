@@ -1,4 +1,4 @@
-//#pragma-transparent
+#pragma transparent
 uniform vec3 light_pos;
 
 uniform sampler2D tex0;
