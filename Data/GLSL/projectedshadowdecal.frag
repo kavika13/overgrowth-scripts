@@ -65,6 +65,7 @@ void main()
 
 	//NdotL = max(dot(normal,normalize(gl_LightSource[0].position.xyz)),0.0);
 	
+	//color = vec4(1.0);
 
 	gl_FragColor = color;
 }

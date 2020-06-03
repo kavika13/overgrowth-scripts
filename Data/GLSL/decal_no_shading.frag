@@ -14,6 +14,10 @@ varying vec3 rel_pos;
 
 void main()
 {	
+	if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
+		gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0) {
+		discard;
+	}
 	vec3 color;
 	
 	vec3 shadow_tex = texture2D(tex5,gl_TexCoord[1].xy).rgb;
