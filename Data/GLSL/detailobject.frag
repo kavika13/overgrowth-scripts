@@ -24,7 +24,7 @@ UNIFORM_EXTRA_AO
 uniform vec3 avg_color;
 uniform vec3 color_tint;
 
-uniform usamplerBuffer tex31;
+uniform usamplerBuffer ambient_color_buffer;
 uniform int num_light_probes;
 uniform int num_tetrahedra;
 uniform mat3 normal_matrix;
@@ -74,7 +74,7 @@ void main()
     CALC_SHADOWED
     
     vec3 ambient_cube_color[6];
-    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, tex31, ambient_cube_color, 0u);
+    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, 0u);
     CALC_DIRECT_DIFFUSE_COLOR
     if(!use_amb_cube){
         diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) *

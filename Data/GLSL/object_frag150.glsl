@@ -39,6 +39,8 @@ if(mod(gl_FragCoord.x + gl_FragCoord.y, 2.0) == 0.0){ \
 #define blood_tex tex6
 #define fur_tex tex7
 #define tint_map tex8
+#define ambient_grid_data tex11
+#define ambient_color_buffer tex12
 
 #define UNIFORM_COMMON_TEXTURES \
 uniform sampler2D color_tex; \
@@ -47,25 +49,15 @@ uniform samplerCube spec_cubemap; \
 UNIFORM_SHADOW_TEXTURE
 
 #define weight_tex tex5
-#define detail_color_0 tex6
-#define detail_normal_0 tex7
-#define detail_color_1 tex8
-#define detail_normal_1 tex9
-#define detail_color_2 tex10
-#define detail_normal_2 tex11
-#define detail_color_3 tex12
-#define detail_normal_3 tex13
+#define detail_color tex6
+#define detail_normal tex7
 
 #define UNIFORM_DETAIL4_TEXTURES \
 uniform sampler2D weight_tex; \
-uniform sampler2D detail_color_0; \
-uniform sampler2D detail_normal_0; \
-uniform sampler2D detail_color_1; \
-uniform sampler2D detail_normal_1; \
-uniform sampler2D detail_color_2; \
-uniform sampler2D detail_normal_2; \
-uniform sampler2D detail_color_3; \
-uniform sampler2D detail_normal_3;
+uniform sampler2DArray detail_color; \
+uniform vec4 detail_color_indices; \
+uniform sampler2DArray detail_normal; \
+uniform vec4 detail_normal_indices; \
 
 #define UNIFORM_AVG_COLOR4 \
 uniform vec3 avg_color0; \

@@ -4,6 +4,10 @@
 #include "ambient_tet_mesh.glsl"
 #include "decals.glsl"
 
+uniform float time;
+
+#define ALPHA
+
 UNIFORM_COMMON_TEXTURES
 #ifdef PLANT
 UNIFORM_TRANSLUCENCY_TEXTURE
@@ -52,9 +56,14 @@ out vec4 out_color;
 #define tc0 frag_tex_coords
 
 void main() {   
-    vec4 colormap = texture(tex0,frag_tex_coords);
+
+    vec2 frag_tex_coordsB = frag_tex_coords;                         	//copy the variable
+    frag_tex_coordsB.y -= time * 0.2;                                	//makes texture 'scroll' in the y axis
+    //frag_tex_coordsB.x += sin(frag_tex_coordsB.y + time * 0.2) * 0.2;     //makes texture move back and fourth
+
+    vec4 colormap = texture(tex0,frag_tex_coordsB);
     #if defined(ALPHA) && !defined(ALPHA_TO_COVERAGE)
-        if(colormap.a < 0.5){
+        if(colormap.a < 0.45){
             discard;
         }
     #endif
@@ -106,7 +115,7 @@ void main() {
         }
 
         // Get color
-        vec3 base_color = texture(color_tex,frag_tex_coords).xyz;
+        vec3 base_color = texture(color_tex,frag_tex_coordsB).xyz;
         vec3 tint;
         {
             vec3 average_color = avg_color0 * weight_map[0] +

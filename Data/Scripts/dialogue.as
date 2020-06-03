@@ -86,6 +86,7 @@ class Dialogue {
     bool text_dirty;
     int set_animation_char_select;
     int set_animation_pose_select;
+	float last_key_update;
 
     void SetRecording(bool val){
         if(recording != val){
@@ -274,6 +275,7 @@ class Dialogue {
         editor_text.Create(800, 512);
         set_animation_char_select = -1;
         set_animation_pose_select = -1;
+		last_key_update = 0.0f;
 
         Print("Loading dialogue poses file\n");
         if(!LoadFile("Data/Animations/dialogue_poses.txt")){
@@ -473,7 +475,15 @@ class Dialogue {
             return; 
         }
         if(!params.HasParam("Script")){
-            LoadScriptFile(params.GetString("Dialogue"));
+			if(params.GetString("Dialogue") == "empty") {
+				strings.resize(0);
+				AddLine("#name \"Unnamed\"", strings.size());
+				AddLine("#participants 1", strings.size());
+				AddLine("", strings.size());
+				AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
+			} else {
+				LoadScriptFile(params.GetString("Dialogue"));
+			}
         } else {
             string script = params.GetString("Script");
             string token = "\n";
@@ -667,49 +677,52 @@ class Dialogue {
 
         if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
             // Handle up/down dialogue editor navigation
-            if(GetInputPressed(controller_id, "down") || selected_line < 0 || !strings[selected_line].visible){
-                int num_lines = int(strings.size());
-                int i = selected_line + 1;
-                if(GetInputDown(controller_id, "shift")){
-                    while(i < num_lines && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-                        ++i;
-                    }
-                } else {
-                    while(i < num_lines && !strings[i].visible){
-                        ++i;
-                    }
-                }
-                if(i < num_lines && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
-            if(GetInputPressed(controller_id, "up") || selected_line >= int(strings.size())){
-                int i = selected_line - 1;
-                if(GetInputDown(controller_id, "shift")){
-                    while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-                        --i;
-                    }
-                } else {
-                    while(i > 0 && !strings[i].visible){
-                        --i;
-                    }
-                }
-                if(i > 0 && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
+			if((the_time - last_key_update) > 0.1f) {
+				last_key_update = the_time;
+				if(GetInputDown(controller_id, "down") || selected_line < 0 || !strings[selected_line].visible){
+					int num_lines = int(strings.size());
+					int i = selected_line + 1;
+					if(GetInputDown(controller_id, "shift")){
+						while(i < num_lines && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
+							++i;
+						}
+					} else {
+						while(i < num_lines && !strings[i].visible){
+							++i;
+						}
+					}
+					if(i < num_lines && strings[i].visible){
+						selected_line = i;
+					}
+					text_dirty = true;
+					HandleSelectedString(selected_line);
+					if(recording){
+						UpdateRecordLocked();
+					}
+					ClearUnselectedObjects();
+				}
+				if(GetInputDown(controller_id, "up") || selected_line >= int(strings.size())){
+					int i = selected_line - 1;
+					if(GetInputDown(controller_id, "shift")){
+						while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
+							--i;
+						}
+					} else {
+						while(i > 0 && !strings[i].visible){
+							--i;
+						}
+					}
+					if(i > 0 && strings[i].visible){
+						selected_line = i;
+					}
+					text_dirty = true;
+					HandleSelectedString(selected_line);
+					if(recording){
+						UpdateRecordLocked();
+					}
+					ClearUnselectedObjects();
+				}
+			}
         }
         // Lock selected dialogue script line
         if(GetInputPressed(controller_id, "f")){
@@ -1412,30 +1425,35 @@ class Dialogue {
         PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
         placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
         if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
-            // Parse file for #name token
-            LoadFile(params.GetString("Dialogue"));
-            string new_str;
-            while(true){
-                new_str = GetFileLine();
-                if(new_str == "end"){
-                    break;
-                }
-                TokenIterator token_iter;
-                token_iter.Init();
-                if(token_iter.FindNextToken(new_str)){
-                    string token = token_iter.GetToken(new_str);
-                    if(token == "#name"){
-                        if(token_iter.FindNextToken(new_str)){
-                            params.SetString("DisplayName", token_iter.GetToken(new_str));
-                        }
-                    }
-                    if(token == "#participants"){
-                        if(token_iter.FindNextToken(new_str)){
-                            params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
-                        }
-                    }
-                }
-            }
+			if(params.GetString("Dialogue") == "empty") {
+				params.SetString("DisplayName", "Unnamed");
+				params.SetInt("NumParticipants", 1);
+			} else {
+				// Parse file for #name token
+				LoadFile(params.GetString("Dialogue"));
+				string new_str;
+				while(true){
+					new_str = GetFileLine();
+					if(new_str == "end"){
+						break;
+					}
+					TokenIterator token_iter;
+					token_iter.Init();
+					if(token_iter.FindNextToken(new_str)){
+						string token = token_iter.GetToken(new_str);
+						if(token == "#name"){
+							if(token_iter.FindNextToken(new_str)){
+								params.SetString("DisplayName", token_iter.GetToken(new_str));
+							}
+						}
+						if(token == "#participants"){
+							if(token_iter.FindNextToken(new_str)){
+								params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
+							}
+						}
+					}
+				}
+			}
         }
         int player_id = GetPlayerCharacterID();
         // Draw dialogue name
@@ -1611,9 +1629,19 @@ class Dialogue {
                 big_style.font_face_id = GetFontFaceID("Data/Fonts/arialbd.ttf", font_size);
 
                 vec2 pen_pos = vec2(0,font_size);
-                int br_size = font_size;
                 uint num_strings = strings.size();
-                for(uint i=0; i<num_strings; ++i){
+
+				TextMetrics metrics;
+				string test_string = "test";
+				editor_text.GetTextMetrics(test_string, small_style, metrics);
+				int cur_pos = selected_line * (metrics.bounds_y / 64); // font_size should do this too?
+				uint i = 0;
+
+				while(cur_pos > GetScreenHeight() + 100) {
+					cur_pos = (selected_line - ++i) * (metrics.bounds_y / 64);
+				}
+
+                for(; i<num_strings; ++i){
                     const bool show_invisible = false;
                     if(!strings[i].visible && !show_invisible){
                         continue;
@@ -1636,7 +1664,7 @@ class Dialogue {
                     } else {
                         editor_text.AddText(strings[i].str, small_style);
                     }
-                    pen_pos.y += br_size;
+                    pen_pos.y += font_size;
                 }
                 editor_text.UploadTextCanvasToTexture();
                 SaveScriptToParams();

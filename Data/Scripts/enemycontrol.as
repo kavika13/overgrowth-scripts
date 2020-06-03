@@ -1,5 +1,6 @@
 #include "aschar.as"
 #include "situationawareness.as"
+#include "enemycontroldebug.as"
 
 Situation situation;
 
@@ -456,39 +457,6 @@ void SetHostile(bool val){
     }
 }
 
-void DisplayGoals() {
-    string label = "Player "+this_mo.GetID()+" goal: ";
-    string text = label;
-    switch(goal){
-        case _patrol:       text += "_patrol"; break;
-        case _attack:       text += "_attack"; break;
-        case _investigate:  text += "_investigate"; break;
-        case _get_help:     text += "_get_help"; break;
-        case _escort:       text += "_escort"; break;
-        case _get_weapon:   text += "_get_weapon"; break;
-        case _navigate:     text += "_navigate"; break;
-        case _struggle:     text += "_struggle"; break;
-        case _hold_still:   text += "_hold_still"; break;
-    }
-    text += ", ";
-    switch(sub_goal){
-        case _unknown:         text += "_unknown"; break;
-        case _punish_fall:     text += "_punish_fall"; break;
-        case _provoke_attack:  text += "_provoke_attack"; break;
-        case _avoid_jump_kick: text += "_avoid_jump_kick"; break;
-        case _wait_and_attack: text += "_wait_and_attack"; break;
-        case _defend:          text += "_defend"; break;
-        case _rush_and_attack: text += "_rush_and_attack"; break;
-        case _surround_target: text += "_surround_target"; break;
-        case _escape_surround: text += "_escape_surround"; break;
-        case _investigate_around: text += "_investigate_around"; break;
-        case _investigate_slow: text += "_investigate_slow"; break;
-        case _investigate_urgent: text += "_investigate_urgent"; break;
-        case _investigate_body: text += "_investigate_body"; break;
-        default: text += sub_goal; break;
-    }
-    DebugText(label, text,0.1f);
-}
 
 int GetClosestKnownThreat() {
     int closest_enemy = -1;
@@ -522,6 +490,11 @@ void CheckForNearbyWeapons() {
             if(dist > _max_dist * _max_dist){
                 continue;
             }
+            //Verify that the item atelast is on a walkable surface.
+            if(!IsOnNavMesh(item_obj,pos))
+            {
+                continue;
+            } 
             if(nearest_weapon == -1 || dist < nearest_dist){ 
                 nearest_weapon = item_obj.GetID();
                 nearest_dist = dist;
@@ -558,10 +531,6 @@ void UpdateBrain(const Timestep &in ts){
         return;
     }
 
-    const bool display_goals = false;
-    if(display_goals){
-        DisplayGoals();
-    }
     if(DebugKeysEnabled() && GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
         if(hostile_switchable){
             SetHostile(!hostile);
@@ -682,7 +651,7 @@ void UpdateBrain(const Timestep &in ts){
         GetPath(GetInvestigateTargetPos());
         if(path.NumPoints() > 0){
             vec3 path_end = path.GetPoint(path.NumPoints()-1);
-            if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
+            if(distance_squared(GetNavPointPos(this_mo.position), path_end) < 1.0f){
                 if(sub_goal == _investigate_slow){
                     SetGoal(_patrol);
                 } else if(sub_goal == _investigate_urgent){
@@ -704,7 +673,7 @@ void UpdateBrain(const Timestep &in ts){
                 for(int i=-3; i<3; ++i){
                     for(int j=-3; j<3; ++j){
                         vec3 rand_offset(i*range + RangedRandomFloat(-range*0.5f,range*0.5f), RangedRandomFloat(-range, range), j*range + RangedRandomFloat(-range*0.5f,range*0.5f));
-                        vec3 investigate = NavPoint(this_mo.position + rand_offset);
+                        vec3 investigate = GetNavPointPos(this_mo.position + rand_offset);
                         if(investigate != vec3(0.0f)){
                             NavPath path = GetPath(this_mo.position, investigate);
                             if(path.success){
@@ -963,6 +932,8 @@ void UpdateBrain(const Timestep &in ts){
             force_look_target_id = chase_target_id;
         }
     }
+
+    DebugDraw();
 }
 
 bool IsAware(){
@@ -1217,21 +1188,6 @@ void GetPath(vec3 target_pos) {
 }
 
 
-array<int> path_lines;
-void DrawPath() {
-    for(int i=0; i<int(path_lines.length()); ++i){
-        DebugDrawRemove(path_lines[i]);
-    }
-    path_lines.resize(0);
-    int num_points = path.NumPoints();
-    for(int i=0; i<num_points-1; i++){
-        int line = DebugDrawLine(path.GetPoint(i),
-                                 path.GetPoint(i+1),
-                                 vec3(1.0f,1.0f,1.0f),
-                                 _persistent);
-        path_lines.insertLast(line);
-    }
-}
 
 vec3 GetNextPathPoint() {
     int num_points = path.NumPoints();
@@ -1534,7 +1490,12 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     vec3 target_velocity;
     vec3 target_point = point;
     if(distance_squared(target_point, this_mo.position) > 0.2f){
-        target_point = NavPoint(point);
+        NavPoint np = GetNavPoint(point);
+
+        if( np.IsSuccess() )
+        {
+            target_point =  np.GetPoint();
+        }
     }
     GetPath(target_point);
     {
@@ -1549,7 +1510,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
 
     if(path.NumPoints() > 0 && on_ground){
        // If path cannot reach target point, check if we can climb or drop to it 
-       if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
+       if(distance_squared(path.GetPoint(path.NumPoints()-1), GetNavPointPos(point)) > 1.0f){
            PredictPathOutput predict_path_output = PredictPath(this_mo.position, point);
            if(predict_path_output.type == _ppt_climb){
                path_find_type = _pft_climb;
@@ -1563,9 +1524,9 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
            }
        }
        // If pathfind failed, then check for jump path
-       /*if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
+       /*if(distance_squared(path.GetPoint(path.NumPoints()-1), GetNavPointPos(point)) > 1.0f){
             NavPath back_path;
-            back_path = GetPath(NavPoint(point), this_mo.position); 
+            back_path = GetPath(GetNavPointPos(point), this_mo.position); 
             if(back_path.NumPoints() > 0){
                 vec3 targ_point = back_path.GetPoint(back_path.NumPoints()-1);
                 targ_point = NavRaycast(targ_point, targ_point + vec3(RangedRandomFloat(-3.0f,3.0f),
@@ -1657,7 +1618,7 @@ vec3 GetAttackMovement() {
         float estimated_run_speed = run_speed * 0.8f;
         float predict_time = (predict_dist / estimated_run_speed); // How long it will take to reach target
         // Update predicted time to take into account velocity
-        vec3 nav_target_react_pos = NavPoint(target_react_pos);
+        vec3 nav_target_react_pos = GetNavPointPos(target_react_pos);
         vec3 target_point = target_react_pos;
         //DebugText("LastSeen", "Last seen time: T - "+ (situation.known_chars[situation.KnownID(chase_target_id)].last_seen_time-time), 0.5f);
         if(situation.known_chars[situation.KnownID(chase_target_id)].last_seen_time > time - 1.0f){
@@ -1857,7 +1818,7 @@ void CheckJumpTarget(vec3 target) {
         
         bool old_path_fail = false;
         if(old_path.NumPoints() == 0 ||
-           distance_squared(old_path.GetPoint(old_path.NumPoints()-1), NavPoint(target)) > 1.0f){
+           distance_squared(old_path.GetPoint(old_path.NumPoints()-1), GetNavPointPos(target)) > 1.0f){
             old_path_fail = true;
         }
 
@@ -1866,7 +1827,7 @@ void CheckJumpTarget(vec3 target) {
 
         bool new_path_fail = false;
         if(new_path.NumPoints() == 0 ||
-           distance_squared(new_path.GetPoint(new_path.NumPoints()-1), NavPoint(target)) > 1.0f){
+           distance_squared(new_path.GetPoint(new_path.NumPoints()-1), GetNavPointPos(target)) > 1.0f){
             new_path_fail = true;
         }
 
@@ -1894,5 +1855,26 @@ int IsThreatToCharacter(int char_id){
         return 1;
     } else {
         return 0;
+    }
+}
+
+bool IsOnNavMesh(ItemObject @item_object, vec3 percieved_position)
+{
+    NavPoint np = GetNavPoint(percieved_position);
+
+    if( np.IsSuccess() )
+    {
+        if( distance_squared(percieved_position, np.GetPoint()) < 1.0f )
+        {
+           return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return false;
     }
 }

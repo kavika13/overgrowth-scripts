@@ -19,7 +19,7 @@ UNIFORM_SIMPLE_SHADOW_CATCH
 UNIFORM_TINT_PALETTE
 uniform float time;
 
-uniform usamplerBuffer tex31;
+uniform usamplerBuffer ambient_color_buffer;
 uniform int num_light_probes;
 uniform int num_tetrahedra;
 
@@ -68,7 +68,7 @@ void main()
 
 
     vec3 ambient_cube_color[6];
-    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, tex31, ambient_cube_color, 0u);
+    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, 0u);
     if(!use_amb_cube){
         diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) *
                          GetAmbientContrib(shadow_tex.g);
