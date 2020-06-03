@@ -2568,7 +2568,7 @@ void AttachWeapon(int which){
 void HandleEditorAttachment(int which, int attachment_type, bool mirror){
     Print("Handling editor attachment\n");
     ItemObject@ item_obj = ReadItemID(which);
-    int weap_slot;
+    int weap_slot = -1;
     if(attachment_type == _at_grip){
         if(mirror){
             weap_slot = _held_left;
@@ -2585,7 +2585,7 @@ void HandleEditorAttachment(int which, int attachment_type, bool mirror){
     
     Print("HandleEditorAttachment("+which+", "+attachment_type+", "+mirror+");\n");
     
-    if(weapon_slots[weap_slot] != -1){
+    if(weap_slot == -1 || weapon_slots[weap_slot] != -1){
         return;
     }    
     weapon_slots[weap_slot] = which;
@@ -3871,7 +3871,7 @@ float target_threat_amount = 0.0f;
 float threat_vel = 0.0f;
 
 void UpdateThreatAmount() { 
-    target_threat_amount = WantsToAttack()?1.0f:0.0f;
+    target_threat_amount = (WantsToAttack() && state == _movement_state || state == _attack_state)?1.0f:0.0f;
     const float _threat_accel = (weapon_slots[primary_weapon_slot] != -1)?150.0f:300.0f;
     const float _threat_vel_inertia = 0.89f;
     threat_vel += (target_threat_amount - threat_amount) * time_step * num_frames * _threat_accel;
@@ -5778,39 +5778,40 @@ void SetParameters() {
     for(int i=0; i<_num_weap_slots; ++i){
         weapon_slots[i] = -1;       
     }
+    Print("Resizing weapon slots to "+_num_weap_slots+"\n");
 
-    params.AddString("Lives","1");
+    params.AddIntSlider("Lives",1,"min:1,max:4");
     p_lives = max(1, params.GetFloat("Lives"));
     lives = p_lives;
 
-    params.AddString("Aggression","0.5");
+    params.AddFloatSlider("Aggression",0.5,"min:0,max:1,step:0.1,text_mult:100");
     p_aggression = min(1.0f, max(0.0f, params.GetFloat("Aggression")));
 
-    params.AddString("Damage Resistance","1.0");
+    params.AddFloatSlider("Damage Resistance",1,"min:0,max:2,step:0.1,text_mult:100");
     p_damage_multiplier = 1.0f / max(0.00001f,params.GetFloat("Damage Resistance"));
 
-    params.AddString("Block Skill","0.5");
+    params.AddFloatSlider("Block Skill",0.5,"min:0,max:1,step:0.1,text_mult:100");
     p_block_skill = min(1.0f, max(0.0f, params.GetFloat("Block Skill")));
 
-    params.AddString("Block Follow-up","0.5");
+    params.AddFloatSlider("Block Follow-up",0.5,"min:0,max:1,step:0.1,text_mult:100");
     p_block_followup = min(1.0f, max(0.0f, params.GetFloat("Block Follow-up")));
 
-    params.AddString("Attack Speed","1.0");
+    params.AddFloatSlider("Attack Speed",1,"min:0,max:2,step:0.1,text_mult:100");
     p_attack_speed_mult = min(2.0f, max(0.1f, params.GetFloat("Attack Speed")));
 
-    params.AddString("Attack Damage","1.0");
+    params.AddFloatSlider("Attack Damage",1,"min:0,max:2,step:0.1,text_mult:100");
     p_attack_damage_mult = max(0.0f, params.GetFloat("Attack Damage"));
 
-    params.AddString("Attack Knockback","1.0");
+    params.AddFloatSlider("Attack Knockback",1,"min:0,max:2,step:0.1,text_mult:100");
     p_attack_knockback_mult = max(0.0f, params.GetFloat("Attack Knockback"));
 
-    params.AddString("Movement Speed","1.0");
+    params.AddFloatSlider("Movement Speed",1,"min:0.1,max:1.5,step:0.1,text_mult:100");
     p_speed_mult = min(100.0f, max(0.01f, params.GetFloat("Movement Speed")));
     run_speed = _base_run_speed * p_speed_mult;
     true_max_speed = _base_true_max_speed * p_speed_mult;
     
-    params.AddString("Left handed","0.0");
-    left_handed = (params.GetFloat("Left handed") != 0.0f);
+    params.AddIntCheckbox("Left handed",false);
+    left_handed = (params.GetInt("Left handed") != 0);
     
     string team_str;
     character_getter.GetTeamString(team_str);

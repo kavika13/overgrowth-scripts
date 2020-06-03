@@ -18,6 +18,9 @@ const float _view_distance = 90.0f;
 const float _throw_counter_probability = 0.2f;
 bool will_throw_counter;
 
+float notice_target_aggression_delay = 0.0f;
+int notice_target_aggression_id = 0.0f;
+
 float target_attack_range = 0.0f;
 float strafe_vel = 0.0f;
 const float _block_reflex_delay_min = 0.1f;
@@ -138,6 +141,10 @@ void HandleAIEvent(AIEvent event){
         Print("Trying to climb = jump\n");
     }
     if(event == _activeblocked){
+        float temp_block_followup = p_block_followup;
+        if(notice_target_aggression_delay > 0.2f){
+            temp_block_followup = 1.0 - pow(temp_block_followup, 2.0);
+        }
         if(RangedRandomFloat(0.0f, 1.0f) < p_block_followup){
             throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.5f;
             if(!throw_after_active_block){
@@ -156,6 +163,9 @@ void HandleAIEvent(AIEvent event){
 }
 
 void SetGoal(AIGoal _goal){
+    if(_goal == _attack && goal != _attack){
+        notice_target_aggression_delay = 0.0f;
+    } 
     goal = _goal;
 }
 
@@ -274,6 +284,18 @@ void UpdateBrain(){
         case _attack:
             {
                 MovementObject@ target = ReadCharacterID(target_id);
+                
+                if(notice_target_aggression_id != target_id){
+                    notice_target_aggression_delay = 0.0f;
+                }
+                notice_target_aggression_id = target_id;
+                float target_threat_amount = target.GetFloatVar("threat_amount");
+                if(target_threat_amount > 0.6f && length_squared(target.velocity) < 1.0){
+                    notice_target_aggression_delay += time_step * num_frames;
+                } else {
+                    notice_target_aggression_delay = 0.0f;   
+                }
+                
                 if(target.GetIntVar("knocked_out") != _awake){
                     SetGoal(_patrol);
                 }
@@ -281,6 +303,9 @@ void UpdateBrain(){
                     float rand_val = RangedRandomFloat(0.0f,1.0f);
                     //Print(rand_val + " < " + p_aggression + "?\n");
                     ai_attacking = (RangedRandomFloat(0.0f,1.0f) < p_aggression);
+                    if(notice_target_aggression_delay > 0.2f){
+                        ai_attacking = (RangedRandomFloat(0.0f,1.0f) < p_aggression * p_aggression * p_aggression);
+                    }
                 }
                 if(rand()%(150/num_frames)==0){
                     target_attack_range = RangedRandomFloat(0.0f, 3.0f);
@@ -490,7 +515,11 @@ bool WantsToStartActiveBlock(){
         if(block_delay != -1.0f){
             going_to_block = true;
         }
-        if(RangedRandomFloat(0.0f,1.0f) > p_block_skill){
+        float temp_block_skill = p_block_skill;
+        if(notice_target_aggression_delay > 0.2f){
+            temp_block_skill = 1.0 - (1.0 - temp_block_skill)*(1.0 - temp_block_skill);
+        }
+        if(RangedRandomFloat(0.0f,1.0f) > temp_block_skill){
             block_delay += 0.4f;
         }
     }
