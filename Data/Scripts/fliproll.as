@@ -22,6 +22,7 @@ class FlipInfo {
 	float target_flip_tuck;
 	float flip_tuck;
 	float wall_flip_protection;
+	bool rolling;
 
 	FlipInfo() {
 		flip_progress = 0.0f;
@@ -34,6 +35,7 @@ class FlipInfo {
 		wall_flip_protection = 0.0f;
 		flipping = false;
 		flipped = false;
+		rolling = false;
 	}
 
 	bool IsFlipping() {
@@ -120,6 +122,7 @@ class FlipInfo {
 	}
 
 	void StartFlip(vec3 dir){
+		rolling = false;
 		flipping = true;
 		wall_flip_protection = 0.0f;
 		flip_progress = 0.0f;
@@ -212,6 +215,9 @@ class FlipInfo {
 	}
 
 	void StartRoll(vec3 target_velocity) {
+		string path = "Data/Sounds/concrete_foley/bunny_roll_concrete.xml";
+		this_mo.PlaySoundGroupAttached(path, this_mo.position);
+
 		flipping = true;
 		flip_progress = 0.0f;
 		flip_angle = PrepareFlipAngle(flip_angle);
@@ -221,6 +227,7 @@ class FlipInfo {
 		flip_axis = AxisFromDir(roll_direction);
 
 		feet_moving = false;
+		rolling = true;
 	}
 
 	void UpdateRollProgress(){
@@ -278,7 +285,11 @@ class FlipInfo {
 	}
 
 	float WhooshAmount() {
-		return abs(flip_vel)*0.2f;
+		if(!rolling){
+			return abs(flip_vel)*0.1f;
+		} else {
+			return 0.0f;
+		}
 	}
 
 	void Land() {

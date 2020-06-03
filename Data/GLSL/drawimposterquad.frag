@@ -39,10 +39,10 @@ void main()
 
 	vec4 colormap = texture2D(tex0,tex_coord);
 	colormap.xyz /= (colormap.a+0.001);
-	colormap.xyz = pow(colormap.xyz,1.2);
+	colormap.xyz = pow(colormap.xyz,vec3(1.2));
 	vec4 shadow_tex = texture2D(tex5,shadow_tex_coord);
 	shadow_tex /= (shadow_tex.a+0.001);
-	shadow_tex.xyz = pow(shadow_tex.xyz,1.4);
+	shadow_tex.xyz = pow(shadow_tex.xyz,vec3(1.4));
 	vec4 normal_tex = texture2D(tex1,tex_coord);
 	normal_tex /= (normal_tex.a+0.001);
 	vec3 os_normal = UnpackObjNormal(normal_tex);

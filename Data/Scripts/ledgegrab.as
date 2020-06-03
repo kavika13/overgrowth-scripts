@@ -43,6 +43,10 @@ class TargetMove {
 	void Update() {
 		time += time_step * speed;
 		if(time >= end_time){
+			if(distance(start_pos, end_pos)>0.1f){
+				string path = "Data/Sounds/concrete_foley/bunny_edgecrawl_concrete.xml";
+				this_mo.PlaySoundGroupAttached(path, end_pos);
+			}
 			start_pos = end_pos;
 			time -= 1.0f;
 		}
@@ -107,8 +111,9 @@ class ShimmyAnimation {
 
 	void Update(vec3 _target_pos, vec3 dir){
 		target_pos = _target_pos;
+		float old_progress = progress;
 		progress += time_step;
-		
+
 		hand_pos[0].SetEndPos(target_pos);
 		hand_pos[1].SetEndPos(target_pos);
 		foot_pos[0].SetEndPos(target_pos);
@@ -338,6 +343,9 @@ class LedgeInfo {
 			this_mo.velocity = vec3(0.0f);
 			ledge_grab_pos = CalculateGrabPos();
 			shimmy_anim.Start(ledge_grab_pos, ledge_dir);
+
+			string path = "Data/Sounds/concrete_foley/bunny_edge_grab_concrete.xml";
+			this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		}
 	}
 	
@@ -351,6 +359,13 @@ class LedgeInfo {
 		float target_height = ledge_height - _height_under_ledge;
 		this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f;
 		this_mo.velocity.y *= 0.92f;
+		
+		if(this_mo.position.y > target_height + 0.5f){
+			this_mo.position.y = target_height + 0.5f;
+		}
+		if(this_mo.position.y < target_height - 0.1f){
+			this_mo.position.y = target_height - 0.1f;
+		}
 		
 		//this_mo.velocity.y = 0.0f;
 		//this_mo.position.y = target_height;

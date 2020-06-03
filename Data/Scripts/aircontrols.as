@@ -46,6 +46,9 @@ class JumpInfo {
 		if(has_hit_wall || dot(dir, this_mo.velocity) < 0.0f){
 			return;
 		}
+		string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
+		this_mo.PlaySoundGroupAttached(path, this_mo.position);
+
 		hit_wall = true;
 		has_hit_wall = true;
 		wall_hit_time = 0.0f;
@@ -221,9 +224,11 @@ class JumpInfo {
 		jetpack_fuel = _jump_fuel;
 		jump_launch = 1.0f;
 		
-		string sound = "Data/Sounds/Impact-Grass3.wav";
-		PlaySound(sound, this_mo.position );
-		
+		//string sound = "Data/Sounds/Impact-Grass3.wav";
+		//PlaySound(sound, this_mo.position );
+		string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
+		this_mo.PlaySoundGroupAttached(path, this_mo.position);
+	
 		this_mo.velocity += old_vel_flat;
 		tilt = this_mo.velocity * 5.0f;
 	}
@@ -239,8 +244,10 @@ class JumpInfo {
 		jetpack_fuel = _jump_fuel;
 		jump_launch = 1.0f;
 		
-		string sound = "Data/Sounds/Impact-Grass3.wav";
-		PlaySound(sound, this_mo.position );
+		//string sound = "Data/Sounds/Impact-Grass3.wav";
+		//PlaySound(sound, this_mo.position );
+		string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
+		this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		
 		if(length(target_velocity)>0.4f){
 			this_mo.SetRotationFromFacing(target_velocity);
