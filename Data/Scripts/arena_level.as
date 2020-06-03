@@ -347,6 +347,10 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
     // Set character parameters based on difficulty
     ScriptParams@ params = char_obj.GetScriptParams();
     params.SetString("Teams", ""+team);
+    params.SetFloat("Character Scale", mix(RangedRandomFloat(0.9f,1.0f), RangedRandomFloat(1.0f,1.1f), difficulty));
+    params.SetFloat("Fat", mix(RangedRandomFloat(0.4f,0.7f), RangedRandomFloat(0.4f,0.5f), difficulty));
+    params.SetFloat("Muscle", mix(RangedRandomFloat(0.3f,0.5f), RangedRandomFloat(0.5f,0.7f), difficulty));
+    params.SetFloat("Ear Size", RangedRandomFloat(0.5f,2.5f));
     params.SetFloat("Block Follow-up", mix(RangedRandomFloat(0.01f,0.25f), RangedRandomFloat(0.75f,1.0f), difficulty));
     params.SetFloat("Block Skill", mix(RangedRandomFloat(0.01f,0.25f), RangedRandomFloat(0.5f,0.8f), difficulty));
     params.SetFloat("Movement Speed", mix(RangedRandomFloat(0.8f,1.0f), RangedRandomFloat(0.9f,1.1f), difficulty));

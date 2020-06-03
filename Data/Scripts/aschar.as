@@ -65,7 +65,7 @@ vec3 dialogue_head_target;
 float dialogue_head_control;
 
 // Body bob offset so that characters don't sway in sync
-float body_bob_freq;
+float body_bob_freq = 0.0f;
 float body_bob_time_offset;
 
 // Parameter values
@@ -78,6 +78,9 @@ float p_attack_speed_mult;
 float p_speed_mult;
 float p_attack_damage_mult;
 float p_attack_knockback_mult;
+float p_fat;
+float p_muscle;
+float p_ear_size;
 int p_lives;
 
 float roll_ik_fade = 0.0f;
@@ -858,8 +861,101 @@ string TetheredStr(int val){
     return "unknown";
 }
 
+void SetIKChainElementInflate(const string &in name, int el, float val) {
+    if(!this_mo.rigged_object().skeleton().IKBoneExists(name)){
+        return;
+    }
+    int bone = this_mo.rigged_object().skeleton().IKBoneStart(name);
+    for(int i=0; i<el; ++i){
+        bone = this_mo.rigged_object().skeleton().GetParent(bone);
+        if(bone == -1){
+            return;
+        }
+    }
+    this_mo.rigged_object().skeleton().SetBoneInflate(bone, val);
+}
+
+void SetIKChainInflate(const string &in name, float val) {
+    if(!this_mo.rigged_object().skeleton().IKBoneExists(name)){
+        return;
+    }
+    int bone = this_mo.rigged_object().skeleton().IKBoneStart(name);
+    int chain_len = this_mo.rigged_object().skeleton().IKBoneLength(name);
+    for(int i=0; i<chain_len; ++i){
+        this_mo.rigged_object().skeleton().SetBoneInflate(bone, val);
+        bone = this_mo.rigged_object().skeleton().GetParent(bone);
+        if(bone == -1){
+            break;
+        }
+    }
+}
+
 void Update(int num_frames) {
     Timestep ts(time_step, num_frames);
+
+    //this_mo.rigged_object().SetIKChainInflate("leftarm",sin(time)+1.0f);
+    int num_bones = this_mo.rigged_object().skeleton().NumBones();
+    for(int i=0; i<num_bones; ++i){
+        this_mo.rigged_object().skeleton().SetBoneInflate(i, 1.0f);
+    }
+
+    const float fat = p_fat;//sin(time);
+    const float muscle = p_muscle;//sin(time*0.7f);
+    const float ear_size = p_ear_size;//1.5f+sin(time*0.5f);
+
+    //SetIKChainElementInflate("leftarm",0,0.1f);
+    /*SetIKChainElementInflate("leftarm",1,1.5f);
+    SetIKChainElementInflate("leftarm",2,1.5f);
+    SetIKChainElementInflate("leftarm",3,2.0f);
+    SetIKChainElementInflate("leftarm",4,2.0f);
+    SetIKChainElementInflate("leftarm",5,2.0f);*/
+    //SetIKChainElementInflate("leftarm",6,0.1f);
+    //SetIKChainElementInflate("leftarm",7,0.1f);
+    //SetIKChainElementInflate("leftarm",8,0.1f);
+
+    
+    SetIKChainElementInflate("torso",2,max(0.7f+muscle*0.5f, 1.0f + max(fat*0.5f,fat)));
+    SetIKChainElementInflate("torso",1,max(0.5f+muscle*0.2f, 1.0f + max(fat*0.75f,fat)));
+    SetIKChainElementInflate("torso",0,1.0f + max(max(0.0f,fat), muscle*0.3f));
+
+    SetIKChainElementInflate("head",1,1.0f + fat);
+
+    SetIKChainInflate("leftear", ear_size);
+    SetIKChainInflate("rightear", ear_size);
+
+    SetIKChainElementInflate("left_leg",5,1.0f + max(fat, muscle*0.4f));
+    SetIKChainElementInflate("left_leg",4,max(muscle, 1.0f + fat * 0.5f));
+    SetIKChainElementInflate("left_leg",3,1.0f + max(fat * 0.25f, muscle*0.6f));
+    SetIKChainElementInflate("left_leg",2,1.0f + max(fat * 0.5f, muscle*0.3f));
+
+    SetIKChainElementInflate("right_leg",5,1.0f + max(fat, muscle*0.4f));
+    SetIKChainElementInflate("right_leg",4,max(muscle, 1.0f + fat * 0.5f));
+    SetIKChainElementInflate("right_leg",3,1.0f + max(fat * 0.25f, muscle*0.6f));
+    SetIKChainElementInflate("right_leg",2,1.0f + max(fat * 0.5f, muscle*0.3f));
+
+    SetIKChainElementInflate("leftarm",1,max(0.6f, 1.0f + max(fat*0.5f,muscle*0.5f)));
+    SetIKChainElementInflate("leftarm",2,max(0.6f, 1.0f + max(fat*0.5f,muscle*0.7f)));
+    SetIKChainElementInflate("leftarm",3,max(0.6f, 1.0f + max(fat, muscle)));
+    SetIKChainElementInflate("leftarm",4,max(0.6f, 1.0f + max(fat, muscle)));
+    SetIKChainElementInflate("leftarm",5,max(0.6f, 1.0f + max(fat*0.5f,muscle)));
+    
+    SetIKChainElementInflate("rightarm",1,max(0.6f, 1.0f + max(fat*0.5f,muscle*0.5f)));
+    SetIKChainElementInflate("rightarm",2,max(0.6f, 1.0f + max(fat*0.5f,muscle*0.7f)));
+    SetIKChainElementInflate("rightarm",3,max(0.6f, 1.0f + max(fat, muscle)));
+    SetIKChainElementInflate("rightarm",4,max(0.6f, 1.0f + max(fat, muscle)));
+    SetIKChainElementInflate("rightarm",5,max(0.6f, 1.0f + max(fat*0.5f,muscle)));
+    
+    /*
+    SetIKChainInflate("leftear",0.1f);
+    SetIKChainInflate("rightear",0.1f);
+    SetIKChainInflate("rightarm",0.1f);
+    SetIKChainInflate("leftarm",0.1f);
+    SetIKChainInflate("left_leg",0.1f);
+    SetIKChainInflate("right_leg",0.1f);
+    SetIKChainInflate("torso",0.0f);
+    SetIKChainInflate("head",0.1f);
+    SetIKChainInflate("tail",0.1f);
+    */
     
     if(test_talking){
         test_talking_amount = min(test_talking_amount + ts.step() * 20.0f, 1.0f);
@@ -882,6 +978,9 @@ void Update(int num_frames) {
     time += ts.step();
     
     if(dialogue_control){
+        on_ground = true;
+        this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
+        this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
         this_mo.SetAnimation(dialogue_anim, 3.0f, 0);
         idle_stance_amount = 0.2f;
         UpdateBlink(ts);
@@ -1306,7 +1405,17 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/cat.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "8")){
-            SwitchCharacter("Data/Characters/raider_rabbit.xml");
+            int rand_int = rand()%4;
+            switch(rand_int){
+            case 0: 
+                SwitchCharacter("Data/Characters/lt_dog_big.xml"); break;
+            case 1: 
+                SwitchCharacter("Data/Characters/lt_dog_female.xml"); break;
+            case 2: 
+                SwitchCharacter("Data/Characters/lt_dog_male_1.xml"); break;
+            case 3: 
+                SwitchCharacter("Data/Characters/lt_dog_male_2.xml"); break;
+            }
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
             int8 flags = _ANM_FROM_START;
@@ -3436,7 +3545,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
     if(attack_event == true && target_id != -1){
         vec3 target_pos = ReadCharacterID(target_id).position;
         bool missed = true;
-        if(event == "attackblocked" || distance(this_mo.position, target_pos) < _attack_range + range_extender + 0.1f){
+        if(event == "attackblocked" || distance(this_mo.position, target_pos) < (_attack_range + range_extender + 0.1f) * this_mo.rigged_object().GetCharScale()){
             vec3 facing = this_mo.GetFacing();
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 dir = normalize(target_pos - this_mo.position);
@@ -3696,7 +3805,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
         return;
     }
     //DebugDrawWireSphere(this_mo.position, _attack_range + range_extender, vec3(1.0f), _delete_on_update);
-    const float range = (_attack_range + range_extender)*range_multiplier - _leg_sphere_size;
+    const float range = (_attack_range + range_extender)*range_multiplier*this_mo.rigged_object().GetCharScale() - _leg_sphere_size;
     int attack_id = -1;
     int throw_id = -1;
     int sneak_throw_id = -1;
@@ -3841,13 +3950,13 @@ void UpdateGroundControls(const Timestep &in ts) {
 void HandleAccelTilt(const Timestep &in ts) {
     if(on_ground){
         if(feet_moving && state == _movement_state){
-            target_tilt = this_mo.velocity * 0.5f;
+            target_tilt = this_mo.velocity * 0.5f / this_mo.rigged_object().GetCharScale();
             accel_tilt = mix((this_mo.velocity - old_vel)*120.0f/ts.frames(), accel_tilt, pow(0.95f,ts.frames()));
         } else {
             target_tilt = vec3(0.0f);
             accel_tilt *= pow(0.8f,ts.frames());
         }
-        target_tilt += accel_tilt;
+        target_tilt += accel_tilt / this_mo.rigged_object().GetCharScale();
         target_tilt.y = 0.0f;
         old_vel = this_mo.velocity;
     } else {
@@ -4583,7 +4692,7 @@ bool LoadAppropriateAttack(bool mirrored) {
             attack_path = character_getter.GetAttackPath("moving_low");
         } else if(curr_attack == "stationary" ||
            (curr_attack == "moving" && ducking_enemy)){
-            if(attack_distance < _close_attack_range + range_extender * 0.5f){
+            if(attack_distance < (_close_attack_range + range_extender * 0.5f) * this_mo.rigged_object().GetCharScale()){
                 attack_path = character_getter.GetAttackPath("stationary_close");
             } else {
                 attack_path = character_getter.GetAttackPath("stationary");
@@ -4592,7 +4701,7 @@ bool LoadAppropriateAttack(bool mirrored) {
             int primary_weapon_id = weapon_slots[primary_weapon_slot];
             if(primary_weapon_id != -1 && ReadItemID(primary_weapon_id).GetLabel() == "sword" && !orig_mirrored){
                 attack_path = "Data/Attacks/smallswordslashright.xml";
-            } else if(attack_distance < _close_attack_range + range_extender * 0.5f){
+            } else if(attack_distance < (_close_attack_range + range_extender * 0.5f) * this_mo.rigged_object().GetCharScale()){
                 attack_path = character_getter.GetAttackPath("moving_close");
             } else {
                 attack_path = character_getter.GetAttackPath("moving");
@@ -5514,7 +5623,7 @@ void ApplyCameraControls(const Timestep &in ts) {
     bool shared_cam = !GetSplitscreen() && num_players >= 2;
 
     const float kCameraRotationInertia = 0.5f;
-    const float kCamFollowDistance = 2.0f;
+    const float kCamFollowDistance = 2.0f * this_mo.rigged_object().GetCharScale();
     const float kCamCollisionRadius = 0.15f;
 
     // Get camera position
@@ -5538,7 +5647,7 @@ void ApplyCameraControls(const Timestep &in ts) {
             } else {
                 cam_offset = vec3(0.0f,0.6f,0.0f);
             }
-            col.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, kCamCollisionRadius);
+            col.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset*this_mo.rigged_object().GetCharScale(), kCamCollisionRadius);
             cam_pos = sphere_col.position;
         } else {
             cam_pos += vec3(0.0f,0.3f,0.0f);
@@ -6101,8 +6210,8 @@ void UpdateAnimation(const Timestep &in ts) {
                     flags |= _ANM_MIRRORED;
                 }
                 this_mo.SetCharAnimation("movement", 5.0f, flags);
-                this_mo.rigged_object().anim_client().SetBlendCoord("speed_coord",speed);
-                this_mo.rigged_object().anim_client().SetBlendCoord("ground_speed",speed);
+                this_mo.rigged_object().anim_client().SetBlendCoord("speed_coord",speed/this_mo.rigged_object().GetCharScale());
+                this_mo.rigged_object().anim_client().SetBlendCoord("ground_speed",speed/this_mo.rigged_object().GetCharScale());
                 this_mo.rigged_object().anim_client().SetAnimatedItemID(0, weapon_slots[primary_weapon_slot]);
                 mirrored_stance = left_handed;
             } else {
@@ -6479,6 +6588,21 @@ void SetParameters() {
     params.AddIntCheckbox("Left handed",false);
     left_handed = (params.GetInt("Left handed") != 0);
     
+    params.AddFloatSlider("Character Scale",1,"min:0.6,max:1.4,step:0.02,text_mult:100");
+    float new_char_scale = params.GetFloat("Character Scale");
+    if(new_char_scale != this_mo.rigged_object().GetRelativeCharScale()){
+        this_mo.RecreateRiggedObject(this_mo.char_path);
+    }
+    
+    params.AddFloatSlider("Fat",0.5f,"min:0.0,max:1.0,step:0.05,text_mult:200");
+    p_fat = params.GetFloat("Fat")*2.0f-1.0f;
+
+    params.AddFloatSlider("Muscle",0.5f,"min:0.0,max:1.0,step:0.05,text_mult:200");
+    p_muscle = params.GetFloat("Muscle")*2.0f-1.0f;
+
+    params.AddFloatSlider("Ear Size",1.0f,"min:0.0,max:3.0,step:0.1,text_mult:100");
+    p_ear_size = params.GetFloat("Ear Size")*0.5f+0.5f;
+
     string team_str;
     character_getter.GetTeamString(team_str);
     params.AddString("Teams",team_str);
@@ -6487,8 +6611,10 @@ void SetParameters() {
     primary_weapon_slot = left_handed?_held_left:_held_right;
     secondary_weapon_slot = left_handed?_held_right:_held_left;
     
-    body_bob_freq = RangedRandomFloat(0.9f,1.1f);
-    body_bob_time_offset = RangedRandomFloat(0.0f,100.0f);
+    if(body_bob_freq == 0.0f){
+        body_bob_freq = RangedRandomFloat(0.9f,1.1f);
+        body_bob_time_offset = RangedRandomFloat(0.0f,100.0f);
+    }
 
     if(params.HasParam("Unarmed Stance Override")){
         this_mo.OverrideCharAnim("idle", params.GetString("Unarmed Stance Override"));
