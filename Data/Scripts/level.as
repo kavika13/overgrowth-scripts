@@ -763,6 +763,79 @@ void Update() {
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
+    
+    /*
+    if(GetInputPressed(controller_id, "t")){
+        array<int> @object_ids = GetObjectIDs();
+        int num_objects = object_ids.length();
+        for(int i=0; i<num_objects; ++i){
+            DeleteObjectID(object_ids[i]);
+        }
+        float obj_size_x = 5.0f;
+        float obj_size_y = 3.6f;
+        for(int i=0; i<5; ++i){
+            for(int j=0; j<5; ++j){
+                int obj_id = CreateObject("Data/Objects/Crete/CreteCube.xml");
+                Object @obj = ReadObjectFromID(obj_id);
+                obj.SetTranslation(vec3(i*obj_size_x,100.0f+RangedRandomFloat(-0.4f,0.4f),j*obj_size_y));
+                if(i==2 && j==2){
+                    ScriptParams @params = obj.GetScriptParams();
+                    params.SetString("Name","Center Block");
+                }
+            }
+        }
+        {
+            int obj_id = CreateObject("Data/Objects/IGF_Characters/IGF_TurnerActor.xml");
+            Object @obj = ReadObjectFromID(obj_id);
+            obj.SetPlayer(true); 
+            obj.SetTranslation(vec3(0.0f,110.0f+0.2f,0.0f));
+        }        
+        for(int i=0; i<5; ++i) {
+            if(rand()%2 == 0){
+                int obj_id = CreateObject("Data/Objects/IGF_Characters/IGF_GuardActor.xml");
+                Object @obj = ReadObjectFromID(obj_id);
+                obj.SetTranslation(vec3(20.0f,110.0f+0.2f,0.0f + i*3));
+            }
+        }        
+    }
+    
+    array<int> @object_ids = GetObjectIDs();
+    int num_objects = object_ids.length();
+    for(int i=0; i<num_objects; ++i){
+        Object @obj = ReadObjectFromID(object_ids[i]);
+        if(obj.GetType() == _env_object){
+            obj.SetTranslation(obj.GetTranslation()+vec3(0,sin(time+i)*time_step,0));
+            //obj.SetRotation(quaternion(vec4(1.0f,0.0f,0.0f,time_step))*obj.GetRotation());
+        }
+        if(obj.GetType() == _movement_object){
+            int num_colors = obj.GetNumPaletteColors();
+            for(int i=0; i<num_colors; ++i){
+                obj.SetPaletteColor(i, vec3(RangedRandomFloat(0.0f,5.0f),RangedRandomFloat(0.0f,5.0f),RangedRandomFloat(0.0f,5.0f)));
+            }
+            ScriptParams @params = obj.GetScriptParams();
+            params.SetFloat("Movement Speed", sin(time)+1);
+            MovementObject@ mo = ReadCharacterID(object_ids[i]);
+            mo.Execute("SetParameters()");
+        } else if(obj.GetType() == _env_object || obj.GetType() == _decal_object){
+            ScriptParams @params = obj.GetScriptParams();
+            if(params.HasParam("Name") && params.GetString("Name") == "Center Block"){
+                obj.SetTranslation(obj.GetTranslation() + vec3(0,time_step,0));
+            }
+            obj.SetTint(vec3(RangedRandomFloat(0.0f,5.0f),RangedRandomFloat(0.0f,5.0f),RangedRandomFloat(0.0f,5.0f)));
+        }
+    }
+    
+    array<int> @object_ids = GetObjectIDs();
+    int num_objects = object_ids.length();
+    for(int i=0; i<num_objects; ++i){
+        Object @obj = ReadObjectFromID(object_ids[i]);
+        if(obj.GetType() == _env_object){
+            obj.SetScale(obj.GetScale()+vec3(0,sin(time+i)*time_step,0));
+            obj.SetRotation(quaternion(vec4(1.0f,0.0f,0.0f,time_step))*obj.GetRotation());
+        }
+    }*/
+    
+    /*
     if(GetInputPressed(controller_id, "t")){
         if(challenge_end_gui.target_visible == 0.0){
             challenge_end_gui.target_visible = 1.0;
@@ -770,7 +843,7 @@ void Update() {
             challenge_end_gui.target_visible = 0.0;
         }
     }
-    
+    */
     if(GetInputDown(controller_id, "x")){  
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){

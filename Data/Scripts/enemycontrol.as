@@ -33,7 +33,7 @@ bool throw_after_active_block;
 enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
-enum AISubGoal {_punish_fall, _provoke_attack, _avoid_jump_kick, _wait_and_attack, _rush_and_attack, _defend, _surround_target, _escape_surround};
+enum AISubGoal {_unknown = -1, _punish_fall = 0, _provoke_attack = 1, _avoid_jump_kick = 2, _wait_and_attack = 3, _rush_and_attack = 4, _defend = 5, _surround_target = 6, _escape_surround = 7};
 AISubGoal sub_goal = _wait_and_attack; 
 
 vec3 nav_target;
@@ -209,7 +209,7 @@ void HandleAIEvent(AIEvent event){
             throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.7f;
             if(!throw_after_active_block){
                 throw_after_active_block = false;
-                sub_goal = _rush_and_attack;
+                SetSubGoal(_rush_and_attack);
             }
         }
     }
@@ -227,6 +227,7 @@ void SetGoal(AIGoal new_goal){
     if(new_goal == _attack && goal != _attack){
         notice_target_aggression_delay = 0.0f;
         target_history.Initialize();
+        SetSubGoal(PickAttackSubGoal());
     } 
     goal = new_goal;
 }
@@ -256,19 +257,37 @@ void ReceiveMessage(int source_id, int _msg_type){
     }
 }
 
-void PickAttackSubGoal() {
+AISubGoal PickAttackSubGoal() {
+    AISubGoal target_goal = _defend;
     if(RangedRandomFloat(0.0f,1.0f) < p_aggression){
         if(RangedRandomFloat(0.0f,1.0f) < 0.5f){
-            sub_goal = _wait_and_attack;
+            target_goal = _wait_and_attack;
         } else {
-            sub_goal = _rush_and_attack;
+            target_goal = _rush_and_attack;
         }
-    } else {
-        sub_goal = _defend;
     }
     if(notice_target_aggression_delay > 0.2f){
-        sub_goal = _provoke_attack;
+        target_goal = _provoke_attack;
     }
+    return target_goal;
+}
+
+bool instant_range_change = true;
+
+void SetSubGoal(AISubGoal sub_goal_) {
+    if(sub_goal != sub_goal_){
+        instant_range_change = true;
+    }
+    sub_goal = sub_goal_;
+}
+
+bool CheckRangeChange() {
+    bool change = false;
+    if(instant_range_change || rand()%(150/num_frames)==0){
+        change = true;
+    }
+    instant_range_change = false;
+    return change;
 }
 
 void UpdateBrain(){
@@ -377,49 +396,66 @@ void UpdateBrain(){
                     SetGoal(_patrol);
                 }
                 
+                AISubGoal target_goal = _unknown;
+                
                 if(rand()%(150/num_frames)==0){
                     switch(sub_goal){
                         case _wait_and_attack:
                         case _rush_and_attack:
                         case _defend:
                         case _provoke_attack:
-                            PickAttackSubGoal();
+                            target_goal = PickAttackSubGoal();
                             break;
                     }
                 }
                 if(target.GetIntVar("state") == _ragdoll_state){
-                    sub_goal = _punish_fall;
+                    target_goal = _punish_fall;
                 } else {
                     if(sub_goal == _punish_fall){
-                        PickAttackSubGoal();
+                        target_goal = PickAttackSubGoal();
                     }
                 }
                 
                 if(!target.GetBoolVar("on_ground")){
-                   sub_goal = _avoid_jump_kick;
+                   target_goal = _avoid_jump_kick;
                 } else if(sub_goal == _avoid_jump_kick){
-                    PickAttackSubGoal();
+                    target_goal = PickAttackSubGoal();
                 } 
+                               
+                if(target_goal != _unknown){
+                    SetSubGoal(target_goal);
+                }
+                
                 switch(sub_goal){
                     case _wait_and_attack:
-                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        if(CheckRangeChange()){
+                            target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        }
                         ai_attacking = true;
                         break;
                     case _punish_fall:
                     case _rush_and_attack:
-                        target_attack_range = 0.0f;
+                        if(CheckRangeChange()){
+                            target_attack_range = 0.0f;
+                        }
                         ai_attacking = true;
                         break;
                     case _defend:
-                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        if(CheckRangeChange()){
+                            target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        }
                         ai_attacking = false;
                         break;
                     case _provoke_attack:
-                        target_attack_range = 0.0f;
+                        if(CheckRangeChange()){
+                            target_attack_range = 0.0f;
+                        }
                         ai_attacking = false;
                         break;
                     case _avoid_jump_kick:
-                        target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+                        if(CheckRangeChange()){
+                            target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+                        }
                         ai_attacking = false;
                         break;
                 }
