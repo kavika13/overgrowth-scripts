@@ -26,13 +26,14 @@ vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz
     return vel;
 }
     
+const float _damage_mult = 0.005f;
 void Collided(float impulse){
     if(impulse < 5.0f){
         return;
     }
     //Print("Collided: "+impulse+"\n");
     int old_knocked_out = knocked_out;
-    TakeDamage(impulse*0.01f);
+    TakeDamage(impulse*_damage_mult);
     if(old_knocked_out == _awake && knocked_out == _unconscious){
         string sound = "Data/Sounds/hit/hit_medium_juicy.xml";
         PlaySoundGroup(sound, this_mo.position);
@@ -40,6 +41,7 @@ void Collided(float impulse){
     if(old_knocked_out != _dead && knocked_out == _dead){
         string sound = "Data/Sounds/hit/hit_hard.xml";
         PlaySoundGroup(sound, this_mo.position);
+        SetRagdollType(_RGDL_LIMP);
     }
 }
 
@@ -148,7 +150,30 @@ void VictoryCheck() {
     }
 }
 
+
+void UpdateMusic() {
+    int threats_remaining = ThreatsRemaining();
+    if(threats_remaining == 0){
+        PlaySong("ambient-happy");
+        return;
+    }
+    if(target_id != -1 && this_mo.ReadCharacterID(target_id).IsKnockedOut() == _awake){
+        PlaySong("combat");
+        return;
+    }
+    PlaySong("ambient-tense");
+}
+
+vec3 old_slide_vel;
+vec3 new_slide_vel;
+float friction = 1.0f;
+
 void Update(bool _controlled, int _num_frames) {
+    if(on_ground){
+        old_slide_vel = this_mo.velocity;
+        this_mo.velocity = new_slide_vel;
+    }
+
     controlled = _controlled;
     num_frames = _num_frames;
     time += time_step;
@@ -159,6 +184,7 @@ void Update(bool _controlled, int _num_frames) {
 
     if(controlled){
         VictoryCheck();
+        UpdateMusic();
     }
 
 
@@ -170,6 +196,14 @@ void Update(bool _controlled, int _num_frames) {
     if(controlled){
         UpdateAirWhooshSound();
         ApplyCameraControls();
+    }
+    
+    if(on_ground){
+        new_slide_vel = this_mo.velocity;
+        float new_friction = this_mo.GetFriction(this_mo.position + vec3(0.0f,_leg_sphere_size * -0.4f,0.0f));
+        friction = max(0.01f, friction);
+        friction = pow(mix(pow(friction,0.01), pow(new_friction,0.01), 0.05f),100);
+        this_mo.velocity = mix(this_mo.velocity, old_slide_vel, pow(1.0f-friction, num_frames));
     }
 }
 
@@ -691,6 +725,7 @@ void HandleRagdollRecovery() {
 }
 
 
+const int _RGDL_NO_TYPE = 3;
 const int _RGDL_FALL = 0;
 const int _RGDL_LIMP = 1;
 const int _RGDL_INJURED = 2;
@@ -700,22 +735,13 @@ int ragdoll_layer_fetal;
 int ragdoll_layer_catchfallfront;
 float ragdoll_limp_stun;
 
-void Ragdoll(int type){
-    const float _ragdoll_recovery_time = 1.0f;
-    recovery_time = _ragdoll_recovery_time;
-    
-    if(state == _ragdoll_state){
+void SetRagdollType(int type) {
+    if(ragdoll_type == type){
+        Print("*Setting ragdoll type to "+type+"\n");
         return;
     }
-    
-    this_mo.Ragdoll();
-    SetState(_ragdoll_state);
-    ragdoll_static_time = 0.0f;
-    ragdoll_time = 0.0f;
-    ragdoll_limp_stun = 0.0f;
-    frozen = false;
+    Print("Setting ragdoll type to "+type+"\n");
     ragdoll_type = type;
-
     switch(ragdoll_type){
         case _RGDL_LIMP:
             no_freeze = false;
@@ -743,6 +769,24 @@ void Ragdoll(int type){
             injured_mouth_open = 0.0f;
             break;
     }
+}
+
+void Ragdoll(int type){
+    const float _ragdoll_recovery_time = 1.0f;
+    recovery_time = _ragdoll_recovery_time;
+    
+    if(state == _ragdoll_state){
+        return;
+    }
+    
+    this_mo.Ragdoll();
+    SetState(_ragdoll_state);
+    ragdoll_static_time = 0.0f;
+    ragdoll_time = 0.0f;
+    ragdoll_limp_stun = 0.0f;
+    frozen = false;
+    ragdoll_type = _RGDL_NO_TYPE;
+    SetRagdollType(type);
 }
 
 void GoLimp() {
@@ -1509,6 +1553,7 @@ void Land(vec3 vel) {
     feet_moving = false;
 
     flip_info.Land();
+    old_slide_vel = this_mo.velocity;
 }
 
 const float offset = 0.05f;
@@ -1573,11 +1618,15 @@ const float _shock_damage_threshold = 30.0f;
 const float _shock_damage_multiplier = 0.1f;
 void CheckForVelocityShock(float vert_vel) {
     float shock = vert_vel * -1.0f;
-    Print("Velocity shock: "+shock+"\n");
+    //Print("Velocity shock: "+shock+"\n");
     if(shock > _shock_damage_threshold){
         TakeDamage((shock-_shock_damage_threshold)*_shock_damage_multiplier);
-        if(knocked_out != _awake){
+        if(knocked_out == _unconscious){
             Ragdoll(_RGDL_INJURED);
+            string sound = "Data/Sounds/hit/hit_hard.xml";
+            PlaySoundGroup(sound, this_mo.position);
+        } else if(knocked_out == _dead){
+            Ragdoll(_RGDL_LIMP);
             string sound = "Data/Sounds/hit/hit_hard.xml";
             PlaySoundGroup(sound, this_mo.position);
         } else {
@@ -1718,7 +1767,12 @@ void UpdateGroundAndAirTime() { // tells how long the character has been touchin
 }
 
 void UpdateAirWhooshSound() { // air whoosh sounds get louder at higher speed.
-    float whoosh_amount = length(this_mo.velocity)*0.05f;
+    float whoosh_amount;
+    if(state != _ragdoll_state){
+       whoosh_amount = length(this_mo.velocity)*0.05f;
+    } else {
+       whoosh_amount = length(this_mo.GetAvgVelocity())*0.05f;
+    }
     if(state != _ragdoll_state){
         whoosh_amount += flip_info.WhooshAmount();
     }
@@ -1726,6 +1780,7 @@ void UpdateAirWhooshSound() { // air whoosh sounds get louder at higher speed.
     if(!on_ground){
         whoosh_amount *= 1.5f;
     }
+    //Print("Whoosh amount: "+whoosh_amount+"\n");
     SetAirWhoosh(whoosh_amount*0.5f,whoosh_pitch);
 }
 
@@ -2271,6 +2326,7 @@ float target_rotation = 0.0f;
 float target_rotation2 = 0.0f;
 float cam_rotation = 0.0f;
 float cam_rotation2 = 0.0f;
+float cam_distance = 1.0f;
 
 vec3 ragdoll_cam_pos;
 
@@ -2286,38 +2342,77 @@ void ApplyCameraControls() {
 
     target_rotation2 = max(-90,min(50,target_rotation2));
 
+/*
+    vec3 true_pos = camera.GetPos() + camera.GetFacing() * cam_distance;
+    this_mo.GetSweptSphereCollision(true_pos,
+                                    true_pos - vec3(0.0f,5.0f,0.0f),
+                                    _cam_collision_radius);
+    vec3 new_pos = sphere_col.position;
+    vec3 new_dir = normalize(new_pos - camera.GetPos());
+    float max_rotation2 = asin(new_dir.y)*-180/3.1415 - 2.0f;
+    Print(""+max_rotation2+"\n");
+
+    target_rotation2 = min(target_rotation2, max_rotation2);*/
+
+    vec3 cam_pos = this_mo.position;
+    if(state != _ragdoll_state){
+        cam_pos += vec3(0.0f,0.6f,0.0f);
+    } else {
+        cam_pos += vec3(0.0f,0.3f,0.0f);
+    }
+
+    ApplyCameraCones(cam_pos);
+
+    //this_mo.GetSlidingSphereCollision(sphere_col.adjusted_position, radius);
+    //DebugDrawWireSphere(sphere_col.adjusted_position, radius, vec3(0.0f,1.0f,0.5f), _delete_on_update);
+
+    /*
+    bool hit_something = false;
+    float radius = 1.0f;
+    vec3 offset;
+    while(!hit_something){
+        this_mo.GetSlidingSphereCollision(cam_pos, radius);
+        if(sphere_col.NumContacts() > 0){
+            hit_something = true;
+            offset = (sphere_col.adjusted_position - cam_pos)/radius;
+            break;
+        }
+        break;   
+    }
+    Print("Targetrotation2: "+target_rotation2+"\n");
+    DebugDrawLine(cam_pos,
+                  cam_pos + offset,
+                  vec3(1.0f),
+                  _delete_on_update);
+
+    if(offset.y > 0.0f){
+        target_rotation2 = min(target_rotation2, max(-20,90 - offset.y*140.0f));
+    }*/
+
     float inertia = pow(_camera_rotation_inertia, num_frames);
     cam_rotation = cam_rotation * inertia + 
                target_rotation * (1.0f - inertia);
     cam_rotation2 = cam_rotation2 * inertia + 
                target_rotation2 * (1.0f - inertia);
 
+
     mat4 rotationY_mat,rotationX_mat;
     rotationY_mat.SetRotationY(cam_rotation*3.1415f/180.0f);
     rotationX_mat.SetRotationX(cam_rotation2*3.1415f/180.0f);
     mat4 rotation_mat = rotationY_mat * rotationX_mat;
     vec3 facing = rotation_mat * vec3(0.0f,0.0f,-1.0f);
-
-    vec3 cam_pos = this_mo.position;
-
     //vec3 facing = camera.GetFacing();
     vec3 right = normalize(vec3(-facing.z,facing.y,facing.x));
 
     //camera.SetZRotation(0.0f);
     //camera.SetZRotation(dot(right,this_mo.velocity+accel_tilt)*-0.1f);
     
-    if(state != _ragdoll_state){
-        cam_pos += vec3(0.0f,0.35f,0.0f);
-    } else {
-        cam_pos += vec3(0.0f,0.1f,0.0f);
-    }
 
     if(old_cam_pos == vec3(0.0f)){
         old_cam_pos = camera.GetPos();
     }
     old_cam_pos += this_mo.velocity * time_step * num_frames;
 
-    
     if(ragdoll_cam_recover_time > 0.0f){
         cam_pos = mix(cam_pos, ragdoll_cam_pos, ragdoll_cam_recover_time);
         ragdoll_cam_recover_time -= time_step * num_frames * ragdoll_cam_recover_speed;
@@ -2332,10 +2427,21 @@ void ApplyCameraControls() {
                                                 _cam_follow_distance,
                                     _cam_collision_radius);
     
-    float new_follow_distance = _cam_follow_distance;
+    float target_cam_distance = _cam_follow_distance;
     if(sphere_col.NumContacts() != 0){
-        new_follow_distance = distance(cam_pos, sphere_col.position);
+        target_cam_distance = distance(cam_pos, sphere_col.position);
     }
+    cam_distance = min(cam_distance, target_cam_distance);
+    cam_distance = mix(target_cam_distance, cam_distance, 0.95f);
+
+    //new_follow_distance = -0.1f;
+    /*
+    vec3 adjusted_pos = sphere_col.position;
+    if(distance(adjusted_pos, cam_pos) < 1.0f){
+        adjusted_pos -= facing * (1.0f - distance(adjusted_pos, cam_pos));
+    }
+    this_mo.GetSlidingSphereCollision(adjusted_pos, _cam_collision_radius);
+    cam_pos += sphere_col.adjusted_position - adjusted_pos;*/
 /*
     if(new_follow_distance<5.0f){
         new_follow_distance = 5.0f;
@@ -2370,10 +2476,103 @@ void ApplyCameraControls() {
     old_cam_pos = cam_pos;
     camera.CalcFacing();
 
-    camera.SetDistance(new_follow_distance);
+    camera.SetDistance(cam_distance);
     UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
 
     camera.SetInterpSteps(num_frames);
+}
+
+void ApplyCameraCones(vec3 cam_pos){
+    bool debug_viz = false;
+    float radius = 0.8f;
+    if(debug_viz){
+        DebugDrawWireSphere(cam_pos, radius, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+    }
+    this_mo.GetSlidingSphereCollision(cam_pos, radius);
+    vec3 offset = sphere_col.adjusted_position - cam_pos;
+    vec3 bad_dir = normalize(offset*-1.0f);
+    if(debug_viz){
+        DebugDrawLine(cam_pos,
+                      cam_pos + bad_dir * radius,
+                      vec3(1.0f),
+                      _delete_on_update);
+    }
+    float penetration = 1.0f-length(offset)/radius;
+    //Print("Angle: "+penetration_angle+"\n");
+
+    if(debug_viz){
+        float penetration_angle = acos(penetration);
+        vec3 b_up(0.0f,1.0f,0.0f);
+        if(abs(dot(b_up, bad_dir))>0.9f){
+            b_up = vec3(1.0f,1.0f,1.0f);
+        }
+        vec3 b_right = normalize(cross(bad_dir, b_up));
+        b_up = normalize(cross(bad_dir, b_right));
+        DebugDrawLine(cam_pos,
+                      cam_pos + bad_dir * penetration + b_right * sin(penetration_angle),
+                      vec3(1.0f),
+                      _delete_on_update);
+        DebugDrawLine(cam_pos,
+                      cam_pos + bad_dir * penetration - b_right * sin(penetration_angle),
+                      vec3(1.0f),
+                      _delete_on_update);
+        DebugDrawLine(cam_pos,
+                      cam_pos + bad_dir * penetration + b_up * sin(penetration_angle),
+                      vec3(1.0f),
+                      _delete_on_update);
+        DebugDrawLine(cam_pos,
+                      cam_pos + bad_dir * penetration - b_up * sin(penetration_angle),
+                      vec3(1.0f),
+                      _delete_on_update);
+    }
+
+    
+
+    mat4 rotationY_mat,rotationX_mat;
+    rotationY_mat.SetRotationY(target_rotation*3.1415f/180.0f);
+    rotationX_mat.SetRotationX(target_rotation2*3.1415f/180.0f);
+    mat4 rotation_mat = rotationY_mat * rotationX_mat;
+    vec3 facing = rotation_mat * vec3(0.0f,0.0f,-1.0f);
+
+    penetration -= 0.3f;
+    //Print("Penetration: "+penetration+"\n");
+    penetration = max(-0.2f, penetration);
+
+    if(dot(facing, bad_dir * -1.0f) > penetration){ 
+        float old_target_rotation = target_rotation;
+        vec3 new_right = normalize(cross(normalize(cross(bad_dir,facing)),bad_dir)); 
+
+        if(facing == bad_dir){
+            facing += vec3(0.1f,0.1f,0.1f);
+        }
+
+        vec3 rot_facing;
+        rot_facing.x = dot(facing, bad_dir)*-1.0f ;
+        rot_facing.y = dot(facing, new_right);
+        bool neg = rot_facing.y < 0;
+
+        //Print("Rot_facing: "+rot_facing.x+" "+rot_facing.y+"\n");
+        rot_facing.x = penetration;
+        rot_facing.y = sqrt(1.0f - penetration * penetration);
+        if(neg){
+            rot_facing.y *= -1.0f;
+        }
+        //Print("Fixed rot_facing: "+rot_facing.x+" "+rot_facing.y+"\n");
+
+        facing = bad_dir * rot_facing.x * -1.0f + new_right * rot_facing.y;
+        target_rotation2 = asin(facing.y)/3.14159265 * 180.0f;
+        facing.y = 0.0f;
+        facing = normalize(facing);
+        target_rotation = atan2(-facing.x,-facing.z)/3.14159265 * 180.0f;
+        //Print("New target rotation: "+target_rotation+"\n");
+        while(target_rotation > old_target_rotation + 180.0f){
+            target_rotation -= 360.0f;
+        }
+        while(target_rotation < old_target_rotation - 180.0f){
+            target_rotation += 360.0f;
+        }
+    }
+
 }
 
 void SwitchCharacter(string path){
@@ -2648,6 +2847,7 @@ void ApplyPhysics() {
         this_mo.velocity += physics.gravity_vector * time_step * num_frames;
     }
     if(on_ground){
+        //Print("Friction "+friction+"\n");
         if(!feet_moving){
             this_mo.velocity *= pow(0.95f,num_frames);
         } else {
