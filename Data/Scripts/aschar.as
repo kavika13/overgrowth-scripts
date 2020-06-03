@@ -416,6 +416,9 @@ void Recover() {
     blood_amount = _max_blood_amount;
 }
 
+bool backslash = false;
+float last_knife_time = 0.0f;
+
 void HandleSpecialKeyPresses() {
     if(GetInputDown(this_mo.controller_id, "z") && !GetInputDown(this_mo.controller_id, "ctrl")){
         GoLimp();
@@ -489,7 +492,7 @@ void HandleSpecialKeyPresses() {
         if(GetInputPressed(this_mo.controller_id, "8")){
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
-        if(GetInputPressed(this_mo.controller_id, "b")){
+        /*if(GetInputPressed(this_mo.controller_id, "b")){
             int8 flags = _ANM_MOBILE | _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
@@ -497,7 +500,24 @@ void HandleSpecialKeyPresses() {
             this_mo.SetAnimation("Data/Animations/r_bigdogswordattackoverblocked.anm",20.0f,flags);
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
-        }
+        }*/
+        /*if(GetInputDown(this_mo.controller_id, "b")){
+            if(last_knife_time > time || last_knife_time < time - 0.3f){
+                if(mirrored_stance){
+                    mirrored_stance = false;
+                    ApplyIdle(4.0f, true);
+                }
+                if(backslash){
+                    this_mo.AddLayer("Data/Animations/r_knifebackslash.anm",7.0f,0);
+                    attack_getter.Load("Data/Attacks/knifebackslash.xml");
+                } else {
+                    this_mo.AddLayer("Data/Animations/r_knifeslash.anm",7.0f,0);
+                    attack_getter.Load("Data/Attacks/knifeslash.xml");
+                }
+                backslash = !backslash;
+                last_knife_time = time;
+            }
+        }*/
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
         } 
@@ -660,9 +680,9 @@ void HandlePlantCollisions(){
         if(this_mo.velocity.y > 0.0f){
             this_mo.velocity.y *= pow(0.97f, num_frames*in_plant);
         }
-        /*if(RangedRandomFloat(0.0f,10000.0f) < speed){
+        if(speed > 110.0f){
             GoLimp();
-        }*/
+        }
     }
 }
 
@@ -956,6 +976,7 @@ vec3 GetTargetHeadDir() {
 }
 
 vec3 head_vel;
+float layer_attacking_fade = 0.0f;
 
 void UpdateHeadLook() {
 
@@ -994,6 +1015,12 @@ void UpdateHeadLook() {
     float torso_control = min(0.0,dot(flat_head_dir, this_mo.GetFacing()))+1.0f;
     torso_control *= max(0.3f,stance_move_fade_val);
     torso_control = min(head_look_opac, torso_control);
+    if(IsLayerAttacking()){
+        layer_attacking_fade = mix(1.0f, layer_attacking_fade, pow(0.9f, num_frames));
+    } else {
+        layer_attacking_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, num_frames));
+    }
+    torso_control *= (1.0f - layer_attacking_fade);
     this_mo.SetIKTargetOffset("torso",head_dir*torso_control);
     stance_move_fade = max(0.0f, stance_move_fade - time_step * num_frames);
     //Print("stance_move_fade: "+stance_move_fade+"\n");
@@ -1719,6 +1746,9 @@ void AddBloodToCutPlaneWeapon(int attacker_id, vec3 dir) {
         float dist;
         int num_lines = item_obj.GetNumLines();
         for(int i=0; i<num_lines; ++i){
+            if(item_obj.GetLineMaterial(i) != "metal"){
+                continue;
+            }
             start = trans * item_obj.GetLineStart(i);
             end = trans * item_obj.GetLineEnd(i);
             vec3 mu = LineLineIntersect(start, end, this_mo.position, char_pos);
@@ -1859,15 +1889,17 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     bool knocked_over = false;
     
     if(!can_passive_block){
-        float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f) * attack_knockback_mult;
-        float damage = attack_getter2.GetDamage() * attack_damage_mult;
-        HandleRagdollImpact(dir, pos, damage, force);
-        knocked_over = true;
-        if(!this_mo.controlled){
-            this_mo.PlaySoundGroupVoice("hit",0.0f);
-        }
         if(sharp_damage > 0.0f){        
             TakeSharpDamage(sharp_damage * attack_damage_mult, pos, attacker_id);
+        }
+		if(sharp_damage == 0.0f || knocked_out != _awake){
+            float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f) * attack_knockback_mult;
+            float damage = attack_getter2.GetDamage() * attack_damage_mult;
+            HandleRagdollImpact(dir, pos, damage, force);
+            knocked_over = true;
+            if(!this_mo.controlled){
+                this_mo.PlaySoundGroupVoice("hit",0.0f);
+            }
         }
     } else {
         HandlePassiveBlockImpact(dir, pos);
@@ -2076,6 +2108,7 @@ int attacking_with_throw;
 const float _attack_range = 1.5f;
 const float _close_attack_range = 1.0f;
 float range_extender = 0.0f;
+float range_multiplier = 1.0f;
 
 // running and movement
 const float _run_threshold = 0.8f; // when character is moving faster than this, it runs
@@ -2120,6 +2153,10 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 }
 
 void AttachWeapon(int which){
+    if(holding_weapon){
+        Print("Can't attach weapon, already holding one!");
+        return;
+    }
     ItemObject@ item_obj = ReadItemID(which);
     vec3 pos = item_obj.GetPhysicsPosition();
     string sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
@@ -2128,7 +2165,9 @@ void AttachWeapon(int which){
     holding_weapon = true;
     this_mo.weapon_id = which;
     range_extender = item_obj.GetRangeExtender();
+    range_multiplier = item_obj.GetRangeMultiplier();
     this_mo.AttachItem(which);
+    this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
 }
 
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
@@ -2477,10 +2516,17 @@ void SetTetherID(int val){
 
 const float _max_tether_height_diff = 0.2f;
 
+bool IsLayerAttacking() {
+    return last_knife_time <= time && last_knife_time >= time - 0.3f;
+}
+
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
+    if(IsLayerAttacking()){
+        return;
+    }
     //DebugDrawWireSphere(this_mo.position, _attack_range + range_extender, vec3(1.0f), _delete_on_update);
-    const float range = _attack_range + range_extender - _leg_sphere_size;
+    const float range = (_attack_range + range_extender)*range_multiplier - _leg_sphere_size;
     int attack_id = -1;
     int throw_id = -1;
     int sneak_throw_id = -1;
@@ -2528,8 +2574,25 @@ void UpdateGroundAttackControls() {
         char.MaterialEvent("choke_grab", char.position);
         //PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
     } else if(attack_id != -1){
-        SetState(_attack_state);
-        attack_animation_set = false;
+        LoadAppropriateAttack();
+        if(attack_getter.GetAsLayer() == 1){
+            if(mirrored_stance){
+                mirrored_stance = false;
+                ApplyIdle(4.0f, true);
+            }
+            if(backslash){
+                this_mo.AddLayer("Data/Animations/r_knifebackslash.anm",7.0f,0);
+                attack_getter.Load("Data/Attacks/knifebackslash.xml");
+            } else {
+                this_mo.AddLayer("Data/Animations/r_knifeslash.anm",7.0f,0);
+                attack_getter.Load("Data/Attacks/knifeslash.xml");
+            }
+            backslash = !backslash;
+            last_knife_time = time;
+        } else {
+            SetState(_attack_state);
+            attack_animation_set = false;
+        }
         attacking_with_throw = 0;
         can_feint = true;
         feinting = false;
@@ -3183,6 +3246,101 @@ int GetState() {
     return state;
 }
 
+bool IsAttackMirrored(){
+    vec3 direction = GetAttackDirection();
+    vec3 right_direction;
+    right_direction.x = direction.z;
+    right_direction.z = -direction.x;
+
+    bool mirrored;
+    if(!mirrored_stance){
+        // GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
+        mirrored = (dot(right_direction, GetTargetVelocity())>0.1f);
+    } else {
+        mirrored = (dot(right_direction, GetTargetVelocity())>-0.1f);
+    }
+    if(!this_mo.controlled){
+        mirrored = rand()%2==0;
+    }    
+    return mirrored;
+}
+
+void LoadAppropriateAttack() {
+    // Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
+    bool front = length_squared(GetTargetVelocity())<0.1f;
+
+    vec3 direction = GetAttackDirection();
+    float attack_distance = length(direction);
+    bool ragdoll_enemy = false;
+    bool ducking_enemy = false;
+    if(target_id != -1){
+        if(ReadCharacterID(target_id).QueryIntFunction("int IsRagdoll()")==1){
+            ragdoll_enemy = true;
+        }
+        if(ReadCharacterID(target_id).QueryIntFunction("int IsDucking()")==1){
+            ducking_enemy = true;
+        }
+    }
+    string attack_path;
+    if(attacking_with_throw != 0){
+        if(attacking_with_throw == 1){
+            attack_path="Data/Attacks/throw.xml";
+        } else if(attacking_with_throw == 2){
+            attack_path="Data/Attacks/rearchoke.xml";
+        }
+    } else {
+        ChooseAttack(front);
+        attack_path;
+        if(curr_attack == "moving" && ragdoll_enemy){
+            attack_path = character_getter.GetAttackPath("moving_low");
+        } else if(curr_attack == "stationary" ||
+           (curr_attack == "moving" && ducking_enemy)){
+            if(attack_distance < _close_attack_range + range_extender * 0.5f){
+                attack_path = character_getter.GetAttackPath("stationary_close");
+            } else {
+                attack_path = character_getter.GetAttackPath("stationary");
+            }
+        } else if(curr_attack == "moving"){
+            if(attack_distance < _close_attack_range + range_extender * 0.5f){
+                attack_path = character_getter.GetAttackPath("moving_close");
+            } else {
+                attack_path = character_getter.GetAttackPath("moving");
+            }
+        } else if(curr_attack == "low"){
+            attack_path = character_getter.GetAttackPath("low");
+        } else if(curr_attack == "air"){
+            attack_path = character_getter.GetAttackPath("air");
+        }
+    }
+    attack_getter.Load(attack_path);
+    
+    bool mirrored = IsAttackMirrored();
+    if(attack_getter.GetDirection() == _left) {
+        mirrored = !mirrored;
+    }
+
+    bool flipped = false;
+    if(attack_getter.GetDirection() != _front) {
+        flipped = mirrored;
+    } else {
+        flipped = !mirrored_stance;
+    }
+    if(flipped){
+        attack_path += " m";
+    }
+    attack_getter.Load(attack_path);
+}
+
+vec3 GetAttackDirection() {
+    vec3 direction;
+    if(target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsDodging()") == 0){
+        direction = ReadCharacterID(target_id).position - this_mo.position;
+    } else {
+        direction = this_mo.GetFacing();
+    }
+    return direction;
+}
+
 // called when state equals _attack_state
 void UpdateAttacking() {    
     flip_info.UpdateRoll();
@@ -3196,20 +3354,16 @@ void UpdateAttacking() {
         //Print("Height_rel: "+height_rel+"\n");
     }
 
-    vec3 direction;
-    if(target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsDodging()") == 0){
-        direction = ReadCharacterID(target_id).position - this_mo.position;
-    } else {
-        direction = this_mo.GetFacing();
-    }
-    float attack_distance = length(direction);
-    direction.y = 0.0f;
-    direction = normalize(direction);
     if(on_ground){
         this_mo.velocity *= pow(0.95f,num_frames);
     } else {
         ApplyPhysics();
     }
+    
+    vec3 direction = GetAttackDirection();
+    direction.y = 0.0f;
+    direction = normalize(direction);
+
     if(attack_animation_set){
         if(attack_getter.IsThrow() == 0){
             float attack_facing_inertia = 0.9f;
@@ -3252,22 +3406,6 @@ void UpdateAttacking() {
         leg_cannon_flip = mix(leg_cannon_flip, leg_cannon_target_flip, 0.1f);
         this_mo.SetFlip(right_direction,leg_cannon_flip,0.0f);
     }
-    
-    bool mirrored;
-    if(!mirrored_stance){
-        // GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
-        mirrored = (dot(right_direction, GetTargetVelocity())>0.1f);
-    } else {
-        mirrored = (dot(right_direction, GetTargetVelocity())>-0.1f);
-    }
-    if(!this_mo.controlled){
-        mirrored = rand()%2==0;
-    }
-    // Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
-    bool front = //(dot(direction, GetTargetVelocity())>0.7f) || 
-                 length_squared(GetTargetVelocity())<0.1f;
-
-    
 
     if(attack_animation_set &&
        this_mo.GetStatusKeyValue("cancel")>=1.0f && 
@@ -3282,75 +3420,23 @@ void UpdateAttacking() {
     }
 
     if(!attack_animation_set){
-        bool ragdoll_enemy = false;
-        bool ducking_enemy = false;
-        if(target_id != -1){
-            if(ReadCharacterID(target_id).QueryIntFunction("int IsRagdoll()")==1){
-                ragdoll_enemy = true;
-            }
-            if(ReadCharacterID(target_id).QueryIntFunction("int IsDucking()")==1){
-                ducking_enemy = true;
-            }
-        }
+        LoadAppropriateAttack();
 
-        // Defined in playercontrol.as and enemycontrol.as. Boolean front tells if the character is standing still, and if it's true a front kick may be performed.
-        // ChooseAttack() sets the value of the curr_attack variable.
-        string attack_path;
-        if(attacking_with_throw != 0){
-            if(attacking_with_throw == 1){
-                attack_path="Data/Attacks/throw.xml";
-            } else if(attacking_with_throw == 2){
-                attack_path="Data/Attacks/rearchoke.xml";
-            }
-        } else {
-            ChooseAttack(front);
-            attack_path;
-            if(curr_attack == "moving" && ragdoll_enemy){
-                attack_path = character_getter.GetAttackPath("moving_low");
-            } else if(curr_attack == "stationary" ||
-               (curr_attack == "moving" && ducking_enemy)){
-                if(attack_distance < _close_attack_range + range_extender * 0.5f){
-                    attack_path = character_getter.GetAttackPath("stationary_close");
-                } else {
-                    attack_path = character_getter.GetAttackPath("stationary");
-                }
-            } else if(curr_attack == "moving"){
-                if(attack_distance < _close_attack_range + range_extender * 0.5f){
-                    attack_path = character_getter.GetAttackPath("moving_close");
-                } else {
-                    attack_path = character_getter.GetAttackPath("moving");
-                }
-            } else if(curr_attack == "low"){
-                attack_path = character_getter.GetAttackPath("low");
-            } else if(curr_attack == "air"){
-                attack_path = character_getter.GetAttackPath("air");
-            }
-        }
-        attack_getter.Load(attack_path);
         if(attack_getter.GetSpecial() == "legcannon"){    
             leg_cannon_flip = 0.0f;
         }
-
-        if(attack_getter.GetDirection() == _left) {
-            mirrored = !mirrored;
-        }
-
-        bool flipped = false;
-        if(attack_getter.GetDirection() != _front) {
-            flipped = mirrored;
-        } else {
-            flipped = !mirrored_stance;
-        }
-        if(flipped){
-            attack_path += " m";
-        }
-        attack_getter.Load(attack_path);
 
         if(attack_getter.GetHeight() == _low){
             duck_amount = 1.0f;
         } else {
             duck_amount = 0.0f;
         }
+        
+        bool mirrored = IsAttackMirrored();
+        if(attack_getter.GetDirection() == _left) {
+            mirrored = !mirrored;
+        }
+
         bool mirror = false;
         if(attack_getter.GetDirection() != _front){
             mirror = mirrored;
@@ -3727,6 +3813,7 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
 void NoWeapon() {
     holding_weapon = false;
     range_extender = 0.0f;
+    range_multiplier = 1.0f;
 }
 
 void DeletedWeapon(int id){
@@ -3802,9 +3889,6 @@ void HandlePickUp() {
                     trying_to_get_weapon_time = 0.0f;
                 }
             }
-        }
-        if(holding_weapon){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
         }
     } else {
         if(pickup_layer != -1){
@@ -4139,8 +4223,12 @@ void Init(string character_path) {
 void ScriptSwap() {
     last_col_pos = this_mo.position;
     //this_mo.position.y += 0.5f;
-    DropWeapon();
-    Print("Dropping weapon\n");
+    int weap_id = this_mo.GetWeapon();
+    if(weap_id != -1){
+        AttachWeapon(weap_id);
+    } else {
+        DropWeapon();
+    }
 }
 
 void Reset() {
