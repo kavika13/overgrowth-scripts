@@ -3,6 +3,7 @@
 #include "object_shared150.glsl"
 #include "object_frag150.glsl"
 #include "ambient_tet_mesh.glsl"
+#include "decals.glsl"
 
 uniform sampler2D tex14;
 UNIFORM_COMMON_TEXTURES
@@ -98,6 +99,8 @@ void main() {
                     texture(tex12,tc1) * weight_map[3];
     colormap.xyz = mix(colormap.xyz,average_color,detail_fade) * tint;
     colormap.a = max(0.0,colormap.a);
+
+	CalculateDecals(colormap, ws_normal, world_vert);
 
     // Put it all together
     CALC_COMBINED_COLOR
