@@ -26,6 +26,10 @@ void main()
 	float wind_time_scale = 8.0;
 	float wind_shake_detail = 6.0;
 	float wind_shake_offset = (world_pos.x+world_pos.y)*wind_shake_detail;
+	wind_shake_amount *= max(0.0,sin((world_pos.x+world_pos.y)+time*0.3));
+	wind_shake_amount *= sin((world_pos.x*0.1+world_pos.z)*0.3+time*0.6)+1.0;
+	wind_shake_amount = max(0.002,wind_shake_amount);
+
 	vertex_offset.x += sin(time*wind_time_scale+wind_shake_offset)*wind_shake_amount;
 	vertex_offset.z += cos(time*wind_time_scale*1.2+wind_shake_offset)*wind_shake_amount;
 	vertex_offset.y += cos(time*wind_time_scale*1.4+wind_shake_offset)*wind_shake_amount;

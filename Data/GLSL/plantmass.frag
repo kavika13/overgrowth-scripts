@@ -38,10 +38,10 @@ void main()
 
 	vec3 diffuse_color = GetDirectColor(NdotL);
 	
-	vec3 diffuse_map_vec = tangent_to_world*normal;
+	/*vec3 diffuse_map_vec = tangent_to_world*normal;
 	diffuse_color += LookupCubemap(obj2world, diffuse_map_vec, tex4) *
 					 GetAmbientContrib(shadow_tex.g);
-	
+	*/
 	float spec = GetSpecContrib(light_pos, normal, vertex_pos, shadow_tex.r);
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
@@ -64,8 +64,13 @@ void main()
 
 	color += backlit*backlit_color;
 
+	
 	color = mix(backlit_color, color, 1.0-backlit);
 	
+	vec3 diffuse_map_vec = tangent_to_world*normal;
+	color += colormap.xyz * LookupCubemap(obj2world, diffuse_map_vec, tex4) *
+					 GetAmbientContrib(shadow_tex.g);
+
 
 	AddHaze(color, rel_pos, tex4);
 	
