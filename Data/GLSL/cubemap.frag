@@ -55,5 +55,5 @@ void main()
 	
 	//color = texture2D(tex5,gl_TexCoord[1].xy).g;// * (0.5+texture2D(tex5,gl_TexCoord[1].xy).r*0.5);
 	
-		gl_FragColor = vec4(color,1.0);
+	gl_FragColor = vec4(color,1.0);
 }
