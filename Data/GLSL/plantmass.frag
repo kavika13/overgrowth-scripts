@@ -33,6 +33,9 @@ void main()
 	float NdotL = GetDirectContrib(light_pos, normal,shadow_tex.r);
 	float back_NdotL = 0.5-dot(light_pos, vec3(0.0,0.0,1.0))*0.5;
 
+	NdotL = GetDirectContrib(light_pos, light_pos,shadow_tex.r);
+	//back_NdotL = 1.0;
+
 	vec3 diffuse_color = GetDirectColor(NdotL);
 	
 	vec3 diffuse_map_vec = tangent_to_world*normal;
@@ -55,8 +58,14 @@ void main()
 	vec3 fixed_world_light = world_light;
 	fixed_world_light.x *= -1.0;
 	fixed_world_light.y *= -1.0;
-	float backlit = max(0.0,dot(fixed_world_light,normalize(rel_pos)));
-	color += back_NdotL * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * 0.6 * texture2D(tex6,gl_TexCoord[0].xy).xyz * shadow_tex.r;
+	//float backlit = max(0.0,dot(fixed_world_light,normalize(rel_pos)));
+	float backlit = (dot(fixed_world_light,normalize(rel_pos))+1.0)*0.5;
+	vec3 backlit_color = back_NdotL * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * 0.6 * texture2D(tex6,gl_TexCoord[0].xy).xyz * shadow_tex.r;
+
+	color += backlit*backlit_color;
+
+	color = mix(backlit_color, color, 1.0-backlit);
+	
 
 	AddHaze(color, rel_pos, tex4);
 	

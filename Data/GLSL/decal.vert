@@ -4,6 +4,8 @@ uniform samplerCube tex3;
 uniform samplerCube tex4;
 uniform sampler2D tex5;
 uniform vec3 cam_pos;
+uniform mat3 test;
+uniform mat4 obj2world;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
@@ -17,11 +19,11 @@ void main()
 {	
 	mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
 	vec3 eyeSpaceVert = (gl_ModelViewMatrix * gl_Vertex).xyz;
-	vertex_pos = normalize(transpose_normal_matrix * eyeSpaceVert);
+	vertex_pos = normalize(test * transpose_normal_matrix * eyeSpaceVert);
 	
-	light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
+	light_pos = normalize(test * transpose_normal_matrix * gl_LightSource[0].position.xyz);
 	
-	rel_pos = CalcRelativePositionForSkySimple(cam_pos);
+	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
 	
 	gl_Position = ftransform();
 	

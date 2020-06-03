@@ -7,6 +7,8 @@ uniform samplerCube tex4;
 uniform sampler2D tex5;
 uniform sampler2D tex6;
 uniform vec3 cam_pos;
+uniform mat3 test;
+uniform mat4 obj2world;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
@@ -54,6 +56,8 @@ void main()
 	color *= BalanceAmbient(NdotL);
 	
 	AddHaze(color, rel_pos, tex4);
+
+	//color = shadow_tex.rgb;
 
 	gl_FragColor = vec4(color,colormap.a);
 }
