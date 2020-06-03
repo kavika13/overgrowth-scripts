@@ -143,7 +143,7 @@ void UpdateBrain(){
         return;
     }
 
-    if(!holding_weapon){
+    if(!holding_weapon && goal != _struggle){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;
@@ -377,8 +377,8 @@ bool WantsToCancelAnimation() {
 NavPath path;
 int current_path_point = 0;
 void GetPath(vec3 target_pos) {
-    path = this_mo.GetPath(this_mo.position,
-                           target_pos);
+    path = GetPath(this_mo.position,
+                   target_pos);
     current_path_point = 0;
 }
 
@@ -437,7 +437,7 @@ vec3 GetPatrolMovement(){
             waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
         }
     }
-    target_velocity = GetMovementToPoint(target_point, 0.0f, 0.0f);
+    target_velocity = GetMovementToPoint(target_point, 0.0f);
     float target_speed = 0.2f;
     if(length_squared(target_velocity) > target_speed){
         target_velocity = normalize(target_velocity) * target_speed;
@@ -445,7 +445,11 @@ vec3 GetPatrolMovement(){
     return target_velocity;
 }
 
-vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist){
+vec3 GetMovementToPoint(vec3 point, float slow_radius){
+    return GetMovementToPoint(point, slow_radius, 0.0f, 0.0f);
+}
+
+vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float strafe_vel){
     // Get path to estimated target position
     vec3 target_velocity;
     vec3 target_point = point;
@@ -455,16 +459,31 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist){
         target_point = next_path_point;
     }
 
-    if(distance_squared(target_point, point) < 0.1f){
-        target_point += normalize(this_mo.position - target_point) * target_dist;
+    vec3 rel_dir = point - this_mo.position;
+    rel_dir.y = 0.0f;
+    rel_dir = normalize(rel_dir);
+
+    if(distance_squared(target_point, point) < target_dist*target_dist){
+        vec3 right_dir(rel_dir.z, 0.0f, -rel_dir.x);
+        target_point = NavRaycast(point, point - rel_dir * target_dist + right_dir * strafe_vel);
+                
+        GetPath(target_point);
+        vec3 next_path_point = GetNextPathPoint();
+        if(next_path_point != vec3(0.0f)){
+            target_point = next_path_point;
+        }
     } 
+
     // Set target velocity to approach target position
     target_velocity = target_point - this_mo.position;
     target_velocity.y = 0.0;
-    float dist = length(target_velocity);
+    vec3 target_vel_indirect = target_velocity - dot(rel_dir, target_velocity) * rel_dir;
+    vec3 target_vel_direct = target_velocity - target_vel_indirect;
+ 
+    float dist = length(target_vel_direct);
     float seek_dist = slow_radius;
     dist = max(0.0, dist-seek_dist);
-    target_velocity = normalize(target_velocity) * dist;
+    target_velocity = normalize(target_vel_direct) * dist + target_vel_indirect;
     if(length_squared(target_velocity) > 1.0){
         target_velocity = normalize(target_velocity);
     }
@@ -484,21 +503,9 @@ vec3 GetAttackMovement() {
         last_seen_target_velocity = ReadCharacterID(target_id).velocity;
     }
 
-    float temp_target_attack_range;
-
-    vec3 move_vel = GetMovementToPoint(last_seen_target_position, max(0.2f,1.0f-target_attack_range), target_attack_range);
-    if(length_squared(move_vel) < 1.0f){
-        vec3 rel_dir = last_seen_target_position - this_mo.position;
-        rel_dir.y = 0.0f;
-        rel_dir = normalize(rel_dir);
-        vec3 right_dir(rel_dir.z, 0.0f, -rel_dir.x);
-        move_vel += right_dir * strafe_vel;
-        if(length_squared(move_vel) > 1.0f){
-            move_vel = normalize(move_vel);
-        }
-    }
-    return move_vel;
+    vec3 move_vel = GetMovementToPoint(last_seen_target_position, max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
     
+    return move_vel;    
 }
 
 
@@ -526,14 +533,14 @@ vec3 GetTargetVelocity() {
     } else if(goal == _attack){
         return GetAttackMovement(); 
     } else if(goal == _get_help){
-        return GetMovementToPoint(ReadCharacterID(ally_id).position, 1.0f, 0.0f); 
+        return GetMovementToPoint(ReadCharacterID(ally_id).position, 1.0f); 
     } else if(goal == _get_weapon){
         vec3 pos = ReadItemID(weapon_target_id).GetPhysicsPosition();
-        return GetMovementToPoint(pos, 0.0f, 0.0f); 
+        return GetMovementToPoint(pos, 0.0f); 
     } else if(goal == _escort){
-        return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f, 0.0f); 
+        return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 
     } else if(goal == _navigate){
-        return GetMovementToPoint(nav_target, 1.0f, 0.0f); 
+        return GetMovementToPoint(nav_target, 1.0f); 
     } else if(goal == _struggle){
         if(struggle_change_time <= 0.0f){
             struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 

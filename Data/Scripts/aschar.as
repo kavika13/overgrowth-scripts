@@ -266,8 +266,6 @@ void CheckForStartBodyDrag(){
 }
 
 void Update(int _num_frames) {
-    
-
     /*if(holding_weapon){
         ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
         vec3 start, end;
@@ -531,8 +529,8 @@ void HandleSpecialKeyPresses() {
     }
     if(GetInputPressed(this_mo.controller_id, "p") && target_id != -1){
         Print("Getting path");
-        NavPath temp = this_mo.GetPath(this_mo.position,
-                                        ReadCharacterID(target_id).position);
+        NavPath temp = GetPath(this_mo.position,
+                               ReadCharacterID(target_id).position);
         int num_points = temp.NumPoints();
         for(int i=0; i<num_points-1; i++){
             DebugDrawLine(temp.GetPoint(i),
@@ -691,9 +689,11 @@ void HandleTethering() {
         }
     }
     if(tethered == _TETHERED_REARCHOKED){
+        DropWeapon();
         // Choking
         TakeDamage(time_step * num_frames * 0.25f);
         if(knocked_out != _awake){
+            this_mo.MaterialEvent("choke_fall", this_mo.position);
             int other_char_id = tether_id;
             Ragdoll(_RGDL_LIMP);
             ReadCharacterID(other_char_id).PassIntFunction("void ChokedOut(int)", this_mo.getID());
@@ -789,6 +789,9 @@ void UpdateHeadLook() {
                                    RangedRandomFloat(-0.2f, 0.2f),
                                    RangedRandomFloat(-1.0f, 1.0f));
             choke_look_time = RangedRandomFloat(0.1f,0.3f);
+            if(rand()%4 == 0){
+                this_mo.MaterialEvent("choke_move", this_mo.position, RangedRandomFloat(0.0f,1.0f));
+            }
         }
         choke_look_time = max(0.0f, choke_look_time - time_step * num_frames);
     }
@@ -1309,6 +1312,9 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(state == _ragdoll_state){
         return _miss;
     }
+    if(tether_id != attacker_id){
+        UnTether();
+    }
     MovementObject@ attacker = ReadCharacterID(attacker_id);
     vec3 offset(attacker.position.x - this_mo.position.x,
                 0.0f,
@@ -1628,17 +1634,20 @@ void MakeMetalSparks(vec3 pos){
 }
 
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
-    if(state == _hit_reaction_state && hit_reaction_dodge){
+    if((state == _hit_reaction_state && hit_reaction_dodge) ||
+       (attack_getter2.GetHeight() == _high && IsDucking() == 1))
+    {
         return _miss;
     }
     if(target_id == -1){
         target_id = attacker_id;
     }
-    if(attack_getter2.GetHeight() == _high && IsDucking() == 1){
-        return _miss;
-    }
     if(this_mo.controlled){
         camera.AddShake(1.0f);
+    }
+
+    if(tether_id != attacker_id){
+        UnTether();
     }
 
     if(attack_getter2.GetSpecial() == "legcannon"){
@@ -1932,7 +1941,7 @@ void AttachWeapon(int which){
 }
 
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
-    if(event == "grabitem" && !holding_weapon && knocked_out == _awake )
+    if(event == "grabitem" && !holding_weapon && knocked_out == _awake && tethered == _TETHERED_FREE )
     {
         Print("Grabbing item\n");
         int num_items = GetNumItems();
@@ -2321,7 +2330,9 @@ void UpdateGroundAttackControls() {
         tether_rel = normalize(tether_rel);
         char.PassIntFunction("void SetTethered(int)", _TETHERED_REARCHOKED);
         char.PassIntFunction("void SetTetherID(int)", this_mo.getID());
-        PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
+        
+        char.MaterialEvent("choke_grab", char.position);
+        //PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
     } else if(attack_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
@@ -3515,7 +3526,7 @@ int pickup_layer = -1;
 int pickup_layer_attempts = 0;
 
 void HandlePickUp() {
-    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state){
+    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state && tethered == _TETHERED_FREE){
         int num_items = GetNumItems();
         
         if(!holding_weapon){
@@ -3768,7 +3779,9 @@ void ApplyCameraControls() {
     camera.CalcFacing();
 
     camera.SetDistance(cam_distance);
-    UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+    if(this_mo.controller_id == 0){
+        UpdateListener(camera.GetPos(),vec3(0,0,0),camera.GetFacing(),camera.GetUpVector());
+    }
 
     camera.SetInterpSteps(num_frames);
 }

@@ -31,6 +31,7 @@ uniform float detail_scale;
 uniform vec3 color_tint;
 
 varying vec3 tangent;
+varying vec3 bitangent;
 varying vec3 ws_vertex;
 varying float alpha;
 #ifndef BAKED_SHADOWS
@@ -53,6 +54,7 @@ void main()
     mat4 obj2world = GetPseudoInstanceMat4();
 
     tangent = gl_MultiTexCoord1.xyz;
+    bitangent = gl_MultiTexCoord2.xyz;
     
     vec4 transformed_vertex = obj2world * gl_Vertex;
     ws_vertex = transformed_vertex.xyz - cam_pos;

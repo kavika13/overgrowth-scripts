@@ -29,6 +29,7 @@ uniform float detail_scale;
 uniform vec3 color_tint;
 
 varying vec3 tangent;
+varying vec3 bitangent;
 varying vec3 ws_vertex;
 varying float alpha;
 #ifndef BAKED_SHADOWS
@@ -57,9 +58,11 @@ void main()
     // Get normal
     vec4 base_normalmap = texture2D(tex1,tc0);
     vec3 base_normal = UnpackObjNormalV3(base_normalmap.xyz);
-    vec3 base_bitangent = normalize(cross(tangent,base_normal));
-    vec3 base_tangent = normalize(cross(base_normal,base_bitangent));
-    base_bitangent *= -1.0;
+    vec3 base_bitangent = normalize(cross(base_normal,tangent));
+    vec3 base_tangent = normalize(cross(base_bitangent,base_normal));
+    if(dot(base_bitangent, bitangent)<0.0){
+        base_bitangent *= -1.0;
+    }
 
     mat3 ws_from_ns = mat3(base_tangent,
                            base_bitangent,
