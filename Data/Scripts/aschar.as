@@ -1403,12 +1403,14 @@ void HandlePickUp() {
 				if(distance(hand_pos, pos)<0.9f){ 
 					holding_weapon = true;
 					weapon_id = i;
+					this_mo.AttachItem(i);
 					break;
 				}
 			}
 		}
 		if(holding_weapon){
-			this_mo.ReadItem(weapon_id);
+			this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
+			/*this_mo.ReadItem(weapon_id);
 			vec3 pos = item_object_getter.GetPhysicsPosition();
 			mat4 transform = this_mo.GetIKTargetTransform("rightarm");
 			mat4 transform_rot = transform;
@@ -1419,12 +1421,12 @@ void HandlePickUp() {
 			new_transform.SetColumn(2, transform.GetColumn(1));
 			new_transform.SetTranslationPart(
 				transform.GetTranslationPart() + transform_rot * vec3(0.03f,0.15f,0.09f));
-			this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
-			item_object_getter.SetPhysicsTransform(new_transform);
+			item_object_getter.SetPhysicsTransform(new_transform);*/
 		}
 	} else {
 		if(holding_weapon){
-			this_mo.ReadItem(weapon_id);
+			this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
+			this_mo.DetachItem(weapon_id);
 			item_object_getter.ActivatePhysics();
 			holding_weapon = false;
 		}
@@ -1460,6 +1462,7 @@ void update(bool _controlled, int _num_frames) {
 	}
 	UpdateRagDoll();	
 	if(limp){
+		HandlePickUp();
 		return;
 	}
 
@@ -1490,7 +1493,6 @@ void update(bool _controlled, int _num_frames) {
 		UpdateAnimation();
 		ApplyPhysics();
 		HandlePickUp();
-		
 		HandleGroundCollision();
 	} else if(state == _ground_state){
 		HandleAccelTilt();

@@ -21,17 +21,20 @@ varying vec3 ws_vertex;
 vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount) {
 	vec3 vertex_offset = vec3(0.0);
 
-	float wind_shake_amount = 0.02*gl_Color.r;
+	float wind_shake_amount = 0.02;
 	float wind_time_scale = 8.0;
 	float wind_shake_detail = 6.0;
 	float wind_shake_offset = (world_pos.x+world_pos.y)*wind_shake_detail;
 	wind_shake_amount *= max(0.0,sin((world_pos.x+world_pos.y)+time*0.3));
 	wind_shake_amount *= sin((world_pos.x*0.1+world_pos.z)*0.3+time*0.6)+1.0;
 	wind_shake_amount = max(0.002,wind_shake_amount);
+	wind_shake_amount *= wind_amount;
 
-	vertex_offset.x += sin(time*wind_time_scale+wind_shake_offset)*wind_shake_amount;
-	vertex_offset.z += cos(time*wind_time_scale*1.2+wind_shake_offset)*wind_shake_amount;
-	vertex_offset.y += cos(time*wind_time_scale*1.4+wind_shake_offset)*wind_shake_amount;
+	vertex_offset.x += sin(time*wind_time_scale+wind_shake_offset);
+	vertex_offset.z += cos(time*wind_time_scale*1.2+wind_shake_offset);
+	vertex_offset.y += cos(time*wind_time_scale*1.4+wind_shake_offset);
+
+	vertex_offset *= wind_shake_amount;
 
 	return vertex_offset;
 }
