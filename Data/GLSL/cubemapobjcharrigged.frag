@@ -15,6 +15,10 @@ varying vec3 concat_bone2;
 #include "lighting.glsl"
 #include "relativeskypos.glsl"
 
+float rand(vec2 co){
+	return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 void main()
 {	
 	// Reconstruct third bone axis
@@ -29,7 +33,18 @@ void main()
 
 	// Get shadowed amount
 	vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).xyz;
+	/*float shadow_amount = 0.0;
+	float offset = 40.0/2048.0;
+	for(int i=0; i<100; i++){
+		float random = (rand(gl_FragCoord.xy*i*3)-0.5)*offset;
+		float random2 = (rand(gl_FragCoord.xy*(i*3+1))-0.5)*offset;
+		float random3 = (rand(gl_FragCoord.xy*(i*3+2))-0.5)*offset*0.001;
+		shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(random,random2,-0.00001+random3,0.0)).r/100.0;
+	}
+	shadow_tex.r *= shadow_amount;*/
+
 	shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+
 	shadow_tex.g = 1.0;
 
 	// Get diffuse lighting
@@ -41,7 +56,7 @@ void main()
 	
 	// Get specular lighting
 	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
-	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
+	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * 0.3;
 	
 	vec3 spec_map_vec = reflect(ws_vertex, ws_normal);
 	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
@@ -63,6 +78,8 @@ void main()
 	
 	// Add haze
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
-	
+
+	//color = vec3(rand(gl_FragCoord.xy));
+
 	gl_FragColor = vec4(color,1.0);
 }
