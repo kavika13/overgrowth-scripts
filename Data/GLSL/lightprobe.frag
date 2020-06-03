@@ -1,4 +1,5 @@
 #version 150
+#include "ambient_tet_mesh.glsl"
 
 const int kMaxInstances = 128;
 
@@ -18,13 +19,15 @@ out vec4 out_color;
 
 void main()
 {    
-    float sum = abs(vert[0]) + abs(vert[1]) + abs(vert[2]);
-    vec3 temp_vert = vert / vec3(sum);
+    vec3 acc[6];
+    acc[0] = ambient_cube_color[instance_id * 6 + 0].xyz;
+    acc[1] = ambient_cube_color[instance_id * 6 + 1].xyz;
+    acc[2] = ambient_cube_color[instance_id * 6 + 2].xyz;
+    acc[3] = ambient_cube_color[instance_id * 6 + 3].xyz;
+    acc[4] = ambient_cube_color[instance_id * 6 + 4].xyz;
+    acc[5] = ambient_cube_color[instance_id * 6 + 5].xyz;
 
-    vec3 total = vec3(0.0);
-    total += ambient_cube_color[0+int(temp_vert.x<0)+instance_id*6].xyz * vec3(abs(temp_vert.x));
-    total += ambient_cube_color[2+int(temp_vert.y<0)+instance_id*6].xyz * vec3(abs(temp_vert.y));
-    total += ambient_cube_color[4+int(temp_vert.z<0)+instance_id*6].xyz * vec3(abs(temp_vert.z));
+    vec3 total = SampleAmbientCube(acc, normalize(vert));
     out_color.xyz = total;
     out_color.a = 1.0;
 }
