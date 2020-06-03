@@ -108,7 +108,8 @@ void main()
 	colormap.xyz = mix(colormap.xyz,average_color,fade);
 	
 	color = diffuse_color * colormap.xyz * tint + spec_color * colormap.a;
-	color *= BalanceAmbient(NdotL);
+	
+color *= BalanceAmbient(NdotL);
 	
 	AddHaze(color, rel_pos, tex3);
 
