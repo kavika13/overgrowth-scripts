@@ -3,7 +3,9 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 #ifdef BAKED_SHADOWS
-    uniform sampler2D tex4;
+    #ifdef SHADOW_CATCHER
+        uniform sampler2D tex4;
+    #endif
 #else
     uniform sampler2DShadow tex4;
 #endif
@@ -13,6 +15,9 @@ uniform sampler2D tex7;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;
+#ifndef SHADOW_CATCHER
+    uniform float in_light;
+#endif
 //uniform mat4 bones[64];
 
 varying vec3 vertex_pos;

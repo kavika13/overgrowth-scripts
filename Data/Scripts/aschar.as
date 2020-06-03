@@ -195,6 +195,14 @@ void UpdateCutThroatEffect() {
 }
 
 void Update(int _num_frames) {
+    /*if(holding_weapon){
+        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+        vec3 start, end;
+        mat4 trans = item_obj.GetPhysicsTransform();
+        start = trans * item_obj.GetLineStart(0);
+        end = trans * item_obj.GetLineEnd(0);
+        DebugDrawLine(start, end, vec3(1.0f), _fade);
+    }*/
     if(in_animation){        
         if(this_mo.controlled){
             UpdateAirWhooshSound();
@@ -1067,40 +1075,82 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     return _hit;
 }
 
-vec3 GetClosestWeapPoint(int other_id, vec3 fallback){
+void HandleWeaponCollision(int other_id, vec3 pos){                   
     if(other_id == -1 || !holding_weapon || this_mo.weapon_id == -1){
-        return fallback;
+        return;
     }
     MovementObject@ char = ReadCharacterID(other_id);
     if(char.weapon_id == -1){
-        return fallback;
+        return;
     }
+       
+    ItemObject@ item_obj_a = ReadItemID(this_mo.weapon_id);
+    ItemObject@ item_obj_b = ReadItemID(char.weapon_id);
+    vec3 a_start, a_end;
+    vec3 b_start, b_end;
+    mat4 trans_a = item_obj_a.GetPhysicsTransform();
+    mat4 trans_b = item_obj_b.GetPhysicsTransform();
+    vec3 mu, col_point;
+    float dist, closest_dist;
+    vec3 a_point, b_point;
+    int closest_line_a = -1;
+    int closest_line_b;
 
-    vec3 p_base, p_tip;
-    {
-        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
-        mat4 trans = item_obj.GetPhysicsTransform();
-        p_base = trans * item_obj.GetPoint("base");
-        p_tip = trans * item_obj.GetPoint("tip");
+    int num_lines_a = item_obj_a.GetNumLines();
+    int num_lines_b = item_obj_b.GetNumLines();
+    for(int i=0; i<num_lines_a; ++i){
+        a_start = trans_a * item_obj_a.GetLineStart(i);
+        a_end = trans_a * item_obj_a.GetLineEnd(i);
+        for(int j=0; j<num_lines_b; ++j){
+            b_start = trans_b * item_obj_b.GetLineStart(j);
+            b_end = trans_b * item_obj_b.GetLineEnd(j);
+
+            vec3 mu = LineLineIntersect(a_start, a_end, b_start, b_end);
+            mu.x = min(1.0,max(0.0,mu.x));
+            mu.y = min(1.0,max(0.0,mu.y));
+            a_point = a_start + (a_end-a_start)*mu.x;
+            b_point = b_start + (b_end-b_start)*mu.y;
+            dist = distance_squared(a_point, b_point);
+            if(closest_line_a == -1 || dist < closest_dist){
+                closest_line_a = i;
+                closest_line_b = j;
+                closest_dist = dist;
+                col_point = (a_point + b_point) * 0.5f;
+            }
+        }        
     }
-
-    //DebugDrawLine(p_base, p_tip, vec3(1.0f), _fade);
-
-    vec3 e_base, e_tip;
-    {
-        ItemObject@ item_obj = ReadItemID(char.weapon_id);
-        mat4 trans = item_obj.GetPhysicsTransform();
-        e_base = trans * item_obj.GetPoint("base");
-        e_tip = trans * item_obj.GetPoint("tip");
-    }
-
-    //DebugDrawLine(e_base, e_tip, vec3(1.0f), _fade);
     
-    vec3 mu = LineLineIntersect(p_base, p_tip, e_base, e_tip);
-    mu.x = min(1.0,max(0.0,mu.x));
-    mu.y = min(1.0,max(0.0,mu.y));
-    return (p_base + (p_tip-p_base)*mu.x +
-            e_base + (e_tip-e_base)*mu.y) * 0.5f;
+
+    string mat_a, mat_b;
+    mat_a = item_obj_a.GetLineMaterial(closest_line_a);
+    mat_b = item_obj_b.GetLineMaterial(closest_line_b);
+
+    string sound;
+    if(mat_a == "metal" && mat_b == "metal"){
+        sound = "Data/Sounds/weapon_foley/impact/weapon_metal_hit_metal_strong.xml";
+        MakeMetalSparks(col_point);
+    } else if(mat_a == "wood" && mat_b == "wood"){
+        sound = "Data/Sounds/weapon_foley/impact/weapon_staff_hit_staff_strong.xml";
+        MakeParticle("Data/Particles/impactfast.xml",col_point,vec3(0.0f));
+        MakeParticle("Data/Particles/impactslow.xml",col_point,vec3(0.0f));
+        int num_sparks = rand()%5;
+        for(int i=0; i<num_sparks; ++i){
+            MakeParticle("Data/Particles/woodspeck.xml",col_point,vec3(RangedRandomFloat(-5.0f,5.0f),
+                                                                       RangedRandomFloat(-5.0f,5.0f),
+                                                                       RangedRandomFloat(-5.0f,5.0f)));
+        }   
+    } else {
+        sound = "Data/Sounds/weapon_foley/impact/weapon_staff_hit_metal_strong.xml";
+        MakeParticle("Data/Particles/impactfast.xml",col_point,vec3(0.0f));
+        MakeParticle("Data/Particles/impactslow.xml",col_point,vec3(0.0f));
+        int num_sparks = rand()%10;
+        for(int i=0; i<num_sparks; ++i){
+            MakeParticle("Data/Particles/woodspeck.xml",col_point,vec3(RangedRandomFloat(-5.0f,5.0f),
+                                                                       RangedRandomFloat(-5.0f,5.0f),
+                                                                       RangedRandomFloat(-5.0f,5.0f)));
+        }   
+    }
+    PlaySoundGroup(sound, col_point);  
 }
 
 int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
@@ -1109,11 +1159,10 @@ int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         sound = "Data/Sounds/hit/hit_block.xml";
         MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
         MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+        PlaySoundGroup(sound, pos);
     } else {
-        sound = "Data/Sounds/weapon_foley/impact/weapon_metal_hit_metal_strong.xml";
-        MakeMetalSparks(GetClosestWeapPoint(attacker_id, pos));
+        HandleWeaponCollision(attacker_id, pos);
     }
-    PlaySoundGroup(sound, pos);
     //TimedSlowMotion(0.1f,0.3f, 0.05f);
     if(this_mo.controlled){
         camera.AddShake(0.5f);
@@ -1310,16 +1359,14 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     } else {
         string sound;
         if(block_health > 0.0f && holding_weapon){
-            sound = "Data/Sounds/weapon_foley/impact/weapon_metal_hit_metal_strong.xml";
-            MakeMetalSparks(GetClosestWeapPoint(attacker_id, pos));
+            HandleWeaponCollision(attacker_id, pos);
         } else {
             sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
+            PlaySoundGroup(sound, pos);  
         }
         if(RangedRandomFloat(0.0f,1.0f) < drop_weapon_probability){
             DropWeapon();
         }
-
-        PlaySoundGroup(sound, pos);   
     }
 
     return _hit;
@@ -1671,6 +1718,13 @@ vec3 WorldToGroundSpace(vec3 world_space_vec){
     vec3 ground_space_vec = right * world_space_vec.x +
                             front * world_space_vec.z +
                             ground_normal * world_space_vec.y;
+    if(!this_mo.controlled){
+        vec3 flat = normalize(world_space_vec)*
+            sqrt(ground_space_vec.x*ground_space_vec.x + 
+                 ground_space_vec.z*ground_space_vec.z);
+        ground_space_vec.x = flat.x;
+        ground_space_vec.z = flat.z;
+    }
     return ground_space_vec;
 }
 
@@ -1728,13 +1782,13 @@ void UpdateGroundMovementControls() {
     float flat_ground_length = length(flat_ground_normal);
     flat_ground_normal = normalize(flat_ground_normal);
     if(flat_ground_length > 0.9f){
-        if(dot(target_velocity, flat_ground_normal)<0.0f){
+        if(this_mo.controlled && dot(target_velocity, flat_ground_normal)<0.0f){
             target_velocity -= dot(target_velocity, flat_ground_normal) *
                                flat_ground_normal;
         }
     }
     if(flat_ground_length > 0.6f){
-        if(dot(this_mo.velocity, flat_ground_normal)>-0.8f){
+        if(this_mo.controlled && dot(this_mo.velocity, flat_ground_normal)>-0.8f){
             target_velocity -= dot(target_velocity, flat_ground_normal) *
                                flat_ground_normal;
             target_velocity += flat_ground_normal * flat_ground_length;

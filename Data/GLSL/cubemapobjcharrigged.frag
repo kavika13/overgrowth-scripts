@@ -3,7 +3,9 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 #ifdef BAKED_SHADOWS
-    uniform sampler2D tex4;
+    #ifdef SHADOW_CATCHER
+        uniform sampler2D tex4;
+    #endif
 #else
     uniform sampler2DShadow tex4;
 #endif
@@ -13,6 +15,9 @@ uniform sampler2D tex7;
 uniform vec3 cam_pos;
 uniform mat4 shadowmat;
 uniform vec3 ws_light;
+#ifndef SHADOW_CATCHER
+    uniform float in_light;
+#endif
 
 varying vec3 ws_vertex;
 varying vec3 concat_bone1;
@@ -38,7 +43,11 @@ void main()
 
     // Get shadowed amount
 #ifdef BAKED_SHADOWS
-    vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).xyz;
+    #ifdef SHADOW_CATCHER
+        vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).xyz;
+    #else
+        vec3 shadow_tex = vec3(in_light);
+    #endif
     float offset = 2.0/512.0;
     float shadow_amount = 0.0;
     float z_bias = -0.00002;

@@ -3,7 +3,9 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 #ifdef BAKED_SHADOWS
-    uniform sampler2D tex4;
+    #ifdef SHADOW_CATCHER
+        uniform sampler2D tex4;
+    #endif
 #else
     uniform sampler2DShadow tex4;
 #endif
@@ -16,6 +18,10 @@ uniform mat4 shadowmat;
 uniform int x_stipple_offset;
 uniform int y_stipple_offset;
 uniform int stipple_val;
+#ifndef SHADOW_CATCHER
+    uniform float in_light;
+#endif
+
 
 varying vec3 ws_vertex;
 #ifndef BAKED_SHADOWS

@@ -7,7 +7,9 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 #ifdef BAKED_SHADOWS
-    uniform sampler2D tex4;
+    #ifdef SHADOW_CATCHER
+        uniform sampler2D tex4;
+    #endif
 #else
     uniform sampler2DShadow tex4;
 #endif
@@ -21,6 +23,10 @@ uniform mat4 shadowmat;
 uniform int x_stipple_offset;
 uniform int y_stipple_offset;
 uniform int stipple_val;
+#ifndef SHADOW_CATCHER
+    uniform float in_light;
+#endif
+
 
 varying vec3 ws_vertex;
 #ifndef BAKED_SHADOWS
@@ -60,7 +66,11 @@ void main()
 
     // Get diffuse lighting
 #ifdef BAKED_SHADOWS
-    vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).rgb;
+    #ifdef SHADOW_CATCHER
+        vec3 shadow_tex = texture2D(tex4,gl_TexCoord[2].xy).rgb;
+    #else
+        vec3 shadow_tex = vec3(in_light);
+    #endif
     shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
 #else
     vec3 shadow_tex = vec3(1.0);

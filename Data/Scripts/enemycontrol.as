@@ -17,9 +17,10 @@ bool going_to_block = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
 
-enum AIGoal {_patrol, _attack, _get_help, _escort, _get_weapon};
+enum AIGoal {_patrol, _attack, _get_help, _escort, _get_weapon, _navigate};
 AIGoal goal = _patrol;
 
+vec3 nav_target;
 int ally_id = -1;
 int escort_id = -1;
 int weapon_target_id = -1;
@@ -40,7 +41,9 @@ void Notice(int character_id){
     target_id = character_id;
     last_seen_target_position = ReadCharacterID(character_id).position;
     last_seen_target_velocity = ReadCharacterID(character_id).velocity;
-    SetGoal(_attack);
+    if(goal == _patrol || goal == _escort){
+        SetGoal(_attack);
+    }
 }
 
 void NotifySound(int created_by_id, vec3 pos) {
@@ -138,14 +141,19 @@ void UpdateBrain(){
         }
     }
 
+    if(hostile){
+        int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
+        if(closest_id != -1){
+            Notice(closest_id);
+        }
+    }
+
+    if(!hostile &&  goal == _attack){
+        SetGoal(_patrol);
+    }
+
     if(goal == _patrol || goal == _escort){
         ai_attacking = false;
-        if(hostile){
-            int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
-            if(closest_id != -1){
-                Notice(closest_id);
-            }
-        }
     } else if(goal == _attack){
         MovementObject@ target = ReadCharacterID(target_id);
         if(target.QueryIntFunction("int IsKnockedOut()") == 1){
@@ -169,9 +177,14 @@ void UpdateBrain(){
         }
     } else if(goal == _get_weapon){
         if(holding_weapon || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
-            SetGoal(_patrol);            
+            if(target_id == -1){
+                SetGoal(_patrol);           
+            } else {
+                SetGoal(_attack);
+            }
         }
     }
+    //MouseControlPathTest();
     //HandleDebugRayDraw();
 }
 
@@ -428,6 +441,19 @@ vec3 GetAttackMovement() {
     return GetMovementToPoint(last_seen_target_position, 1.0f);
 }
 
+
+void MouseControlPathTest() {
+    vec3 start = camera.GetPos();
+    vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
+    col.GetSweptSphereCollision(start, end, _leg_sphere_size);
+    DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+    
+    if(GetInputDown("mouse0")){
+        goal = _navigate;
+        nav_target = sphere_col.position;
+    }
+}
+
 int last_seen_sphere = -1;
 vec3 GetTargetVelocity() {
     if(goal == _patrol){
@@ -441,6 +467,8 @@ vec3 GetTargetVelocity() {
         return GetMovementToPoint(pos, 0.0f); 
     } else if(goal == _escort){
         return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 
+    } else if(goal == _navigate){
+        return GetMovementToPoint(nav_target, 1.0f); 
     } else {
         return vec3(0.0f);
     }
