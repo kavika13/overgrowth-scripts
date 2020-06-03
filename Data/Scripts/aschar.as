@@ -424,10 +424,11 @@ void HandleSpecialKeyPresses() {
                     vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
             }*/
             //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-            this_mo.StartAnimation("Data/Animations/r_spearstabfarhigh.anm",20.0f,_ANM_MOBILE);
-            in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");
-            this_mo.velocity = vec3(0.0f);
+            //this_mo.StartAnimation("Data/Animations/r_spearstabfarhigh.anm",20.0f,_ANM_MOBILE);
+            //in_animation = true;
+            //this_mo.SetAnimationCallback("void EndAnim()");
+            //this_mo.velocity = vec3(0.0f);
+            //this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
         }
     }
     if(GetInputPressed("p") && target_id != -1){
@@ -556,6 +557,10 @@ void UpdateHeadLook() {
         } else {
             target_head_dir = target_dir;
         }
+    }
+
+    if(trying_to_get_weapon != 0){
+        target_head_dir = normalize(get_weapon_pos - this_mo.GetAvgIKChainPos("head"));
     }
 
     const bool _draw_gaze_line = false;
@@ -1287,9 +1292,40 @@ vec3 last_seen_target_velocity;
 
 // Animation events are created by the animation files themselves. For example, when the run animation is played, it calls HandleAnimationEvent( "leftrunstep", left_foot_pos ) when the left foot hits the ground.
 void HandleAnimationEvent(string event, vec3 world_pos){
+    HandleAnimationMiscEvent(event, world_pos);
     HandleAnimationMaterialEvent(event, world_pos);
     HandleAnimationCombatEvent(event, world_pos);
     //DebugDrawText(world_pos, event, _persistent);
+}
+
+void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
+    if(event == "grabitem" && !holding_weapon)
+    {
+        Print("Grabbing item");
+        int num_items = this_mo.GetNumItems();
+        for(int i=0; i<num_items; i++){
+            this_mo.ReadItem(i);
+            vec3 pos = item_object_getter.GetPhysicsPosition();
+            vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
+            if(distance(hand_pos, pos)<0.9f){ 
+                holding_weapon = true;
+                this_mo.weapon_id = i;
+                range_extender = 0.0f;
+                range_extender = item_object_getter.GetRangeExtender();
+                this_mo.AttachItem(i);
+                if(pickup_layer != -1){
+                    this_mo.RemoveLayer(pickup_layer, 4.0f);
+                    pickup_layer = -1;
+                } 
+                break;
+            }
+        }
+        ++pickup_layer_attempts;
+        if(pickup_layer_attempts > 4 && pickup_layer != -1){
+            this_mo.RemoveLayer(pickup_layer, 4.0f);
+            pickup_layer = -1;
+        }
+    }
 }
 
 void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos) {
@@ -2632,14 +2668,20 @@ void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.weapon_id);
+        this_mo.ReadItem(this_mo.weapon_id);
         item_object_getter.ActivatePhysics();
         holding_weapon = false;
         range_extender = 0.0f;
     }
 }
 
+const float _get_weapon_time_limit = 0.4f;
+float trying_to_get_weapon_time;
 int trying_to_get_weapon = 0;
 vec3 get_weapon_dir;
+vec3 get_weapon_pos;
+int pickup_layer = -1;
+int pickup_layer_attempts = 0;
 
 void HandlePickUp() {
     if(WantsToPickUpItem() && knocked_out == _awake){
@@ -2651,12 +2693,18 @@ void HandlePickUp() {
                 vec3 pos = item_object_getter.GetPhysicsPosition();
                 vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
                 if(distance(hand_pos, pos)<0.9f){ 
-                    holding_weapon = true;
-                    this_mo.weapon_id = i;
-                    range_extender = 0.0f;
-                    range_extender = item_object_getter.GetRangeExtender();
-                    this_mo.AttachItem(i);
-                    //Print("Range extender: "+range_extender+"\n");
+                    if(flip_info.IsFlipping()){
+                        holding_weapon = true;
+                        this_mo.weapon_id = i;
+                        range_extender = 0.0f;
+                        range_extender = item_object_getter.GetRangeExtender();
+                        this_mo.AttachItem(i);
+                    } else {
+                        if(pickup_layer == -1){
+                            pickup_layer = this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
+                            pickup_layer_attempts = 0;
+                        }
+                    }
                     break;
                 }
             }
@@ -2673,7 +2721,9 @@ void HandlePickUp() {
                     }
                     target_duck_amount = max(target_duck_amount,1.0f-length_squared(flat_dir));
                     get_weapon_dir = flat_dir;
+                    get_weapon_pos = pos;
                     trying_to_get_weapon = 2;
+                    trying_to_get_weapon_time = 0.0f;
                 }
             }
         }
@@ -2692,6 +2742,11 @@ void HandlePickUp() {
                 transform.GetTranslationPart() + transform_rot * vec3(0.03f,0.15f,0.09f));
             item_object_getter.SetPhysicsTransform(new_transform);*/
         }
+    } else {
+        if(pickup_layer != -1){
+            this_mo.RemoveLayer(pickup_layer, 4.0f);
+            pickup_layer = -1;
+        } 
     }
     if(WantsToDropItem() || knocked_out != _awake){
         DropWeapon();
@@ -3228,6 +3283,15 @@ void MovementState_UpdateIKTargets() {
             this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height*(1.0f-ground_conform),0.0f));
         }
     }
+
+    /*vec3 item_pos;
+    int num_items = this_mo.GetNumItems();
+    for(int i=0; i<num_items; i++){
+        this_mo.ReadItem(i);
+        vec3 pos = item_object_getter.GetPhysicsPosition();
+        item_pos = pos;
+    }
+    this_mo.SetIKTargetOffset("rightarm",item_pos - this_mo.GetIKTargetPosition("rightarm"));*/
 }
 
 void UpdateIKTargets() {

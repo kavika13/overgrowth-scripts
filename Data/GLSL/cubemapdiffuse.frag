@@ -2,7 +2,6 @@ uniform sampler2D tex0;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform vec4 emission;
-uniform mat4 obj2world;
 uniform vec3 cam_pos;
 
 varying vec3 normal;
