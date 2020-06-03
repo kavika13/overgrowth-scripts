@@ -6,7 +6,9 @@ const float _flip_tuck_inertia = 0.7f;
 const float _flip_axis_inertia = 0.9f;
 const float _flip_facing_inertia = 0.08f;
 const float _flip_speed = 2.5f; 
-	
+const float _wind_up_threshold = 0.1f;
+const float _wall_flip_protection_time = 0.2f;	
+
 class FlipInfo {
 	float flip_angle;
 	vec3 target_flip_axis;
@@ -19,6 +21,7 @@ class FlipInfo {
 	float old_target_flip_angle;
 	float target_flip_tuck;
 	float flip_tuck;
+	float wall_flip_protection;
 
 	FlipInfo() {
 		flip_angle = 1.0f;
@@ -26,6 +29,7 @@ class FlipInfo {
 		old_target_flip_angle = 0.0f;
 		target_flip_tuck = 0.0f;
 		flip_tuck = 0.0f;
+		wall_flip_protection = 0.0f;
 		flipping = false;
 	}
 
@@ -65,7 +69,7 @@ class FlipInfo {
 
 	bool NeedWindup(){
 		// If not rotating, need wind up anticipation before flipping
-		return abs(flip_vel)<0.1f;
+		return abs(flip_vel)<_wind_up_threshold;
 	}
 
 	void FlipRecover() {
@@ -104,15 +108,28 @@ class FlipInfo {
 		this_mo.SetRotationFromFacing(flat_facing);
 	}
 
-	void StartFlip(){
+	
+	void StartWallFlip(vec3 dir){
+		flip_vel = _wind_up_threshold;
+		StartFlip(dir);
+		flip_angle += 0.1f;
+		wall_flip_protection = _wall_flip_protection_time;
+	}
+
+	void StartFlip(vec3 dir){
 		flipping = true;
+		wall_flip_protection = 0.0f;
 		flip_progress = 0.0f;
 		flip_angle = PrepareFlipAngle(flip_angle);
-		target_flip_axis = ChooseFlipAxis();
+		target_flip_axis = AxisFromDir(GetFlipDir(dir));
 		if(NeedWindup()){
 			flip_axis = target_flip_axis;
 			flip_vel = -2.0f;
 		}
+	}
+
+	void StartFlip(){
+		StartFlip(GetTargetVelocity());
 	}
 
 	void UpdateFlipProgress(){
@@ -164,12 +181,21 @@ class FlipInfo {
 									 1.0f-_flip_axis_inertia);
 
 		this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
+
+		if(wall_flip_protection > 0.0f){
+			wall_flip_protection -= time_step;
+		}
+	}
+
+	bool RagdollOnImpact(){
+		return flipping && wall_flip_protection <= 0.0f;
 	}
 
 	void StartedJump() {
 		flipped = false;
 		flip_angle = 1.0f;
 		flip_tuck = 0.0f;
+		this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
 	}
 
 	float GetTuck() {

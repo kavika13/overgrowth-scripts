@@ -12,8 +12,6 @@ const float _pre_jump_delay = 0.04f;
 
 bool on_ground = false;
 float on_ground_time = 0.0f;
-float no_collide_time = 0.0f;
-const float _off_ground_delay = 0.1f;
 
 vec3 tilt(0.0f);
 vec3 target_tilt(0.0f);
@@ -219,6 +217,22 @@ void Land(vec3 vel) {
 
 const float offset = 0.05f;
 
+vec3 HandleBumperCollision(){
+	this_mo.position.y -= offset;
+	this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
+	this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
+	return (sphere_col.adjusted_position - sphere_col.position);
+}
+
+bool HandleStandingCollision() {
+	vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
+	vec3 lower_pos = this_mo.position+vec3(0,-0.1f,0);
+	this_mo.GetSweptSphereCollision(upper_pos,
+								 lower_pos,
+								 _leg_sphere_size);
+	return (sphere_col.position == lower_pos);
+}
+
 void HandleGroundCollision() {
 	vec3 air_vel = this_mo.velocity;
 	if(on_ground){
@@ -226,18 +240,17 @@ void HandleGroundCollision() {
 		this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
 		this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
 		this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
+		
+		this_mo.velocity += HandleBumperCollision() / time_step;
 
 		if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
 			GoLimp();	
 		}
 
-		vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
-		vec3 lower_pos = this_mo.position+vec3(0,-0.1f,0);
-		this_mo.GetSweptSphereCollision(upper_pos,
-									 lower_pos,
-									 _leg_sphere_size);
-		if(sphere_col.position == lower_pos){
+		bool in_air = HandleStandingCollision();
+		if(in_air){
 			SetOnGround(false);
+			jump_info.StartFall();
 		} else {
 			for(int i=0; i<sphere_col.NumContacts(); i++){
 				const CollisionPoint contact = sphere_col.GetContact(i);
@@ -258,7 +271,14 @@ void HandleGroundCollision() {
 		this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
 		this_mo.position = sphere_col.adjusted_position;
 		this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
-		if(sphere_col.NumContacts() != 0 && flip_info.IsFlipping()){
+		for(int i=0; i<sphere_col.NumContacts(); i++){
+			const CollisionPoint contact = sphere_col.GetContact(i);
+			if(contact.normal.y < 0.5f){
+				jump_info.HitWall(normalize(contact.position-this_mo.position));
+			}
+		}	
+			
+		if(sphere_col.NumContacts() != 0 && flip_info.RagdollOnImpact()){
 			GoLimp();	
 		}
 	}
@@ -270,7 +290,6 @@ void HandleGroundCollision() {
 				Land(air_vel);
 				ground_normal = contact.normal;
 			}
-			no_collide_time = 0;
 			ground_normal = ground_normal * 0.9f +
 							contact.normal * 0.1f;
 			ground_normal = normalize(ground_normal);
@@ -337,8 +356,11 @@ const int _wake_roll = 2;
 
 void WakeUp(int how) {
 	this_mo.UnRagdoll();
-	this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
-	this_mo.position = sphere_col.adjusted_position;
+	
+	HandleBumperCollision();
+	HandleStandingCollision();
+	this_mo.position = sphere_col.position;
+
 	limp = false;
 	duck_amount = 1.0f;
 	duck_vel = 0.0f;
@@ -349,11 +371,13 @@ void WakeUp(int how) {
 		this_mo.StartAnimation("Data/Animations/idle.xml");
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
+		jump_info.StartFall();
 		flip_info.StartFlip();
 		flip_info.FlipRecover();
 		this_mo.StartAnimation("Data/Animations/jump.xml");
 	} else if (how == _wake_roll) {
 		SetOnGround(true);
+		flip_info.Land();
 		this_mo.StartAnimation("Data/Animations/idle.xml");
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
@@ -398,8 +422,8 @@ void UpdateRagDoll() {
 					WakeUp(_wake_flip);
 				} else {
 					WakeUp(_wake_roll);
-					this_mo.position = roll_point + 
-									   vec3(0.0f,_leg_sphere_size,0.0f);
+					//this_mo.position = roll_point + 
+					//z				   vec3(0.0f,_leg_sphere_size,0.0f);
 				}
 			}
 			return;
@@ -422,6 +446,18 @@ void update() {
 	}
 	
 	HandleGroundCollision();
+
+	if(GetInputPressed("x")){
+		NavPath temp = this_mo.GetPath(this_mo.position,
+										target.position);
+		int num_points = temp.NumPoints();
+		for(int i=0; i<num_points-1; i++){
+			DebugDrawLine(temp.GetPoint(i),
+						  temp.GetPoint(i+1),
+						  vec3(1.0f,1.0f,1.0f),
+						  _persistent);
+		}
+	}
 }
 
 void init() {
