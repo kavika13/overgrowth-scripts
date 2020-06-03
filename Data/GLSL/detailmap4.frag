@@ -8,7 +8,7 @@ UNIFORM_LIGHT_DIR
 UNIFORM_EXTRA_AO
 UNIFORM_COLOR_TINT
 UNIFORM_AVG_COLOR4
-uniform float detail_scale;
+uniform vec4 detail_scale;
 
 VARYING_REL_POS
 VARYING_SHADOW
@@ -40,13 +40,12 @@ void main()
                           base_normal);
     }
 
-    vec2 tc2 = tc0 * detail_scale;
     vec3 ws_normal;
     {
-        vec4 normalmap = (texture2D(detail_normal_0,tc2) * weight_map[0] +
-                          texture2D(detail_normal_1,tc2) * weight_map[1] +
-                          texture2D(detail_normal_2,tc2) * weight_map[2] +
-                          texture2D(detail_normal_3,tc2) * weight_map[3]);
+        vec4 normalmap = (texture2D(detail_normal_0,tc0*detail_scale[0]) * weight_map[0] +
+                          texture2D(detail_normal_1,tc0*detail_scale[1]) * weight_map[1] +
+                          texture2D(detail_normal_2,tc0*detail_scale[2]) * weight_map[2] +
+                          texture2D(detail_normal_3,tc0*detail_scale[3]) * weight_map[3]);
         normalmap.xyz = UnpackTanNormal(normalmap);
         normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),detail_fade);
 
@@ -65,10 +64,10 @@ void main()
         tint = base_color / average_color;
     }
 
-    vec4 colormap = texture2D(detail_color_0,tc2) * weight_map[0] +
-                    texture2D(detail_color_1,tc2) * weight_map[1] +
-                    texture2D(detail_color_2,tc2) * weight_map[2] +
-                    texture2D(detail_color_3,tc2) * weight_map[3];
+    vec4 colormap = texture2D(detail_color_0,tc0*detail_scale[0]) * weight_map[0] +
+                    texture2D(detail_color_1,tc0*detail_scale[1]) * weight_map[1] +
+                    texture2D(detail_color_2,tc0*detail_scale[2]) * weight_map[2] +
+                    texture2D(detail_color_3,tc0*detail_scale[3]) * weight_map[3];
     colormap.xyz = mix(colormap.xyz * tint, base_color, detail_fade);
     colormap.xyz = mix(colormap.xyz,colormap.xyz*color_tint,color_tint_alpha);
     colormap.a = max(0.0,colormap.a); 
