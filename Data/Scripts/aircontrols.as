@@ -31,8 +31,7 @@ class JumpInfo {
     vec3 wall_run_facing;
 
     float down_jetpack_fuel; // pushes the character down after upwards velocity of the jump has stopped
-
-    LedgeInfo ledge_info;
+    float ledge_delay;
 
     JumpInfo() {    
         jetpack_fuel = 0.0f;
@@ -52,6 +51,7 @@ class JumpInfo {
         if(length_squared(flat_dir) > 0.0f){
             flat_dir = normalize(flat_dir);
             this_mo.SetRotationFromFacing(flat_dir); 
+            //Print("Setting facing: " + wall_dir.x + " "+wall_dir.y+" "+wall_dir.z+"\n");
         }
     }
 
@@ -61,8 +61,10 @@ class JumpInfo {
         }
         //string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
         //this_mo.PlaySoundGroupAttached(path, this_mo.position);
-        this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size);
-    
+        if(!ledge_info.on_ledge){
+            this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size);
+        }
+
         hit_wall = true;
         has_hit_wall = true;
         wall_hit_time = 0.0f;
@@ -78,12 +80,17 @@ class JumpInfo {
         }
     }
 
+    float GetFlailingAmount() {
+        const float _flail_threshold = 0.5f;
+        return min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*_flail_threshold)*_shock_damage_multiplier*(1.0f)));
+    }
+
     void UpdateFreeAirAnimation() {
         float up_coord = this_mo.velocity.y/_jump_vel + 0.5f;
         up_coord = min(1.5f,up_coord)+jump_launch*0.5f;
         up_coord *= -0.5f;
         up_coord += 0.5f;
-        float flailing = min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*0.75f)*_shock_damage_multiplier*0.75f));
+        float flailing = GetFlailingAmount();
         this_mo.SetBlendCoord("up_coord",up_coord);
         this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
         this_mo.SetBlendCoord("flail_coord",flailing);
@@ -167,7 +174,17 @@ class JumpInfo {
         if(sphere_col.NumContacts() == 0){
             LostWallContact();
         } else {
-            wall_dir = normalize(sphere_col.GetContact(0).position -
+            vec3 closest_point;
+            float closest_dist = -1.0f;
+            for(int i=0; i<sphere_col.NumContacts(); i++){
+                const CollisionPoint contact = sphere_col.GetContact(i);
+                float dist = distance_squared(contact.position, this_mo.position);
+                if(closest_dist == -1.0f || dist < closest_dist){
+                    closest_dist = dist;
+                    closest_point = contact.position;
+                }
+            }    
+            wall_dir = normalize(closest_point -
                                  this_mo.position);
             /*DebugDrawWireSphere(this_mo.position,
                                 _leg_sphere_size * 1.0f,
@@ -220,20 +237,20 @@ class JumpInfo {
             UpdateWallRun();
         }
 
-        if(WantsToGrabLedge()){
-            ledge_info.CheckLedges(hit_wall, wall_dir);
-            if(ledge_info.on_ledge && !hit_wall){
+        if(WantsToGrabLedge() && (ledge_info.on_ledge || ledge_delay <= 0.0f)){
+            ledge_info.CheckLedges();
+            if(ledge_info.on_ledge){
                 has_hit_wall = false;
                 HitWall(ledge_info.ledge_dir);
-                this_mo.position.x = ledge_info.ledge_grab_pos.x;
-                this_mo.position.z = ledge_info.ledge_grab_pos.z;
+                ledge_delay = 0.3f;
+                //this_mo.position.x = ledge_info.ledge_grab_pos.x;
+                //this_mo.position.z = ledge_info.ledge_grab_pos.z;
             }
         }
 
         // if not holding a ledge, the character is airborne and can get controlled by arrow keys
-        if(ledge_info.on_ledge){
-            ledge_info.UpdateLedge(hit_wall);
-        } else {
+        if(!ledge_info.on_ledge){
+            ledge_delay -= time_step * num_frames;
             if(!follow_jump_path){
                 vec3 target_velocity = GetTargetVelocity();
                 this_mo.velocity += time_step * target_velocity * _air_control * num_frames;
@@ -305,6 +322,7 @@ class JumpInfo {
         hit_wall = false;
         has_hit_wall = false;
         flip_info.StartedJump();
+        ledge_delay = 0.0f;
 
         this_mo.SetIKTargetOffset("left_leg",vec3(0.0f));
         this_mo.SetIKTargetOffset("right_leg",vec3(0.0f));
@@ -345,3 +363,4 @@ class JumpInfo {
 };
 
 JumpInfo jump_info;
+LedgeInfo ledge_info;

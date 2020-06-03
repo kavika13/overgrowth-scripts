@@ -79,8 +79,12 @@ class MovingGrip {  // This class handles grip positions (IK targets) as they mo
         }
         float progress = (time - start_time)/move_time;                         // If moving, position is straight line from start to end, plus 
         vec3 pos = mix(start_pos, end_pos, progress);                           // offset sin arc
-        pos += offset * sin(progress * 3.14f) * distance(start_pos, end_pos);
         return pos;
+    }
+
+    vec3 GetOffset() {
+        float progress = (time - start_time)/move_time;
+        return offset * sin(progress * 3.14f) * distance(start_pos, end_pos);
     }
 
 }
@@ -90,6 +94,9 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
     MovingGrip[] foot_pos;  // Animated foot grips
     vec3 lag_vel;           // Lagged clone of character velocity, used to detect accelerations
     vec3 ledge_dir;         // Which direction is the ledge we are climbing relative to the character
+    vec3 ik_shift;
+    vec3[] last_grip_pos;
+    vec3[] old_ik_offset;
 
     ShimmyAnimation() {
         hand_pos.resize(2);
@@ -99,14 +106,23 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         foot_pos[0].id = 2;
         foot_pos[1].id = 3;
         lag_vel = vec3(0.0f);
+        ik_shift = vec3(0.0f);
+        last_grip_pos.resize(2);
+        old_ik_offset.resize(2);
     }
 
-    void Start(vec3 pos, vec3 dir){                                             // Set up the rhythm of the hand and foot grippers
+    void Start(vec3 pos, vec3 dir, vec3 vel){                                   // Set up the rhythm of the hand and foot grippers
         ledge_dir = dir;
         hand_pos[0].Move(pos, pos, 0.0f, 0.4f, vec3(0.0f,0.1f,0.0f));           // Initialize hands to offset up when moving
         hand_pos[1].Move(pos, pos, 0.5f, 0.9f, vec3(0.0f,0.1f,0.0f));
         foot_pos[0].Move(pos, pos, 0.1f, 0.5f, dir * -0.1f);                    // Initialize feet to offset away from wall when moving
         foot_pos[1].Move(pos, pos, 0.6f, 1.0f, dir * -0.1f);
+        ik_shift = vec3(0.0f);
+        lag_vel = vel;
+        last_grip_pos[0] = vec3(0.0f);
+        last_grip_pos[1] = vec3(0.0f);
+        old_ik_offset[0] = vec3(0.0f);
+        old_ik_offset[1] = vec3(0.0f);
     }
 
     void Update(vec3 _target_pos, vec3 dir){
@@ -134,12 +150,16 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
     }
 
     void UpdateIKTargets() {
+        const float _dist_limit = 0.4f;
+        const float _dist_limit_squared = _dist_limit*_dist_limit;
+
         vec3 transition_offset = ledge_grab_origin - this_mo.position;          // Offset used for transitioning into ledge climb
         vec3[] offset(4);
         offset[0] = hand_pos[0].GetPos() - this_mo.position;                    // Get gripper offsets relative to leg_sphere origin
         offset[1] = hand_pos[1].GetPos() - this_mo.position;
         offset[2] = foot_pos[0].GetPos() - this_mo.position;
         offset[3] = foot_pos[1].GetPos() - this_mo.position;
+
         offset[2].y *= leg_ik_mult;                                             // Flatten out foot positions if needed
         offset[3].y *= leg_ik_mult;
 
@@ -147,29 +167,55 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         old_offset[0] = offset[0];
         old_offset[1] = offset[1];
 
-        vec3 check_pos = this_mo.GetIKTargetPosition("leftarm")+offset[0];    
+        vec3 check_pos = this_mo.GetIKTargetPosition("leftarm")+offset[0]+ledge_dir*0.1f;    
         vec3 check_dir = normalize(vec3(0.0f,-1.0f,0.0f)+ledge_dir*0.5f);
         this_mo.GetSweptSphereCollision(check_pos-check_dir*0.2f,
-                                        check_pos+check_dir*0.2f,
-                                        0.1f);
-        offset[0] += sphere_col.position - check_pos;
-        offset[0].y -= 0.15f;
+                                        check_pos+check_dir*0.4f,
+                                        0.05f);
+        if(sphere_col.NumContacts() != 0){
+            last_grip_pos[0] = sphere_col.position + vec3(0.0f,-0.15f,0.0f);
+            offset[0] += sphere_col.position - check_pos;
+            offset[0].y -= 0.10f;
+        } else {
+            if(last_grip_pos[0] != vec3(0.0f)){
+                offset[0] = last_grip_pos[0] - this_mo.GetIKTargetPosition("leftarm");   
+            }
+        }
 
-        check_pos = this_mo.GetIKTargetPosition("rightarm")+offset[1];    
+        check_pos = this_mo.GetIKTargetPosition("rightarm")+offset[1]+ledge_dir*0.1f;    
         this_mo.GetSweptSphereCollision(check_pos-check_dir*0.2f,
-                                        check_pos+check_dir*0.2f,
-                                        0.1f);
-        offset[1] += sphere_col.position - check_pos;
-        offset[1].y -= 0.15f;
+                                        check_pos+check_dir*0.4f,
+                                        0.05f); 
+        if(sphere_col.NumContacts() != 0){
+            last_grip_pos[1] = sphere_col.position + vec3(0.0f,-0.15f,0.0f);
+            offset[1] += sphere_col.position - check_pos;
+            offset[1].y -= 0.10f;
+        } else {
+            if(last_grip_pos[1] != vec3(0.0f)){
+                offset[1] = last_grip_pos[1] - this_mo.GetIKTargetPosition("rightarm");   
+            }
+        }
 
-        vec3 ik_shift = (offset[0]-old_offset[0] + offset[1]-old_offset[1])*0.5f;
+        vec3 ik_offset;
+
+        ik_offset = offset[0] - old_offset[0];
+        old_ik_offset[0] = mix(ik_offset, old_ik_offset[0], 0.8f);
+        offset[0] = old_offset[0] + old_ik_offset[0];
+
+        ik_offset = offset[1] - old_offset[1];
+        old_ik_offset[1] = mix(ik_offset, old_ik_offset[1], 0.8f);
+        offset[1] = old_offset[1] + old_ik_offset[1];
+
+        vec3 new_ik_shift = (offset[0]-old_offset[0] + offset[1]-old_offset[1])*0.5f;
+        ik_shift = mix(new_ik_shift, ik_shift, 0.9f);
         offset[2].y += ik_shift.y;
         offset[3].y += ik_shift.y;
+        
+        offset[0] += hand_pos[0].GetOffset();
+        offset[1] += hand_pos[1].GetOffset();
+        offset[0] += foot_pos[0].GetOffset();
+        offset[1] += foot_pos[1].GetOffset();
 
-        this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],transition_progress));  // Set IK target offsets
-        this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],transition_progress));
-        this_mo.SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],transition_progress));
-        this_mo.SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],transition_progress));
 
         float[] weight(4);
         weight[0] = hand_pos[0].GetWeight();                                    // Get weight bearing for each gripper
@@ -191,12 +237,26 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         weight_offset += (lag_vel - this_mo.velocity) * 0.1f;                   // Add acceleration lag to weight offset
         //weight_offset += this_mo.velocity * 0.05f;
         weight_offset.y += 0.3f * move_amount;
-        weight_offset += ledge_dir * move_amount * 0.2f;
+        weight_offset += ledge_dir * move_amount * 0.3f;
         weight_offset.y += ik_shift.y;
         weight_offset.x += ik_shift.x*0.5f;
         weight_offset.z += ik_shift.z*0.5f;
+        weight_offset -= ledge_dir * 0.1f;
 
         this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,transition_progress)); // Apply weight offset to torso
+
+        for(int i=0; i<4; i++){
+            offset[i] -= weight_offset;
+            if(length_squared(offset[i]) > _dist_limit_squared){
+                offset[i] = normalize(offset[i])*_dist_limit;
+            }
+            offset[i] += weight_offset;
+        }
+
+        this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],transition_progress));  // Set IK target offsets
+        this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],transition_progress));
+        this_mo.SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],transition_progress));
+        this_mo.SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],transition_progress));
     }
 }
 
@@ -212,7 +272,8 @@ class LedgeInfo {
     vec3 ledge_dir;                 // Direction to the ledge from the character
     bool climbed_up;                // Did we just climb up something? Queried by main movement update
     bool playing_animation;         // Are we currently playing an animation?
-
+    vec3 disp_ledge_dir;
+    
     ShimmyAnimation shimmy_anim;    // Hand and foot animation class
 
     LedgeInfo() {    
@@ -283,37 +344,59 @@ class LedgeInfo {
         return sphere_col.position - vec3(0.0f, _height_under_ledge, 0.0f);
     }
 
-    void CheckLedges(bool hit_wall, vec3 wall_dir) {                            // Get info about the ledge if there is one,
-                                                                                // and grab on if not already grabbing
-        if(hit_wall){                                                           // If we are already hitting a wall, we know the wall direction
-            ledge_dir = wall_dir;
-        } else {                                                                
-            this_mo.GetSlidingSphereCollision(this_mo.position,                 // Otherwise try to detect the wall by colliding an enlarged 
+    void CheckLedges() {                            // Get info about the ledge if there is one,
+        vec3 possible_ledge_dir;                                                // and grab on if not already grabbing
+        
+        this_mo.GetSlidingSphereCollision(this_mo.position,                 // Otherwise try to detect the wall by colliding an enlarged 
                                               _leg_sphere_size*1.5f);           // player sphere with the scene, and finding the closest 
-            if(sphere_col.NumContacts() == 0){                                  // collision
-                return;
-            } else {
-                float closest_dist = 0.0f;
-                float dist;
-                int closest_point = -1;
-                int num_contacts = sphere_col.NumContacts();
-                for(int i=0; i<num_contacts; ++i){
-                    dist = distance_squared(
-                        sphere_col.GetContact(i).position, this_mo.position);
-                    if(closest_point == -1 || dist < closest_dist){
-                        closest_dist = dist;
-                        closest_point = i;
-                    }
+        if(sphere_col.NumContacts() == 0){                                  // collision
+            return;
+        } else {
+            float closest_dist = 0.0f;
+            float dist;
+            int closest_point = -1;
+            int num_contacts = sphere_col.NumContacts();
+            for(int i=0; i<num_contacts; ++i){
+                dist = distance_squared(
+                    sphere_col.GetContact(i).position, this_mo.position);
+                if(closest_point == -1 || dist < closest_dist){
+                    closest_dist = dist;
+                    closest_point = i;
                 }
-                ledge_dir = sphere_col.GetContact(closest_point).position - this_mo.position;
-                ledge_dir.y = 0.0f;
-                ledge_dir = normalize(ledge_dir);
             }
+            possible_ledge_dir = sphere_col.GetContact(closest_point).position - this_mo.position;
+            possible_ledge_dir = normalize(possible_ledge_dir);
+            const bool _debug_draw_sphere_check = false;
+            if(_debug_draw_sphere_check){
+                DebugDrawWireSphere(this_mo.position, _leg_sphere_size*1.5f, vec3(1.0f), _delete_on_update);
+            }
+            if(possible_ledge_dir.y < -0.7f){
+                if(on_ledge){
+                    Print("Letting go because nearest surface is downwards\n");
+                }
+                on_ledge = false;
+                return;
+                if(_debug_draw_sphere_check){
+                    DebugDrawLine(sphere_col.GetContact(closest_point).position,
+                                  this_mo.position,
+                                  vec3(1.0f,0.0f,0.0f),
+                                  _delete_on_update);
+                }
+            } else {
+                if(_debug_draw_sphere_check){
+                    DebugDrawLine(sphere_col.GetContact(closest_point).position,
+                                  this_mo.position,
+                                  vec3(0.0f,1.0f,0.0f),
+                                  _delete_on_update);
+                }
+            }
+            possible_ledge_dir.y = 0.0f;
+            possible_ledge_dir = normalize(possible_ledge_dir);
         }
 
         float cyl_height = 1.0f;                                                // Get ledge height by sweeping a cylinder downwards onto the ledge
-        vec3 test_start = this_mo.position+vec3(0.0f,5.0f,0.0f)+ledge_dir * 0.5f;
-        vec3 test_end = this_mo.position+vec3(0.0f,0.5f,0.0f)+ledge_dir * 0.5f;
+        vec3 test_start = this_mo.position+vec3(0.0f,5.0f,0.0f)+possible_ledge_dir * 0.5f;
+        vec3 test_end = this_mo.position+vec3(0.0f,0.5f,0.0f)+possible_ledge_dir * 0.5f;
         
         this_mo.GetSweptCylinderCollision(test_start,
                                           test_end,
@@ -321,6 +404,10 @@ class LedgeInfo {
                                           1.0f);
 
         if(sphere_col.NumContacts() == 0){
+            if(on_ledge){
+                Print("Let go because no height collision found\n");
+            }
+            on_ledge = false;
             return;                                                             // Return if there is no ledge detected
         }
 
@@ -344,11 +431,13 @@ class LedgeInfo {
                                   _delete_on_update);
         }
 
-        ledge_height = sphere_col.position.y - cyl_height * 0.5f;
+        float edge_height = sphere_col.position.y - cyl_height * 0.5f;
 
-        if(on_ledge){
-            return;                                                             // The rest of this function is only useful for
-        }                                                                       // determining whether or not we can grab the ledge
+        if(on_ledge && edge_height > ledge_height + 0.5f){
+            return;
+        } else {
+            ledge_height = edge_height;
+        }
 
         vec3 surface_pos = sphere_col.position;
 
@@ -366,6 +455,10 @@ class LedgeInfo {
                                       vec3(1.0f,0.0f,0.0f),
                                       _delete_on_update);
             }
+            if(on_ledge){
+                Print("Let go because top is not clear\n");
+            }
+            on_ledge = false;
             return;                                                             // Return if surface is obstructed
         }
 
@@ -377,9 +470,15 @@ class LedgeInfo {
                                   _delete_on_update);
         }
 
-        test_end = this_mo.position+ledge_dir*1.0f;                             // Use a swept cylinder to detect the distance
+        ledge_dir = possible_ledge_dir;
+        if(on_ledge){
+            return;                                                             // The rest of this function is only useful for
+        }                                                                       // determining whether or not we can grab the ledge
+
+
+        test_end = this_mo.position+possible_ledge_dir*1.0f;                             // Use a swept cylinder to detect the distance
         test_end.y = ledge_height;                                              // of the ledge from the player sphere origin
-        test_start = test_end+ledge_dir*-1.0f;
+        test_start = test_end+possible_ledge_dir*-1.0f;
         this_mo.GetSweptCylinderCollision(test_start,
                                           test_end,
                                           _leg_sphere_size,
@@ -429,12 +528,13 @@ class LedgeInfo {
             transition_speed = 10.0f/(abs(ledge_height - char_height)+0.05f);
             
             on_ledge = true;                                                    // Set up ledge grab starting conditions
+            disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
             this_mo.velocity = vec3(0.0f);
             ledge_grab_pos = CalculateGrabPos();
-            shimmy_anim.Start(ledge_grab_pos, ledge_dir);
+            shimmy_anim.Start(ledge_grab_pos, possible_ledge_dir, this_mo.velocity);
 
-            this_mo.MaterialEvent("edge_grab", this_mo.position + wall_dir * _leg_sphere_size);
+            this_mo.MaterialEvent("edge_grab", this_mo.position + ledge_dir * _leg_sphere_size);
         }
     }
 
@@ -442,14 +542,20 @@ class LedgeInfo {
         playing_animation = false; 
     }
     
-    void UpdateLedge(bool hit_wall) {
+    void UpdateLedge() {
+        CheckLedges();
+        /*DebugDrawWireSphere(this_mo.position,
+                            _leg_sphere_size,
+                            vec3(1.0f),
+                            _delete_on_update);
+        */
         if(transition_progress < 1.0f){
             transition_progress += time_step * num_frames * transition_speed;   // Update transition to ledge grab
             transition_progress = min(1.0f, transition_progress); 
             cam_pos_offset = (ledge_grab_origin - this_mo.position)*(1.0f-transition_progress);
         }
 
-        if(!WantsToGrabLedge() || !hit_wall){
+        if(!WantsToGrabLedge()){
             on_ledge = false;    // If let go or not in contact with wall, 
                                  // not on ledge
         }
@@ -488,9 +594,19 @@ class LedgeInfo {
 
         //DebugDrawWireSphere(this_mo.position, _leg_sphere_size, vec3(1.0f), _delete_on_update); 
 
+        /*if(dot(disp_ledge_dir, ledge_dir) > 0.90f){
+            disp_ledge_dir = ledge_dir;
+        }*/
+        float val = dot(ledge_dir, disp_ledge_dir)*0.5f+0.5f;
+        float inertia = mix(0.95f,0.8f,pow(val,4.0));
+        disp_ledge_dir= InterpDirections(ledge_dir,
+                         disp_ledge_dir,
+                         pow(inertia,num_frames));
+        this_mo.SetRotationFromFacing(disp_ledge_dir); 
         if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
             on_ledge = false;    
             climbed_up = true;
+            jump_info.hit_wall = false;
             this_mo.velocity = vec3(0.0f);
             this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
             this_mo.position += ledge_dir * 0.7f;
@@ -504,5 +620,5 @@ class LedgeInfo {
 };
 
 void EndClimbAnim(){
-    jump_info.ledge_info.EndClimbAnim();
+    ledge_info.EndClimbAnim();
 }

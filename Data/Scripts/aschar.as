@@ -377,7 +377,7 @@ void HandleSpecialKeyPresses() {
             this_mo.ResetLevel();
         }
         if(GetInputPressed("v")){
-            string sound = "Data/Sounds/voice/torikamal/kill_intent.xml";
+            string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
         }
         if(GetInputPressed("1")){    
@@ -463,18 +463,19 @@ void UpdateState() {
         UpdateAnimation();
         ApplyPhysics();
         HandlePickUp();
-        HandleGroundCollision();
+        HandleCollisions();
     } else if(state == _ground_state){
+        UpdateDuckAmount();
         HandleAccelTilt();
         UpdateGroundState();
     } else if(state == _attack_state){
         HandleAccelTilt();
         UpdateAttacking();
-        HandleGroundCollision();
+        HandleCollisions();
     } else if(state == _hit_reaction_state){
         UpdateHitReaction();
         HandleAccelTilt();
-        HandleGroundCollision();
+        HandleCollisions();
     }
 
     if(!controlled && state != _ragdoll_state){
@@ -991,17 +992,23 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
     return _going_to_block;
 }
 
+int IsDucking(){
+    if(duck_amount > 0.5f){
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(target_id == -1){
         target_id = attacker_id;
     }
-    if(attack_getter2.GetHeight() == _high && duck_amount > 0.5f){
+    if(attack_getter2.GetHeight() == _high && IsDucking() == 1){
         return _miss;
     }
     if(controlled){
         camera.AddShake(1.0f);
-    } else {
-        this_mo.PlaySoundGroupVoice("hit",0.0f);
     }
 
     if(attack_getter2.GetSpecial() == "legcannon"){
@@ -1028,11 +1035,17 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
 
     bool knocked_over = false;
     
-    if(block_health <= 0.0f || state == _attack_state || !on_ground || blood_health <= 0.0f){
+    if(block_health <= 0.0f || state == _attack_state || !on_ground || blood_health <= 0.0f || state == _ragdoll_state){
         HandleRagdollImpact(dir, pos);
         knocked_over = true;
+        if(!controlled){
+            this_mo.PlaySoundGroupVoice("hit",0.0f);
+        }
     } else {
         HandlePassiveBlockImpact(dir, pos);
+        if(!controlled){
+            this_mo.PlaySoundGroupVoice("block_hit",0.0f);
+        }
     }
     
     if(sharp_damage <= 0.0f){
@@ -1135,6 +1148,7 @@ const float _leg_sphere_size = 0.45f; // affects the size of a sphere collider u
 const float _bumper_size = 0.5f;
 
 const float _run_speed = 8.0f; // used to calculate movement and jump velocities, change this instead of max_speed
+const float _true_max_speed = 12.0f; // speed can never exceed this amount
 float max_speed = _run_speed; // this is recalculated constantly because actual max speed is affected by slopes
 
 const float _tilt_transition_vel = 8.0f;
@@ -1374,6 +1388,7 @@ void UpdateGroundMovementControls() {
 
     max_speed *= 1.0 - adjusted_vel.y;
     max_speed = max(curr_speed * 0.98f, max_speed);
+    max_speed = min(max_speed, _true_max_speed);
 
     float speed = _walk_accel * run_phase;
     speed = mix(speed,speed*_duck_speed_mult,duck_amount);
@@ -1500,31 +1515,37 @@ void UpdateMovementControls() {
         }
         flip_info.UpdateRoll();
     } else {
-        jump_info.UpdateAirControls();
-        UpdateAirAttackControls();
-        if(jump_info.ClimbedUp()){
-            SetOnGround(true);
-            duck_amount = 1.0f;
-            duck_vel = 2.0f;
-            target_duck_amount = 1.0f;
-            this_mo.StartCharAnimation("idle",20.0f);
-            HandleBumperCollision();
-            HandleStandingCollision();
-            this_mo.position = sphere_col.position;
-            this_mo.velocity = vec3(0.0f);
-            feet_moving = false;
-            this_mo.MaterialEvent("land_soft", this_mo.position);
-            //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
-            //this_mo.PlaySoundGroupAttached(path, this_mo.position);
+        if(ledge_info.on_ledge){
+            ledge_info.UpdateLedge();
         } else {
-            flip_info.UpdateFlip();
-            
-            target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z)*2.0f;
-            if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
-                target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
-            }
-            if(this_mo.velocity.y<0.0f || flip_info.HasFlipped()){
-                target_tilt *= -1.0f;
+            jump_info.UpdateAirControls();
+            UpdateAirAttackControls();
+            if(jump_info.ClimbedUp()){
+                SetOnGround(true);
+                duck_amount = 1.0f;
+                duck_vel = 2.0f;
+                target_duck_amount = 1.0f;
+                this_mo.StartCharAnimation("idle",20.0f);
+                HandleBumperCollision();
+                HandleStandingCollision();
+                this_mo.position = sphere_col.position;
+                this_mo.velocity = vec3(0.0f);
+                feet_moving = false;
+                this_mo.MaterialEvent("land_soft", this_mo.position);
+                //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
+                //this_mo.PlaySoundGroupAttached(path, this_mo.position);
+            } else {
+                flip_info.UpdateFlip();
+                
+                target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z)*2.0f;
+                vec3 flail_tilt(sin(time*5.0f)*10.0f,0.0f,cos(time*3.0f+0.75f)*10.0f);
+                target_tilt += jump_info.GetFlailingAmount()*flail_tilt;
+                if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
+                    target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
+                }
+                if(this_mo.velocity.y<0.0f || flip_info.HasFlipped()){
+                    target_tilt *= -1.0f;
+                }
             }
         }
     }
@@ -1685,10 +1706,18 @@ void Land(vec3 vel) {
 
 const float offset = 0.05f;
 
+const bool _draw_collision_spheres = false;
+
 vec3 HandleBumperCollision(){
-    this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
+    vec3 offset(0.0f,mix(0.3f,0.15f,duck_amount),0.0f);
+    float size = _bumper_size;
+    vec3 scale(1.0f,mix(1.2f,0.6f,duck_amount),1.0f);
+    this_mo.GetSlidingScaledSphereCollision(this_mo.position+offset, size, scale);
+    if(_draw_collision_spheres){
+        DebugDrawWireScaledSphere(this_mo.position+offset,size,scale,vec3(0.0f,1.0f,0.0f),_delete_on_update);
+    }
     // the value of sphere_col.adjusted_position variable was set by the GetSlidingSphereCollision() called on the previous line.
-    this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
+    this_mo.position = sphere_col.adjusted_position-offset;
     return (sphere_col.adjusted_position - sphere_col.position);
 }
 
@@ -1738,6 +1767,11 @@ bool HandleStandingCollision() {
     this_mo.GetSweptSphereCollision(upper_pos,
                                  lower_pos,
                                  _leg_sphere_size);
+
+    if(_draw_collision_spheres){
+        DebugDrawWireSphere(upper_pos,_leg_sphere_size,vec3(0.0f,0.0f,1.0f),_delete_on_update);
+        DebugDrawWireSphere(lower_pos,_leg_sphere_size,vec3(0.0f,0.0f,1.0f),_delete_on_update);
+    }
     return (sphere_col.position == lower_pos);
 }
 
@@ -1752,6 +1786,10 @@ void CheckForVelocityShock(float vert_vel) {
             Ragdoll(_RGDL_INJURED);
             string sound = "Data/Sounds/hit/hit_hard.xml";
             PlaySoundGroup(sound, this_mo.position);
+            /*for(int i=0; i<500; ++i){
+                MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
+                    vec3(RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f))*3.0f);
+            }*/
         } else if(knocked_out == _dead){
             Ragdoll(_RGDL_LIMP);
             string sound = "Data/Sounds/hit/hit_hard.xml";
@@ -1763,104 +1801,164 @@ void CheckForVelocityShock(float vert_vel) {
     }
 }
 
-void HandleGroundCollision() {
-    vec3 initial_vel = this_mo.velocity;
-    if(on_ground){
-        this_mo.velocity += HandleBumperCollision() / (time_step * num_frames); // Push away from wall, and apply velocity change verlet style
+void HandleGroundCollisions() {
+    this_mo.velocity += HandleBumperCollision() / (time_step * num_frames); // Push away from wall, and apply velocity change verlet style
 
-        //if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
-        //    GoLimp();    
-        //}
+    //if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
+    //    GoLimp();    
+    //}
 
-        if((/*sphere_col.NumContacts() != 0 ||*/                                // If standing on overly-sloped surface, start controlled fall
-            ground_normal.y < _ground_normal_y_threshold)                       
-            && this_mo.velocity.y > 0.2f &&
-            false)
-        {
-            SetOnGround(false);
-            jump_info.StartFall();
-        }
+    if((/*sphere_col.NumContacts() != 0 ||*/                                // If standing on overly-sloped surface, start controlled fall
+        ground_normal.y < _ground_normal_y_threshold)                       
+        && this_mo.velocity.y > 0.2f &&
+        false)
+    {
+        SetOnGround(false);
+        jump_info.StartFall();
+    }
 
-        bool in_air = HandleStandingCollision();                                // Move vertically to stand on surface, or fall if there is no surface
-        if(in_air){
-            SetOnGround(false);
-            jump_info.StartFall();
-        } else {
-            this_mo.position = sphere_col.position;
-            /*DebugDrawWireSphere(sphere_col.position,
-                                sphere_col.radius,
-                                vec3(1.0f,0.0f,0.0f),
-                                _delete_on_update);*/
-            for(int i=0; i<sphere_col.NumContacts(); i++){
-                const CollisionPoint contact = sphere_col.GetContact(i);
-                float dist = distance(contact.position, this_mo.position);
-                if(dist <= _leg_sphere_size + 0.01f){
-                    ground_normal = ground_normal * 0.9f +                      // Calculate ground_normal with moving average of contact point normals
-                                    contact.normal * 0.1f;
-                    ground_normal = normalize(ground_normal);
-                    /*DebugDrawLine(sphere_col.position,
-                                  sphere_col.position-contact.normal,
-                                  vec3(1.0f,0.0f,0.0f),
-                                  _delete_on_update);*/
-                }
-            }/*
-            DebugDrawLine(sphere_col.position,
-                              sphere_col.position-ground_normal,
-                              vec3(0.0f,1.0f,0.0f),
-                              _delete_on_update);
-            */
-            
-            /*if(flip_info.ShouldRagdollIntoSteepGround() &&
-               dot(this_mo.GetFacing(),ground_normal) < -0.6f){
-                GoLimp();    
-            }*/
-        }
+    bool in_air = HandleStandingCollision();                                // Move vertically to stand on surface, or fall if there is no surface
+    if(in_air){
+        SetOnGround(false);
+        jump_info.StartFall();
     } else {
-        vec3 offset = this_mo.position - last_col_pos; 
-        this_mo.position = last_col_pos;
-        bool landing = false;
-        vec3 landing_normal;
-        vec3 old_vel = this_mo.velocity;
-        for(int i=0; i<num_frames; ++i){                                        // Divide movement into multiple pieces to help prevent surface penetration
-            if(on_ground){
+        this_mo.position = sphere_col.position;
+        /*DebugDrawWireSphere(sphere_col.position,
+        sphere_col.radius,
+        vec3(1.0f,0.0f,0.0f),
+        _delete_on_update);*/
+        for(int i=0; i<sphere_col.NumContacts(); i++){
+            const CollisionPoint contact = sphere_col.GetContact(i);
+            float dist = distance(contact.position, this_mo.position);
+            if(dist <= _leg_sphere_size + 0.01f){
+                ground_normal = ground_normal * 0.9f +                      // Calculate ground_normal with moving average of contact point normals
+                    contact.normal * 0.1f;
+                ground_normal = normalize(ground_normal);
+                /*DebugDrawLine(sphere_col.position,
+                sphere_col.position-contact.normal,
+                vec3(1.0f,0.0f,0.0f),
+                _delete_on_update);*/
+            }
+        }/*
+         DebugDrawLine(sphere_col.position,
+         sphere_col.position-ground_normal,
+         vec3(0.0f,1.0f,0.0f),
+         _delete_on_update);
+         */
+
+        /*if(flip_info.ShouldRagdollIntoSteepGround() &&
+        dot(this_mo.GetFacing(),ground_normal) < -0.6f){
+        GoLimp();    
+        }*/
+    }
+}
+
+void HandleAirCollisions() {
+    vec3 initial_vel = this_mo.velocity;
+    vec3 offset = this_mo.position - last_col_pos; 
+    this_mo.position = last_col_pos;
+    bool landing = false;
+    vec3 landing_normal;
+    vec3 old_vel = this_mo.velocity;
+    for(int i=0; i<num_frames; ++i){                                        // Divide movement into multiple pieces to help prevent surface penetration
+        if(on_ground){
+            break;
+        }
+        this_mo.position += offset/num_frames;
+        vec3 col_offset(0.0f,mix(0.2f,0.35f,flip_info.GetTuck()),0.0f);
+        vec3 col_scale(1.0f,mix(1.25f,1.0f,flip_info.GetTuck()),1.0f);
+        this_mo.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
+        if(_draw_collision_spheres){
+            DebugDrawWireScaledSphere(this_mo.position+col_offset, _leg_sphere_size, col_scale, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+        }
+        this_mo.position = sphere_col.adjusted_position-col_offset;         // Collide like a sliding sphere with verlet-integrated velocity response
+        vec3 adjustment = (this_mo.position - (sphere_col.position-col_offset));
+        adjustment.y = min(0.0f,adjustment.y);
+        this_mo.velocity += adjustment / (time_step * num_frames);
+        offset += (sphere_col.adjusted_position - sphere_col.position) * (num_frames);
+        vec3 closest_point;
+        float closest_dist = -1.0f;
+        for(int i=0; i<sphere_col.NumContacts(); i++){
+            const CollisionPoint contact = sphere_col.GetContact(i);
+            if(contact.normal.y < _ground_normal_y_threshold){              // If collision with a surface that can't be walked on, check for wallrun
+                float dist = distance_squared(contact.position, this_mo.position);
+                if(closest_dist == -1.0f || dist < closest_dist){
+                    closest_dist = dist;
+                    closest_point = contact.position;
+                }
+            }
+        }    
+        if(closest_dist != -1.0f){
+            jump_info.HitWall(normalize(closest_point-this_mo.position));
+        }
+        for(int i=0; i<sphere_col.NumContacts(); i++){
+            if(landing){
                 break;
             }
-            this_mo.position += offset/num_frames;
-            this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
-            this_mo.position = sphere_col.adjusted_position;                    // Collide like a sliding sphere with verlet-integrated velocity response
-            vec3 adjustment = (this_mo.position - sphere_col.position);
-            this_mo.velocity += adjustment / (time_step * num_frames);
-            offset += (sphere_col.adjusted_position - sphere_col.position) * (num_frames);
-            for(int i=0; i<sphere_col.NumContacts(); i++){
-                const CollisionPoint contact = sphere_col.GetContact(i);
-                if(contact.normal.y < _ground_normal_y_threshold){              // If collision with a surface that can't be walked on, check for wallrun
-                    jump_info.HitWall(normalize(contact.position-this_mo.position));
-                }
-            }    
-            for(int i=0; i<sphere_col.NumContacts(); i++){
-                if(landing){
-                    break;
-                }
-                const CollisionPoint contact = sphere_col.GetContact(i);
-                if(contact.normal.y > _ground_normal_y_threshold ||
-                   (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f))
-                {                                                               // If collision with a surface that can be walked on, then land
-                    if(air_time > 0.1f){
-                        landing = true;
-                        landing_normal = contact.normal;
-                    }
+            const CollisionPoint contact = sphere_col.GetContact(i);
+            if(contact.normal.y > _ground_normal_y_threshold ||
+               (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f))
+            {                                                               // If collision with a surface that can be walked on, then land
+                if(air_time > 0.1f){
+                    landing = true;
+                    landing_normal = contact.normal;
                 }
             }
         }
-        if(landing){
-            CheckForVelocityShock(old_vel.y);                                   // Check landing damage from high-speed falls
-            if(knocked_out == _awake){                                          // If still conscious, land properly
-                ground_normal = landing_normal;
-                Land(initial_vel);
-                if(state != _ragdoll_state){
-                    SetState(_movement_state);
-                }
+    }
+    if(landing){
+        CheckForVelocityShock(old_vel.y);                                   // Check landing damage from high-speed falls
+        if(knocked_out == _awake){                                          // If still conscious, land properly
+            ground_normal = landing_normal;
+            Land(initial_vel);
+            if(state != _ragdoll_state){
+                SetState(_movement_state);
             }
+        }
+    }
+}
+
+
+void HandleLedgeCollisions() {
+    vec3 col_offset(0.0f,0.8f,0.0f);
+    vec3 col_scale(1.05f);
+    this_mo.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
+    if(_draw_collision_spheres){
+        DebugDrawWireScaledSphere(this_mo.position+col_offset, _leg_sphere_size, col_scale, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+    }
+    this_mo.position = sphere_col.adjusted_position-col_offset;                 // Collide like a sliding sphere with verlet-integrated velocity response
+    vec3 adjustment = (this_mo.position - (sphere_col.position-col_offset));
+    //Print("Adjustment: "+adjustment.x+" "+adjustment.y+" "+adjustment.z+"\n");
+    this_mo.velocity += adjustment / (time_step * num_frames);
+    vec3 closest_point;
+    float closest_dist = -1.0f;
+    for(int i=0; i<sphere_col.NumContacts(); i++){
+        const CollisionPoint contact = sphere_col.GetContact(i);
+        if(contact.normal.y < _ground_normal_y_threshold){                      // If collision with a surface that can't be walked on, check for wallrun
+            float dist = distance_squared(contact.position, this_mo.position);
+            if(closest_dist == -1.0f || dist < closest_dist){
+                closest_dist = dist;
+                closest_point = contact.position;
+            }
+        }
+    }    
+}
+
+void HandleCollisions() {
+    vec3 initial_vel = this_mo.velocity;
+    if(_draw_collision_spheres){
+        DebugDrawWireSphere(this_mo.position,
+                            _leg_sphere_size,
+                            vec3(1.0f,1.0f,1.0f),
+                            _delete_on_update);
+    }    
+    if(on_ground){
+        HandleGroundCollisions();
+    } else {
+        if(ledge_info.on_ledge){
+            HandleLedgeCollisions();
+        } else {
+            HandleAirCollisions();
         }
     }
     last_col_pos = this_mo.position;
@@ -1886,6 +1984,7 @@ void UpdateDuckAmount() { // target_duck_amount is 1.0 when the character should
     duck_vel += (target_duck_amount - duck_amount) * time_step * num_frames * _duck_accel;
     duck_vel *= pow(_duck_vel_inertia,num_frames);
     duck_amount += duck_vel * time_step * num_frames;
+    duck_amount = min(1.0,duck_amount);
 }
 
 float air_time = 0.0f;
@@ -1917,9 +2016,22 @@ void UpdateAirWhooshSound() { // air whoosh sounds get louder at higher speed.
     SetAirWhoosh(whoosh_amount*0.5f,whoosh_pitch);
 }
 
+int IsRagdoll() {
+    return state==_ragdoll_state?1:0;
+}
+
 // called when state equals _attack_state
 void UpdateAttacking() {    
     flip_info.UpdateRoll();
+
+    if(target_id != -1){
+        vec3 avg_pos = this_mo.ReadCharacterID(target_id).GetAvgPosition();
+        //DebugDrawWireSphere(avg_pos, 0.5f, vec3(1.0f), _delete_on_update);
+        //DebugDrawWireSphere(this_mo.GetAvgPosition(), 0.5f, vec3(1.0f), _delete_on_update);
+        float height_rel = avg_pos.y - this_mo.GetAvgPosition().y;
+        this_mo.SetBlendCoord("attack_height_coord",height_rel);
+        Print("Height_rel: "+height_rel+"\n");
+    }
 
     vec3 direction;
     if(target_id != -1){
@@ -1991,6 +2103,17 @@ void UpdateAttacking() {
     }
 
     if(!attack_animation_set){
+        bool ragdoll_enemy = false;
+        bool ducking_enemy = false;
+        if(target_id != -1){
+            if(this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsRagdoll()")==1){
+                ragdoll_enemy = true;
+            }
+            if(this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsDucking()")==1){
+                ducking_enemy = true;
+            }
+        }
+
         // Defined in playercontrol.as and enemycontrol.as. Boolean front tells if the character is standing still, and if it's true a front kick may be performed.
         // ChooseAttack() sets the value of the curr_attack variable.
         string attack_path;
@@ -1999,7 +2122,10 @@ void UpdateAttacking() {
         } else {
             ChooseAttack(front);
             attack_path;
-            if(curr_attack == "stationary"){
+            if(curr_attack == "moving" && ragdoll_enemy){
+                attack_path = character_getter.GetAttackPath("moving_low");
+            } else if(curr_attack == "stationary" ||
+               (curr_attack == "moving" && ducking_enemy)){
                 if(attack_distance < _close_attack_range + range_extender * 0.5f){
                     attack_path = character_getter.GetAttackPath("stationary_close");
                 } else {
@@ -2216,6 +2342,7 @@ void WakeUp(int how) {
         SetState(_ground_state);
         ragdoll_cam_recover_speed = 2.0f;
         this_mo.SetRagdollFadeSpeed(4.0f); 
+        target_duck_amount = 0.0f;
     } else if(how == _wake_fall){
         SetOnGround(true);
         flip_info.Land();
@@ -2494,7 +2621,14 @@ void ApplyCameraControls() {
 
     vec3 cam_pos = this_mo.position + cam_pos_offset;
     if(state != _ragdoll_state){
-        cam_pos += vec3(0.0f,0.6f,0.0f);
+        vec3 cam_offset;
+        if(on_ground){
+            cam_offset = vec3(0.0f,mix(0.6f,0.4f,duck_amount),0.0f);
+        } else {
+            cam_offset = vec3(0.0f,0.6f,0.0f);
+        }
+        this_mo.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, _cam_collision_radius);
+        cam_pos = sphere_col.position;
     } else {
         cam_pos += vec3(0.0f,0.3f,0.0f);
     }
