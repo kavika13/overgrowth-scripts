@@ -8,6 +8,7 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
+uniform float fade;
 
 varying vec3 ws_vertex;
 varying vec3 tangent_to_world1;
@@ -18,8 +19,16 @@ varying vec3 tangent_to_world3;
 #include "texturepack.glsl"
 #include "relativeskypos.glsl"
 
+float rand(vec2 co){
+	return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 void main()
 {	
+	if((rand(gl_FragCoord.xy)) < fade
+		){
+		discard;
+	};
 	// Get normal
 	vec4 normalmap = texture2D(tex1,tc0);
 	vec3 unpacked_normal = UnpackTanNormal(normalmap);

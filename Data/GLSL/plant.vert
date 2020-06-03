@@ -7,6 +7,7 @@ uniform sampler2D tex5;
 uniform vec3 cam_pos;
 uniform float time;
 uniform vec3 ws_light;
+uniform float fade;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;

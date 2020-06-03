@@ -33,6 +33,8 @@ float getting_up_time;
 
 int run_phase = 1;
 
+string hit_reaction_event;
+
 const int _movement_state = 0;
 const int _ground_state = 1; 
 const int _attack_state = 2; 
@@ -71,7 +73,7 @@ void EndHitReaction() {
 	SetState(_movement_state);
 }
 
-void WasHit(vec3 dir, vec3 pos, string type) {
+void WasHit(string type, vec3 dir, vec3 pos) {
 	if((type == "spinkickrightimpact" ||
 		type == "sweeprightimpact") && duck_amount < 0.5f){
 		string sound = "Data/Sounds/FistImpact1.wav";
@@ -80,6 +82,8 @@ void WasHit(vec3 dir, vec3 pos, string type) {
 
 		SetState(_hit_reaction_state);
 		hit_reaction_anim_set = false;
+	
+		hit_reaction_event = type;
 
 		dir.y = 0.0f;
 		dir = normalize(dir) * -1;
@@ -100,7 +104,7 @@ void HandleAnimationEvent(string event, vec3 pos){
 		vec3 facing = this_mo.GetFacing();
 		vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
 		vec3 dir = normalize(target.position - this_mo.position);
-		target.WasHit(dir, world_pos, event);
+		target.WasHit(event, dir, world_pos);
 		//target.velocity += facing;
 		//target.velocity += facing_right;
 	}
@@ -497,19 +501,36 @@ int choice = 0;
 void UpdateHitReaction() {
 	if(!hit_reaction_anim_set){
 		//int choice = rand()%4;
-		switch(choice){
-			case 0:
-				this_mo.StartMobileAnimation("Data/Animations/r_blockright.anm",20.0f);
-				break;
-			case 1:
-				this_mo.StartMobileAnimation("Data/Animations/r_blockrighthard.anm",20.0f);
-				break;
-			case 2:
-				this_mo.StartMobileAnimation("Data/Animations/r_hitspinright.anm",20.0f);
-				break;
-			case 3:
-				this_mo.StartMobileAnimation("Data/Animations/r_hitrightflip.anm",20.0f);
-				break;
+		if(hit_reaction_event == "spinkickrightimpact"){
+			switch(choice){
+				case 0:
+					this_mo.StartMobileAnimation("Data/Animations/r_blockright.anm",20.0f);
+					break;
+				case 1:
+					this_mo.StartMobileAnimation("Data/Animations/r_blockrighthard.anm",20.0f);
+					break;
+				case 2:
+					this_mo.StartMobileAnimation("Data/Animations/r_hitspinright.anm",20.0f);
+					break;
+				case 3:
+					this_mo.StartMobileAnimation("Data/Animations/r_hitrightflip.anm",20.0f);
+					break;
+			}
+		} else if(hit_reaction_event == "sweeprightimpact"){
+			switch(choice){
+				case 0:
+					this_mo.StartMobileAnimation("Data/Animations/r_blocksweepright.anm",20.0f);
+					break;
+				case 1:
+					this_mo.StartMobileAnimation("Data/Animations/r_blocksweeprighthard.anm",20.0f);
+					break;
+				case 2:
+					this_mo.StartMobileAnimation("Data/Animations/r_blocksweeprightstagger.anm",20.0f);
+					break;
+				case 3:
+					this_mo.StartMobileAnimation("Data/Animations/r_sweptright.anm",20.0f);
+					break;
+			}
 		}
 		choice++;
 		if(choice > 3) {
@@ -688,7 +709,7 @@ void UpdateGroundState() {
 
 float time = 0;
 
-void update(bool _controlled) {
+void update(bool _controlled) {	
 	time += time_step;
 	//this_mo.SetMorphTargetWeight("fist_l",min(1,max(0,sin(time*3))),0.0f);
 	/*this_mo.SetMorphTargetWeight("wink_r",sin(time*3),1.0f);
@@ -805,7 +826,7 @@ vec3 GetLegTargetOffset(vec3 initial_pos){
 	}
 
 	float target_y_pos = sphere_col.position.y;
-	float height = initial_pos.y - this_mo.position.y + _leg_sphere_size;
+	float height = initial_pos.y - this_mo.position.y + _leg_sphere_size - 0.05f;
 	target_y_pos += height;
 	/*DebugDrawWireSphere(sphere_col.position,
 				  0.05f,
@@ -815,7 +836,7 @@ vec3 GetLegTargetOffset(vec3 initial_pos){
 	float offset_amount = target_y_pos - initial_pos.y;
 	offset_amount /= max(0.0f,height)+1.0f;
 
-	offset_amount = max(-0.15f,min(0.15f,offset_amount));
+	//offset_amount = max(-0.15f,min(0.15f,offset_amount));
 
 	return vec3(0.0,offset_amount, 0.0f);
 }
@@ -848,7 +869,7 @@ vec3 GetLimbTargetOffset(vec3 initial_pos, vec3 anim_pos){
 	float offset_amount = target_y_pos - initial_pos.y;
 	//offset_amount /= max(0.0f,height)+1.0f;
 
-	//offset_amount = max(-0.15f,min(0.15f,offset_amount));
+	offset_amount = max(-0.3f,min(0.3f,offset_amount));
 
 	return vec3(0.0,offset_amount, 0.0f);
 }
@@ -884,24 +905,59 @@ void MovementState_UpdateIKTargets() {
 	if(!on_ground){
 		jump_info.UpdateIKTargets();
 	} else {
-		vec3 left_leg = this_mo.GetIKTargetPosition("left_leg");
-		vec3 left_leg_offset = GetLegTargetOffset(left_leg);
-		this_mo.SetIKTargetOffset("left_leg",left_leg_offset);
+		float left_ik_weight = this_mo.GetIKWeight("left_leg");
+		float right_ik_weight = this_mo.GetIKWeight("right_leg");
 
+		vec3 left_leg = this_mo.GetIKTargetPosition("left_leg");
 		vec3 right_leg = this_mo.GetIKTargetPosition("right_leg");
-		vec3 right_leg_offset = GetLegTargetOffset(right_leg);
+
+		vec3 foot_apart = right_leg - left_leg;
+		foot_apart.y = 0.0f;
+		float bring_feet_together = min(0.4f,max(0.0f,1.0f-ground_normal.y)*2.0f);
+
+		float two_feet_on_ground;
+		if(left_ik_weight > right_ik_weight){
+			two_feet_on_ground = right_ik_weight / left_ik_weight;
+		} else if(right_ik_weight > left_ik_weight){
+			two_feet_on_ground = left_ik_weight / right_ik_weight;
+		} else {
+			two_feet_on_ground = 1.0f;
+		}
+
+		bring_feet_together *= two_feet_on_ground;
+
+		vec3 left_leg_offset = foot_apart * bring_feet_together * 0.5f;
+		vec3 right_leg_offset = foot_apart * bring_feet_together * -0.5f;
+
+		left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset);
+		right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset);
+		
+		this_mo.SetIKTargetOffset("left_leg",left_leg_offset);
 		this_mo.SetIKTargetOffset("right_leg",right_leg_offset);
 
 		//float curr_avg_offset_height = min(0.0f,
 		//						  min(left_leg_offset.y, right_leg_offset.y));
 		float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;
 		float min_offset_height = min(0.0f, min(left_leg_offset.y, right_leg_offset.y));
-		float mix_amount = min(1.0f,length(this_mo.velocity));
+		float mix_amount = 1.0f;//min(1.0f,length(this_mo.velocity));
 		float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
 		offset_height = mix(offset_height, curr_offset_height, 0.1f);
 		this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height,0.0f));
+		
+		float ground_conform = this_mo.GetStatusKeyValue("groundconform");
+		//Print(""+ground_conform+"\n");
+		if(ground_conform > 0.0f){
+			ground_conform = min(1.0f, ground_conform);
+			vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
+
+			float x_amount = ground_normal.y;
+			float y_amount = length(vec3(ground_normal.x, 0.0f, ground_normal.z));
+			float angle = atan2(y_amount, x_amount);
+
+			this_mo.SetFlip(axis,-angle*ground_conform,0.0f);
+			this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height*(1.0f-ground_conform),0.0f));
+		}
 	}
-	this_mo.SetIKTargetOffset("full_body", vec3(0.0f,-0.1f,0.0f));
 }
 
 void UpdateIKTargets() {

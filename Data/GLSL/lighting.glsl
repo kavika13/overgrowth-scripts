@@ -16,6 +16,18 @@ float GetDirectContrib( const vec3 light_pos,
 
 vec3 UnpackObjNormal(const vec4 normalmap) {
 	return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
+	/*x = 2.0 * nm.x - 1.0
+	y = 2.0 * nm.z - 1.0
+	z = -2.0 * nm.y + 1.0	
+	
+	nm.x = 0.5 * x + 0.5
+	nm.y = -0.5 * z + 0.5
+	nm.z = 0.5 * y + 0.5*/
+}
+
+vec3 PackObjNormal(const vec3 normal) {
+	return vec3(0.5,-0.5,0.5)*normal.xzy + vec3(0.5,0.5,0.5);
+	
 }
 
 vec3 UnpackTanNormal(const vec4 normalmap) {

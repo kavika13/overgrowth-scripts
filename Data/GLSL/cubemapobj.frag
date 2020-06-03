@@ -6,6 +6,7 @@ uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
+uniform float fade;
 
 varying vec3 ws_vertex;
 varying vec3 rel_pos;
@@ -15,8 +16,16 @@ varying vec3 rel_pos;
 #include "texturepack.glsl"
 #include "relativeskypos.glsl"
 
+float rand(vec2 co){
+	return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 void main()
-{		
+{			
+	if((rand(gl_FragCoord.xy)) < fade
+		){
+		discard;
+	};
 	// Get normal
 	vec4 normalmap = texture2D(tex1,tc0);
 	vec3 os_normal = UnpackObjNormal(normalmap);
@@ -37,6 +46,8 @@ void main()
 	vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 	spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
 				  GetAmbientContrib(shadow_tex.g);
+
+	spec_color = vec3(0.0);
 	
 	// Put it all together
 	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);

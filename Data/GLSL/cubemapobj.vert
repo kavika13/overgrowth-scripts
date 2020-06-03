@@ -5,6 +5,7 @@ uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
+uniform float fade;
 
 varying vec3 ws_vertex;
 

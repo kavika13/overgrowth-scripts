@@ -11,6 +11,7 @@ uniform float in_light;
 uniform float time;
 uniform vec3 ws_light;
 uniform float extra_ao;
+uniform float fade;
 
 varying mat3 tangent_to_world;
 varying vec3 ws_vertex;
@@ -19,8 +20,16 @@ varying vec3 ws_vertex;
 #include "texturepack.glsl"
 #include "relativeskypos.glsl"
 
+float rand(vec2 co){
+	return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 void main()
 {	
+	if((rand(gl_FragCoord.xy)) < fade
+		){
+		discard;
+	};
 	
 	// Calculate normal
 	vec4 normalmap = texture2D(tex1,tc0);
