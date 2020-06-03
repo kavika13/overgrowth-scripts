@@ -6,11 +6,13 @@ uniform sampler2D tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
+uniform mat4 bones[64];
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;
 varying vec3 rel_pos;
 varying vec3 world_light;
+varying mat4 concat_bone;
 
 //#include "lighting.glsl"
 
@@ -22,6 +24,10 @@ void main()
 	
 	vec4 normalmap = texture2D(tex2,gl_TexCoord[0].xy);
 	vec3 normal = UnpackObjNormal(normalmap);
+
+	vec4 temp_normal = vec4(normal,0.0);
+	temp_normal = concat_bone * temp_normal;
+	normal = normalize(temp_normal.xyz);
 
 	float NdotL = GetDirectContrib(light_pos, normal, shadow_tex.r);
 	
