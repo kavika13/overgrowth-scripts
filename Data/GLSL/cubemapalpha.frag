@@ -25,8 +25,7 @@ float rand(vec2 co){
 
 void main()
 {	
-	if((rand(gl_FragCoord.xy)) < fade
-		){
+	if((rand(gl_FragCoord.xy)) < fade){
 		discard;
 	};
 	// Get normal

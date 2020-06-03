@@ -30,21 +30,21 @@ void main()
 	   gl_TexCoord[0].y <= blur_offset+edge_buffer || gl_TexCoord[0].y >= 1.0-blur_offset-edge_buffer ||
 	   gl_TexCoord[0].z < -10.0){
 		discard;
+	} else {
+		// Accumulate shadow samples
+		vec4 color = vec4(0.0,0.0,0.0,1.0);
+
+		color.a -= (shadow2DProj(tex0,ProjShadow).r)*0.2;
+		color.a -= (shadow2DProj(tex0,ProjShadow+vec4(blur_offset,0.0,0.0,0.0)).r)*0.2;
+		color.a -= (shadow2DProj(tex0,ProjShadow+vec4(-blur_offset,0.0,0.0,0.0)).r)*0.2;
+		color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,blur_offset,0.0,0.0)).r)*0.2;
+		color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,-blur_offset,0.0,0.0)).r)*0.2;
+
+		// Fade shadow based on distance
+		color.a *= pow(texture2D(tex4,gl_TexCoord[1].xy).r,0.25);
+		color.a *= (1.0-GetAmbientMultiplierScaled())*1.1;
+		color.a *=max(0.0,(1.0 - distance_fade));
+
+		gl_FragColor = color;
 	}
-
-	// Accumulate shadow samples
-	vec4 color = vec4(0.0,0.0,0.0,1.0);
-
-	color.a -= (shadow2DProj(tex0,ProjShadow).r)*0.2;
-	color.a -= (shadow2DProj(tex0,ProjShadow+vec4(blur_offset,0.0,0.0,0.0)).r)*0.2;
-	color.a -= (shadow2DProj(tex0,ProjShadow+vec4(-blur_offset,0.0,0.0,0.0)).r)*0.2;
-	color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,blur_offset,0.0,0.0)).r)*0.2;
-	color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,-blur_offset,0.0,0.0)).r)*0.2;
-
-	// Fade shadow based on distance
-	color.a *= pow(texture2D(tex4,gl_TexCoord[1].xy).r,0.25);
-	color.a *= (1.0-GetAmbientMultiplierScaled())*1.1;
-	color.a *=max(0.0,(1.0 - distance_fade));
-
-	gl_FragColor = color;
 }

@@ -70,5 +70,6 @@ void main()
 
 	color *= Exposure();
 
+
 	gl_FragColor = vec4(color,weight_map[weight_component]);
 }

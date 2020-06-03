@@ -12,6 +12,7 @@ uniform sampler2D tex10;
 uniform sampler2D tex11;
 uniform sampler2D tex12;
 uniform sampler2D tex13;
+uniform sampler2D tex14;
 uniform vec3 avg_color0;
 uniform vec3 avg_color1;
 uniform vec3 avg_color2;
@@ -30,9 +31,12 @@ varying float alpha;
 #include "relativeskypos.glsl"
 
 void main()
-{	
+{		
+	vec2 test_offset = (texture2D(tex14,tc0*200.0).xy-0.5)*0.001;
+	//test_offset = vec2(0.0);
+	
 	// Get weights
-	vec4 weight_map = texture2D(tex0,tc0);
+	vec4 weight_map = texture2D(tex0,tc0+test_offset);
 	weight_map[3] = 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]);
 
 	// Get fade
@@ -80,7 +84,7 @@ void main()
 					     avg_color1 * weight_map[1] +
 						 avg_color2 * weight_map[2] +
 						 avg_color3 * weight_map[3];
-	vec3 terrain_color = texture2D(tex1,tc0).xyz;
+	vec3 terrain_color = texture2D(tex1,tc0+test_offset).xyz;
 	average_color = max(average_color, vec3(0.01));
 	vec3 tint = terrain_color / average_color;
 
@@ -99,6 +103,21 @@ void main()
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
 
+	//color = NdotL * 0.5f;
 
+	//color = weight_map;
+	//color = texture2D(tex14,tc1).xyz;
+/*
+	vec2 tex_co = tc1 * 900.0;
+
+	color = vec3(int(abs(int(tex_co.x)%2)+abs(int(tex_co.y)%2))%2);
+	color = vec3(int(abs(int(tex_co.x)%2)+abs(int(tex_co.y)%2))%2);
+
+	color *= 0.5;
+	color += 0.5;
+	
+	color.r *= abs(tex_co.x * 0.25 - int(tex_co.x * 0.25));
+	color.g *= abs(tex_co.y * 0.25 - int(tex_co.y * 0.25));
+*/
 	gl_FragColor = vec4(color,alpha);
 }

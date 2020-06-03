@@ -46,9 +46,10 @@ class JumpInfo {
 		if(has_hit_wall || dot(dir, this_mo.velocity) < 0.0f){
 			return;
 		}
-		string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, this_mo.position);
-
+		//string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size);
+	
 		hit_wall = true;
 		has_hit_wall = true;
 		wall_hit_time = 0.0f;
@@ -143,7 +144,7 @@ class JumpInfo {
 							_wall_run_friction;
 		*/
 		this_mo.GetSlidingSphereCollision(this_mo.position, 
-										  _leg_sphere_size * 1.0f);
+										  _leg_sphere_size * 1.05f);
 		if(sphere_col.NumContacts() == 0){
 			LostWallContact();
 		} else {
@@ -226,9 +227,9 @@ class JumpInfo {
 		
 		//string sound = "Data/Sounds/Impact-Grass3.wav";
 		//PlaySound(sound, this_mo.position );
-		string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, this_mo.position);
-	
+		//string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size);
 		this_mo.velocity += old_vel_flat;
 		tilt = this_mo.velocity * 5.0f;
 	}
@@ -246,8 +247,9 @@ class JumpInfo {
 		
 		//string sound = "Data/Sounds/Impact-Grass3.wav";
 		//PlaySound(sound, this_mo.position );
-		string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		//string path = "Data/Sounds/concrete_foley/bunny_jump_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
 		
 		if(length(target_velocity)>0.4f){
 			this_mo.SetRotationFromFacing(target_velocity);

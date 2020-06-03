@@ -81,9 +81,37 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 		type == "spinkickleftimpact" ||
 		type == "sweepleftimpact" ||
 		type == "frontkick") && duck_amount < 0.5f){
-		string sound = "Data/Sounds/FistImpact1.wav";
-		PlaySound(sound, pos);
+		string sound = "Data/Sounds/FistImpact.xml";
+		PlaySoundGroup(sound, pos);
 		MakeImpactParticle(pos);
+		
+		float force = 20000.0f;
+		GoLimp();
+		if(type == "frontkick"){
+			this_mo.ApplyForceToRagdoll(dir*force,pos);
+		} else {
+			vec3 right;
+			right.x = -dir.z;
+			right.z = dir.x;
+			right.y = dir.y;
+			if(type == "spinkickrightimpact")
+			{
+				this_mo.ApplyForceToRagdoll(right*force,pos);
+			}
+			if(type == "spinkickleftimpact")
+			{
+				this_mo.ApplyForceToRagdoll(right*-force,pos);
+			}
+			if(type == "sweeprightimpact")
+			{
+				this_mo.ApplyForceToRagdoll(right*force*0.5f,pos);
+			}
+			if(type == "sweepleftimpact")
+			{
+				this_mo.ApplyForceToRagdoll(right*-force*0.5f,pos);
+			}
+		}
+		TimedSlowMotion(0.1f,0.7f, 0.05f);
 
 		SetState(_hit_reaction_state);
 		hit_reaction_anim_set = false;
@@ -98,27 +126,33 @@ void WasHit(string type, vec3 dir, vec3 pos) {
 	}
 }
 
-void HandleAnimationEvent(string event, vec3 pos){
+void HandleAnimationEvent(string event, vec3 world_pos){
 	//Print("Angelscript received event: "+event+"\n");
-	vec3 world_pos = pos+this_mo.position;
+	if(event == "golimp"){
+		GoLimp();
+	}
 	if(event == "leftstep" || event == "rightstep"){
 		this_mo.MaterialEvent(event, world_pos);
 	}
 	if(event == "leftwallstep" || event == "rightwallstep"){
-		string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, world_pos);
+		this_mo.MaterialEvent(event, world_pos);
+		//string path = "Data/Sounds/concrete_foley/bunny_wallrun_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
 	if(event == "leftrunstep" || event == "rightrunstep"){
-		string path = "Data/Sounds/concrete_foley/bunny_run_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, world_pos);
+		this_mo.MaterialEvent(event, world_pos);
+		//string path = "Data/Sounds/concrete_foley/bunny_run_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
 	if(event == "leftwalkstep" || event == "rightwalkstep"){
-		string path = "Data/Sounds/concrete_foley/bunny_walk_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, world_pos);
+		this_mo.MaterialEvent(event, world_pos);
+		//string path = "Data/Sounds/concrete_foley/bunny_walk_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
 	if(event == "leftcrouchwalkstep" || event == "rightcrouchwalkstep"){
-		string path = "Data/Sounds/concrete_foley/bunny_crouchwalk_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, world_pos);
+		this_mo.MaterialEvent(event, world_pos);
+		//string path = "Data/Sounds/concrete_foley/bunny_crouchwalk_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
 	if((event == "spinkickrightimpact" || event == "sweeprightimpact" ||
 		event == "spinkickleftimpact" || event == "sweepleftimpact" ||
@@ -268,6 +302,7 @@ void UpdateGroundAttackControls() {
 		SetState(_attack_state);
 		//Print("Starting attack\n");
 		attack_animation_set = false;
+		TimedSlowMotion(0.2f,0.4f, 0.15f);
 	}
 }
 
@@ -296,8 +331,9 @@ void UpdateMovementControls() {
 			this_mo.position = sphere_col.position;
 			this_mo.velocity = vec3(0.0f);
 			feet_moving = false;
-			string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("land_soft", this_mo.position);
+			//string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		} else {
 			flip_info.UpdateFlip();
 			
@@ -325,7 +361,7 @@ void SetOnGround(bool _on_ground){
 
 void Land(vec3 vel) {
 	if(flip_info.ShouldRagdollOnLanding()){
-		GoLimp();
+		//GoLimp();
 		return;
 	}
 
@@ -335,22 +371,23 @@ void Land(vec3 vel) {
 	this_mo.StartAnimation("Data/Animations/r_idle.xml",land_speed);
 
 	if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
-		//string sound = "Data/Sounds/Impact-Grass2.wav";
-		//PlaySound(sound, this_mo.position);
 		if(dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal))>0.6f){
-			string path = "Data/Sounds/concrete_foley/bunny_jump_land_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
+			//string path = "Data/Sounds/concrete_foley/bunny_jump_land_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		} else {
-			string path = "Data/Sounds/concrete_foley/bunny_jump_land_slide_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("land_slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
+			//string path = "Data/Sounds/concrete_foley/bunny_jump_land_slide_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		}
 
 		duck_amount = 1.0;
 		target_duck_amount = 1.0;
 		duck_vel = land_speed * 0.3f;
 	} else {
-		string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
-		this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		this_mo.MaterialEvent("land_soft", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
+		//string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
+		//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 	}
 
 	if(WantsToCrouch()){
@@ -395,7 +432,7 @@ void HandleGroundCollision() {
 		this_mo.velocity += HandleBumperCollision() / time_step;
 
 		if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
-			GoLimp();	
+			//GoLimp();	
 		}
 
 		if((sphere_col.NumContacts() != 0 ||
@@ -435,7 +472,7 @@ void HandleGroundCollision() {
 			
 			if(flip_info.ShouldRagdollIntoSteepGround() &&
 			   dot(this_mo.GetFacing(),ground_normal) < -0.6f){
-				GoLimp();	
+				//GoLimp();	
 			}
 		}
 	} else {
@@ -450,7 +487,7 @@ void HandleGroundCollision() {
 		}	
 			
 		if(sphere_col.NumContacts() != 0 && flip_info.RagdollOnImpact()){
-			GoLimp();	
+			//GoLimp();	
 		}
 		
 		for(int i=0; i<sphere_col.NumContacts(); i++){
@@ -476,7 +513,7 @@ void HandleGroundCollision() {
 }
 
 void GoLimp() {
-	return;
+	//return;
 	SetState(_movement_state);
 	limp = true;
 	this_mo.Ragdoll();
@@ -554,8 +591,9 @@ void UpdateAttacking() {
 				this_mo.StartMirroredAnimation("Data/Animations/r_spinkickright.anm");
 				mirrored_stance = true;
 			}
-			string path = "Data/Sounds/concrete_foley/bunny_kick_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("kick", this_mo.position);
+			//string path = "Data/Sounds/concrete_foley/bunny_kick_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		} else {
 			if(!mirrored){
 				this_mo.StartAnimation("Data/Animations/r_sweep.anm");
@@ -564,8 +602,9 @@ void UpdateAttacking() {
 				this_mo.StartMirroredAnimation("Data/Animations/r_sweep.anm");
 				mirrored_stance = true;
 			}
-			string path = "Data/Sounds/concrete_foley/bunny_sweep_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("sweep", this_mo.position);
+			//string path = "Data/Sounds/concrete_foley/bunny_sweep_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
 		}
 		this_mo.SetAnimationCallback("void EndAttack()");
 		attack_animation_set = true;
@@ -647,19 +686,36 @@ void UpdateHitReaction() {
 					break;
 			}
 		} else if(hit_reaction_event == "frontkick"){
-			switch(choice){
-				case 0:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockfront.anm",20.0f);
-					break;
-				case 1:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockfronthard.anm",20.0f);
-					break;
-				case 2:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockfrontstagger.anm",20.0f);
-					break;
-				case 3:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockfrontko.anm",20.0f);
-					break;
+			if(mirrored_stance){
+				switch(choice){
+					case 0:
+						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfront.anm",20.0f);
+						break;
+					case 1:
+						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfronthard.anm",20.0f);
+						break;
+					case 2:
+						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfrontstagger.anm",20.0f);
+						break;
+					case 3:
+						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfrontko.anm",20.0f);
+						break;
+				}
+			} else {
+				switch(choice){
+					case 0:
+						this_mo.StartMobileAnimation("Data/Animations/r_blockfront.anm",20.0f);
+						break;
+					case 1:
+						this_mo.StartMobileAnimation("Data/Animations/r_blockfronthard.anm",20.0f);
+						break;
+					case 2:
+						this_mo.StartMobileAnimation("Data/Animations/r_blockfrontstagger.anm",20.0f);
+						break;
+					case 3:
+						this_mo.StartMobileAnimation("Data/Animations/r_blockfrontko.anm",20.0f);
+						break;
+				}
 			}
 		}
 		if(choice == 3){
@@ -939,6 +995,7 @@ void UpdateAnimation() {
 			float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
 			this_mo.SetBlendCoord("forward_roll_coord",forwards_rollness);
 			this_mo.SetIKEnabled(false);
+			roll_ik_fade = min(roll_ik_fade + time_step * 5.0f, 1.0f);
 		} else {
 			this_mo.SetIKEnabled(true);
 			if(speed > _walk_threshold && feet_moving){
@@ -956,6 +1013,7 @@ void UpdateAnimation() {
 				}
 				this_mo.SetIKEnabled(true);
 			}
+			roll_ik_fade = max(roll_ik_fade - time_step * 5.0f, 0.0f);
 		}
 	} else {
 		jump_info.UpdateAirAnimation();
@@ -1056,6 +1114,8 @@ void GroundState_UpdateIKTargets() {
 	this_mo.SetFlip(axis,-angle,0.0f);
 }
 
+float roll_ik_fade = 0.0f;
+
 void MovementState_UpdateIKTargets() {
 	if(!on_ground){
 		jump_info.UpdateIKTargets();
@@ -1087,9 +1147,9 @@ void MovementState_UpdateIKTargets() {
 		left_leg_offset += GetLegTargetOffset(left_leg+left_leg_offset);
 		right_leg_offset += GetLegTargetOffset(right_leg+right_leg_offset);
 		
-		this_mo.SetIKTargetOffset("left_leg",left_leg_offset);
-		this_mo.SetIKTargetOffset("right_leg",right_leg_offset);
-
+		this_mo.SetIKTargetOffset("left_leg",left_leg_offset*(1.0f-roll_ik_fade));
+		this_mo.SetIKTargetOffset("right_leg",right_leg_offset*(1.0f-roll_ik_fade));
+			
 		//float curr_avg_offset_height = min(0.0f,
 		//						  min(left_leg_offset.y, right_leg_offset.y));
 		float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;
@@ -1097,8 +1157,8 @@ void MovementState_UpdateIKTargets() {
 		float mix_amount = 1.0f;//min(1.0f,length(this_mo.velocity));
 		float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
 		offset_height = mix(offset_height, curr_offset_height, 0.1f);
-		this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height,0.0f));
-		
+		this_mo.SetIKTargetOffset("full_body",vec3(0.0f,offset_height*(1.0f-roll_ik_fade)-0.1f*roll_ik_fade,0.0f));
+
 		float ground_conform = this_mo.GetStatusKeyValue("groundconform");
 		//Print(""+ground_conform+"\n");
 		if(ground_conform > 0.0f){

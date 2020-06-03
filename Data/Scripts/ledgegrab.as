@@ -11,6 +11,7 @@ class TargetMove {
 	vec3 offset;
 	float time;
 	float speed;
+	int id;
 
 	void Move(vec3 _start_pos, 
 			  vec3 _end_pos, 
@@ -43,9 +44,14 @@ class TargetMove {
 	void Update() {
 		time += time_step * speed;
 		if(time >= end_time){
-			if(distance(start_pos, end_pos)>0.1f){
-				string path = "Data/Sounds/concrete_foley/bunny_edgecrawl_concrete.xml";
-				this_mo.PlaySoundGroupAttached(path, end_pos);
+			if(id < 2 && distance(start_pos, end_pos)>0.1f){
+				//string path = "Data/Sounds/concrete_foley/bunny_edgecrawl_concrete.xml";
+				//this_mo.PlaySoundGroupAttached(path, end_pos);
+				if(id==0){
+					this_mo.MaterialEvent("edge_crawl", this_mo.GetIKTargetPosition("leftarm"));
+				} else {
+					this_mo.MaterialEvent("edge_crawl", this_mo.GetIKTargetPosition("rightarm"));
+				}
 			}
 			start_pos = end_pos;
 			time -= 1.0f;
@@ -93,6 +99,10 @@ class ShimmyAnimation {
 	ShimmyAnimation() {
 		hand_pos.resize(2);
 		foot_pos.resize(2);
+		hand_pos[0].id = 0;
+		hand_pos[1].id = 1;
+		foot_pos[0].id = 2;
+		foot_pos[1].id = 3;
 		moving = false;
 		just_finished = false;
 		lag_vel = vec3(0.0f);
@@ -344,8 +354,9 @@ class LedgeInfo {
 			ledge_grab_pos = CalculateGrabPos();
 			shimmy_anim.Start(ledge_grab_pos, ledge_dir);
 
-			string path = "Data/Sounds/concrete_foley/bunny_edge_grab_concrete.xml";
-			this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			//string path = "Data/Sounds/concrete_foley/bunny_edge_grab_concrete.xml";
+			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+			this_mo.MaterialEvent("edge_grab", this_mo.position + wall_dir * _leg_sphere_size);
 		}
 	}
 	

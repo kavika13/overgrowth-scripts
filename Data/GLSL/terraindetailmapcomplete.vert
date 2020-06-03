@@ -14,6 +14,7 @@ uniform sampler2D tex10;
 uniform sampler2D tex11;
 uniform sampler2D tex12;
 uniform sampler2D tex13;
+uniform sampler2D tex14;
 uniform vec3 cam_pos;
 uniform vec3 avg_color0;
 uniform vec3 avg_color1;
