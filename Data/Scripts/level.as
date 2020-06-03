@@ -177,7 +177,7 @@ void VictoryCheck() {
         failure = true;
     }
     if(victory || failure){
-        reset_timer -= time_step;
+        /*reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             if(reset_allowed && !has_gui){
                 gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400,0);
@@ -192,7 +192,7 @@ void VictoryCheck() {
                 reset_allowed = false;
             }
             //Reset();
-        }
+        }*/
     } else {
         reset_timer = _reset_delay;
     }

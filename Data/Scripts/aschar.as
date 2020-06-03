@@ -10,6 +10,17 @@ void ChokedOut(int target){
     head_choke_queue = target;
 }
 
+void HitByItem(string material, vec3 point, int id) {
+    //Print(""+ this_mo.getID() + " was hit by item id "+id+" with material \""+material+"\" at ");
+    //PrintVec3(point);
+    //Print("\n");
+    ItemObject@ io = ReadItemID(id);
+    vec3 lin_vel = io.GetLinearVelocity();
+    if(length_squared(lin_vel) > 10.0f){
+        HandleRagdollImpactImpulse(lin_vel * 200.0f * io.GetMass(), point, 1.0f);
+    }
+}
+
 vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz, float max_vert, float arc){
     vec3 rel_vec = end - start;
     vec3 rel_vec_flat = vec3(rel_vec.x, 0.0f, rel_vec.z);
@@ -64,6 +75,18 @@ int IsBlockStunned() {
 
 int BlockStunnedBy() {
     return block_stunned_by_id;
+}
+
+vec3 FlipFacing() {
+    if(target_id != -1 && throw_knife_layer_id != -1){
+        MovementObject@ mo = ReadCharacterID(target_id);
+        vec3 vec = mo.position - this_mo.position;
+        vec.y = 0.0f;
+        vec = normalize(vec);
+        return vec;
+    } else {
+        return camera.GetFlatFacing();
+    }
 }
 
 void MouseControlJumpTest() {
@@ -267,12 +290,39 @@ void CheckForStartBodyDrag(){
 
 void Update(int _num_frames) {
     /*if(holding_weapon){
+        if(target_id != -1){
+            MovementObject@ char = ReadCharacterID(target_id);
+            ItemObject@ io = ReadItemID(this_mo.weapon_id);
+            vec3 launch_vel = CalcLaunchVel(io.GetPhysicsPosition(), char.position, io.GetMass(), this_mo.velocity);
+            JumpTestEq(io.GetPhysicsPosition(), launch_vel, jump_info.jump_path); 
+            for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+                DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    vec3(1.0f,0.0f,0.0f), 
+                    _delete_on_update);
+            }
+        } else {
+            float throw_range = 50.0f;
+            int target = GetClosestCharacterID(throw_range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
+            if(target != -1 && (on_ground || flip_info.IsFlipping())){
+                target_id = target;
+            }
+        }
+    }*/
+    /*if(holding_weapon){
         ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
-        vec3 start, end;
-        mat4 trans = item_obj.GetPhysicsTransform();
-        start = trans * item_obj.GetLineStart(0);
-        end = trans * item_obj.GetLineEnd(0);
-        DebugDrawLine(start, end, vec3(1.0f), _fade);
+        int num_lines = item_obj.GetNumLines();
+        for(int i=0; i<num_lines; ++i){
+            vec3 start, end;
+            mat4 trans = item_obj.GetPhysicsTransform();
+            start = trans * item_obj.GetLineStart(i);
+            end = trans * item_obj.GetLineEnd(i);
+            vec3 color(1.0f);
+            if(item_obj.GetLineMaterial(i) == "wood"){
+                color = vec3(105/255.0f,77/255.0f,50/255.0f);
+            }
+            DebugDrawLine(start, end, color, _fade);
+        }
     }*/
     if(in_animation){        
         if(this_mo.controlled){
@@ -281,6 +331,7 @@ void Update(int _num_frames) {
             }
             ApplyCameraControls();
         }
+        ApplyPhysics();
         HandleCollisions();
         return;
     }    
@@ -418,6 +469,8 @@ void Recover() {
 
 bool backslash = false;
 float last_knife_time = 0.0f;
+int knife_layer_id = -1;
+int throw_knife_layer_id = -1;
 
 void HandleSpecialKeyPresses() {
     if(GetInputDown(this_mo.controller_id, "z") && !GetInputDown(this_mo.controller_id, "ctrl")){
@@ -492,32 +545,16 @@ void HandleSpecialKeyPresses() {
         if(GetInputPressed(this_mo.controller_id, "8")){
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
-        /*if(GetInputPressed(this_mo.controller_id, "b")){
-            int8 flags = _ANM_MOBILE | _ANM_FROM_START;
+        if(GetInputPressed(this_mo.controller_id, "b")){
+            /*int8 flags = _ANM_MOBILE | _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
-            this_mo.SetAnimation("Data/Animations/r_bigdogswordattackoverblocked.anm",20.0f,flags);
+            this_mo.SetAnimation("Data/Animations/r_knifethrow.anm",20.0f,flags);
             in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");
-        }*/
-        /*if(GetInputDown(this_mo.controller_id, "b")){
-            if(last_knife_time > time || last_knife_time < time - 0.3f){
-                if(mirrored_stance){
-                    mirrored_stance = false;
-                    ApplyIdle(4.0f, true);
-                }
-                if(backslash){
-                    this_mo.AddLayer("Data/Animations/r_knifebackslash.anm",7.0f,0);
-                    attack_getter.Load("Data/Attacks/knifebackslash.xml");
-                } else {
-                    this_mo.AddLayer("Data/Animations/r_knifeslash.anm",7.0f,0);
-                    attack_getter.Load("Data/Attacks/knifeslash.xml");
-                }
-                backslash = !backslash;
-                last_knife_time = time;
-            }
-        }*/
+            this_mo.SetAnimationCallback("void EndAnim()");*/
+            //this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
+        }
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
         } 
@@ -924,6 +961,9 @@ vec3 GetTargetHeadDir() {
         look_inertia = 0.8f;
         target_head_dir = normalize(get_weapon_pos - this_mo.GetAvgIKChainPos("head"));
     } else {
+        if(throw_knife_layer_id != -1 && target_id != -1){
+            force_look_target_id = target_id;
+        }
         if(force_look_target_id != -1){
             vec3 target_pos = ReadCharacterID(force_look_target_id).GetAvgIKChainPos("head");
             look_at_target = true;
@@ -977,6 +1017,7 @@ vec3 GetTargetHeadDir() {
 
 vec3 head_vel;
 float layer_attacking_fade = 0.0f;
+float layer_throwing_fade = 0.0f;
 
 void UpdateHeadLook() {
 
@@ -1021,6 +1062,13 @@ void UpdateHeadLook() {
         layer_attacking_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, num_frames));
     }
     torso_control *= (1.0f - layer_attacking_fade);
+    
+    if(throw_knife_layer_id != -1){
+        layer_throwing_fade = mix(1.0f, layer_attacking_fade, pow(0.9f, num_frames));
+    } else {
+        layer_throwing_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, num_frames));
+    }
+    torso_control = mix(torso_control,0.5f,layer_throwing_fade);
     this_mo.SetIKTargetOffset("torso",head_dir*torso_control);
     stance_move_fade = max(0.0f, stance_move_fade - time_step * num_frames);
     //Print("stance_move_fade: "+stance_move_fade+"\n");
@@ -1476,10 +1524,29 @@ const int _invalid = 4;
 bool startled = false;
 const float drop_weapon_probability = 0.3f;
 
+void LayerRemoved(int id) {
+    //Print("Removed layer: "+id+"\n");
+    if(id == knife_layer_id){
+        //Print("That was the active knife slash layer\n");
+        knife_layer_id = -1;
+    }
+    if(id == throw_knife_layer_id){
+        //Print("That was the active knife slash layer\n");
+        throw_knife_layer_id = -1;
+    }
+}
+
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
 // Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id, float attack_damage_mult, float attack_knockback_mult) {
     attack_getter2.Load(attack_path);
+
+    if(knife_layer_id != -1){
+        this_mo.RemoveLayer(knife_layer_id, 4.0f);       
+    }
+    if(throw_knife_layer_id != -1){
+        this_mo.RemoveLayer(throw_knife_layer_id, 4.0f);       
+    }
 
     if(type == "grabbed"){
         return WasGrabbed(dir, pos, attacker_id);
@@ -1496,7 +1563,6 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id,
 
 void PrintVec3(vec3 vec){
     Print("("+vec.x + ", " + vec.y + ", " + vec.z + ")");
-
 }
 
 int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
@@ -1944,10 +2010,19 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     return _hit;
 }
 
-void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, float force){
+void HandleRagdollImpactImpulse(const vec3&in impulse, const vec3&in pos, float damage){
     GoLimp();
     ragdoll_limp_stun = 0.9f;
+    this_mo.ApplyForceToRagdoll(impulse, pos);
+    block_health = 0.0f;
+    TakeDamage(damage);
+    if(startled && knocked_out == _awake){
+        TakeDamage(damage);
+    }
+    temp_health = max(0.0f, temp_health);
+}
 
+void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, float force){
     vec3 impact_dir = attack_getter2.GetImpactDir();
     vec3 right;
     right.x = -dir.z;
@@ -1956,14 +2031,7 @@ void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, flo
     vec3 impact_dir_adjusted = impact_dir.x * right +
                                impact_dir.z * dir;
     impact_dir_adjusted.y += impact_dir.y;
-    this_mo.ApplyForceToRagdoll(impact_dir_adjusted * force, pos);
-
-    block_health = 0.0f;
-    TakeDamage(damage);
-    if(startled && knocked_out == _awake){
-        TakeDamage(damage);
-    }
-    temp_health = max(0.0f, temp_health);
+    HandleRagdollImpactImpulse(impact_dir_adjusted * force, pos, damage);
 }
 
 void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
@@ -2236,6 +2304,10 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
         //    TakeDamage(attack_getter2.GetDamage());
         //}
         GoLimp();
+    }
+
+     if(event == "rightweaponrelease"){
+         ThrowWeapon();
     }
 
     bool attack_event = false;
@@ -2574,18 +2646,20 @@ void UpdateGroundAttackControls() {
         char.MaterialEvent("choke_grab", char.position);
         //PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
     } else if(attack_id != -1){
-        LoadAppropriateAttack();
+        LoadAppropriateAttack(false);
         if(attack_getter.GetAsLayer() == 1){
-            if(mirrored_stance){
+            if(mirrored_stance && state == _movement_state){
                 mirrored_stance = false;
                 ApplyIdle(4.0f, true);
             }
             if(backslash){
-                this_mo.AddLayer("Data/Animations/r_knifebackslash.anm",7.0f,0);
+                knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifebackslash.anm",7.0f,0);
                 attack_getter.Load("Data/Attacks/knifebackslash.xml");
+                //Print("Back slash\n");
             } else {
-                this_mo.AddLayer("Data/Animations/r_knifeslash.anm",7.0f,0);
+                knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifeslash.anm",7.0f,0);
                 attack_getter.Load("Data/Attacks/knifeslash.xml");
+                //Print("Front slash\n");
             }
             backslash = !backslash;
             last_knife_time = time;
@@ -3265,7 +3339,7 @@ bool IsAttackMirrored(){
     return mirrored;
 }
 
-void LoadAppropriateAttack() {
+void LoadAppropriateAttack(bool mirrored) {
     // Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
     bool front = length_squared(GetTargetVelocity())<0.1f;
 
@@ -3314,7 +3388,6 @@ void LoadAppropriateAttack() {
     }
     attack_getter.Load(attack_path);
     
-    bool mirrored = IsAttackMirrored();
     if(attack_getter.GetDirection() == _left) {
         mirrored = !mirrored;
     }
@@ -3420,7 +3493,14 @@ void UpdateAttacking() {
     }
 
     if(!attack_animation_set){
-        LoadAppropriateAttack();
+        bool mirrored = IsAttackMirrored();
+        LoadAppropriateAttack(mirrored);
+        if(attack_getter.GetAsLayer() == 1){
+            //Print("Attacking with layered attack in wrong mode\n");
+            SetState(_movement_state);
+            return;
+        }
+
 
         if(attack_getter.GetSpecial() == "legcannon"){    
             leg_cannon_flip = 0.0f;
@@ -3432,7 +3512,6 @@ void UpdateAttacking() {
             duck_amount = 0.0f;
         }
         
-        bool mirrored = IsAttackMirrored();
         if(attack_getter.GetDirection() == _left) {
             mirrored = !mirrored;
         }
@@ -3828,11 +3907,36 @@ void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.weapon_id);
-        if(pickup_layer != -1){
-            this_mo.RemoveLayer(pickup_layer, 4.0f);
-            pickup_layer = -1;
-        } 
         NoWeapon();
+    }
+    if(pickup_layer != -1){
+        this_mo.RemoveLayer(pickup_layer, 4.0f);
+        pickup_layer = -1;
+    }
+}
+
+vec3 CalcLaunchVel(vec3 start, vec3 end, float mass, vec3 vel) {
+    vec3 launch_vel = normalize(normalize(end - start)+vec3(0.0f,0.2f,0.0f))*20.0f;
+    launch_vel /= max(1.0f,mass);
+    launch_vel += normalize(launch_vel) * dot(normalize(launch_vel), vel);
+    return launch_vel;
+}
+
+void ThrowWeapon() {
+    if(holding_weapon){
+        int target = target_id;
+        if(target != -1){
+            int weapon_id = this_mo.weapon_id;
+            this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
+            this_mo.DetachItem(this_mo.weapon_id);
+            NoWeapon();
+            MovementObject@ char = ReadCharacterID(target);
+            ItemObject@ io = ReadItemID(this_mo.weapon_id);
+            vec3 launch_vel = CalcLaunchVel(io.GetPhysicsPosition(), char.position, io.GetMass(), this_mo.velocity);
+            io.SetVelocity(launch_vel);
+            this_mo.velocity -= launch_vel * io.GetMass() * 0.05f;
+            //io.SetVelocity(vec3(0.0f,5.0f,0.0f));
+        }
     }
 }
 
@@ -3843,6 +3947,8 @@ vec3 get_weapon_dir;
 vec3 get_weapon_pos;
 int pickup_layer = -1;
 int pickup_layer_attempts = 0;
+bool going_to_throw_item = false;
+float going_to_throw_item_time;
 
 void HandlePickUp() {
     if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state && tethered == _TETHERED_FREE){
@@ -3898,6 +4004,27 @@ void HandlePickUp() {
     }
     if(WantsToDropItem() || knocked_out != _awake){
         DropWeapon();
+    }
+    if(WantsToThrowItem() && holding_weapon){        
+        float throw_range = 50.0f;
+        int target = GetClosestCharacterID(throw_range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
+        if(target != -1 && (on_ground || flip_info.IsFlipping())){
+            target_id = target;
+            going_to_throw_item = true;
+            going_to_throw_item_time = time;
+        }
+    }
+    if(going_to_throw_item && going_to_throw_item_time <= time && going_to_throw_item_time > time - 1.0f){
+        //Print("Going to throw!\n");
+        if(!flip_info.IsFlipping() || flip_info.flip_progress > 0.5f){
+            //Print("Starting throw!\n");
+            if(!flip_info.IsFlipping()){
+                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
+            } else {
+                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowfliplayer.anm",8.0f,0);
+            }
+            going_to_throw_item = false;
+        }
     }
 }
 
@@ -4395,7 +4522,9 @@ void UpdateAnimation() {
                 stance_move = true;
 
             }
-            if(speed < _walk_threshold && GetTargetVelocity() != vec3(0.0f)){
+            if((speed < _walk_threshold && GetTargetVelocity() != vec3(0.0f)) || 
+                knife_layer_id != -1 || 
+                throw_knife_layer_id != -1 && (speed < _walk_threshold * 2.0f)){
                 stance_move = true;
             }
             if(WantsToWalkBackwards() && length_squared(flat_velocity) > 0.001f){
@@ -4415,14 +4544,17 @@ void UpdateAnimation() {
                 mirrored_stance = false;
             } else {
                 if(stance_move){
-                    if(force_look_target != -1 && speed > 1.0f && tethered == _TETHERED_FREE){
+                    if(throw_knife_layer_id != -1 && force_look_target == -1){
+                        force_look_target = target_id;
+                    }
+                    if(force_look_target != -1 && (speed > 1.0f || knife_layer_id != -1 || throw_knife_layer_id != -1) && tethered == _TETHERED_FREE){
                         MovementObject@ char = ReadCharacterID(force_look_target);
                         vec3 dir = char.position - this_mo.position;
                         dir.y = 0.0f;
                         dir = normalize(dir);
                         this_mo.SetRotationFromFacing(
                             InterpDirections(this_mo.GetFacing(), dir, 1.0 - pow(0.9f, num_frames)));
-                    }
+                    } 
                     HandleFootStance();
                 }
                 if(tethered == _TETHERED_FREE){

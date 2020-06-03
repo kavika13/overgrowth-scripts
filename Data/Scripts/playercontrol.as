@@ -102,9 +102,18 @@ bool WantsToPickUpItem() {
     return GetInputDown(this_mo.controller_id, "item");
 }
 
+bool DropDifferentiator() {
+    return GetInputDown(this_mo.controller_id, "crouch") && duck_amount > 0.5f && on_ground && !flip_info.IsFlipping();
+}
+
 bool WantsToDropItem() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "drop");
+    return GetInputDown(this_mo.controller_id, "drop") && DropDifferentiator();
+}
+
+bool WantsToThrowItem() {
+    if(!this_mo.controlled) return false;
+    return GetInputDown(this_mo.controller_id, "drop") && !DropDifferentiator();
 }
 
 bool WantsToStartActiveBlock(){
