@@ -33,6 +33,10 @@ bool WantsToCrouch() {
 	return false;
 }
 
+bool WantsToThrowEnemy() {
+	return ai_attacking && (rand()%3 == 0);
+}
+
 bool WantsToRoll() {
 	return false;
 }

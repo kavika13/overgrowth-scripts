@@ -41,6 +41,11 @@ bool WantsToGrabLedge() {
 	return GetInputDown("grab");
 }
 
+bool WantsToThrowEnemy() {
+	if(!controlled) return false;
+	return GetInputDown("grab");
+}
+
 bool WantsToStartActiveBlock(){
 	if(!controlled) return false;
 	return GetInputDown("grab");
