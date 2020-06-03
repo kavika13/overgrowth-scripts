@@ -1,7 +1,7 @@
 #include "ascharmovement.as"
 
-int count = 0;
 bool limp = false;
+float limp_delay;
 
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0);
@@ -22,13 +22,31 @@ void draw() {
 	this.DrawBody();
 }
 
-void update() {
-	count++;
-	Print("Angelscript updating! Count = "+count+"\n");
-	
-	SetAnimationFromVelocity();
-	UpdateVelocity();
-	ApplyPhysics();
+void ForceApplied(vec3 force) {
+	if(!limp){
+		PlaySound("Data/Sounds/Revolver.wav", this.position);
+		velocity += force;
+		this.GoLimp();
+		velocity -= force;		
+		limp = true;
+		limp_delay = 1.0;
+	}
+}
+
+void update() {	
+	if(!limp){
+		UpdateVelocity();
+		SetAnimationFromVelocity();
+		ApplyPhysics();
+	} else {
+		limp_delay -= time_step;
+		if(limp_delay <= 0){
+			limp = false;
+			this.position = this.GetAvgPosition();
+			velocity = this.GetAvgVelocity();
+			this.ResolveCollisions();
+		}
+	}
 }
 
 void init() {

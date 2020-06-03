@@ -1,7 +1,8 @@
 #include "ascharmovement.as"
 
-int count = 0;
 bool limp = false;
+bool attacking = false;
+float attacking_time;
 
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0);
@@ -28,11 +29,22 @@ vec3 GetTargetVelocity() {
 	if(GetInputDown("jump")){
 		target_velocity.y += 1.0;
 	}
+	if(GetInputDown("attack")){
+		//vec3 direction = normalize(target.position - this.position);
+		attacking = true;
+		attacking_time = 0.0;
+		/*if(this.HasTarget()){
+			target.ApplyForce(direction*20);
+		}*/
+	}
 	if(GetInputDown("crouch")){		
 		limp = true;
 		this.GoLimp();
 		//target_velocity.y -= 1.0;
 	} else {
+		if(limp == true){
+			this.UnRagdoll();
+		}
 		limp = false;
 	}
 	
@@ -48,12 +60,23 @@ void draw() {
 }
 
 void update() {
-	count++;
-	Print("Angelscript updating! Count = "+count+"\n");
-	
-	SetAnimationFromVelocity();
-	UpdateVelocity();
-	ApplyPhysics();
+	if(!attacking){
+		UpdateVelocity();
+		SetAnimationFromVelocity();
+		ApplyPhysics();
+	} else {
+		vec3 direction = normalize(target.position - this.position);
+		this.SetRotationFromFacing(direction);
+		this.ClearAnimations();
+		this.AddAnimation("Data/Animations/kick.anm",1.0);
+		attacking_time += time_step;
+		if(attacking_time > 0.3){
+			target.ApplyForce(direction*20);
+		}
+		if(attacking_time > 0.6){
+			attacking = false;
+		}
+	}
 }
 
 void init() {
