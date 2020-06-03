@@ -78,8 +78,39 @@ void Update() {
     
     time += time_step;
 
+    SetAnimUpdateFreqs();
     VictoryCheck();
     UpdateMusic();
+}
+
+const float _max_anim_frames_per_second = 100.0f;
+
+void SetAnimUpdateFreqs() {
+    int num = GetNumCharacters();
+    array<float> framerate_request(num);
+    vec3 cam_pos = camera.GetPos();
+    float total_framerate_request = 0.0f;
+    for(int i=0; i<num; ++i){
+        MovementObject@ char = ReadCharacter(i);
+        if(char.controlled){
+            continue;
+        }
+        float dist = distance(char.position, cam_pos);
+        framerate_request[i] = 120.0f/max(4.0f,min(dist*0.5f,32.0f));
+        total_framerate_request += framerate_request[i];
+    }
+    float scale = 1.0f;
+    if(total_framerate_request > _max_anim_frames_per_second){
+        scale *= _max_anim_frames_per_second/total_framerate_request;
+    }
+    for(int i=0; i<num; ++i){
+        MovementObject@ char = ReadCharacter(i);
+        if(char.controlled){
+            continue;
+        }
+        int period = 120.0f/(framerate_request[i]*scale);
+        char.SetAnimUpdatePeriod(period);
+    }
 }
 
 const float _reset_delay = 4.0f;
@@ -105,6 +136,12 @@ void VictoryCheck() {
                 gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
                 has_gui = true;
                 UpdateTimerDisplay();
+                if(victory){
+                    gui.CallFunction(gui_id,"SetText(\"You beat the level!\")");
+                }
+                if(failure){
+                    gui.CallFunction(gui_id,"SetText(\"You were defeated.\")");
+                }
                 reset_allowed = false;
             }
             //Reset();

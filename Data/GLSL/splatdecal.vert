@@ -3,6 +3,7 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform float wetness;
 
 varying mat3 tangent_to_world;
 varying vec3 vertex_pos;

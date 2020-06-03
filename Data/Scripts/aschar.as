@@ -1,6 +1,5 @@
 #include "interpdirection.as"
 
-bool controlled = false; //True if controlled by a human player
 int num_frames; //How many timesteps passed since the last update
 
 enum AIEvent{_ragdolled, _activeblocked, _thrown};
@@ -51,7 +50,7 @@ float block_stunned = 0.0f;
 int block_stunned_by_id = -1;
 
 int IsBlockStunned() {
-    /*if(controlled){
+    /*if(this_mo.controlled){
         Print("Block stunned: "+block_stunned+"\n");
     }*/
     return (block_stunned > 0.0f)?1:0;
@@ -195,9 +194,9 @@ void UpdateCutThroatEffect() {
     -- blood_delay;
 }
 
-void Update(bool _controlled, int _num_frames) {
+void Update(int _num_frames) {
     if(in_animation){        
-        if(controlled){
+        if(this_mo.controlled){
             UpdateAirWhooshSound();
             ApplyCameraControls();
         }
@@ -222,11 +221,10 @@ void Update(bool _controlled, int _num_frames) {
         this_mo.velocity = new_slide_vel + offset;
     }
 
-    controlled = _controlled;
     num_frames = _num_frames;
     time += time_step * num_frames;
 
-    if(!controlled && on_ground){
+    if(!this_mo.controlled && on_ground){
         //MouseControlJumpTest();
     }
 
@@ -237,7 +235,7 @@ void Update(bool _controlled, int _num_frames) {
     UpdateBrain(); //in playercontrol.as or enemycontrol.as
     UpdateState();
 
-    if(controlled){
+    if(this_mo.controlled){
         UpdateAirWhooshSound();
         ApplyCameraControls();
     }
@@ -376,7 +374,7 @@ void HandleSpecialKeyPresses() {
         Recover();
     }
 
-    if(controlled){
+    if(this_mo.controlled){
         if(GetInputPressed("v")){
             string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
@@ -398,6 +396,9 @@ void HandleSpecialKeyPresses() {
         }
         if(GetInputPressed("6")){
             SwitchCharacter("Data/Characters/rabbot.xml");
+        }
+        if(GetInputPressed("7")){
+            SwitchCharacter("Data/Characters/cat.xml");
         }
         if(GetInputPressed("b")){
             /*for(int i=0; i<5; ++i){
@@ -432,7 +433,7 @@ void HandleSpecialKeyPresses() {
                 flags = flags | _ANM_MIRRORED;
             }
             //mirrored_stance = !mirrored_stance;
-            this_mo.StartAnimation("Data/Animations/r_dodgebacklow.anm",20.0f,flags);
+            this_mo.StartAnimation("Data/Animations/r_bigdogswordattackoverblocked.anm",20.0f,flags);
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
         }
@@ -553,7 +554,7 @@ void UpdateHeadLook() {
             target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
         }
     }
-    if(controlled){
+    if(this_mo.controlled){
         if(!look_at_target){
             target_head_dir = camera.GetFacing();
             target_head_dir.y *= 0.5f;
@@ -675,9 +676,9 @@ void UpdateActiveBlockAndDodge() {
     UpdateActiveBlockMechanics();
     UpdateActiveDodgeMechanics();
     if(active_blocking){
-        if(active_block_flinch_layer == -1){
+        if(active_block_flinch_layer == -1 && state != _hit_reaction_state){
             active_block_flinch_layer = 
-                this_mo.AddLayer("Data/Animations/r_activeblockflinch.anm",10.0f,0);
+                this_mo.AddLayer(character_getter.GetAnimPath("blockflinch"),10.0f,0);
         }
     } else {
         if(active_block_flinch_layer != -1){
@@ -850,7 +851,7 @@ void SetActiveRagdollFallPose() {
     float penetration_ratio = penetration / danger_radius;
     float protect_amount = min(1.0f,max(0.0f,penetration_ratio*4.0f-2.0));
     this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount); // How much to try to curl up into a ball
-    /*if(controlled){
+    /*if(this_mo.controlled){
         Print("Protect amount: "+protect_amount+"\n");
     }*/
 
@@ -973,7 +974,6 @@ void Ragdoll(int type){
     if(state == _ragdoll_state){
         return;
     }
-    
     ledge_info.on_ledge = false;
     this_mo.Ragdoll();
     SetState(_ragdoll_state);
@@ -1010,6 +1010,9 @@ const int _hit = 2;
 const int _block_impact = 3;
 const int _invalid = 4;
 
+
+const float drop_weapon_probability = 0.3f;
+    
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
 // Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id) {
@@ -1064,13 +1067,55 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     return _hit;
 }
 
+vec3 GetClosestWeapPoint(int other_id, vec3 fallback){
+    if(other_id == -1 || !holding_weapon || this_mo.weapon_id == -1){
+        return fallback;
+    }
+    MovementObject@ char = ReadCharacterID(other_id);
+    if(char.weapon_id == -1){
+        return fallback;
+    }
+
+    vec3 p_base, p_tip;
+    {
+        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+        mat4 trans = item_obj.GetPhysicsTransform();
+        p_base = trans * item_obj.GetPoint("base");
+        p_tip = trans * item_obj.GetPoint("tip");
+    }
+
+    //DebugDrawLine(p_base, p_tip, vec3(1.0f), _fade);
+
+    vec3 e_base, e_tip;
+    {
+        ItemObject@ item_obj = ReadItemID(char.weapon_id);
+        mat4 trans = item_obj.GetPhysicsTransform();
+        e_base = trans * item_obj.GetPoint("base");
+        e_tip = trans * item_obj.GetPoint("tip");
+    }
+
+    //DebugDrawLine(e_base, e_tip, vec3(1.0f), _fade);
+    
+    vec3 mu = LineLineIntersect(p_base, p_tip, e_base, e_tip);
+    mu.x = min(1.0,max(0.0,mu.x));
+    mu.y = min(1.0,max(0.0,mu.y));
+    return (p_base + (p_tip-p_base)*mu.x +
+            e_base + (e_tip-e_base)*mu.y) * 0.5f;
+}
+
 int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
-    string sound = "Data/Sounds/hit/hit_block.xml";
+    string sound;
+    if(attack_getter2.GetFleshUnblockable() == 0){
+        sound = "Data/Sounds/hit/hit_block.xml";
+        MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
+        MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
+    } else {
+        sound = "Data/Sounds/weapon_foley/impact/weapon_metal_hit_metal_strong.xml";
+        MakeMetalSparks(GetClosestWeapPoint(attacker_id, pos));
+    }
     PlaySoundGroup(sound, pos);
-    MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
-    MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-    TimedSlowMotion(0.1f,0.3f, 0.05f);
-    if(controlled){
+    //TimedSlowMotion(0.1f,0.3f, 0.05f);
+    if(this_mo.controlled){
         camera.AddShake(0.5f);
     }
     return _block_impact;
@@ -1087,8 +1132,10 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
         }
     }
 
+    //active_blocking = true;
     if(!on_ground || flip_info.IsFlipping() || !active_blocking || 
-        attack_getter2.GetUnblockable() != 0)
+        attack_getter2.GetUnblockable() != 0 || 
+        (attack_getter2.GetFleshUnblockable() != 0 && !holding_weapon))
     {
         return _miss;
     }
@@ -1120,6 +1167,75 @@ int IsDucking(){
     }
 }
 
+void TakeSharpDamage(float sharp_damage, vec3 pos, int attacker_id) {
+    TakeBloodDamage(sharp_damage);
+     /*for(int i=0; i<5; ++i){
+        MakeParticle("Data/Particles/bloodcloud.xml",pos,
+            vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
+        MakeParticle("Data/Particles/bloodsplat.xml",pos,
+            vec3(RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f)));
+     }
+     cut_torso = true;
+     for(int i=0; i<100; ++i){
+            this_mo.CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
+     }*/
+    if(attack_getter2.HasCutPlane()){
+        vec3 cut_plane_local = attack_getter2.GetCutPlane();
+        int cut_plane_type = attack_getter2.GetCutPlaneType();
+        if(attack_getter2.GetMirrored() == 1){
+            cut_plane_local.x *= -1.0f;
+        }
+        vec3 facing = ReadCharacterID(attacker_id).GetFacing();
+        vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
+        vec3 up(0.0f,1.0f,0.0f);
+        vec3 cut_plane_world = facing * cut_plane_local.z +
+            facing_right * cut_plane_local.x +
+            up * cut_plane_local.y;
+        this_mo.CutPlane(cut_plane_world, pos, facing, cut_plane_type);
+        const bool _draw_cut_plane = false;
+        if(_draw_cut_plane){
+            vec3 cut_plane_z = normalize(cross(up, cut_plane_world));
+            vec3 cut_plane_x = normalize(cross(cut_plane_world, cut_plane_z));
+            for(int i=-10; i<=10; ++i){
+                DebugDrawLine(pos-cut_plane_z*0.5f+cut_plane_x*(i*0.1f)+facing*0.5, pos+cut_plane_z*0.5f+cut_plane_x*(i*0.1f)+facing*0.5, vec3(1.0f,1.0f,1.0f), _fade);
+                DebugDrawLine(pos-cut_plane_x*0.5f+cut_plane_z*(i*0.1f)+facing*0.5, pos+cut_plane_x*0.5f+cut_plane_z*(i*0.1f)+facing*0.5, vec3(1.0f,1.0f,1.0f), _fade);
+            }
+        }
+    }
+    if(attack_getter2.HasStabDir()){
+        int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
+        int stab_type = attack_getter2.GetStabDirType();
+        ItemObject@ item_obj = ReadItemID(attack_weapon_id);
+        mat4 trans = item_obj.GetPhysicsTransform();
+        mat4 trans_rotate = trans;
+        trans_rotate.SetColumn(3, vec3(0.0f));
+        vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
+        vec3 stab_dir = trans_rotate * attack_getter2.GetStabDir();
+        stab_pos -= stab_dir * 5.0f;
+        const bool _draw_cut_line = false;
+        if(_draw_cut_line){
+            DebugDrawLine(stab_pos,
+                stab_pos + stab_dir*10.0f,
+                vec3(1.0f),
+                _fade);
+        }
+        this_mo.Stab(stab_pos, stab_dir, stab_type);
+    }
+}
+
+void MakeMetalSparks(vec3 pos){
+    int num_sparks = rand()%20;
+    for(int i=0; i<num_sparks; ++i){
+        MakeParticle("Data/Particles/metalspark.xml",pos,vec3(RangedRandomFloat(-5.0f,5.0f),
+                                                         RangedRandomFloat(-5.0f,5.0f),
+                                                         RangedRandomFloat(-5.0f,5.0f)));
+        
+        MakeParticle("Data/Particles/metalflash.xml",pos,vec3(RangedRandomFloat(-5.0f,5.0f),
+                                                         RangedRandomFloat(-5.0f,5.0f),
+                                                         RangedRandomFloat(-5.0f,5.0f)));
+    }   
+}
+
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(state == _hit_reaction_state && hit_reaction_dodge){
         return _miss;
@@ -1130,7 +1246,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(attack_getter2.GetHeight() == _high && IsDucking() == 1){
         return _miss;
     }
-    if(controlled){
+    if(this_mo.controlled){
         camera.AddShake(1.0f);
     }
 
@@ -1142,76 +1258,38 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     block_health = max(0.0f, block_health);
 
     float sharp_damage = attack_getter2.GetSharpDamage();
-    if(sharp_damage > 0.0f){
-        TakeBloodDamage(sharp_damage);
-         /*for(int i=0; i<5; ++i){
-            MakeParticle("Data/Particles/bloodcloud.xml",pos,
-                vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
-            MakeParticle("Data/Particles/bloodsplat.xml",pos,
-                vec3(RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f)));
-         }
-         cut_torso = true;
-         for(int i=0; i<100; ++i){
-                this_mo.CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
-         }*/
-        if(attack_getter2.HasCutPlane()){
-            vec3 cut_plane_local = attack_getter2.GetCutPlane();
-            int cut_plane_type = attack_getter2.GetCutPlaneType();
-            if(attack_getter2.GetMirrored() == 1){
-                cut_plane_local.x *= -1.0f;
-            }
-            vec3 facing = ReadCharacterID(attacker_id).GetFacing();
-            vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
-            vec3 up(0.0f,1.0f,0.0f);
-            vec3 cut_plane_world = facing * cut_plane_local.z +
-                facing_right * cut_plane_local.x +
-                up * cut_plane_local.y;
-            this_mo.CutPlane(cut_plane_world, pos, facing, cut_plane_type);
-            const bool _draw_cut_plane = false;
-            if(_draw_cut_plane){
-                vec3 cut_plane_z = normalize(cross(up, cut_plane_world));
-                vec3 cut_plane_x = normalize(cross(cut_plane_world, cut_plane_z));
-                for(int i=-5; i<=5; ++i){
-                    DebugDrawLine(pos-cut_plane_z*0.5f+cut_plane_x*(i*0.1f), pos+cut_plane_z*0.5f+cut_plane_x*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
-                    DebugDrawLine(pos-cut_plane_x*0.5f+cut_plane_z*(i*0.1f), pos+cut_plane_x*0.5f+cut_plane_z*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
-                }
-            }
-        }
-        if(attack_getter2.HasStabDir()){
-            int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
-            int stab_type = attack_getter2.GetStabDirType();
-            ItemObject@ item_obj = ReadItemID(attack_weapon_id);
-            mat4 trans = item_obj.GetPhysicsTransform();
-            mat4 trans_rotate = trans;
-            trans_rotate.SetColumn(3, vec3(0.0f));
-            vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
-            vec3 stab_dir = trans_rotate * attack_getter2.GetStabDir();
-            stab_pos -= stab_dir * 5.0f;
-            const bool _draw_cut_line = false;
-            if(_draw_cut_line){
-                DebugDrawLine(stab_pos,
-                    stab_pos + stab_dir*10.0f,
-                    vec3(1.0f),
-                    _persistent);
-            }
-            this_mo.Stab(stab_pos, stab_dir, stab_type);
-        }
-    } else {
+
+    bool can_passive_block = true;
+    if(block_health <= 0.0f || 
+       flip_info.IsFlipping() || 
+       state == _attack_state || 
+       !on_ground || 
+       blood_health <= 0.0f || 
+       state == _ragdoll_state ||
+       (sharp_damage > 0.0f && !holding_weapon))
+    {
+       can_passive_block = false;
+    }
+
+    if(sharp_damage == 0.0f){
         MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
         MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
     }
 
     bool knocked_over = false;
     
-    if(block_health <= 0.0f || flip_info.IsFlipping() || state == _attack_state || !on_ground || blood_health <= 0.0f || state == _ragdoll_state){
+    if(!can_passive_block){
         HandleRagdollImpact(dir, pos);
         knocked_over = true;
-        if(!controlled){
+        if(!this_mo.controlled){
             this_mo.PlaySoundGroupVoice("hit",0.0f);
+        }
+        if(sharp_damage > 0.0f){        
+            TakeSharpDamage(sharp_damage, pos, attacker_id);
         }
     } else {
         HandlePassiveBlockImpact(dir, pos);
-        if(!controlled){
+        if(!this_mo.controlled){
             this_mo.PlaySoundGroupVoice("block_hit",0.0f);
         }
     }
@@ -1230,7 +1308,17 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
             PlaySoundGroup(sound, pos);        
         }
     } else {
-        string sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
+        string sound;
+        if(block_health > 0.0f && holding_weapon){
+            sound = "Data/Sounds/weapon_foley/impact/weapon_metal_hit_metal_strong.xml";
+            MakeMetalSparks(GetClosestWeapPoint(attacker_id, pos));
+        } else {
+            sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
+        }
+        if(RangedRandomFloat(0.0f,1.0f) < drop_weapon_probability){
+            DropWeapon();
+        }
+
         PlaySoundGroup(sound, pos);   
     }
 
@@ -1319,7 +1407,7 @@ bool HandleDodge(const vec3&in dir, int attacker_id){
     }
     this_mo.StartAnimation(anim_path,10.0f,flags);
     this_mo.SetAnimationCallback("void EndHitReaction()");
-    TimedSlowMotion(0.1f,0.4f, 0.15f);
+    //TimedSlowMotion(0.1f,0.4f, 0.15f);
     target_id = attacker_id;
     return true;
 }
@@ -1344,8 +1432,8 @@ void TakeDamage(float how_much){
     }
     if(temp_health <= 0.0f && knocked_out == _awake){
         knocked_out = _unconscious;
-        TimedSlowMotion(0.1f,0.7f, 0.05f);
-        if(!controlled){
+        //TimedSlowMotion(0.1f,0.7f, 0.05f);
+        if(!this_mo.controlled){
             this_mo.PlaySoundGroupVoice("death",0.4f);
         }
     }
@@ -1532,7 +1620,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
     }
     if(attack_event == true && target_id != -1){
         vec3 target_pos = ReadCharacterID(target_id).position;
-        if(event == "blockprepare" || distance(this_mo.position, target_pos) < _attack_range + range_extender){
+        if(event == "blockprepare" || event == "attackblocked" || distance(this_mo.position, target_pos) < _attack_range + range_extender){
             vec3 facing = this_mo.GetFacing();
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 dir = normalize(target_pos - this_mo.position);
@@ -1541,7 +1629,13 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
             if(return_val == _going_to_block){
                 WasBlocked();
             }
-            if((return_val == _hit || return_val == _block_impact) && controlled){
+            if(return_val == _hit){
+                if(attack_getter.GetSharpDamage() > 0.0f && holding_weapon){
+                    ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+                    item_obj.AddBlood();
+                }
+            }
+            if((return_val == _hit || return_val == _block_impact) && this_mo.controlled){
                 camera.AddShake(0.5f);
             }
             if(return_val != _miss && attack_getter.GetSpecial() == "legcannon"){
@@ -1554,7 +1648,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
                     char.position = this_mo.position + dir;
                 }
             }
-            /*if((return_val == _hit) && !controlled){
+            /*if((return_val == _hit) && !this_mo.controlled){
                 if(rand()%2==0){
                     string sound = "Data/Sounds/voice/torikamal/hit_taunt.xml";
                     this_mo.PlaySoundGroupVoice(sound,0.2f);
@@ -1764,7 +1858,7 @@ void UpdateGroundAttackControls() {
         can_feint = true;
         feinting = false;
         target_id = attack_id;
-        if(!controlled){
+        if(!this_mo.controlled){
             this_mo.PlaySoundGroupVoice("attack",0.0f);
         }
     } 
@@ -2004,6 +2098,7 @@ void Land(vec3 vel) {
 
     flip_info.Land();
     old_slide_vel = this_mo.velocity;
+    this_mo.velocity.y = max(this_mo.velocity.y, -10.0f);
 }
 
 const float offset = 0.05f;
@@ -2110,7 +2205,7 @@ void HandleGroundCollisions() {
     //    GoLimp();    
     //}
 
-    if((/*sphere_col.NumContacts() != 0 ||*/                                // If standing on overly-sloped surface, start controlled fall
+    if((/*sphere_col.NumContacts() != 0 ||*/                                // If standing on overly-sloped surface, start this_mo.controlled fall
         ground_normal.y < _ground_normal_y_threshold)                       
         && this_mo.velocity.y > 0.2f &&
         false)
@@ -2404,6 +2499,9 @@ void UpdateAttacking() {
     } else {
         mirrored = (dot(right_direction, GetTargetVelocity())>-0.1f);
     }
+    if(!this_mo.controlled){
+        mirrored = rand()%2==0;
+    }
     // Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
     bool front = //(dot(direction, GetTargetVelocity())>0.7f) || 
                  length_squared(GetTargetVelocity())<0.1f;
@@ -2576,9 +2674,9 @@ void UpdateHitReaction() {
             }
             block_string += "block";
             if(mirrored_stance){
-                this_mo.StartCharAnimation(block_string,40.0f, _ANM_MIRRORED);
+                this_mo.StartCharAnimation(block_string,20.0f, _ANM_MIRRORED);
             } else {
-                this_mo.StartCharAnimation(block_string,40.0f);
+                this_mo.StartCharAnimation(block_string,20.0f);
             }
         } else if(hit_reaction_event == "attackimpact") {
             if(reaction_getter.GetMirrored() == 0){
@@ -2600,7 +2698,7 @@ void UpdateHitReaction() {
         this_mo.SwapAnimation("Data/Animations/r_throwncounter.anm");
         string sound = "Data/Sounds/weapon_foley/swoosh/weapon_whoos_big.xml";
         this_mo.PlaySoundGroupAttached(sound,this_mo.position);
-        TimedSlowMotion(0.1f,0.3f, 0.1f);
+        //TimedSlowMotion(0.1f,0.3f, 0.1f);
     }
     hit_reaction_time += time_step * num_frames;
 }
@@ -2871,9 +2969,8 @@ void NoWeapon() {
 }
 
 void DeletedWeapon(int id){
-    Print("Deleting weapon!\n");
     if(this_mo.weapon_id == id){
-        Print("Deleting weapon success!\n");
+        this_mo.DetachItem(this_mo.weapon_id);
         this_mo.weapon_id = -1;
         NoWeapon();
     }
@@ -2883,6 +2980,10 @@ void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.weapon_id);
+        if(pickup_layer != -1){
+            this_mo.RemoveLayer(pickup_layer, 4.0f);
+            pickup_layer = -1;
+        } 
         NoWeapon();
     }
 }
@@ -2896,7 +2997,7 @@ int pickup_layer = -1;
 int pickup_layer_attempts = 0;
 
 void HandlePickUp() {
-    if(WantsToPickUpItem() && knocked_out == _awake){
+    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state){
         int num_items = GetNumItems();
         
         if(!holding_weapon){

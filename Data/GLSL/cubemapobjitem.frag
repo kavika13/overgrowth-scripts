@@ -12,6 +12,7 @@ uniform samplerCube tex3;
     uniform sampler2DShadow tex4;
 #endif
 uniform sampler2DShadow tex5;
+uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float extra_ao;
@@ -49,6 +50,8 @@ void main()
     if((rand(gl_FragCoord.xy)) < fade){
         discard;
     };
+    float blood_amount, wetblood;
+    ReadBloodTex(tex6, tc0, blood_amount, wetblood);
     // Get normal
     vec4 normalmap = texture2D(tex1,tc0);
     vec3 os_normal = UnpackObjNormal(normalmap);
@@ -67,18 +70,20 @@ void main()
     vec3 diffuse_color = GetDirectColor(NdotL);
     diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
                      GetAmbientContrib(shadow_tex.g);
-    
+
+
     // Get specular lighting
-    float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,100.0);
+    float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(100.0,50.0,(1.0-wetblood)*blood_amount));
     spec *= 5.0;
-    vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
+    vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * mix(1.0,0.3,blood_amount);
     
     vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
     spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 *
-                  GetAmbientContrib(shadow_tex.g);
+                  GetAmbientContrib(shadow_tex.g) * max(0.0,(1.0 - blood_amount * 2.0));
     
     // Put it all together
     vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
+    ApplyBloodToColorMap(colormap, blood_amount, wetblood);
     vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
     
     color *= BalanceAmbient(NdotL);

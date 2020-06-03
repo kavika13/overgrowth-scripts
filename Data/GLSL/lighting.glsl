@@ -250,4 +250,18 @@ vec3 GammaAntiCorrectVec3(in vec3 val) {
 #endif
 }
 
+void ReadBloodTex(in sampler2D tex, in vec2 tex_coords, out float blood_amount, out float wetblood){
+    vec4 blood_tex = texture2D(tex,tex_coords);
+    blood_amount = min(blood_tex.r*5.0, 1.0);
+    wetblood = max(0.0,blood_tex.g*1.4-0.4);
+}
+
+void ApplyBloodToColorMap(inout vec4 colormap, in float blood_amount, in float temp_wetblood){
+    float wetblood = mix(temp_wetblood, 0.4, colormap.a);
+    colormap = mix(colormap, 
+                   mix(vec4(0.2*wetblood+0.05,0.0,0.0,wetblood),
+                       colormap*vec4(0.8,0.0,0.0,0.0)+vec4(0.0,0.0,0.0,wetblood*0.5+0.5),
+                       (1.0-wetblood)*0.5), 
+                   blood_amount);
+}
 #endif

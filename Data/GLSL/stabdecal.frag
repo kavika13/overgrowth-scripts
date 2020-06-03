@@ -8,5 +8,5 @@ void main()
         discard;
     }
     vec4 color = texture2D(tex0, gl_TexCoord[0].xy);
-    gl_FragColor = vec4(gl_Color.xyz, gl_Color.a * color.a);
+    gl_FragColor = vec4(gl_Color.x * color.r, gl_Color.y, gl_Color.z, min(1.0,gl_Color.a * color.r * 10.0));
 }

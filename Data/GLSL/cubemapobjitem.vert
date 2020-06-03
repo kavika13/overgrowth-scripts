@@ -8,6 +8,7 @@ uniform samplerCube tex3;
     uniform sampler2DShadow tex4;
 #endif
 uniform sampler2DShadow tex5;
+uniform sampler2D tex6;
 uniform vec3 cam_pos;
 uniform vec3 ws_light;
 uniform float fade;

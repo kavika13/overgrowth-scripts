@@ -28,89 +28,89 @@ void ReceiveMessage(int source, int msg_type){
 }
 
 bool WantsToCrouch() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("crouch");
 }
 
 bool WantsToRoll() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("crouch");
 }
 
 bool WantsToJump() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("jump");
 }
 
 bool WantsToAttack() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("attack");
 }
 
 bool WantsToRollFromRagdoll(){
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("crouch");
 }
 
 bool WantsToFlip() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("crouch");
 }
 
 bool WantsToGrabLedge() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     if(holding_weapon) return false;
     return GetInputDown("grab");
 }
 
 bool WantsToThrowEnemy() {
-    if(!controlled) return false;
-    if(holding_weapon) return false;
+    if(!this_mo.controlled) return false;
+    //if(holding_weapon) return false;
     return throw_key_time > 0.2f;
 }
 
 bool WantsToPickUpItem() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("item");
 }
 
 bool WantsToDropItem() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("drop");
 }
 
 bool WantsToStartActiveBlock(){
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("grab");
 }
 
 bool WantsToFeint(){
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("grab");
 }
 
 bool WantsToCounterThrow(){
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("grab");
 }
 
 bool WantsToJumpOffWall() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("jump");
 }
 
 bool WantsToFlipOffWall() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputPressed("crouch");
 }
 
 bool WantsToAccelerateJump() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
     return GetInputDown("jump");
 }
 
 bool WantsToDodge() {
-    if(!controlled) return false;
+    if(!this_mo.controlled) return false;
 
     bool movement_key_down = false;
     if(GetInputDown("move_up") ||
@@ -138,7 +138,7 @@ bool WantsToCancelAnimation() {
 // Converts the keyboard controls into a target velocity that is used for movement calculations in aschar.as and aircontrol.as.
 vec3 GetTargetVelocity() {
     vec3 target_velocity(0.0f);
-    if(!controlled) return target_velocity;
+    if(!this_mo.controlled) return target_velocity;
     
     if(GetInputDown("move_up")){
         target_velocity += camera.GetFlatFacing();

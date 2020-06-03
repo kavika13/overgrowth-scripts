@@ -54,7 +54,8 @@ void main()
 #endif
     shadow_tex.g = 1.0;
 
-    float blood_amount = min(texture2D(tex6,gl_TexCoord[1].xy).r*5.0, 1.0);
+    float blood_amount, wetblood;
+    ReadBloodTex(tex6, gl_TexCoord[1].xy, blood_amount, wetblood);
 
     // Get diffuse lighting
     float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
@@ -65,7 +66,7 @@ void main()
     
     // Get specular lighting
     //float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
-    float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,200.0);
+    float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(200.0,50.0,(1.0-wetblood)*blood_amount));
     spec *= 5.0;
     vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * 0.3;
     
@@ -75,7 +76,9 @@ void main()
 
     // Put it all together
     vec4 colormap = texture2D(tex0,gl_TexCoord[1].xy);
-    colormap = mix(colormap, vec4(0.1,0.0,0.0,1.0), blood_amount);
+    ApplyBloodToColorMap(colormap, blood_amount, wetblood);
+
+    //colormap = vec4(0.1,0.0,0.0,1.0);
     //colormap.xyz *= 1.0-blood_amount*0.3;
     //colormap.a = mix(colormap.a, 1.0, blood_amount);
     vec3 color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
