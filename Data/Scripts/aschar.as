@@ -6,23 +6,23 @@ float air_time = 0.0f;
 
 bool pre_jump = false;
 float pre_jump_time;
-const float _pre_jump_delay = 0.04f;
+const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
 
 bool on_ground = false;
 float on_ground_time = 0.0f;
 
 vec3 tilt(0.0f);
 vec3 target_tilt(0.0f);
-const float _tilt_inertia = 0.9f;
+const float _tilt_inertia = 0.9f; // affects tilt, must be between 0 and 1
 
 const float _duck_speed_mult = 0.5f;
 
 const float _ground_normal_y_threshold = 0.5f;
-const float _leg_sphere_size = 0.45f;
+const float _leg_sphere_size = 0.45f; // affects the size of a sphere collider used for leg collisions
 const float _bumper_size = 0.5f;
 
-const float _run_speed = 8.0f;
-float max_speed = _run_speed;
+const float _run_speed = 8.0f; // used to calculate movement and jump velocities, change this instead of max_speed
+float max_speed = _run_speed; // this is recalculated constantly because actual max speed is affected by slopes
 
 const float _tilt_transition_vel = 8.0f;
 
@@ -44,9 +44,9 @@ int state;
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
 
-const float _run_threshold = 0.8f;
-const float _walk_threshold = 0.6f;
-const float _walk_accel = 35.0f;
+const float _run_threshold = 0.8f; // when character is moving faster than this, it runs
+const float _walk_threshold = 0.6f; // when character is moving slower than this, it's idling
+const float _walk_accel = 35.0f; // how fast characters accelerate when moving
 float duck_amount = 0.0f;
 float target_duck_amount = 0.0f;
 float duck_vel = 0.0f;
@@ -83,7 +83,7 @@ bool active_blocking = false;
 float active_block_duration = 0.0f;
 float active_block_recharge = 0.0f;
 
-string curr_attack;
+string curr_attack; 
 
 void EndAttack() {
 	SetState(_movement_state);
@@ -98,13 +98,9 @@ void EndHitReaction() {
 }
 
 void WasBlocked() {
-	if(curr_attack == "frontkick"){
-		this_mo.SwapAnimation("Data/Animations/r_frontkickblocked.anm");
+	this_mo.SwapAnimation(attack_getter.GetBlockedAnimPath());
+	if(attack_getter.GetSwapStance() != 0){
 		mirrored_stance = !mirrored_stance;
-	} else if(curr_attack == "spinkickright"){
-		this_mo.SwapAnimation("Data/Animations/r_spinkickrightblocked.anm");
-	} else if(curr_attack == "sweep") {
-		this_mo.SwapAnimation("Data/Animations/r_sweepblocked.anm");
 	}
 }
 
@@ -539,7 +535,9 @@ void SetOnGround(bool _on_ground){
 	on_ground = _on_ground;
 }
 
+// this is called when the character lands in a non-ragdoll mode
 void Land(vec3 vel) {
+	// this is true when the character initiated a flip during jump and isn't finished yet
 	if(flip_info.ShouldRagdollOnLanding()){
 		GoLimp();
 		return;
@@ -699,7 +697,7 @@ void GoLimp() {
 	limp = true;
 	this_mo.Ragdoll();
 	recovery_time = _ragdoll_recovery_time;
-	pose_handler.clear();
+	//pose_handler.clear();
 	//pose_handler.AddLayer("Data/Animations/run.pos",
 	//					  0.000f,
 	//					  false);
@@ -784,35 +782,43 @@ void UpdateAttacking() {
 
 	if(!attack_animation_set){
 		ChooseAttack(front);
+		bool attack_chosen = false;
 		if(curr_attack == "frontkick"){
-			duck_amount = 0.0f;
-			if(mirrored_stance){
-				this_mo.StartMirroredMobileAnimation("Data/Animations/r_frontkick.anm");
-			} else {
-				this_mo.StartMobileAnimation("Data/Animations/r_frontkick.anm");
-			}
-			this_mo.MaterialEvent("kick", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
-			mirrored_stance = !mirrored_stance;
+			attack_getter.Load("Data/Attacks/frontkick.xml");
+			attack_chosen = true;
 		} else if(curr_attack == "spinkickright"){
-			duck_amount = 0.0f;
-			if(!mirrored){
-				this_mo.StartAnimation("Data/Animations/r_spinkickright.anm");
-				mirrored_stance = false;
-			} else {
-				this_mo.StartMirroredAnimation("Data/Animations/r_spinkickright.anm");
-				mirrored_stance = true;
-			}
-			this_mo.MaterialEvent("kick", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+			attack_getter.Load("Data/Attacks/spinkick.xml");
+			attack_chosen = true;
 		} else if(curr_attack == "sweep"){
-			duck_amount = 1.0f;
-			if(!mirrored){
-				this_mo.StartAnimation("Data/Animations/r_sweep.anm");
-				mirrored_stance = false;
+			attack_getter.Load("Data/Attacks/sweep.xml");
+			attack_chosen = true;
+		}
+		if(attack_chosen){
+			if(attack_getter.GetHeight() == _low){
+				duck_amount = 1.0f;
 			} else {
-				this_mo.StartMirroredAnimation("Data/Animations/r_sweep.anm");
-				mirrored_stance = true;
+				duck_amount = 0.0f;
 			}
-			this_mo.MaterialEvent("sweep", this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+			if(attack_getter.GetDirection() == _right){
+				if(!mirrored){
+					this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
+					mirrored_stance = false;
+				} else {
+					this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
+					mirrored_stance = true;
+				}
+			} else {
+				if(mirrored_stance){
+					this_mo.StartMirroredMobileAnimation(attack_getter.GetUnblockedAnimPath());
+				} else {
+					this_mo.StartMobileAnimation(attack_getter.GetUnblockedAnimPath());
+				}
+			}
+			this_mo.MaterialEvent(attack_getter.GetMaterialEvent(),
+						this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+			if(attack_getter.GetSwapStance() != 0){
+				mirrored_stance = !mirrored_stance;
+			}
 		} else if(curr_attack == "legcannon"){
 			this_mo.StartAnimation("Data/Animations/r_legcannon.anm");
 			leg_cannon_flip = 0.0f;
@@ -1282,7 +1288,14 @@ void update(bool _controlled) {
 	/*vec3 vel(RangedRandomFloat(-20.0f,20.0f),
 			 RangedRandomFloat(0.0f,100.0f),
 			 RangedRandomFloat(-20.0f,20.0f));
-	MakeParticle("Data/Particles/spark.xml",this_mo.position, vel);*/
+	vel *= 0.05;*/
+	//MakeParticle("Data/Particles/spark.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/smoke.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/heavysand.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/heavydirt.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/impactfast.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
+	//MakeParticle("Data/Particles/impactslow.xml",this_mo.position + vec3(0.0,0.7,0.0), vel);
 
 	//MakeImpactParticle(this_mo.position);
 
@@ -1324,7 +1337,46 @@ void update(bool _controlled) {
 						  _persistent);
 		}
 	}
-
+	if(controlled && GetInputPressed("1")){
+		this_mo.RecreateRiggedObject(
+							"Data/Objects/IGF_Characters/IGF_Guard.xml",
+							"Data/Skeletons/r_rig.xml",
+							"",
+							"");
+		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}
+	if(controlled && GetInputPressed("2")){
+		this_mo.RecreateRiggedObject(
+							"Data/Objects/IGF_Characters/IGF_Guard_reddy.xml",
+							"Data/Skeletons/r_rig.xml",
+							"",
+							"");
+		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}
+	if(controlled && GetInputPressed("3")){
+		this_mo.RecreateRiggedObject(
+							"Data/Objects/IGF_Characters/IGF_Turner.xml",
+							"Data/Skeletons/r_turner.xml",
+							"",
+							"");
+		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}
+	if(controlled && GetInputPressed("4")){
+		this_mo.RecreateRiggedObject(
+							"Data/Objects/IGF_Characters/IGF_RabbitCiv.xml",
+							"Data/Skeletons/r_civ.xml",
+							"Data/Skeletons/r_civ.xml",
+							"Data/Skeletons/r_rig.xml");
+		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}
+	if(controlled && GetInputPressed("5")){
+		this_mo.RecreateRiggedObject(
+							"Data/Objects/IGF_Characters/IGF_Wolf.xml",
+							"Data/Skeletons/r_wolf.xml",
+							"Data/Skeletons/r_wolf.xml",
+							"Data/Skeletons/r_rig.xml");
+		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}
 	/*
 	if(GetInputPressed("c")){
 		if(state == _movement_state){
@@ -1389,6 +1441,7 @@ void UpdateAnimation() {
 	this_mo.SetBlendCoord("tall_coord",1.0f-duck_amount);
 	
 	if(on_ground){
+		// rolling on the ground
 		if(flip_info.UseRollAnimation()){
 			this_mo.SetAnimation("Data/Animations/r_roll.xml",7.0f);
 			float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
@@ -1396,7 +1449,14 @@ void UpdateAnimation() {
 			this_mo.SetIKEnabled(false);
 			roll_ik_fade = min(roll_ik_fade + time_step * 5.0f, 1.0f);
 		} else {
+			// running, walking and idle animation
 			this_mo.SetIKEnabled(true);
+			
+			// when he's moving instead of idling, the character turns to the movement direction.
+			// the different movement types are listed in XML files, and are blended together
+			// by variables such as speed or crouching amount (blending values should be 0 and 1)
+			// when there are more than two animations to blend, the XML file refers to another 
+			// XML file which asks for another blending variable.
 			if(speed > _walk_threshold && feet_moving){
 				this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
 															   normalize(flat_velocity),

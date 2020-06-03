@@ -1,20 +1,24 @@
 #include "fliproll.as"
 #include "ledgegrab.as"
 
-const float _jump_fuel_burn = 10.0f;
-const float _jump_fuel = 5.0f;
-const float _air_control = 3.0f;
-const float _jump_vel = 5.0f;
-const float _jump_threshold_time = 0.1f;
+const float _jump_fuel_burn = 10.0f; // multiplier for amount of fuel lost per time_step
+const float _jump_fuel = 5.0f; // used to set the amount of fuel available at the start of a jump
+const float _air_control = 3.0f; // multiplier for the amount of directional control available while in the air
+const float _jump_vel = 5.0f; // y-axis (up) velocity of jump used in GetJumpVelocity()
+const float _jump_threshold_time = 0.1f; // time that must pass before a new jump, used in aschar.as
 const float _jump_launch_decay = 2.0f;
-const float _wall_run_friction = 0.1f;
-		
+const float _wall_run_friction = 0.1f; // used to let wall running pull the character up, uncomment code in UpdateWallRun() to enable
+
+// at the end of this file, JumpInfo is instantiated as jump_info
+// aschar.as uses jump_info to execute code in aircontrol.as
+
+
 class JumpInfo {
-	float jetpack_fuel;
-	float jump_launch; // Used for the initial jump stretch pose
+	float jetpack_fuel; // the amount of fuel available for acceleration
+	float jump_launch; // used for the initial jump stretch pose
 
 	bool has_hit_wall;
-	bool hit_wall;
+	bool hit_wall; // used to see if the character is wallrunning
 	float wall_hit_time;
 	vec3 wall_dir;
 	vec3 wall_run_facing;
@@ -141,6 +145,7 @@ class JumpInfo {
 			LostWallContact();
 		}
 
+		// lets wall-running pull the character farther up, as affected by the _wall_run_friction
 		/*this_mo.velocity -= physics.gravity_vector * 
 							time_step * 
 							_wall_run_friction;
@@ -164,10 +169,10 @@ class JumpInfo {
 			}*/
 			SetFacingFromWallDir();
 		}
-
 		if(WantsToJumpOffWall()){
 			StartWallJump(wall_dir * -1.0f);
 		}
+		
 		if(WantsToFlipOffWall()){
 			StartWallJump(wall_dir * -1.0f);
 			flip_info.StartWallFlip(wall_dir * -1.0f);
@@ -176,6 +181,7 @@ class JumpInfo {
 
 	void UpdateAirControls() {
 		if(WantsToAccelerateJump()){
+			// if there's fuel left and character is not moving down, height can still be increased
 			if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
 				jetpack_fuel -= time_step * _jump_fuel_burn;
 				this_mo.velocity.y += time_step * _jump_fuel_burn;
@@ -209,6 +215,7 @@ class JumpInfo {
 			}
 		}
 
+		// if not holding a ledge, the character is airborne and can get controlled by arrow keys
 		if(ledge_info.on_ledge){
 			ledge_info.UpdateLedge(hit_wall);
 		} else {
@@ -271,12 +278,13 @@ class JumpInfo {
 		hit_wall = false;
 		has_hit_wall = false;
 		flip_info.StartedJump();
-		
+
 		this_mo.SetIKTargetOffset("left_leg",vec3(0.0f));
 		this_mo.SetIKTargetOffset("right_leg",vec3(0.0f));
 		this_mo.SetIKTargetOffset("full_body",vec3(0.0f));
 	}
 
+	// adjusts the velocity of jumps and wall jumps based on ground_normal
 	vec3 GetJumpVelocity(vec3 target_velocity){
 		vec3 jump_vel = target_velocity * _run_speed;
 		jump_vel.y = _jump_vel;
