@@ -148,7 +148,7 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _choking){
         MovementObject@ char = ReadCharacterID(tether_id);
-        if(char.GetNumAttachedWeapons() == 0){
+        if(char.GetIntVar("held_weapon") == -1){
             SetGoal(_struggle);
         } else {
             SetGoal(_hold_still);
@@ -212,7 +212,7 @@ void UpdateBrain(){
         return;
     }
 
-    if(!holding_weapon && goal != _struggle && goal != _hold_still && hostile){
+    if(held_weapon == -1 && goal != _struggle && goal != _hold_still && hostile){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;
@@ -274,7 +274,7 @@ void UpdateBrain(){
         case _attack:
             {
                 MovementObject@ target = ReadCharacterID(target_id);
-                if(target.QueryIntFunction("int IsKnockedOut()") == 1){
+                if(target.GetIntVar("knocked_out") != _awake){
                     SetGoal(_patrol);
                 }
                 if(rand()%(150/num_frames)==0){
@@ -307,7 +307,7 @@ void UpdateBrain(){
             }
             break;
         case _get_weapon:
-            if(holding_weapon || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
+            if(held_weapon != -1 || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
                 if(target_id == -1){
                     SetGoal(_patrol);           
                 } else {
@@ -466,7 +466,7 @@ bool ShouldBlock(){
         return false;
     }
     MovementObject @char = ReadCharacterID(target_id);
-    if(char.QueryIntFunction("int GetState()") == _attack_state){
+    if(char.GetIntVar("state") == _attack_state){
         return true;
     } else {
         return false;
@@ -739,12 +739,19 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float 
 vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float strafe_vel){
     // Get path to estimated target position
     vec3 target_velocity;
-    vec3 target_point = NavPoint(point);
+    vec3 target_point = point;
+    if(distance_squared(target_point, this_mo.position) > 0.2f){
+        target_point = NavPoint(point);
+    }
     GetPath(target_point);
     vec3 next_path_point = GetNextPathPoint();
     if(next_path_point != vec3(0.0f)){
         target_point = next_path_point;
     }
+
+    //for(int i=0; i<path.NumPoints()-1; ++i){
+    //    DebugDrawLine(path.GetPoint(i), path.GetPoint(i+1), vec3(1.0f), _fade);
+    //}
 
     if(path.NumPoints() > 0 && on_ground){
        if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
@@ -868,7 +875,7 @@ void MouseControlPathTest() {
     vec3 start = camera.GetPos();
     vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
     col.GetSweptSphereCollision(start, end, _leg_sphere_size);
-    DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+    //DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
     
     if(GetInputDown(this_mo.controller_id, "g") ){
         goal = _navigate;
@@ -897,6 +904,7 @@ vec3 GetBaseTargetVelocity() {
     } else if(goal == _escort){
         return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 
     } else if(goal == _navigate){
+        DebugDrawWireSphere(nav_target, 0.2f, vec3(1.0f), _fade);
         return GetMovementToPoint(nav_target, 1.0f); 
     } else if(goal == _investigate){
         if(move_delay <= 0.0f){
