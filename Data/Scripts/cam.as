@@ -13,6 +13,8 @@ float smooth_speed = 0.0f;
 
 const float _camera_rotation_inertia = 0.8f;
 const float _camera_inertia = 0.8f;
+const float _camera_media_mode_rotation_inertia = 0.99f;
+const float _camera_media_mode_inertia = 0.99f;
 const float _acceleration = 20.0f;
 const float _base_speed = 5.0f;
 
@@ -89,7 +91,13 @@ void Update() {
             if(GetInputDown(controller_id, "space")){
                 target_velocity *= 0.1f;   
             }
-            co.velocity = co.velocity * _camera_inertia + target_velocity * (1.0f - _camera_inertia);
+            float inertia;
+            if(MediaMode()){
+                inertia = _camera_media_mode_inertia;
+            } else {
+                inertia = _camera_inertia;
+            }
+            co.velocity = co.velocity * inertia + target_velocity * (1.0f - inertia);
             co.position += co.velocity * time_step;
             if(GetInputDown(controller_id, "mouse0") && !co.ignore_mouse_input){
                 target_rotation -= GetLookXAxis(controller_id);
@@ -103,10 +111,16 @@ void Update() {
         co.position = col.GetSlidingCapsuleCollision(old_position, co.position, _camera_collision_radius) ;
         co.velocity += (co.position - old_new_position)/time_step;
     
-        rotation = rotation * _camera_rotation_inertia + 
-                   target_rotation * (1.0f - _camera_rotation_inertia);
-        rotation2 = rotation2 * _camera_rotation_inertia + 
-                   target_rotation2 * (1.0f - _camera_rotation_inertia);
+        float rot_inertia;
+        if(MediaMode()){
+            rot_inertia = _camera_media_mode_rotation_inertia;
+        } else {
+            rot_inertia = _camera_rotation_inertia;
+        }
+        rotation = rotation * rot_inertia + 
+                   target_rotation * (1.0f - rot_inertia);
+        rotation2 = rotation2 * rot_inertia + 
+                   target_rotation2 * (1.0f - rot_inertia);
     
         float smooth_inertia = 0.9f;
         smooth_speed = mix(length(co.velocity), smooth_speed, smooth_inertia);

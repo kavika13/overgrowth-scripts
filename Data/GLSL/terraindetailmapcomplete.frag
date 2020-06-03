@@ -74,4 +74,6 @@ void main()
     CALC_HAZE
     CALC_EXPOSURE
     CALC_FINAL_UNIVERSAL(alpha)
+    
+    //gl_FragColor.xyz = LookupCubemapSimple(ws_normal, diffuse_cubemap).xyz;
 }
