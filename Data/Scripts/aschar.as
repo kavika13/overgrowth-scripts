@@ -150,7 +150,16 @@ float spurt_sound_delay = 0.0f;
 const float _spurt_delay_amount = 6.283185/_spurt_frequency;
 
 void Update(bool _controlled, int _num_frames) {
-    if(in_animation){
+    /*DebugDrawWireSphere(this_mo.position,
+                        0.1f,
+                        vec3(1.0f),
+                        _delete_on_update);*/
+    if(in_animation){        
+        if(controlled){
+            UpdateAirWhooshSound();
+            ApplyCameraControls();
+        }
+        HandleCollisions();
         return;
     }
     if(cut_throat && blood_amount > 0.0f){
@@ -381,11 +390,16 @@ void HandleSpecialKeyPresses() {
                     vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
             }*/
             //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-            //this_mo.StartAnimation("Data/Animations/r_spearstabfarhigh.anm",20.0f,_ANM_MOBILE);
-            //in_animation = true;
-            //this_mo.SetAnimationCallback("void EndAnim()");
             //this_mo.velocity = vec3(0.0f);
             //this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
+            int8 flags = _ANM_MOBILE;
+            if(mirrored_stance){
+                flags = flags | _ANM_MIRRORED;
+            }
+            this_mo.StartAnimation("Data/Animations/r_throw.anm",20.0f,flags);
+            //mirrored_stance = !mirrored_stance;
+            in_animation = true;
+            this_mo.SetAnimationCallback("void EndAnim()");
         }
         if(GetInputPressed("h")){
             context.PrintGlobalVars();
@@ -618,11 +632,7 @@ int active_block_flinch_layer = -1;
 
 void UpdateActiveBlock() {
     block_stunned = max(0.0f, block_stunned - time_step * num_frames);
-    //if(controlled){
-        UpdateActiveBlockMechanics();
-    /*} else {
-        active_blocking = (rand()%4)==0;
-    }*/
+    UpdateActiveBlockMechanics();
     if(active_blocking && state == _movement_state){
         if(active_block_flinch_layer == -1){
             active_block_flinch_layer = 
@@ -954,7 +964,7 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(attack_getter2.GetMirrored() == 0){
         flags = flags | _ANM_MIRRORED;
     }
-    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),1000.0f,flags);
+    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),10.0f,flags);
     SetState(_hit_reaction_state);
     hit_reaction_anim_set = true;
     if(!controlled){
@@ -1537,40 +1547,42 @@ float GetTempHealth() {
 
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
-    if(WantsToAttack()||WantsToThrowEnemy()){
-        TargetClosest(3.0f);
+    const float range = _attack_range + range_extender - _leg_sphere_size;
+    int attack_id = -1;
+    int throw_id = -1;
+    if(WantsToAttack()){
+        int closest_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS);
+        if(closest_id != -1){
+            int danger_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
+            if(danger_id == -1){
+                attack_id = closest_id;
+            } else {
+                attack_id = danger_id;
+            }
+        }
     }
-    if(target_id == -1){
-        return;
+    if(WantsToThrowEnemy()){
+        throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_THROWABLE);
     }
-    if(WantsToAttack() && distance(this_mo.position,ReadCharacterID(target_id).position) <= _attack_range + range_extender){
+    if(attack_id != -1){
         SetState(_attack_state);
-        //Print("Starting attack\n");
         attack_animation_set = false;
         attacking_with_throw = false;
+        target_id = attack_id;
         if(!controlled){
             this_mo.PlaySoundGroupVoice("attack",0.0f);
         }
-
-        /*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
-            TimedSlowMotion(0.2f,0.4f, 0.15f);
-        }*/
-    } else if(WantsToThrowEnemy() && 
-              distance(this_mo.position,ReadCharacterID(target_id).position) <= _attack_range + range_extender &&
-              ReadCharacterID(target_id).QueryIntFunction("int IsBlockStunned()") == 1){
+    } else if(throw_id != -1){
         SetState(_attack_state);
-        //Print("Starting attack\n");
         attack_animation_set = false;
         attacking_with_throw = true;
-        /*if(target.GetTempHealth() <= 0.4f && target.IsKnockedOut()==0){
-            TimedSlowMotion(0.2f,0.4f, 0.15f);
-        }*/
     }
 }
 
 void UpdateAirAttackControls() {
     if(WantsToAttack()){
-        TargetClosest(3.0f);
+        int closest_id = GetClosestCharacterID(3.0f, _TC_ENEMY | _TC_CONSCIOUS);
+        target_id = closest_id;
     }
     if(target_id == -1){
         return;
@@ -1673,7 +1685,55 @@ float GetVisionDistance(const vec3&in target_pos){
     return direct_vision * vision_threshold;
 }
 
-void TargetClosestVisible(){
+const uint8 _TC_ENEMY = (1<<0);
+const uint8 _TC_CONSCIOUS = (1<<1);
+const uint8 _TC_THROWABLE = (1<<2);
+const uint8 _TC_NON_RAGDOLL = (1<<3);
+
+int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags){
+    int num = characters.size();
+    int closest_id = -1;
+    float closest_dist = 0.0f;
+
+    for(int i=0; i<num; ++i){
+        if(this_mo.getID() == characters[i]){
+            continue;
+        }
+        MovementObject@ char = ReadCharacterID(characters[i]);
+        if(flags & _TC_CONSCIOUS != 0 && char.IsKnockedOut() != _awake){
+            continue;
+        }
+        
+        character_getter.Load(this_mo.char_path);
+        if(flags & _TC_ENEMY != 0 && 
+           character_getter.OnSameTeam(char.char_path) == 1)
+        {
+            continue;
+        }
+
+        if(flags & _TC_THROWABLE != 0 && 
+           char.QueryIntFunction("int IsBlockStunned()") != 1)
+        {
+            continue;
+        }
+        
+        if(flags & _TC_NON_RAGDOLL != 0 && 
+           char.QueryIntFunction("int IsRagdoll()")==1)
+        {
+            continue;
+        }
+        
+        vec3 target_pos = char.position;
+        float dist = distance_squared(pos, target_pos);
+        if(closest_id == -1 || dist < closest_dist){
+           closest_dist = dist;
+           closest_id = characters[i];
+        }
+    }
+    return closest_id;
+}
+
+int GetClosestVisibleCharacterID(uint8 flags){
     mat4 transform = this_mo.GetAvgIKChainTransform("head");
     mat4 transform_offset;
     transform_offset.SetRotationX(-70);
@@ -1682,92 +1742,13 @@ void TargetClosestVisible(){
     GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
     //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _fade);
 
-    int num = nearby_characters.size();
-    int closest_id = -1;
-    float closest_dist = 0.0f;
-
-    for(int i=0; i<num; ++i){
-        if(this_mo.getID() == nearby_characters[i]){
-            continue;
-        }
-        MovementObject@ char = ReadCharacterID(nearby_characters[i]);
-        vec3 target_pos = char.position;
-        if(char.IsKnockedOut() != _awake){
-            continue;
-        }
-        character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(char.char_path) == 1){
-            continue;
-        }
-        if(!controlled && target_id != nearby_characters[i]){
-            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            if(!char.VisibilityCheck(head_pos)){
-                continue;
-            }
-        }
-        
-        if(closest_id == -1 || 
-           distance_squared(this_mo.position, target_pos) < closest_dist)
-       {
-           closest_dist = distance_squared(this_mo.position, target_pos);
-           closest_id = nearby_characters[i];
-        }
-    }
-    if(closest_id != -1){
-        if(target_id == -1){
-            last_seen_target_position = ReadCharacterID(closest_id).position;
-            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
-        }
-        target_id = closest_id;
-    }
-    //Print("Targeting character "+closest_id+" aka "+target_id+"\n");
+    return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags);
 }
 
-void TargetClosest(float range){
+int GetClosestCharacterID(float range, uint8 flags){
     array<int> nearby_characters;
     GetCharactersInSphere(this_mo.position, range, nearby_characters);
-
-    int num = nearby_characters.size();
-    int closest_id = -1;
-    float closest_dist = 0.0f;
-
-    for(int i=0; i<num; ++i){
-        if(this_mo.getID() == nearby_characters[i]){
-            continue;
-        }
-        MovementObject@ char = ReadCharacterID(nearby_characters[i]);
-        vec3 target_pos = char.position;
-        if(char.IsKnockedOut() != _awake){
-            continue;
-        }
-        
-        character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(char.char_path) == 1){
-            continue;
-        }
-        
-        if(closest_id == -1 || 
-           distance_squared(this_mo.position, target_pos) < closest_dist)
-       {
-           closest_dist = distance_squared(this_mo.position, target_pos);
-           closest_id = nearby_characters[i];
-        }
-    }
-    if(closest_id != -1){
-        if(target_id == -1){
-            last_seen_target_position = ReadCharacterID(closest_id).position;
-            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
-        }
-        target_id = closest_id;
-    } else {
-        if(target_id != -1){
-            MovementObject@ char = ReadCharacterID(target_id);
-            if(char.IsKnockedOut() != _awake){
-                target_id = -1;   
-            }
-        }
-    }
-    //Print("Targeting character "+closest_id+" aka "+target_id+"\n");
+    return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags);
 }
 
 void ClearTarget(){

@@ -18,7 +18,6 @@ void UpdateBrain(){
         if(hostile_switchable){
             hostile = !hostile;
             if(hostile){
-                TargetClosestVisible();
                 ai_attacking = true;
                 listening = true;
             } else {
@@ -38,7 +37,12 @@ void UpdateBrain(){
         ai_attacking = false;
     }
     if(target_id == -1 && hostile){
-        TargetClosestVisible();
+        int closest_id = GetClosestVisibleCharacterID(_TC_ENEMY | _TC_CONSCIOUS);
+        if(closest_id != -1){
+            last_seen_target_position = ReadCharacterID(closest_id).position;
+            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
+        }
+        target_id = closest_id;
     }
     //HandleDebugRayDraw();
 }
