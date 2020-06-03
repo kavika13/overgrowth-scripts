@@ -5,6 +5,7 @@ uint32 gui_id;
 bool has_display_text = false;
 uint32 display_text_id;
 float time = 0.0f;
+float display_time = 0.0f;
 float no_win_time = 0.0f;
 int score_left = 0;
 int score_right = 0;
@@ -12,7 +13,12 @@ string level_name;
 
 void Init(string p_level_name) {
     level_name = p_level_name;
+    versus_gui.Init();
+    challenge_end_gui.Init();
 }
+
+enum VictoryCondition {kDefeatAllEnemies};
+VictoryCondition victory_condition = kDefeatAllEnemies;
 
 enum GameType {_normal, _versus};
 GameType game_type = _normal;
@@ -61,14 +67,14 @@ class Achievements {
         DebugText("saved_achmt4", "Saved Time: "+level.GetValue("time"), 0.5f);*/
     }
     void Save() {
-        SavedLevel @level = save_file.GetSavedLevel(level_name);
-        if(flawless_) level.SetValue("flawless","true");
-        if(!injured_) level.SetValue("no_injuries","true");
-        if(no_kills_) level.SetValue("no_kills","true");
-        if(no_alert_) level.SetValue("no_alert","true");
-        string time_str = level.GetValue("time");
-        if(time_str == "" || no_win_time < atof(level.GetValue("time"))){
-            level.SetValue("time", ""+no_win_time);
+        SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
+        if(flawless_) saved_level.SetValue("flawless","true");
+        if(!injured_) saved_level.SetValue("no_injuries","true");
+        if(no_kills_) saved_level.SetValue("no_kills","true");
+        if(no_alert_) saved_level.SetValue("no_alert","true");
+        string time_str = saved_level.GetValue("time");
+        if(time_str == "" || no_win_time < atof(saved_level.GetValue("time"))){
+            saved_level.SetValue("time", ""+no_win_time);
         }
         save_file.WriteInPlace();
     }
@@ -106,6 +112,16 @@ class Achievements {
         total_blood_loss_ += val;
         PlayerWasInjured();
     }
+    bool GetValue(const string &in key){
+        if(key == "flawless"){
+            return flawless_;
+        } else if(key == "no_kills"){
+            return no_kills_;
+        } else if(key == "no_injuries"){
+            return !injured_;
+        }
+        return false; 
+    }
 };
 
 Achievements achievements;
@@ -134,7 +150,7 @@ void UpdateTimerDisplay() {
 }
 
 int HasFocus(){
-    return has_gui?1:0;
+    return (has_gui || challenge_end_gui.target_visible == 1.0)?1:0;
 }
 
 void Reset(){
@@ -142,6 +158,7 @@ void Reset(){
     reset_allowed = true;
     reset_timer = _reset_delay;
     achievements.Init();
+    challenge_end_gui.target_visible = 0.0;
     ResetLevel();
 }
 
@@ -167,8 +184,9 @@ void DrawGUI() {
         hud.AddImage(hotspot_image_string, vec3(700,200,0));   
     }
     if(game_type == _versus){
-        versus_gui.DrawGUI();
+        versus_gui.DrawGUI(); 
     }
+    challenge_end_gui.DrawGUI();
 }
 
 void AchievementEvent(string event_str){
@@ -236,25 +254,28 @@ class VersusGUI_ScoreMark {
 class VersusGUI {
     float player_one_win_alpha;
     float player_two_win_alpha;
-    array<VersusGUI_ScoreMark> right_score_marks;
-    array<VersusGUI_ScoreMark> left_score_marks;
     float blackout_amount;
     float score_change_time;
+    array<VersusGUI_ScoreMark> right_score_marks;
+    array<VersusGUI_ScoreMark> left_score_marks;
 
-    VersusGUI() {
+    VersusGUI(){
+        right_score_marks.resize(5);
+        left_score_marks.resize(5);
+    }
+    
+    void Init() {
         player_one_win_alpha = 0.0f;
         player_two_win_alpha = 0.0f;
         blackout_amount = 0.0f;
         score_change_time = 0.0f;
         
-        right_score_marks.resize(5);
         for(int i=0; i<5; ++i){
             right_score_marks[i].mirrored = false;
             right_score_marks[i].lit = false;
             right_score_marks[i].scale_mult = 1.0f;
         }
         
-        left_score_marks.resize(5);
         for(int i=0; i<5; ++i){
             left_score_marks[i].mirrored = true;
             left_score_marks[i].lit = false;
@@ -392,7 +413,262 @@ class VersusGUI {
     }
 }
 
+string StringFromFloatTime(float time){
+    string time_str;
+    int minutes = int(time) / 60;
+    int seconds = int(time)-minutes*60;
+    time_str += minutes + ":";
+    if(seconds < 10){
+        time_str += "0";
+    }
+    time_str += seconds;
+    return time_str;
+}
+
 VersusGUI versus_gui;
+
+class ChallengeEndGUI {
+    float visible;
+    float target_visible;
+    int gui_id;
+    IMUIContext imui_context;
+
+    void Init(){
+        visible = 0.0;
+        target_visible = 0.0;
+        gui_id = -1;
+    }
+
+    ChallengeEndGUI() {
+        imui_context.Init();
+    }
+    
+    void Update(){
+        visible = mix(visible, target_visible, 0.1f);
+        if(gui_id != -1){
+            gui.MoveTo(gui_id,GetScreenWidth()/2-400,GetScreenHeight()/2-300);
+        }
+        if(target_visible == 1.0f){
+            if(gui_id == -1){
+                CreateGUI();
+            }
+        } else {
+            if(gui_id != -1){
+                gui.RemoveGUI(gui_id);
+                gui_id = -1;
+            }
+        }
+    }
+    
+    void CreateGUI() {
+        gui_id = gui.AddGUI("text2","challengelevel/challenge.html",800,600, _GG_IGNORES_MOUSE);   
+        gui.Execute(gui_id,"addElement('', 'title', 'challenge complete')");
+        gui.Execute(gui_id,"addElement('', 'hr', '')");
+        gui.Execute(gui_id,"addElement('', 'spacer', '')");
+        gui.Execute(gui_id,"addElement('objectives', 'heading', 'objectives:')");
+        string mission_objective;
+        string mission_objective_color;
+        bool success = false;
+        if(victory_condition == kDefeatAllEnemies){
+            int threats_possible = ThreatsPossible();
+            int threats_remaining = ThreatsRemaining();
+            if(threats_possible <= 0){
+                mission_objective = "  Defeat all enemies (N/A)";
+                mission_objective_color = "red";
+            } else {
+                if(threats_remaining == 0){
+                    mission_objective += "v ";
+                    mission_objective_color = "green";
+                    success = true;
+                } else {
+                    mission_objective += "x ";
+                    mission_objective_color = "red";
+                }
+                mission_objective += "defeat all enemies (" ;
+                mission_objective += (threats_possible - threats_remaining);
+                mission_objective += "/" ;
+                mission_objective += threats_possible;
+                mission_objective += ")";
+            }
+            gui.Execute(gui_id,"addElement('', '"+mission_objective_color+
+                "', '"+mission_objective+"', 'objectives')");
+        }
+        gui.Execute(gui_id,"addElement('time', 'heading', 'time:')");
+        string time_color;
+        if(success){
+            time_color = "green time";
+        } else {
+            time_color = "red time";
+        }
+        gui.Execute(gui_id,"addElement('', '"+time_color+"', '"+StringFromFloatTime(no_win_time)+"', 'time')");
+        SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
+        float best_time = atof(saved_level.GetValue("time"));
+        if(best_time > 0.0f){
+            gui.Execute(gui_id,"addElement('', 'teal time', '"+StringFromFloatTime(best_time)+"', 'time')");
+        }
+        int player_id = GetPlayerCharacterID();
+        if(victory_condition == kDefeatAllEnemies && player_id != -1){
+            gui.Execute(gui_id,"addElement('enemies', 'heading', 'enemies:')");
+            MovementObject@ player_char = ReadCharacter(player_id);
+            int num = GetNumCharacters();
+            for(int i=0; i<num; ++i){
+                MovementObject@ char = ReadCharacter(i);
+                if(!player_char.OnSameTeam(char)){
+                    int knocked_out = char.GetIntVar("knocked_out");
+                    if(knocked_out == 1 && char.GetFloatVar("blood_health") <= 0.0f){
+                        knocked_out = 2;
+                    }
+                    switch(knocked_out){
+                        case 0:    
+                            gui.Execute(gui_id,"addElement('', 'ok', '', 'enemies')"); break;
+                        case 1:    
+                            gui.Execute(gui_id,"addElement('', 'ko', '', 'enemies')"); break;
+                        case 2:    
+                            gui.Execute(gui_id,"addElement('', 'dead', '', 'enemies')"); break;
+                    }
+                }
+            }
+        }
+        gui.Execute(gui_id,"addElement('extra', 'heading', 'extra:')");
+        
+        int num_achievements = level.GetNumAchievements();
+        for(int i=0; i<num_achievements; ++i){
+            string achievement = level.GetAchievement(i);
+            string display_str;
+            string color_str = "red";
+            if(saved_level.GetValue(achievement) == "true"){
+                color_str = "teal";
+            }
+            if(achievements.GetValue(achievement)){
+                color_str = "green";
+            }
+            if(achievement == "flawless"){
+                display_str += "flawless";
+            } else if(achievement == "no_kills"){
+                display_str += "no kills";
+            } else if(achievement == "no_injuries"){
+                display_str = "never hurt";
+            }
+            gui.Execute(gui_id,"addElement('', '"+color_str+"', '"+display_str+"', 'extra')");
+        }
+        /*gui.Execute(gui_id,"addElement('', 'green', 'v flawless', 'extra')");
+        gui.Execute(gui_id,"addElement('', 'teal', 'v no kills', 'extra')");
+        gui.Execute(gui_id,"addElement('', 'red', '  no weapons', 'extra')");*/
+    }
+    
+    ~ChallengeEndGUI() {
+    }
+   
+    bool DrawButton(const string &in path, const vec2 &in pos, float ui_scale, int widget_id) {
+        HUDImage @image = hud.AddImage(path, vec3(0,0,0));
+        float scale = ui_scale * 0.5f;
+        image.position.x = pos.x;
+        image.position.y = pos.y;
+        image.position.z = 4;
+        image.color.a = visible;
+        image.scale = vec3(scale);
+        UIState state;
+        bool button_pressed = imui_context.DoButton(widget_id, 
+            vec2(image.position.x,
+                 image.position.y),
+            vec2(image.position.x+image.GetWidth() * image.scale.x,
+                 image.position.y+image.GetHeight() * image.scale.y),
+            state);
+        if(state == kActive){
+            vec3 old_scale = image.scale;
+            image.scale.x *= 0.9;
+            image.scale.y *= 0.9;
+            image.position.x += image.GetWidth() * (old_scale.x - image.scale.x) * 0.5f;
+            image.position.y += image.GetHeight() * (old_scale.y - image.scale.y) * 0.5f;
+        } else if(state == kHot){
+            vec3 old_scale = image.scale;
+            image.scale.x *= 1.1f;
+            image.scale.y *= 1.1f;
+            image.position.x += image.GetWidth() * (old_scale.x - image.scale.x) * 0.5f;
+            image.position.y += image.GetHeight() * (old_scale.y - image.scale.y) * 0.5f;
+        }
+        return button_pressed;
+    }
+    void DrawGUI(){
+        imui_context.UpdateControls();
+        if(visible < 0.01){
+            return;
+        }
+        float ui_scale = 0.5f;
+        {   HUDImage @image = hud.AddImage("Data/Textures/ui/challenge_mode/red_gradient_border_c.tga", vec3(0,0,0));
+            image.position.x = 0;
+            image.position.y = - image.GetHeight() * ui_scale * ((1.0-visible) + 0.125);
+            image.position.z = 2;
+            float stretch = GetScreenWidth() / image.GetWidth() / ui_scale;
+            image.tex_scale.x = stretch;
+            image.tex_scale.y = 1.0;
+            image.tex_offset.x += display_time * 0.05;
+            image.color = vec4(0.7,0.7,0.7,1.0);
+            image.scale = vec3(ui_scale*stretch,ui_scale,1.0);}
+        
+        {   HUDImage @image = hud.AddImage("Data/Textures/ui/challenge_mode/red_gradient_border_c.tga", vec3(0,0,0));
+            image.position.x = 0;
+            image.position.y = GetScreenHeight() + image.GetHeight() * ui_scale * ((1.0-visible) + 0.375);
+            image.position.z = 2;
+            float stretch = GetScreenWidth() / image.GetWidth() / ui_scale;
+            image.tex_scale.x = stretch;
+            image.tex_scale.y = 1.0;
+            image.tex_offset.x = display_time * 0.05;
+            image.color = vec4(0.7,0.7,0.7,1.0);
+            image.scale = vec3(ui_scale*stretch,-ui_scale,1.0);}
+            
+        {   HUDImage @image = hud.AddImage("Data/Textures/ui/challenge_mode/giometric_ribbon_c.tga", vec3(0,0,0));
+            float stretch = GetScreenHeight() / image.GetHeight() / ui_scale;
+            image.position.x = GetScreenWidth() * 0.5 - image.GetWidth() * ui_scale * 0.9;
+            image.position.y =  ((1.0-visible) * GetScreenHeight() * 1.2);
+            image.position.z = 3;
+            image.tex_scale.y = stretch;
+            image.tex_offset.y = display_time * 0.025;
+            image.scale = vec3(ui_scale, ui_scale*stretch, 1.0);}
+            
+        {   HUDImage @image = hud.AddImage("Data/Textures/ui/challenge_mode/giometric_ribbon_c.tga", vec3(0,0,0));
+            float stretch = GetScreenHeight() / image.GetHeight() / ui_scale;
+            image.position.x = GetScreenWidth() * 0.5 - image.GetWidth() * ui_scale * 0.8;
+            image.position.y = ((1.0-visible) * GetScreenHeight() * -1.2);
+            image.position.z = 3;
+            image.tex_scale.y = stretch;
+            image.tex_offset.y = -display_time * 0.0125;
+            image.scale = vec3(ui_scale, ui_scale*stretch, 1.0);}
+        
+        {   HUDImage @image = hud.AddImage("Data/Textures/ui/challenge_mode/blue_gradient_c.tga", vec3(0,0,0));
+            image.position.x = -2;
+            image.position.y = -2;
+            image.position.z = 0;
+            float stretch_x = (GetScreenWidth()+4) / image.GetWidth();
+            float stretch_y = (GetScreenHeight()+4) / image.GetHeight();
+            image.color.a = 0.8 * visible;
+            image.scale = vec3(stretch_x, stretch_y, 1.0);}
+        
+        if(DrawButton("Data/Textures/ui/challenge_mode/quit_icon_c.tga",
+                   vec2(GetScreenWidth() - 256 * ui_scale * 1, 0), 
+                   ui_scale, 0))
+        {
+            GoToMainMenu();
+        }
+        if(DrawButton("Data/Textures/ui/challenge_mode/retry_icon_c.tga",
+                   vec2(GetScreenWidth() - 256 * ui_scale * 2, 0), 
+                   ui_scale, 1))
+        {
+            Reset(); 
+        }
+        DrawButton("Data/Textures/ui/challenge_mode/continue_icon_c.tga",
+                   vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
+                   ui_scale, 2);
+    }
+}
+
+ChallengeEndGUI challenge_end_gui;
+
+void GoToMainMenu(){
+    gui.RemoveAll();
+    has_gui = false;
+    LoadLevel("mainmenu");
+}
 
 void Update() {
     if(GetPlayerCharacterID() != -1){
@@ -406,9 +682,13 @@ void Update() {
     } else {
         game_type = _normal;
     }
+    challenge_end_gui.Update();
+
+    if(HasFocus() == 1){
+        SetGrabMouse(false);
+    }
 
     if(has_gui){
-        SetGrabMouse(false);
         string callback = gui.GetCallback(gui_id);
         while(callback != ""){
             Print("AS Callback: "+callback+"\n");
@@ -424,9 +704,7 @@ void Update() {
                 break;
             }
             if(callback == "mainmenu"){
-                gui.RemoveGUI(gui_id);
-                has_gui = false;
-                LoadLevel("mainmenu");
+                GoToMainMenu();
                 break;
             }
             if(callback == "settings"){
@@ -453,6 +731,14 @@ void Update() {
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
+    /*if(GetInputPressed(controller_id, "t")){
+        if(challenge_end_gui.target_visible == 0.0){
+            challenge_end_gui.target_visible = 1.0;
+        } else {
+            challenge_end_gui.target_visible = 0.0;
+        }
+    }*/
+    
     if(GetInputDown(controller_id, "x")){  
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
@@ -462,6 +748,7 @@ void Update() {
     }
     
     time += time_step;
+    display_time += time_step;
 
     SetAnimUpdateFreqs();
     if(game_type == _normal){
@@ -540,8 +827,10 @@ void VictoryCheckNormal() {
         return;
     }
     bool victory = false;
-    if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
-        victory = true;
+    int threats_remaining = ThreatsRemaining();
+    int threats_possible = ThreatsPossible();
+    if(threats_remaining <= 0 && threats_possible > 0){
+       victory = true;
     }
     bool failure = false;
     MovementObject@ player_char = ReadCharacter(player_id);
@@ -552,7 +841,7 @@ void VictoryCheckNormal() {
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             if(reset_allowed && !has_gui){
-                gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400,0);
+                /*gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400,0);
                 has_gui = true;
                 UpdateTimerDisplay();
                 if(victory){
@@ -561,7 +850,8 @@ void VictoryCheckNormal() {
                 if(failure){
                     gui.Execute(gui_id,"SetText(\"You were defeated.\")");
                 }
-                reset_allowed = false;
+                reset_allowed = false;*/
+                challenge_end_gui.target_visible = 1.0;
             }
             if(victory){
                 achievements.Save();
@@ -702,9 +992,7 @@ int ThreatsRemaining() {
     int num_threats = 0;
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
-        vec3 target_pos = char.position;
-        if(char.GetIntVar("knocked_out") == _awake &&
-           !player_char.OnSameTeam(char))
+        if(char.GetIntVar("knocked_out") == _awake && !player_char.OnSameTeam(char))
         {
             ++num_threats;
         }
