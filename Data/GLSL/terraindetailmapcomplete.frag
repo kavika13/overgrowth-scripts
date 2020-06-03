@@ -107,7 +107,7 @@ void main()
 
 	colormap.xyz = mix(colormap.xyz,average_color,fade);
 	
-	color = diffuse_color * colormap.xyz * tint + spec_color * colormap.a;
+	color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
 	
 	color *= BalanceAmbient(NdotL);
 	
@@ -116,6 +116,6 @@ void main()
 	color *= Exposure();
 
 	//color = weight_map.xyz;
-
+	
 	gl_FragColor = vec4(color,alpha);
 }

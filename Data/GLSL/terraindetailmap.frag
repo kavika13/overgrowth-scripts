@@ -62,14 +62,13 @@ void main()
 	float blend = max(0.0,min(1.0,(length(rel_pos)-30.0)*0.1));
 	colormap = mix(colormap,colormap_alt,blend);
 */
-	color = diffuse_color * colormap.xyz * tint * 2.0;// + spec_color * colormap.a;
+	color = diffuse_color * colormap.xyz * tint * 2.0;// + spec_color * GammaCorrectFloat(colormap.a);
 
 	color *= BalanceAmbient(NdotL);
 	
 	AddHaze(color, rel_pos, tex3);
 
 	color *= Exposure();
-
 
 	gl_FragColor = vec4(color,weight_map[weight_component]);
 }

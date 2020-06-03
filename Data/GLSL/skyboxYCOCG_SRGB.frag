@@ -24,6 +24,10 @@ void main()
 	
 	color = YCOCGtoRGB(textureCube(tex2,normal));
 	//color = textureCube(tex3,normal).xyz;
+	
+	color.x = pow(color.x,2.2);
+	color.y = pow(color.y,2.2);
+	color.z = pow(color.z,2.2);
 
 	color *= Exposure();
 

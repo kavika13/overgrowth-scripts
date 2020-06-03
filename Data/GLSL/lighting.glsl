@@ -90,3 +90,11 @@ void AddHaze( inout vec3 color,
 float Exposure() {
 	return gl_LightSource[0].ambient.a;
 }
+
+float GammaCorrectFloat(in float val) {
+#ifdef GAMMA_CORRECT
+	return pow(val,2.2);
+#else
+	return val;
+#endif
+}

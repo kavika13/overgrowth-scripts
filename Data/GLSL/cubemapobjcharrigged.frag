@@ -51,7 +51,7 @@ void main()
 	
 	vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
 	
-	color = diffuse_color * colormap.xyz + spec_color * colormap.a;
+	color = diffuse_color * colormap.xyz + spec_color * GammaCorrectFloat(colormap.a);
 	
 	color *= BalanceAmbient(NdotL);
 	
@@ -68,6 +68,8 @@ void main()
 	rim_lit *= pow((dot(light_pos,normal)+1.0)*0.5,0.5);
 	color += vec3(back_lit*rim_lit) * normalmap.a * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
 	
+	//color = back_lit;
+
 	//color = spec_color;
 
 	//color = vec3(dot(light_pos,normal));
