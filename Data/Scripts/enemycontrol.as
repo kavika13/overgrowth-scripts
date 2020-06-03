@@ -388,7 +388,10 @@ bool WantsToSheatheItem() {
 }
 
 bool WantsToUnSheatheItem() {
-    return false;
+    if(startled || goal != _attack || weapon_slots[primary_weapon_slot] != -1){
+        return false;
+    }
+    return true;
 }
 
 bool struggle_crouch = false;

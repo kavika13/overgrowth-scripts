@@ -2554,32 +2554,51 @@ void AttachWeapon(int which){
         sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
     }
     PlaySoundGroup(sound, pos,0.5f);
-    //item_object_getter.SceneMaterialEvent("weapon_metal_pickup", item_object_getter.GetPhysicsPosition());
     if(weapon_slots[primary_weapon_slot] == -1){
-        weapon_slots[primary_weapon_slot] = which;
-        bool right = (primary_weapon_slot == _held_right);
-        this_mo.AttachItem(which, right);
-        if(right){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
-        } else {
-            this_mo.SetMorphTargetWeight("fist_l",1.0f,1.0f);
-        }
+        bool mirror = primary_weapon_slot != _held_right;
+        this_mo.AttachItemToSlot(which, _at_grip, mirror);
+        HandleEditorAttachment(which, _at_grip, mirror);
     } else {
-        weapon_slots[secondary_weapon_slot] = which;
-        bool right = (secondary_weapon_slot == _held_right);
-        this_mo.AttachItem(which, right);
-        if(right){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
-        } else {
-            this_mo.SetMorphTargetWeight("fist_l",1.0f,1.0f);
-        }
+        bool mirror = secondary_weapon_slot != _held_right;
+        this_mo.AttachItemToSlot(which, _at_grip, mirror);
+        HandleEditorAttachment(which, _at_grip, mirror);
     }
-    UpdatePrimaryWeapon();
+}
+
+void HandleEditorAttachment(int which, int attachment_type, bool mirror){
+    Print("Handling editor attachment\n");
+    ItemObject@ item_obj = ReadItemID(which);
+    int weap_slot;
+    if(attachment_type == _at_grip){
+        if(mirror){
+            weap_slot = _held_left;
+        } else {
+            weap_slot = _held_right;
+        } 
+    } else if(attachment_type == _at_sheathe){
+        if(mirror){
+            weap_slot = _sheathed_right;
+        } else {
+            weap_slot = _sheathed_left;
+        }         
+    }
+    
+    Print("HandleEditorAttachment("+which+", "+attachment_type+", "+mirror+");\n");
+    
+    if(weapon_slots[weap_slot] != -1){
+        return;
+    }    
+    weapon_slots[weap_slot] = which;
+    
+    if(weap_slot == _held_left || weap_slot == _held_right){
+        UpdateItemFistGrip();
+        UpdatePrimaryWeapon();
+    }
 }
 
 void AttachMisc(int which){
     ItemObject@ item_obj = ReadItemID(which);
-    this_mo.AttachItem(which, true);
+    this_mo.AttachItemToSlot(which, _at_grip, false);
 }
 
 void GrabWeaponFromBody(int stuck_id, int weapon_id, const vec3 &in pos) {{
@@ -2606,11 +2625,7 @@ void Sheathe(WeaponSlot src, WeaponSlot dst){
         weapon_slots[dst+2] = weapon_slots[dst];
         weapon_slots[dst] = weapon_slots[src];
         weapon_slots[src] = -1;
-        if(src == _held_right){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-        } else {
-            this_mo.SetMorphTargetWeight("fist_l",1.0f,0.0f);
-        }
+        UpdateItemFistGrip();
         UpdatePrimaryWeapon();
     }
 }
@@ -2627,11 +2642,7 @@ void UnSheathe(WeaponSlot dst, WeaponSlot src){
         weapon_slots[dst] = weapon_slots[src];
         weapon_slots[src] = weapon_slots[src+2];
         weapon_slots[src+2] = -1;
-        if(dst_right){
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
-        } else {
-            this_mo.SetMorphTargetWeight("fist_l",1.0f,1.0f);
-        }
+        UpdateItemFistGrip();
         UpdatePrimaryWeapon();
     }
 }
@@ -2672,21 +2683,18 @@ void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
         if(weapon_slots[_held_right] != -1){
             this_mo.DetachItem(weapon_slots[_held_right]);
         }
-        this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-        this_mo.SetMorphTargetWeight("fist_l",1.0f,0.0f);
         int temp = weapon_slots[_held_left];
         weapon_slots[_held_left] = weapon_slots[_held_right];
         weapon_slots[_held_right] = temp;
         if(weapon_slots[_held_left] != -1){
-            this_mo.AttachItem(weapon_slots[_held_left], false);
-            this_mo.SetMorphTargetWeight("fist_l",1.0f,1.0f);
+            this_mo.AttachItemToSlot(weapon_slots[_held_left], _at_grip, true);
         }
         if(weapon_slots[_held_right] != -1){
-            this_mo.AttachItem(weapon_slots[_held_right], true);
-            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
+            this_mo.AttachItemToSlot(weapon_slots[_held_right], _at_grip, false);
         }
         string sound = "Data/Sounds/weapon_foley/impact/weapon_drop_light_dirt.xml";
         PlaySoundGroup(sound, world_pos,0.5f);
+        UpdateItemFistGrip();
         UpdatePrimaryWeapon();
     }
     if(event == "sheatherighthandlefthip" ){ 
@@ -4517,28 +4525,37 @@ void UpdatePrimaryWeapon(){
     }
 }
 
-void DeletedWeapon(int id){
-    if(weapon_slots[primary_weapon_slot] == id)
-    {
-        this_mo.DetachItem(id);
+void UpdateItemFistGrip(){
+    if(weapon_slots[_held_left] != -1){
+        this_mo.SetMorphTargetWeight("fist_l",1.0f,1.0f);
+    } else {
+        this_mo.SetMorphTargetWeight("fist_l",1.0f,0.0f);
+    }
+    if(weapon_slots[_held_right] != -1){
+        this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
+    } else {
+        this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
+    }
+}
+
+void NotifyItemDetach(int item_id){
+    if(weapon_slots[primary_weapon_slot] == item_id) {
         weapon_slots[primary_weapon_slot] = -1;
         UpdatePrimaryWeapon();
     }
-    if(weapon_slots[_sheathed_right] == id)
-    {
-        this_mo.DetachItem(id);
-        weapon_slots[_sheathed_right] = -1;
+    for(int i=0; i<6; ++i){
+        if(weapon_slots[i] == item_id){
+            weapon_slots[i] = -1;
+        }
     }
-    UpdatePrimaryWeapon();
+    UpdateItemFistGrip();
 }
 
 void DropWeapon() {
     if(weapon_slots[_held_left] != -1){
-        this_mo.SetMorphTargetWeight("fist_l",1.0f,0.0f);
         this_mo.DetachItem(weapon_slots[_held_left]);
         weapon_slots[_held_left] = -1;
     } else if(weapon_slots[_held_right] != -1){
-        this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(weapon_slots[_held_right]);
         weapon_slots[_held_right] = -1;
     }
@@ -4546,6 +4563,7 @@ void DropWeapon() {
         this_mo.RemoveLayer(pickup_layer, 4.0f);
         pickup_layer = -1;
     }
+    UpdateItemFistGrip();
     UpdatePrimaryWeapon();
 }
 
@@ -4577,11 +4595,6 @@ void ThrowWeapon() {
         int target = target_id;
         if(target != -1){
             int weapon_id = weapon_slots[primary_weapon_slot];
-            if(primary_weapon_slot == _held_right){
-                this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-            } else {
-                this_mo.SetMorphTargetWeight("fist_l",1.0f,0.0f);
-            }
             this_mo.DetachItem(weapon_id);
             weapon_slots[primary_weapon_slot] = -1;
             MovementObject@ char = ReadCharacterID(target);
@@ -4604,6 +4617,7 @@ void ThrowWeapon() {
             this_mo.velocity -= launch_vel * io.GetMass() * 0.05f;
             //io.SetVelocity(vec3(0.0f,5.0f,0.0f));
             UpdatePrimaryWeapon();
+            UpdateItemFistGrip();
         }
     }
 }
@@ -4639,8 +4653,18 @@ int GetNearestPickupableWeapon(vec3 point, float max_range){
     int hands_free = GetNumHandsFree();
     for(int i=0; i<num_items; i++){
         ItemObject@ item_obj = ReadItem(i);
-        if(item_obj.IsHeld() || item_obj.GetNumHands() > hands_free){
+        if(item_obj.GetNumHands() > hands_free){
             continue;
+        }
+        if(item_obj.IsHeld()){
+            int holder_id = item_obj.HeldByWhom();
+            if(holder_id == -1){
+                continue;
+            }    
+            MovementObject@ holder = ReadCharacterID(holder_id);
+            if(holder.GetIntVar("knocked_out") == _awake){
+                continue;
+            }
         }
         vec3 item_pos = item_obj.GetPhysicsPosition();
         if(closest_id == -1 || distance_squared(point, item_pos) < closest_dist){ 
@@ -5202,12 +5226,6 @@ void Init(string character_path) {
 
 void ScriptSwap() {
     last_col_pos = this_mo.position;
-    /*int weap_id = held_weapon;
-    DropWeapon();
-    this_mo.DetachAllItems();
-    if(weap_id != -1){
-        AttachWeapon(weap_id);
-    }*/
 }
 
 float reset_no_collide = 0.2f;
