@@ -619,7 +619,7 @@ class Dialogue {
 
         int player_id = GetPlayerCharacterID();
 
-        array<int> @object_ids = GetObjectIDs();
+        array<int> @object_ids = GetObjectIDsType(_placeholder_object);
         int num_objects = object_ids.length();
         for(int i=0; i<num_objects; ++i){
             if(!ObjectExists(object_ids[i])){ // This is needed because SetDialogueObjID can delete some objects
@@ -627,68 +627,69 @@ class Dialogue {
             }
             Object @obj = ReadObjectFromID(object_ids[i]);
             ScriptParams@ params = obj.GetScriptParams();
-            if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
-                obj.SetCopyable(false);
-                /*if(obj.IsSelected()){
-                    dialogue.SetDialogueObjID(object_ids[i]);
-                }*/
-                PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
-                placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
-                if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
-                    // Parse file for #name token
-                    LoadFile(params.GetString("Dialogue"));
-                    string new_str;
-                    while(true){
-                        new_str = GetFileLine();
-                        if(new_str == "end"){
-                            break;
-                        }
-                        TokenIterator token_iter;
-                        token_iter.Init();
-                        if(token_iter.FindNextToken(new_str)){
-                            string token = token_iter.GetToken(new_str);
-                            if(token == "#name"){
-                                if(token_iter.FindNextToken(new_str)){
-                                    params.SetString("DisplayName", token_iter.GetToken(new_str));
-                                }
+            if(!params.HasParam("Dialogue")){
+                continue;
+            }
+            obj.SetCopyable(false);
+            /*if(obj.IsSelected()){
+                dialogue.SetDialogueObjID(object_ids[i]);
+            }*/
+            PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
+            placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
+            if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
+                // Parse file for #name token
+                LoadFile(params.GetString("Dialogue"));
+                string new_str;
+                while(true){
+                    new_str = GetFileLine();
+                    if(new_str == "end"){
+                        break;
+                    }
+                    TokenIterator token_iter;
+                    token_iter.Init();
+                    if(token_iter.FindNextToken(new_str)){
+                        string token = token_iter.GetToken(new_str);
+                        if(token == "#name"){
+                            if(token_iter.FindNextToken(new_str)){
+                                params.SetString("DisplayName", token_iter.GetToken(new_str));
                             }
-                            if(token == "#participants"){
-                                if(token_iter.FindNextToken(new_str)){
-                                    params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
-                                }
+                        }
+                        if(token == "#participants"){
+                            if(token_iter.FindNextToken(new_str)){
+                                params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
                             }
                         }
                     }
                 }
-                if(player_id == -1){
-                    DrawDialogueTextCanvas(object_ids[i]);
-                }
-                int num_connectors = params.GetInt("NumParticipants");
-                for(int j=1; j<=num_connectors; ++j){
-                    if(!params.HasParam("obj_"+j)){
-                        int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
-                        params.AddInt("obj_"+j, obj_id);
-                        Object@ obj = ReadObjectFromID(obj_id);
-                        PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
-                        placeholder_object.SetSpecialType(kPlayerConnect);
-                    } else {
-                        int obj_id = params.GetInt("obj_"+j);
-                        if(ObjectExists(obj_id)){
-                            Object @new_obj = ReadObjectFromID(obj_id);
-                            vec4 v = obj.GetRotationVec4();
-                            quaternion quat(v.x,v.y,v.z,v.a);
-                            new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
-                            new_obj.SetRotation(quat);
-                            new_obj.SetScale(obj.GetScale()*0.3f);
-                            if(player_id == -1){
-                                TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
-                                text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _delete_on_update);
-                            }
-                            new_obj.SetCopyable(false);
-                            new_obj.SetDeletable(false);
-                        } else {
-                            params.Remove("obj_"+j);
+            }
+            if(player_id == -1){
+                DrawDialogueTextCanvas(object_ids[i]);
+            }
+            int num_connectors = params.GetInt("NumParticipants");
+            for(int j=1; j<=num_connectors; ++j){
+                if(!params.HasParam("obj_"+j)){
+                    int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                    params.AddInt("obj_"+j, obj_id);
+                    Object@ obj = ReadObjectFromID(obj_id);
+                    PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
+                    placeholder_object.SetSpecialType(kPlayerConnect);
+                } else {
+                    int obj_id = params.GetInt("obj_"+j);
+                    if(ObjectExists(obj_id)){
+                        Object @new_obj = ReadObjectFromID(obj_id);
+                        vec4 v = obj.GetRotationVec4();
+                        quaternion quat(v.x,v.y,v.z,v.a);
+                        new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
+                        new_obj.SetRotation(quat);
+                        new_obj.SetScale(obj.GetScale()*0.3f);
+                        if(player_id == -1){
+                            TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
+                            text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _delete_on_update);
                         }
+                        new_obj.SetCopyable(false);
+                        new_obj.SetDeletable(false);
+                    } else {
+                        params.Remove("obj_"+j);
                     }
                 }
             }
