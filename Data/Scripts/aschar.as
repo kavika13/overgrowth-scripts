@@ -69,6 +69,8 @@ float test_talking_amount = 0.0f;
 int knocked_out = _awake;
 float knocked_out_time = 0.0f;
 
+bool ignore_death = false;
+
 float speak_sound_delay = 0.0f;
 vec3 dialogue_torso_target;
 float dialogue_torso_control;
@@ -1656,6 +1658,7 @@ void RecoverHealth() {
     blood_damage = 0.0f;
     temp_health = 1.0f;
     permanent_health = 1.0f;
+	ignore_death = false;
 }
 
 void Recover() {      
@@ -3853,6 +3856,18 @@ void SetKnockedOut(int val) {
     }
 }
 
+void KillCharacter(){
+    HandleAIEvent(_damaged);
+    temp_health = -1.0f;
+    permanent_health = -1.0f;
+	blood_health = -1.0f;
+    knocked_out_time = the_time;
+	knocked_out = _dead;
+	ignore_death = true;
+    this_mo.StopVoice();
+	Ragdoll(_RGDL_LIMP);
+}
+
 void ReceiveMessage(string msg){
     TokenIterator token_iter;
     token_iter.Init();
@@ -3863,8 +3878,7 @@ void ReceiveMessage(string msg){
     if(token == "restore_health"){
         RecoverHealth();
 	} else if(token == "remove_health"){
-        TakeDamage(9999.0f);
-		Ragdoll(_RGDL_LIMP);
+        KillCharacter();
     } else if(token == "start_talking"){
         test_talking = true;
     } else if(token == "stop_talking"){

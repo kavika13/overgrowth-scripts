@@ -63,6 +63,7 @@ class ArenaGUI : AHGUI::GUI {
     AHGUI::Element@ selectedProfile = null;// Which profile label is selected 
     int selectedProfileNum = -1;       // Which profile number is selected  
     int showingProfileNum = -1;       // Which profile number is shown
+    bool showingProfileDetails = false; // Are we showing profile details?
     int selectedArena = 0;      // Which arena are we going to load
 
     /*******************************************************************************************/
@@ -138,6 +139,7 @@ class ArenaGUI : AHGUI::GUI {
         verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
 
         footer.addElement( verText ,DDRight );
+
 
     }
 
@@ -400,7 +402,7 @@ class ArenaGUI : AHGUI::GUI {
                 characterpane.addSpacer( 125, DDTop ); 
 
                 // Make a divider for the buttons 
-                AHGUI::Divider@ buttonDivider = characterpane.addDivider( DDLeft, DOHorizontal );
+                AHGUI::Divider@ buttonDivider = characterpane.addDivider( DDLeft, DOHorizontal, ivec2(700,UNDEFINEDSIZE) );
 
                 // Create the text 
                 AHGUI::Text okText( "Accept", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
@@ -420,9 +422,9 @@ class ArenaGUI : AHGUI::GUI {
                                                  vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
 
                 // Add them to the divider with some space 
-                buttonDivider.addSpacer( 25, DDLeft );
+                //buttonDivider.addSpacer( 25, DDLeft );
                 buttonDivider.addElement( okText, DDLeft );
-                buttonDivider.addSpacer( 25, DDRight );
+                //buttonDivider.addSpacer( 25, DDRight );
                 buttonDivider.addElement( cancelText, DDRight );
 
 
@@ -434,6 +436,7 @@ class ArenaGUI : AHGUI::GUI {
                 // Reset our state data
                 @selectedProfile = null;
                 selectedProfileNum = -1;
+                showingProfileDetails = false;
 
                 // Get (a copy of) the current profiles        
                 profileData = global_data.getProfiles();
@@ -462,10 +465,11 @@ class ArenaGUI : AHGUI::GUI {
                 AHGUI::Divider@ infoPanel = mainpane.addDivider( DDRight, DOVertical );
                 // Give it a name so we can find it as we update it
                 infoPanel.setName("infopane");
+                infoPanel.setVeritcalAlignment(BATop);
                 // We will populate this when the appropriate message is received
 
                 // Add a divider 
-                mainpane.addDivider( DDTop,DOHorizontal );
+                mainpane.addDivider( DDTop, DOHorizontal );
 
                 // Create a divider for the new character interface
                 // This will automatically expand vertically for us
@@ -495,7 +499,7 @@ class ArenaGUI : AHGUI::GUI {
                             (profileData[i]["player_wins"].asInt() + profileData[i]["player_loses"].asInt() ), 
                             "OpenSans-Regular", 40, 1.0, 7.0, 0.0, 0.7 );
                     battlesText.setHorizontalAlignment( BALeft );
-                    battlesText.setPadding( 5, 0, 30, 40 );
+                    battlesText.setPadding( 10, 5, 30, 40 );
 
                     // Turn the character pane into a button
 
@@ -582,7 +586,8 @@ class ArenaGUI : AHGUI::GUI {
                 // Add some space
                 messagepane.addSpacer( 175, DDTop );
 
-                AHGUI::Divider@ buttonpane = messagepane.addDivider( DDCenter, DOHorizontal );
+                AHGUI::Divider@ buttonpane = messagepane.addDivider( DDCenter, DOHorizontal, ivec2( 600, UNDEFINEDSIZE ) );
+                buttonpane.setName("buttonpane");
 
                 // Create the buttons
                 AHGUI::Text okText( "Ok", "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.8 );
@@ -605,11 +610,10 @@ class ArenaGUI : AHGUI::GUI {
                 cancelText.addUpdateBehavior( AHGUI::FadeIn( 500, @inSine ) );
                 
                 // Add the buttons to the layout 
-                buttonpane.addSpacer( 975, DDLeft );
                 buttonpane.addElement( okText, DDLeft );
-                
-                buttonpane.addSpacer( 950, DDRight );
                 buttonpane.addElement( cancelText, DDRight );
+                cancelText.setName("cancelText");
+                
                 
             }
             break;
@@ -624,7 +628,11 @@ class ArenaGUI : AHGUI::GUI {
      *
      */
      void populateInfoPanel( int profileNum ) {
-        // first clear the existing pane
+        
+        // If we're already showing it -- let's be lazy and get out of here
+        if( showingProfileNum == profileNum and showingProfileDetails ) {
+            return;
+        }
 
         // Get a reference to the pane
         AHGUI::Element@ infoElement = root.findElement("infopane");
@@ -762,21 +770,39 @@ class ArenaGUI : AHGUI::GUI {
         if( profileNum != selectedProfileNum ) {
             // if not, fly it in
             infoPane.addUpdateBehavior( AHGUI::MoveIn( ivec2( 400, 0 ), 500 , @linear ) );
+            showingProfileDetails = false;
         }
         else {
+
+            showingProfileDetails = true;
+
+            // Add the delete profile at the bottom
+            AHGUI::Text deleteText( "Delete Profile", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+            //deleteText.setHorizontalAlignment( BARight );
+                    
+            // Turn it into a button
+            deleteText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("delete") );
+            
+
+            // Add the effects
+            deleteText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
+                                         vec4( 0.5, 7.0, 0.0, 0.3 ), 
+                                         vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
+            deleteText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
+
+            // Add them to the divider with some space 
+            infoPane.addSpacer( 30, DDBottom );
+            infoPane.addElement( deleteText, DDTop );
+
+
             // if so, we can add the battle options 
             infoPane.addSpacer( 75, DDTop );
-
-            // AHGUI::Text nextBattleText( "Next Battle", "OpenSans-Regular", 70, 1.0, 7.0, 0.0, 0.9 );
-            // nextBattleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
-
-            // infoPane.addElement( nextBattleText, DDTop );
         
             // Make a divider for the battle selector 
             AHGUI::Divider@ battleSelect = infoPane.addDivider( DDTop, DOHorizontal );
 
             AHGUI::Image goLeftImage("Textures/arenamenu/left_arrow.tga");
-            goLeftImage.scaleToSizeX(80);
+            goLeftImage.scaleToSizeX(150);
             
             // Turn it into a button
             goLeftImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("battledecrease") );
@@ -787,17 +813,16 @@ class ArenaGUI : AHGUI::GUI {
                                                vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
             goLeftImage.addUpdateBehavior( AHGUI::FadeIn( 1250, @inSine ) );
 
-            battleSelect.addSpacer(20, DDLeft);
             battleSelect.addElement( goLeftImage, DDLeft );
 
             AHGUI::Image battleImage(arenaImages[selectedArena]);
-            battleImage.scaleToSizeX(300);
+            battleImage.scaleToSizeX(450);
             battleImage.addUpdateBehavior( AHGUI::FadeIn( 750, @inSine ) );
             battleImage.setName( "battleimage" );
             battleSelect.addElement( battleImage, DDCenter );
 
             AHGUI::Image goRightImage("Textures/arenamenu/right_arrow.tga");
-            goRightImage.scaleToSizeX(80);
+            goRightImage.scaleToSizeX(150);
             
             // Turn it into a button
             goRightImage.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("battleincrease") );
@@ -808,8 +833,6 @@ class ArenaGUI : AHGUI::GUI {
                                                vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
             goRightImage.addUpdateBehavior( AHGUI::FadeIn( 1250, @inSine ) );
 
-
-            battleSelect.addSpacer(20, DDRight);
             battleSelect.addElement( goRightImage, DDRight );
 
             // Add the effects
@@ -839,22 +862,7 @@ class ArenaGUI : AHGUI::GUI {
             fightText.addUpdateBehavior( AHGUI::FadeIn( 2000, @inSine ) );
 
 
-            // Add the delete profile at the bottom
-            AHGUI::Text deleteText( "Delete Profile", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
-                    
-            // Turn it into a button
-            deleteText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("delete") );
-            
-
-            // Add the effects
-            deleteText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
-                                         vec4( 0.5, 7.0, 0.0, 0.3 ), 
-                                         vec4( 1.0, 7.0, 0.0, 0.9 ), 1.0f ) );
-            deleteText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
-
-            // Add them to the divider with some space 
-            infoPane.addSpacer( 30, DDBottom );
-            infoPane.addElement( deleteText, DDBottom );          
+                      
 
         }
      } 
@@ -899,10 +907,7 @@ class ArenaGUI : AHGUI::GUI {
                     AHGUI::Text@ nameText = cast<AHGUI::Text>(root.findElement("newNameText"));
 
                     // Do a pseudo-cross fade onto the new text
-                    //nameText.addUpdateBehavior( AHGUI::ChangeTextFadeOutIn( 100, newCharacter["character_name"].asString(), outSine, inSine ) );
-
-                    // Change it's value to reflect
-                    nameText.setText( newCharacter["character_name"].asString() );
+                    nameText.addUpdateBehavior( AHGUI::ChangeTextFadeOutIn( 250, newCharacter["character_name"].asString(), outSine, inSine ), "textchange" );
 
                 }
                 else if( message.name == "colorselected" ) {
@@ -982,7 +987,7 @@ class ArenaGUI : AHGUI::GUI {
                     // See if we're still showing this profile
                     if( showingProfileNum == message.intParams[0] ) {
                         // if we are just show the selectedProfile
-                        if( selectedProfileNum != -1 && showingProfileNum != selectedProfileNum  ) {
+                        if( selectedProfileNum != -1 || showingProfileNum != selectedProfileNum  ) {
                             populateInfoPanel( selectedProfileNum );    
                         }
                     }
@@ -994,13 +999,14 @@ class ArenaGUI : AHGUI::GUI {
                     AHGUI::Image@ battleImage = cast<AHGUI::Image>(root.findElement("battleimage"));
                     // Change the image
                     battleImage.setImageFile( arenaImages[selectedArena] );
-                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
+                    battleImage.scaleToSizeX(450);
+                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
 
                     // Find the text in the layout, by name
                     AHGUI::Text@ battleText = cast<AHGUI::Text>(root.findElement("battlename"));
                     // Change the text
                     battleText.setText( arenaNames[selectedArena] );
-                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
+                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
 
                 }
                 else if( message.name == "battledecrease" ) {
@@ -1010,13 +1016,14 @@ class ArenaGUI : AHGUI::GUI {
                     AHGUI::Image@ battleImage = cast<AHGUI::Image>(root.findElement("battleimage"));
                     // Change the image
                     battleImage.setImageFile( arenaImages[selectedArena] );
-                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
+                    battleImage.scaleToSizeX(450);
+                    battleImage.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
 
                     // Find the text in the layout, by name
                     AHGUI::Text@ battleText = cast<AHGUI::Text>(root.findElement("battlename"));
                     // Change the text
                     battleText.setText( arenaNames[selectedArena] );
-                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ) );
+                    battleText.addUpdateBehavior( AHGUI::FadeIn( 250, @inSine ), "fadein" );
 
                 }
                 else if( message.name == "delete" ) {
@@ -1075,6 +1082,15 @@ class ArenaGUI : AHGUI::GUI {
         
         // Do state machine stuff
         handleStateChange();
+
+        AHGUI::Divider@ bp = cast<AHGUI::Divider>(root.findElement("buttonpane"));
+
+        if( bp !is null ){
+            Print("buttonpane size: " + bp.getSize().toString() + "\n" );
+            Print("buttonpane boundary size: " + bp.boundarySize.toString() + "\n" );
+            Print("buttonpane boundary offset: " + bp.boundaryOffset.toString() + "\n" );
+            Print("buttonpane bottomRightBoundStart: " + bp.bottomRightBoundStart + "\n" );
+        }
 
         // Update the GUI 
         AHGUI::GUI::update();

@@ -18,8 +18,6 @@ out vec2 fur_tex_coord;
 #ifndef DEPTH_ONLY
 out vec3 concat_bone1;
 out vec3 concat_bone2;
-out vec3 ws_vertex;
-out vec4 shadow_coords[4];
 out vec2 tex_coord;
 out vec2 morphed_tex_coord;
 out vec3 world_vert;
@@ -42,15 +40,9 @@ void main()
     concat_bone1 = concat_bone[0].xyz;
     concat_bone2 = concat_bone[1].xyz;
 
-    ws_vertex = transformed_vertex - cam_pos;
     tex_coord = tex_coord_attrib;
     morphed_tex_coord = tex_coord_attrib + morph_tex_offset_attrib;
     fur_tex_coord = fur_tex_coord_attrib;
-    
-    shadow_coords[0] = shadow_matrix[0] * vec4(transformed_vertex, 1.0);
-    shadow_coords[1] = shadow_matrix[1] * vec4(transformed_vertex, 1.0);
-    shadow_coords[2] = shadow_matrix[2] * vec4(transformed_vertex, 1.0);
-    shadow_coords[3] = shadow_matrix[3] * vec4(transformed_vertex, 1.0);
 #else
     fur_tex_coord = vec2(0.0, 0.0);
 #endif

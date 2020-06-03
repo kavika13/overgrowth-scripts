@@ -41,7 +41,7 @@ int ThreatsRemaining() {
     int num_threats = 0;
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
-        if(char.GetIntVar("knocked_out") == _awake && !player_char.OnSameTeam(char))
+        if(char.GetIntVar("knocked_out") == _awake && !player_char.OnSameTeam(char) && !char.GetBoolVar("ignore_death"))
         {
             ++num_threats;
         }
@@ -61,7 +61,7 @@ int ThreatsPossible() {
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
         vec3 target_pos = char.position;
-        if(!player_char.OnSameTeam(char))
+        if(!player_char.OnSameTeam(char) && !char.GetBoolVar("ignore_death"))
         {
             ++num_threats;
         }

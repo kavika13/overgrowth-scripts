@@ -14,18 +14,26 @@ UNIFORM_EXTRA_AO
 uniform usamplerBuffer ambient_color_buffer;
 uniform int num_light_probes;
 uniform int num_tetrahedra;
+uniform vec3 cam_pos;
+uniform mat4 shadow_matrix[4];
 #define warp_tex tex14
 
-in vec3 ws_vertex;
 in vec3 frag_tangent;
 in float alpha;
 in vec4 frag_tex_coords;
-in vec4 shadow_coords[4];
 in vec3 world_vert;
 
 out vec4 out_color;
 
-void main() {     
+void main() {
+	vec3 ws_vertex = world_vert - cam_pos;
+
+	vec4 shadow_coords[4];
+	shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
+    shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
+    shadow_coords[2] = shadow_matrix[2] * vec4(world_vert, 1.0);
+    shadow_coords[3] = shadow_matrix[3] * vec4(world_vert, 1.0);
+
     vec3 ambient_cube_color[6];
     bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, 0u);
 

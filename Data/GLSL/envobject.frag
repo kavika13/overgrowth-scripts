@@ -35,12 +35,13 @@ uniform int subdivisions_x;
 uniform int subdivisions_y;
 uniform int subdivisions_z;
 
+uniform vec3 cam_pos;
+uniform mat4 shadow_matrix[4];
+
 #ifdef TANGENT
 in mat3 tan_to_obj;
 #endif
-in vec3 ws_vertex;
 in vec2 frag_tex_coords;
-in vec4 shadow_coords[4];
 in vec3 world_vert;
 #ifndef NO_INSTANCE_ID
 flat in int instance_id;
@@ -53,6 +54,18 @@ out vec4 out_color;
 
 void main() {   
     vec4 colormap = texture(tex0,frag_tex_coords);
+
+	vec3 ws_vertex;
+	vec4 shadow_coords[4];
+
+	#ifndef DEPTH_ONLY
+        ws_vertex = world_vert - cam_pos;
+        shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
+        shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
+        shadow_coords[2] = shadow_matrix[2] * vec4(world_vert, 1.0);
+        shadow_coords[3] = shadow_matrix[3] * vec4(world_vert, 1.0);
+    #endif
+
     #if defined(ALPHA) && !defined(ALPHA_TO_COVERAGE)
         if(colormap.a < 0.5){
             discard;
@@ -163,7 +176,7 @@ void main() {
         guess = data[cell_id%4];
         use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, guess);
     } else {
-        for(int i=0; i<3; ++i){
+        for(int i=0; i<6; ++i){
             ambient_cube_color[i] = vec3(0.0);
         }
     }
