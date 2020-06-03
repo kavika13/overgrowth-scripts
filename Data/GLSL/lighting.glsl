@@ -143,4 +143,20 @@ float GammaCorrectFloat(in float val) {
 #endif
 }
 
+vec3 GammaCorrectVec3(in vec3 val) {
+#ifdef GAMMA_CORRECT
+	return vec3(pow(val.r,2.2),pow(val.g,2.2),pow(val.b,2.2));
+#else
+	return val;
+#endif
+}
+
+vec3 GammaAntiCorrectVec3(in vec3 val) {
+#ifdef GAMMA_CORRECT
+	return vec3(pow(val.r,1.0/2.2),pow(val.g,1.0/2.2),pow(val.b,1.0/2.2));
+#else
+	return val;
+#endif
+}
+
 #endif
