@@ -3,6 +3,14 @@
 bool limp = false;
 float limp_delay;
 
+void HandleAnimationEvent(string event, vec3 pos){
+	Print("Angelscript received event: "+event+"\n");
+	vec3 world_pos = pos+this.position;
+	if(event == "leftstep" || event == "rightstep"){
+		this.MaterialEvent(event, world_pos);
+	}
+}
+
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0);
 	
@@ -25,7 +33,7 @@ void draw() {
 void ForceApplied(vec3 force) {
 	if(!limp){
 		PlaySound("Data/Sounds/FistImpact5.wav", this.position);
-		velocity += force;
+		this.velocity += force;
 		this.Ragdoll();
 		//velocity -= force;		
 		limp = true;

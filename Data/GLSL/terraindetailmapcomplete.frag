@@ -88,12 +88,13 @@ void main()
 				    texture2D(tex10,tc1) * weight_map[2] +
 				    texture2D(tex12,tc1) * weight_map[3];
 	colormap.xyz = mix(colormap.xyz,average_color,detail_fade);
+	colormap.a = max(0.0,colormap.a);
 
 	// Put it all together
 	vec3 color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
 	color *= BalanceAmbient(NdotL);
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
-	
+
 	gl_FragColor = vec4(color,alpha);
 }
