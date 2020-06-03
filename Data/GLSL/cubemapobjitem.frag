@@ -40,7 +40,8 @@ void main()
 					 GetAmbientContrib(shadow_tex.g);
 	
 	// Get specular lighting
-	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);
+	float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,100.0);
+	spec *= 5.0;
 	vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);
 	
 	vec3 spec_map_vec = reflect(ws_vertex,ws_normal);

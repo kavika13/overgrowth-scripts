@@ -105,6 +105,7 @@ int num_frames;
 const float _ragdoll_static_threshold = 0.4f;
 float ragdoll_static_time;
 bool frozen;
+bool no_freeze = false;
 bool holding_weapon = false;
 int weapon_id = -1;
 
@@ -149,7 +150,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	}
 	if(type == "attackblocked")
 	{
-		string sound = "Data/Sounds/hit/hit_normal.xml";
+		string sound = "Data/Sounds/hit/hit_block.xml";
 		PlaySoundGroup(sound, pos);
 		//MakeParticle("Data/Particles/bloodsplat.xml",pos,dir*5.0f);
 		MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
@@ -641,16 +642,15 @@ void Land(vec3 vel) {
 	this_mo.StartAnimation(character_getter.GetAnimPath("idle"),land_speed);
 
 	if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
-		if(dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal))>0.6f){
-			this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
-			//string path = "Data/Sounds/concrete_foley/bunny_jump_land_concrete.xml";
-			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
-		} else {
-			this_mo.MaterialEvent("land_slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
-			//string path = "Data/Sounds/concrete_foley/bunny_jump_land_slide_concrete.xml";
-			//this_mo.PlaySoundGroupAttached(path, this_mo.position);
+		float slide_amount = 1.0f - (dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal)));
+		Print("Slide amount: "+slide_amount+"\n");
+		Print("Slide vel: "+slide_amount*length(this_mo.velocity)+"\n");
+		this_mo.MaterialEvent("land", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), 1.0f);
+		if(slide_amount > 0.0f){
+			float slide_vel = slide_amount*length(this_mo.velocity);
+			float vol = min(1.0f,slide_amount * slide_vel * 0.2f);
+			this_mo.MaterialEvent("slide", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f), vol);
 		}
-
 		duck_amount = 1.0;
 		target_duck_amount = 1.0;
 		duck_vel = land_speed * 0.3f;
@@ -801,6 +801,11 @@ void GoLimp() {
 	this_mo.Ragdoll();
 	ragdoll_static_time = 0.0f;
 	frozen = false;
+	no_freeze = false;
+	{
+		//no_freeze = true;
+		//this_mo.StartAnimation("Data/Animations/r_combatidle.anm");
+	}
 }
 
 // target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
@@ -1168,7 +1173,9 @@ void UpdateRagDoll() {
 	}
 	if(limp == true && !frozen){
 		vec3 color;
-		if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold){
+		if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold &&
+		   !no_freeze)
+		{
 			color = vec3(1.0f,0.0f,0.0f);
 			ragdoll_static_time += time_step * num_frames;
 		} else {
