@@ -108,14 +108,14 @@ void ChooseAttack(bool front) {
 	if(on_ground){
 		if(!WantsToCrouch()){
 			if(front){
-				curr_attack = "frontkick";			
+				curr_attack = "stationary";			
 			} else {
-				curr_attack = "spinkickright";
+				curr_attack = "moving";
 			}
 		} else {
-			curr_attack = "sweep";
+			curr_attack = "low";
 		}	
 	} else {
-		curr_attack = "legcannon";
+		curr_attack = "air";
 	}
 }

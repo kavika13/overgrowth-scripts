@@ -84,6 +84,8 @@ float active_block_duration = 0.0f;
 float active_block_recharge = 0.0f;
 
 string curr_attack; 
+int target_id = -1;
+int self_id;
 
 void EndAttack() {
 	SetState(_movement_state);
@@ -104,13 +106,10 @@ void WasBlocked() {
 	}
 }
 
-int WasHit(string type, vec3 dir, vec3 pos) {
-	if(type == "spinkickrightblocked" ||
-	   type == "spinkickleftblocked" ||
-	   type == "sweeprightblocked" ||
-	   type == "sweepleftblocked" ||
-	   type == "frontkickrightblocked" ||
-	   type == "frontkickleftblocked")
+int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
+	attack_getter2.Load(attack_path);
+
+	if(type == "attackblocked")
 	{
 		string sound = "Data/Sounds/hit/hit_normal.xml";
 		PlaySoundGroup(sound, pos);
@@ -119,15 +118,11 @@ int WasHit(string type, vec3 dir, vec3 pos) {
 		MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
 		TimedSlowMotion(0.1f,0.3f, 0.05f);
 	}
-	if(type == "highrightblockprepare" ||
-	   type == "highleftblockprepare" ||
-	   type == "medrightblockprepare" ||
-	   type == "medleftblockprepare" ||
-	   type == "lowrightblockprepare" ||
-	   type == "lowleftblockprepare")
+	if(type == "blockprepare")
 	{
 		if(state == _movement_state && limp == false){
 			if(active_blocking){
+				reaction_getter.Load(attack_getter2.GetReactionPath());
 				SetState(_hit_reaction_state);
 				hit_reaction_anim_set = false;
 			
@@ -143,61 +138,44 @@ int WasHit(string type, vec3 dir, vec3 pos) {
 			}
 		}
 	}
-	if((type == "spinkickrightimpact" ||
-		type == "sweeprightimpact" ||
-		type == "spinkickleftimpact" ||
-		type == "sweepleftimpact" ||
-		type == "frontkick" ||
-		type == "legcannon"))
+	if(type == "attackimpact")
 	{
-		if((type == "spinkickrightimpact" || type == "spinkickleftimpact") &&
+		if(attack_getter2.GetHeight() == _high &&
 			duck_amount > 0.5f)
 		{
-			//TimedSlowMotion(0.1f,0.7f, 0.05f);
 			return 0;
 		}
-		if(type == "legcannon"){
-			target.velocity += dir * -10.0f;
+		if(attack_getter2.GetSpecial() == "legcannon"){
 			block_health = 0.0f;
 		}
 	
-		block_health -= (rand()%5+3)*0.1f;
+		block_health -= attack_getter2.GetBlockDamage();
 		block_health = max(0.0f, block_health);
 
 		if(block_health <= 0.0f || state == _attack_state || !on_ground){
 			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
 			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-			float force = 20000.0f*(1.0f-temp_health*0.5f);
+			float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f);
 			GoLimp();
-			if(type == "frontkick"){
-				this_mo.ApplyForceToRagdoll(dir*force,pos);
-			} else if(type == "legcannon"){
-				this_mo.ApplyForceToRagdoll(dir*force*2.5f,pos);
-			} else {
-				vec3 right;
-				right.x = -dir.z;
-				right.z = dir.x;
-				right.y = dir.y;
-				if(type == "spinkickrightimpact")
-				{
-					this_mo.ApplyForceToRagdoll(right*force,pos);
-				}
-				if(type == "spinkickleftimpact")
-				{
-					this_mo.ApplyForceToRagdoll(right*-force,pos);
-				}
-				if(type == "sweeprightimpact")
-				{
-					this_mo.ApplyForceToRagdoll(right*force*0.5f,pos);
-				}
-				if(type == "sweepleftimpact")
-				{
-					this_mo.ApplyForceToRagdoll(right*-force*0.5f,pos);
-				}
-			}
 			
+			vec3 impact_dir = attack_getter2.GetImpactDir();
+			vec3 right;
+			right.x = -dir.z;
+			right.z = dir.x;
+			right.y = dir.y;
+			vec3 impact_dir_adjusted = impact_dir.x * right +
+									   impact_dir.z * dir;
+			impact_dir_adjusted.y += impact_dir.y;
+			this_mo.ApplyForceToRagdoll(impact_dir_adjusted * force, pos);
+
 			block_health = 0.0f;
-			temp_health -= (rand()%4+2)*0.1f;
+			temp_health -= attack_getter2.GetDamage();
+			permanent_health -= attack_getter2.GetDamage() * 0.4f;
+			if(permanent_health <= 0.0f && knocked_out != 2){
+				knocked_out = 2;
+				string sound = "Data/Sounds/hit/hit_hard.xml";
+				PlaySoundGroup(sound, pos);
+			}
 			if(temp_health <= 0.0f && knocked_out==0){
 				knocked_out = 1;
 				TimedSlowMotion(0.1f,0.7f, 0.05f);
@@ -215,6 +193,7 @@ int WasHit(string type, vec3 dir, vec3 pos) {
 			MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
 			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
 			
+			reaction_getter.Load(attack_getter2.GetReactionPath());
 			SetState(_hit_reaction_state);
 			hit_reaction_anim_set = false;
 		
@@ -227,7 +206,7 @@ int WasHit(string type, vec3 dir, vec3 pos) {
 			}
 		}
 	}
-	return 0;
+	return 2;
 }
 
 void HandleAnimationEvent(string event, vec3 world_pos){
@@ -285,30 +264,31 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 		//string path = "Data/Sounds/concrete_foley/bunny_crouchwalk_concrete.xml";
 		//this_mo.PlaySoundGroupAttached(path, world_pos);
 	}
-	if((event == "spinkickrightimpact" || event == "sweeprightimpact" ||
-		event == "spinkickrightblocked" || event == "spinkickleftblocked" ||
-		event == "sweeprightblocked" || event == "sweepleftblocked" ||
-		event == "spinkickleftimpact" || event == "sweepleftimpact" ||
-		event == "frontkick" || event == "frontkickleftblocked" ||
-		event == "highrightblockprepare" ||
-	    event == "highleftblockprepare" ||
-	    event == "medrightblockprepare" ||
-	    event == "medleftblockprepare" ||
-	    event == "lowrightblockprepare" ||
-	    event == "lowleftblockprepare" ||
-	    event == "frontkickrightblocked" || event == "legcannon") && 
-	   distance(this_mo.position, target.position) < 1.6f){
+
+	if(target_id == -1){
+		return;
+	}
+	vec3 target_pos = this_mo.ReadCharacter(target_id).position;
+	if((event == "attackblocked" ||
+		event == "attackimpact" ||
+		event == "blockprepare") && 
+	   distance(this_mo.position, target_pos) < 1.6f){
 		vec3 facing = this_mo.GetFacing();
 		vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
-		vec3 dir = normalize(target.position - this_mo.position);
-		int return_val = target.WasHit(event, dir, world_pos);
+		vec3 dir = normalize(target_pos - this_mo.position);
+		int return_val = this_mo.ReadCharacter(target_id).WasHit(
+							   event, attack_getter.GetPath(), dir, world_pos);
 		if(return_val == 1){
 			WasBlocked();
 		}
+		if(return_val != 0 && attack_getter.GetSpecial() == "legcannon"){
+			this_mo.velocity += dir * -10.0f;
+		}
 		if(event == "frontkick"){
-			if(distance(this_mo.position, target.position) < 1.0f){
-				vec3 dir = normalize(target.position - this_mo.position);
-				target.position = this_mo.position + dir;
+			if(distance(this_mo.position, target_pos) < 1.0f){
+				vec3 dir = normalize(target_pos - this_mo.position);
+				this_mo.ReadCharacter(target_id).position = 
+					this_mo.position + dir;
 			}
 		}
 	}
@@ -449,7 +429,13 @@ float GetTempHealth() {
 }
 
 void UpdateGroundAttackControls() {
-	if(WantsToAttack() && distance(this_mo.position,target.position) <= 1.6f){
+	if(WantsToAttack()){
+		TargetClosest();
+	}
+	if(target_id == -1){
+		return;
+	}
+	if(WantsToAttack() && distance(this_mo.position,this_mo.ReadCharacter(target_id).position) <= 1.6f){
 		SetState(_attack_state);
 		//Print("Starting attack\n");
 		attack_animation_set = false;
@@ -460,9 +446,15 @@ void UpdateGroundAttackControls() {
 }
 
 void UpdateAirAttackControls() {
+	if(WantsToAttack()){
+		TargetClosest();
+	}
+	if(target_id == -1){
+		return;
+	}
 	if(WantsToAttack() && !flip_info.IsFlipping() &&
 		distance(this_mo.position + this_mo.velocity * 0.3f,
-				 target.position + target.velocity * 0.3f) <= 1.6f)
+				 this_mo.ReadCharacter(target_id).position + this_mo.ReadCharacter(target_id).velocity * 0.3f) <= 1.6f)
 	{
 		SetState(_attack_state);
 		attack_animation_set = false;
@@ -506,7 +498,7 @@ void UpdateMovementControls() {
 			duck_amount = 1.0f;
 			duck_vel = 2.0f;
 			target_duck_amount = 1.0f;
-			this_mo.StartAnimation("Data/Animations/r_idle.anm",20.0f);
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"),20.0f);
 			HandleBumperCollision();
 			HandleStandingCollision();
 			this_mo.position = sphere_col.position;
@@ -535,6 +527,30 @@ void SetOnGround(bool _on_ground){
 	on_ground = _on_ground;
 }
 
+void TargetClosest(){
+	int num = this_mo.GetNumCharacters();
+	int closest_id = -1;
+	float closest_dist;
+
+	for(int i=0; i<num; ++i){
+		vec3 target_pos = this_mo.ReadCharacter(i).position;
+		if(this_mo.position == target_pos){
+			continue;
+		}
+		if(this_mo.ReadCharacter(i).IsKnockedOut() != 0){
+			continue;
+		}
+		
+		if(closest_id == -1 || 
+		   distance_squared(this_mo.position, target_pos) < closest_dist)
+	   {
+		   closest_dist = distance_squared(this_mo.position, target_pos);
+		   closest_id = i;
+	   }
+	}
+	target_id = closest_id;
+}
+
 // this is called when the character lands in a non-ragdoll mode
 void Land(vec3 vel) {
 	// this is true when the character initiated a flip during jump and isn't finished yet
@@ -546,7 +562,7 @@ void Land(vec3 vel) {
 	SetOnGround(true);
 	
 	float land_speed = 10.0f;//min(30.0f,max(10.0f, -vel.y));
-	this_mo.StartAnimation("Data/Animations/r_idle.xml",land_speed);
+	this_mo.StartAnimation(character_getter.GetAnimPath("idle"),land_speed);
 
 	if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
 		if(dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal))>0.6f){
@@ -735,7 +751,7 @@ void UpdateAirWhooshSound() {
 void UpdateAttacking() {	
 	flip_info.UpdateRoll();
 
-	vec3 direction = target.position - this_mo.position;
+	vec3 direction = this_mo.ReadCharacter(target_id).position - this_mo.position;
 	direction.y = 0.0f;
 	direction = normalize(direction);
 	if(on_ground){
@@ -751,7 +767,7 @@ void UpdateAttacking() {
 	right_direction.x = direction.z;
 	right_direction.z = -direction.x;
 	if(!on_ground){
-		float rel_height = normalize(target.position - this_mo.position).y;
+		float rel_height = normalize(this_mo.ReadCharacter(target_id).position - this_mo.position).y;
 		float leg_cannon_target_flip = -1.4f - rel_height;
 		leg_cannon_flip = mix(leg_cannon_flip, leg_cannon_target_flip, 0.1f);
 		this_mo.SetFlip(right_direction,leg_cannon_flip,0.0f);
@@ -782,46 +798,60 @@ void UpdateAttacking() {
 
 	if(!attack_animation_set){
 		ChooseAttack(front);
-		bool attack_chosen = false;
-		if(curr_attack == "frontkick"){
-			attack_getter.Load("Data/Attacks/frontkick.xml");
-			attack_chosen = true;
-		} else if(curr_attack == "spinkickright"){
-			attack_getter.Load("Data/Attacks/spinkick.xml");
-			attack_chosen = true;
-		} else if(curr_attack == "sweep"){
-			attack_getter.Load("Data/Attacks/sweep.xml");
-			attack_chosen = true;
+		string attack_path;
+		if(curr_attack == "stationary"){
+			attack_path = character_getter.GetAttackPath("stationary");
+		} else if(curr_attack == "moving"){
+			attack_path = character_getter.GetAttackPath("moving");
+		} else if(curr_attack == "low"){
+			attack_path = character_getter.GetAttackPath("low");
+		} else if(curr_attack == "air"){
+			attack_path = character_getter.GetAttackPath("air");
 		}
-		if(attack_chosen){
-			if(attack_getter.GetHeight() == _low){
-				duck_amount = 1.0f;
-			} else {
-				duck_amount = 0.0f;
-			}
-			if(attack_getter.GetDirection() == _right){
-				if(!mirrored){
-					this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
-					mirrored_stance = false;
-				} else {
-					this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
-					mirrored_stance = true;
-				}
-			} else {
-				if(mirrored_stance){
-					this_mo.StartMirroredMobileAnimation(attack_getter.GetUnblockedAnimPath());
-				} else {
-					this_mo.StartMobileAnimation(attack_getter.GetUnblockedAnimPath());
-				}
-			}
-			this_mo.MaterialEvent(attack_getter.GetMaterialEvent(),
-						this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
-			if(attack_getter.GetSwapStance() != 0){
-				mirrored_stance = !mirrored_stance;
-			}
-		} else if(curr_attack == "legcannon"){
-			this_mo.StartAnimation("Data/Animations/r_legcannon.anm");
+		attack_getter.Load(attack_path);
+		if(attack_getter.GetSpecial() == "legcannon"){	
 			leg_cannon_flip = 0.0f;
+		}
+
+		bool flipped = false;
+		if(attack_getter.GetDirection() != _front) {
+			flipped = mirrored;
+		} else {
+			flipped = !mirrored_stance;
+		}
+		if(flipped){
+			attack_path += " m";
+		}
+		attack_getter.Load(attack_path);
+
+		if(attack_getter.GetHeight() == _low){
+			duck_amount = 1.0f;
+		} else {
+			duck_amount = 0.0f;
+		}
+		if(attack_getter.GetDirection() == _right){
+			if(!mirrored){
+				this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
+				mirrored_stance = false;
+			} else {
+				this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
+				mirrored_stance = true;
+			}
+		} else {
+			if(mirrored_stance){
+				this_mo.StartMirroredMobileAnimation(attack_getter.GetUnblockedAnimPath());
+			} else {
+				this_mo.StartMobileAnimation(attack_getter.GetUnblockedAnimPath());
+			}
+		}
+		string material_event = attack_getter.GetMaterialEvent();
+		if(material_event.length() > 0){
+			Print(material_event);
+			this_mo.MaterialEvent(material_event,
+						this_mo.position-vec3(0.0f,_leg_sphere_size, 0.0f));
+		}
+		if(attack_getter.GetSwapStance() != 0){
+			mirrored_stance = !mirrored_stance;
 		}
 		this_mo.SetAnimationCallback("void EndAttack()");
 		attack_animation_set = true;
@@ -837,146 +867,41 @@ void UpdateAttacking() {
 
 void UpdateHitReaction() {
 	if(!hit_reaction_anim_set){
-		int choice = ((1.0f-block_health)*2.99f);
-		if(hit_reaction_event == "highrightblockprepare"){
+		if(hit_reaction_event == "blockprepare"){
+			bool right = (attack_getter2.GetDirection() != _left);
+			if(attack_getter2.GetMirrored() != 0){
+				right = !right;
+			}
 			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockhighleft.anm",40.0f);
-			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblockhighright.anm",40.0f);
+				right = !right;
 			}
-		} else if(hit_reaction_event == "highleftblockprepare"){
+			string block_string;
+			if(attack_getter2.GetHeight() == _high){
+				block_string += "high";
+			} else if(attack_getter2.GetHeight() == _medium){
+				block_string += "med";
+			} else if(attack_getter2.GetHeight() == _low){
+				block_string += "low";
+			}		
+			if(right){
+				block_string += "right";
+			} else {
+				block_string += "left";
+			}
+			block_string += "block";
 			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockhighright.anm",40.0f);
+				this_mo.StartMirroredAnimation(character_getter.GetAnimPath(block_string),40.0f);
 			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblockhighleft.anm",40.0f);
+				this_mo.StartAnimation(character_getter.GetAnimPath(block_string),40.0f);
 			}
-		} else if(hit_reaction_event == "medrightblockprepare"){
-			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockmedleft.anm",40.0f);
+		} else if(hit_reaction_event == "attackimpact") {
+			if(reaction_getter.GetMirrored() == 0){
+				this_mo.StartMobileAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f);
+				mirrored_stance = false;
 			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblockmedright.anm",40.0f);
+				this_mo.StartMobileMirroredAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f);
+				mirrored_stance = true;
 			}
-		} else if(hit_reaction_event == "medleftblockprepare"){
-			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblockmedright.anm",40.0f);
-			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblockmedleft.anm",40.0f);
-			}
-		} else if(hit_reaction_event == "lowrightblockprepare"){
-			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblocklowleft.anm",40.0f);
-			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblocklowright.anm",40.0f);
-			}
-		} else if(hit_reaction_event == "lowleftblockprepare"){
-			if(mirrored_stance){
-				this_mo.StartMirroredAnimation("Data/Animations/r_activeblocklowright.anm",40.0f);
-			} else {
-				this_mo.StartAnimation("Data/Animations/r_activeblocklowleft.anm",40.0f);
-			}
-		} else if(hit_reaction_event == "spinkickrightimpact"){
-			mirrored_stance = false;
-			switch(choice){
-				case 0:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockright.anm",20.0f);
-					break;
-				case 1:
-					this_mo.StartMobileAnimation("Data/Animations/r_blockrighthard.anm",20.0f);
-					break;
-				case 2:
-					this_mo.StartMobileAnimation("Data/Animations/r_hitspinright.anm",20.0f);
-					break;
-				case 3:
-					this_mo.StartMobileAnimation("Data/Animations/r_hitrightflip.anm",20.0f);
-					break;
-			}
-		} else if(hit_reaction_event == "sweeprightimpact"){
-			mirrored_stance = false;
-			switch(choice){
-				case 0:
-					this_mo.StartMobileAnimation("Data/Animations/r_blocksweepright.anm",20.0f);
-					break;
-				case 1:
-					this_mo.StartMobileAnimation("Data/Animations/r_blocksweeprighthard.anm",20.0f);
-					break;
-				case 2:
-					this_mo.StartMobileAnimation("Data/Animations/r_blocksweeprightstagger.anm",20.0f);
-					break;
-				case 3:
-					this_mo.StartMobileAnimation("Data/Animations/r_sweptright.anm",20.0f);
-					break;
-			}
-		} else if(hit_reaction_event == "spinkickleftimpact"){
-			mirrored_stance = true;
-			switch(choice){
-				case 0:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockright.anm",20.0f);
-					break;
-				case 1:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockrighthard.anm",20.0f);
-					break;
-				case 2:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_hitspinright.anm",20.0f);
-					break;
-				case 3:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_hitrightflip.anm",20.0f);
-					break;
-			}
-		} else if(hit_reaction_event == "sweepleftimpact"){
-			mirrored_stance = true;
-			switch(choice){
-				case 0:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_blocksweepright.anm",20.0f);
-					break;
-				case 1:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_blocksweeprighthard.anm",20.0f);
-					break;
-				case 2:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_blocksweeprightstagger.anm",20.0f);
-					break;
-				case 3:
-					this_mo.StartMobileMirroredAnimation("Data/Animations/r_sweptright.anm",20.0f);
-					break;
-			}
-		} else if(hit_reaction_event == "frontkick" || hit_reaction_event == "legcannon"){
-			if(mirrored_stance){
-				switch(choice){
-					case 0:
-						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfront.anm",20.0f);
-						break;
-					case 1:
-						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfronthard.anm",20.0f);
-						break;
-					case 2:
-						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfrontstagger.anm",20.0f);
-						break;
-					case 3:
-						this_mo.StartMobileMirroredAnimation("Data/Animations/r_blockfrontko.anm",20.0f);
-						break;
-				}
-			} else {
-				switch(choice){
-					case 0:
-						this_mo.StartMobileAnimation("Data/Animations/r_blockfront.anm",20.0f);
-						break;
-					case 1:
-						this_mo.StartMobileAnimation("Data/Animations/r_blockfronthard.anm",20.0f);
-						break;
-					case 2:
-						this_mo.StartMobileAnimation("Data/Animations/r_blockfrontstagger.anm",20.0f);
-						break;
-					case 3:
-						this_mo.StartMobileAnimation("Data/Animations/r_blockfrontko.anm",20.0f);
-						break;
-				}
-			}
-		}
-		if(choice == 3){
-			TimedSlowMotion(0.1f,0.7f, 0.1f);
-		}
-		choice++;
-		if(choice > 3) {
-			choice = 0;
 		}
 		this_mo.SetAnimationCallback("void EndHitReaction()");
 		hit_reaction_anim_set = true;
@@ -994,9 +919,9 @@ void SetState(int _state) {
 		Print("Setting state to ground state");
 		//this_mo.StartAnimation("Data/Animations/kipup.anm");
 		if(!mirrored_stance){
-			this_mo.StartAnimation("Data/Animations/r_idle.anm");
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartMirroredAnimation("Data/Animations/r_idle.anm");
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
@@ -1037,23 +962,23 @@ void WakeUp(int how) {
 		SetOnGround(true);
 		flip_info.Land();
 		if(!mirrored_stance){
-			this_mo.StartAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartMirroredAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
 		jump_info.StartFall();
 		flip_info.StartFlip();
 		flip_info.FlipRecover();
-		this_mo.StartAnimation("Data/Animations/r_jump.xml");
+		this_mo.StartAnimation(character_getter.GetAnimPath("jump"));
 	} else if (how == _wake_roll) {
 		SetOnGround(true);
 		flip_info.Land();
 		if(!mirrored_stance){
-			this_mo.StartAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		} else {
-			this_mo.StartMirroredAnimation("Data/Animations/r_idle.xml");
+			this_mo.StartMirroredAnimation(character_getter.GetAnimPath("idle"));
 		}
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
@@ -1131,7 +1056,7 @@ void UpdateRagDoll() {
 bool testing_mocap = false;
 void TestMocap(){
 	//this_mo.SetAnimation("Data/Animations/mocapsit.anm");
-	this_mo.SetAnimation("Data/Animations/r_idle.anm");
+	this_mo.SetAnimation(character_getter.GetAnimPath("idle"));
 	this_mo.SetAnimationCallback("void EndTestMocap()");
 	testing_mocap = true;
 	this_mo.velocity = vec3(0.0f);
@@ -1255,7 +1180,42 @@ void HandleActiveBlock() {
 		}
 	}
 	if(!controlled){
-		active_blocking = (rand()%2)!=0;
+		active_blocking = (rand()%4)==0;
+	}
+}
+
+void HandleCollisionsBetweenTwoCharacters(int which){
+	if(this_mo.position == this_mo.ReadCharacter(which).position){
+		return;
+	}
+
+	if(knocked_out == 0 && this_mo.ReadCharacter(which).IsKnockedOut() == 0){
+		float distance_threshold = 0.7f;
+		vec3 this_com = this_mo.GetCenterOfMass()*0.33;
+		vec3 other_com = this_mo.ReadCharacter(which).GetCenterOfMass()*0.33;
+		this_com.y = this_mo.position.y;
+		other_com.y = this_mo.ReadCharacter(which).position.y;
+		if(distance_squared(this_com, other_com) < distance_threshold*distance_threshold){
+			vec3 dir = other_com - this_com;
+			float dist = length(dir);
+			dir /= dist;
+			dir *= distance_threshold - dist;
+			if(on_ground || this_mo.ReadCharacter(which).IsOnGround()==1){
+				this_mo.ReadCharacter(which).position += dir * 0.5f;
+				this_mo.position -= dir * 0.5f;
+			} else {
+				this_mo.ReadCharacter(which).velocity += dir * 0.5f / time_step;
+				this_mo.velocity -= dir * 0.5f / time_step;
+			}
+		}	
+	}
+}
+
+void HandleCollisionsBetweenCharacters() {
+	int num_chars = this_mo.GetNumCharacters();
+
+	for(int i=0; i<num_chars; ++i){
+		HandleCollisionsBetweenTwoCharacters(i);
 	}
 }
 
@@ -1279,7 +1239,9 @@ void update(bool _controlled) {
 	}
 	controlled = _controlled;
 
-	UpdateAirWhooshSound();
+	if(controlled){
+		UpdateAirWhooshSound();
+	}
 	UpdateRagDoll();	
 	if(limp){
 		return;
@@ -1325,10 +1287,10 @@ void update(bool _controlled) {
 		HandleAccelTilt();
 		HandleGroundCollision();
 	}
-
+/*
 	if(GetInputPressed("x")){
 		NavPath temp = this_mo.GetPath(this_mo.position,
-										target.position);
+										this_mo.ReadCharacter(target_id).position);
 		int num_points = temp.NumPoints();
 		for(int i=0; i<num_points-1; i++){
 			DebugDrawLine(temp.GetPoint(i),
@@ -1336,46 +1298,42 @@ void update(bool _controlled) {
 						  vec3(1.0f,1.0f,1.0f),
 						  _persistent);
 		}
-	}
-	if(controlled && GetInputPressed("1")){
-		this_mo.RecreateRiggedObject(
-							"Data/Objects/IGF_Characters/IGF_Guard.xml",
-							"Data/Skeletons/r_rig.xml",
-							"",
-							"");
-		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+	}*/
+	if(controlled && GetInputPressed("1")){	
+		character_getter.Load("Data/Characters/guard.xml");
+		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+									 character_getter.GetSkeletonPath());
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("2")){
-		this_mo.RecreateRiggedObject(
-							"Data/Objects/IGF_Characters/IGF_Guard_reddy.xml",
-							"Data/Skeletons/r_rig.xml",
-							"",
-							"");
-		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+		character_getter.Load("Data/Characters/guard2.xml");
+		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+									 character_getter.GetSkeletonPath());
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("3")){
-		this_mo.RecreateRiggedObject(
-							"Data/Objects/IGF_Characters/IGF_Turner.xml",
-							"Data/Skeletons/r_turner.xml",
-							"",
-							"");
-		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+		character_getter.Load("Data/Characters/turner.xml");
+		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+									 character_getter.GetSkeletonPath());
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("4")){
-		this_mo.RecreateRiggedObject(
-							"Data/Objects/IGF_Characters/IGF_RabbitCiv.xml",
-							"Data/Skeletons/r_civ.xml",
-							"Data/Skeletons/r_civ.xml",
-							"Data/Skeletons/r_rig.xml");
-		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+		character_getter.Load("Data/Characters/civ.xml");
+		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+									 character_getter.GetSkeletonPath());
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("5")){
-		this_mo.RecreateRiggedObject(
-							"Data/Objects/IGF_Characters/IGF_Wolf.xml",
-							"Data/Skeletons/r_wolf.xml",
-							"Data/Skeletons/r_wolf.xml",
-							"Data/Skeletons/r_rig.xml");
-		this_mo.SetAnimation("Data/Animations/r_idle.xml");
+		
+		character_getter.Load("Data/Characters/wolf.xml");
+		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+									 character_getter.GetSkeletonPath());
+		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+		SetState(_movement_state);
 	}
 	/*
 	if(GetInputPressed("c")){
@@ -1387,26 +1345,7 @@ void update(bool _controlled) {
 //		TestMocap();
 	}*/
 
-	if(knocked_out == 0 && target.IsKnockedOut() == 0){
-		float distance_threshold = 0.7f;
-		vec3 this_com = this_mo.GetCenterOfMass()*0.33;
-		vec3 other_com = target.GetCenterOfMass()*0.33;
-		this_com.y = this_mo.position.y;
-		other_com.y = target.position.y;
-		if(distance_squared(this_com, other_com) < distance_threshold*distance_threshold){
-			vec3 dir = other_com - this_com;
-			float dist = length(dir);
-			dir /= dist;
-			dir *= distance_threshold - dist;
-			if(on_ground || target.IsOnGround()==1){
-				target.position += dir * 0.5f;
-				this_mo.position -= dir * 0.5f;
-			} else {
-				target.velocity += dir * 0.5f / time_step;
-				this_mo.velocity -= dir * 0.5f / time_step;
-			}
-		}	
-	}
+	HandleCollisionsBetweenCharacters();
 
 	float terminal_velocity = 50.0f;
 	if(length_squared(this_mo.velocity) > terminal_velocity*terminal_velocity){
@@ -1429,7 +1368,15 @@ void update(bool _controlled) {
 	smear_sound_time += time_step;
 }
 
-void init() {
+void init(string character_path) {
+	character_getter.Load(character_path);
+	this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
+								 character_getter.GetSkeletonPath());
+	for(int i=0; i<5; ++i){
+		HandleBumperCollision();
+		HandleStandingCollision();
+		this_mo.position = sphere_col.position;
+	}
 }
 
 void UpdateAnimation() {
@@ -1443,7 +1390,7 @@ void UpdateAnimation() {
 	if(on_ground){
 		// rolling on the ground
 		if(flip_info.UseRollAnimation()){
-			this_mo.SetAnimation("Data/Animations/r_roll.xml",7.0f);
+			this_mo.SetAnimation(character_getter.GetAnimPath("roll"),7.0f);
 			float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
 			this_mo.SetBlendCoord("forward_roll_coord",forwards_rollness);
 			this_mo.SetIKEnabled(false);
@@ -1461,14 +1408,14 @@ void UpdateAnimation() {
 				this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
 															   normalize(flat_velocity),
 															   0.2f));
-				this_mo.SetAnimation("Data/Animations/r_movement.xml");
+				this_mo.SetAnimation(character_getter.GetAnimPath("movement"));
 				this_mo.SetBlendCoord("speed_coord",speed);
 				this_mo.SetBlendCoord("ground_speed",speed);
 			} else {
 				if(!mirrored_stance){
-					this_mo.SetAnimation("Data/Animations/r_idle.xml");
+					this_mo.SetAnimation(character_getter.GetAnimPath("idle"));
 				} else {
-					this_mo.SetMirroredAnimation("Data/Animations/r_idle.xml");
+					this_mo.SetMirroredAnimation(character_getter.GetAnimPath("idle"));
 				}
 				this_mo.SetIKEnabled(true);
 			}

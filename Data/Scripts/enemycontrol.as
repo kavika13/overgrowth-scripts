@@ -2,10 +2,16 @@
 
 bool hostile = false;
 bool ai_attacking = false;
+bool hostile_switchable = true;
 
 void AIUpdate(){
-	if(GetInputPressed("c")){
-		hostile = !hostile;
+	if(GetInputDown("c")){
+		if(hostile_switchable){
+			hostile = !hostile;
+		}
+		hostile_switchable = false;
+	} else {
+		hostile_switchable = true;
 	}
 	if(hostile && rand()%150==0){
 		ai_attacking = !ai_attacking;
@@ -68,9 +74,12 @@ bool WantsToCancelAnimation() {
 }
 
 vec3 GetTargetVelocity() {
+	if(target_id == -1){
+		return vec3(0.0f);
+	}
 	//if(distance_squared(this_mo.position, target.position) < 9.0f){
 		vec3 target_velocity;
-		target_velocity = target.position - this_mo.position;
+		target_velocity = this_mo.ReadCharacter(target_id).position - this_mo.position;
 		target_velocity.y = 0.0;
 		float dist = length(target_velocity);
 		float seek_dist = 1.0;
@@ -106,13 +115,13 @@ void ChooseAttack(bool front) {
 	if(on_ground){
 		int choice = rand()%3;
 		if(choice==0){
-			curr_attack = "frontkick";			
+			curr_attack = "stationary";			
 		} else if(choice == 1){
-			curr_attack = "spinkickright";
+			curr_attack = "moving";
 		} else {
-			curr_attack = "sweep";
+			curr_attack = "low";
 		}	
 	} else {
-		curr_attack = "legcannon";
+		curr_attack = "air";
 	}
 }
