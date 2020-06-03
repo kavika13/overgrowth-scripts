@@ -89,7 +89,7 @@ class JumpInfo {
         if(left_foot_jump){
             flags = _ANM_MIRRORED;
         }
-        this_mo.SetAnimation(character_getter.GetAnimPath("jump"),20.0f,flags);
+        this_mo.SetCharAnimation("jump",20.0f,flags);
         this_mo.SetIKEnabled(false);
     }
 
@@ -99,7 +99,7 @@ class JumpInfo {
         wall_right.x = -wall_dir.z;
         wall_right.z = temp;
         float speed = length(this_mo.velocity);
-        this_mo.SetAnimation(character_getter.GetAnimPath("wall"),5.0f);
+        this_mo.SetCharAnimation("wall",5.0f);
         this_mo.SetBlendCoord("ground_speed",speed);
         this_mo.SetBlendCoord("speed_coord",speed*0.25f);
         this_mo.SetBlendCoord("dir_coord",dot(normalize(this_mo.velocity), wall_right));
@@ -114,7 +114,7 @@ class JumpInfo {
     }
 
     void UpdateLedgeAnimation() {
-        this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
+        this_mo.StartCharAnimation("idle");
     }
 
     void UpdateIKTargets() {

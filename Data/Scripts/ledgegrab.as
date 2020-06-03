@@ -201,7 +201,7 @@ class LedgeInfo {
     }
 
     void UpdateLedgeAnimation() {
-        this_mo.SetAnimation(character_getter.GetAnimPath("ledge"),5.0f);
+        this_mo.SetCharAnimation("ledge",5.0f);
     }
 
     void UpdateIKTargets() {

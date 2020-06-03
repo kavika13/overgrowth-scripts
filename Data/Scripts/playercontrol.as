@@ -52,6 +52,7 @@ bool WantsToGrabLedge() {
 
 bool WantsToThrowEnemy() {
     if(!controlled) return false;
+    if(holding_weapon) return false;
     return throw_key_time > 0.2f;
 }
 
