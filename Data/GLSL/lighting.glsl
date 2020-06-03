@@ -14,6 +14,15 @@ float GetDirectContrib( const vec3 light_pos,
     return GetDirectContribSimple(direct_contrib);
 }
 
+float GetDirectContribSoft( const vec3 light_pos,
+                            const vec3 normal, 
+                            const float unshadowed ) {
+    float direct_contrib;
+    direct_contrib = max(0.0,dot(light_pos, normal)*0.5+0.5);
+    direct_contrib *= unshadowed;
+    return GetDirectContribSimple(direct_contrib);
+}
+
 vec3 UnpackObjNormal(const vec4 normalmap) {
     return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
     /*x = 2.0 * nm.x - 1.0

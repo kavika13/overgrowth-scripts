@@ -170,6 +170,7 @@ float friction = 1.0f;
 uint32 last_blood_particle_id = 0;
 int blood_delay = 0;
 bool cut_throat = false;
+bool cut_torso = false;
 const float _max_blood_amount = 10.0f;
 float blood_amount = _max_blood_amount;
 const float _spurt_frequency = 7.0f;
@@ -186,8 +187,8 @@ void Update(bool _controlled, int _num_frames) {
                 this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
             }
             if(rand()%32 == 0){
-                this_mo.CreateBloodDrip("rightarm", 0, vec3(1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
-                this_mo.CreateBloodDrip("leftarm", 0, vec3(-1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+                //this_mo.CreateBloodDrip("rightarm", 0, vec3(1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+                //this_mo.CreateBloodDrip("leftarm", 0, vec3(-1.0f,0.0f,0.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
             }
             
             vec3 head_pos = this_mo.GetAvgIKChainPos("head");
@@ -212,6 +213,14 @@ void Update(bool _controlled, int _num_frames) {
             vec3 bleed_pos = mix(head_pos, torso_pos, 0.2f);
             PlaySoundGroup("Data/Sounds/Blood/artery_squirt.xml", bleed_pos, blood_amount/_max_blood_amount);
         }
+        -- blood_delay;
+    }
+    if(cut_torso && blood_amount > 0.0f){
+        if(blood_delay <= 0){
+            this_mo.CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
+            blood_delay = 2;
+        }
+        blood_amount -= time_step * num_frames * 0.5f;
         -- blood_delay;
     }
 
@@ -367,8 +376,10 @@ void HandleSpecialKeyPresses() {
         permanent_health = 1.0f;
         recovery_time = 0.0f;
         cut_throat = false;
+        cut_torso = false;
         this_mo.CleanBlood();
         ClearTemporaryDecals();
+        blood_amount = _max_blood_amount;
     }
 
     if(controlled){
@@ -797,10 +808,12 @@ void SetActiveRagdollInjuredPose(){
     }
 }
 
+const float _auto_wake_vel_threshold = 20.0f;
+
 float recovery_time;
 void HandleRagdollRecovery() {
     recovery_time -= time_step * num_frames;
-    if(recovery_time <= 0.0f){
+    if(recovery_time <= 0.0f && length_squared(this_mo.GetAvgVelocity())<_auto_wake_vel_threshold){
         bool can_roll = CanRoll();
         if(can_roll){
             WakeUp(_wake_stand);
@@ -1000,6 +1013,8 @@ int IsDucking(){
     }
 }
 
+
+
 int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(target_id == -1){
         target_id = attacker_id;
@@ -1021,13 +1036,38 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     float sharp_damage = attack_getter2.GetSharpDamage();
     if(sharp_damage > 0.0f){
         TakeBloodDamage(sharp_damage);
-        for(int i=0; i<10; ++i){
+         /*for(int i=0; i<5; ++i){
             MakeParticle("Data/Particles/bloodcloud.xml",pos,
                 vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
-         }for(int i=0; i<5; ++i){
             MakeParticle("Data/Particles/bloodsplat.xml",pos,
-                vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
-        }
+                vec3(RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f),RangedRandomFloat(-2.0f,2.0f)));
+         }
+         cut_torso = true;
+         for(int i=0; i<100; ++i){
+                this_mo.CreateBloodDrip("torso", 1, vec3(0.0f,RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f)));
+         }*/
+         if(attack_getter2.HasCutPlane()){
+                vec3 cut_plane_local = attack_getter2.GetCutPlane();
+                if(attack_getter2.GetMirrored() == 1){
+                    cut_plane_local.x *= -1.0f;
+                }
+                vec3 facing = this_mo.ReadCharacterID(attacker_id).GetFacing();
+                vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
+                vec3 up(0.0f,1.0f,0.0f);
+                vec3 cut_plane_world = facing * cut_plane_local.z +
+                                       facing_right * cut_plane_local.x +
+                                       up * cut_plane_local.y;
+                this_mo.CutPlane(cut_plane_world, pos, facing);
+                const bool _draw_cut_plane = false;
+                if(_draw_cut_plane){
+                    vec3 cut_plane_z = normalize(cross(up, cut_plane_world));
+                    vec3 cut_plane_x = normalize(cross(cut_plane_world, cut_plane_z));
+                    for(int i=-5; i<=5; ++i){
+                        DebugDrawLine(pos-cut_plane_z*0.5f+cut_plane_x*(i*0.1f), pos+cut_plane_z*0.5f+cut_plane_x*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
+                        DebugDrawLine(pos-cut_plane_x*0.5f+cut_plane_z*(i*0.1f), pos+cut_plane_x*0.5f+cut_plane_z*(i*0.1f), vec3(1.0f,1.0f,1.0f), _persistent);
+                    }
+                }
+         }
     } else {
         MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
         MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
@@ -1517,6 +1557,7 @@ void UpdateMovementControls() {
     } else {
         if(ledge_info.on_ledge){
             ledge_info.UpdateLedge();
+            flip_info.UpdateFlip();
         } else {
             jump_info.UpdateAirControls();
             UpdateAirAttackControls();
@@ -1920,6 +1961,9 @@ void HandleAirCollisions() {
 
 
 void HandleLedgeCollisions() {
+    if(ghost_movement){
+        return;
+    }
     vec3 col_offset(0.0f,0.8f,0.0f);
     vec3 col_scale(1.05f);
     this_mo.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
@@ -2030,7 +2074,7 @@ void UpdateAttacking() {
         //DebugDrawWireSphere(this_mo.GetAvgPosition(), 0.5f, vec3(1.0f), _delete_on_update);
         float height_rel = avg_pos.y - this_mo.GetAvgPosition().y;
         this_mo.SetBlendCoord("attack_height_coord",height_rel);
-        Print("Height_rel: "+height_rel+"\n");
+        //Print("Height_rel: "+height_rel+"\n");
     }
 
     vec3 direction;
@@ -2619,7 +2663,13 @@ void ApplyCameraControls() {
 
     target_rotation2 = min(target_rotation2, max_rotation2);*/
 
-    vec3 cam_pos = this_mo.position + cam_pos_offset;
+    vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
+
+    this_mo.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
+    vec3 cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
+
+
+    vec3 cam_pos = cam_center + cam_pos_offset;
     if(state != _ragdoll_state){
         vec3 cam_offset;
         if(on_ground){
@@ -2884,6 +2934,7 @@ void Reset() {
     this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
     this_mo.CleanBlood();
     ClearTemporaryDecals();
+    blood_amount = _max_blood_amount;
 }
 
 void UpdateAnimation() {

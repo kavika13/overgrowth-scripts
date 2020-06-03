@@ -81,8 +81,9 @@ class JumpInfo {
     }
 
     float GetFlailingAmount() {
-        const float _flail_threshold = 0.5f;
-        return min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*_flail_threshold)*_shock_damage_multiplier*(1.0f)));
+        //const float _flail_threshold = 0.5f;
+        //return min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*_flail_threshold)*_shock_damage_multiplier*(1.0f)));
+        return min(1.0f,max(0.0f,(length(this_mo.velocity)-10.0f)*0.05f));
     }
 
     void UpdateFreeAirAnimation() {
@@ -91,6 +92,7 @@ class JumpInfo {
         up_coord *= -0.5f;
         up_coord += 0.5f;
         float flailing = GetFlailingAmount();
+        flailing = min(0.6f+sin(time*2.0f)*0.2f,flailing);
         this_mo.SetBlendCoord("up_coord",up_coord);
         this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
         this_mo.SetBlendCoord("flail_coord",flailing);

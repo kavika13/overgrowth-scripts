@@ -2,6 +2,7 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
+uniform sampler2D tex4;
 
 varying mat3 tangent_to_world;
 varying vec3 vertex_pos;
@@ -17,10 +18,12 @@ void main()
         discard;
     }
     
+
+    float shadowed = texture2D(tex4,gl_TexCoord[1].xy).x;
     vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
     vec3 normal = normalize(vec3((normalmap.x-0.5)*2.0, (normalmap.y-0.5)*-2.0, normalmap.z));
 
-    float NdotL = max(0.0,dot(light_pos, normal));
+    float NdotL = max(0.0,dot(light_pos, normal))*shadowed;
     vec3 diffuse_color = vec3(NdotL * 0.5);
     
     vec3 diffuse_map_vec = normal;
@@ -44,6 +47,6 @@ void main()
     
     //    colormap.a = 1.0;
     //color = colormap.xyz;
-    
+
     gl_FragColor = vec4(color,colormap.a);
 }

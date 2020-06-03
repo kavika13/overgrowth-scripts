@@ -2,6 +2,7 @@ uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
+uniform sampler2D tex4;
 
 varying mat3 tangent_to_world;
 varying vec3 vertex_pos;

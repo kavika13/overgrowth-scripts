@@ -243,6 +243,8 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         weight_offset.z += ik_shift.z*0.5f;
         weight_offset -= ledge_dir * 0.1f;
 
+        weight_offset *= ik_mult;     
+   
         this_mo.SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,transition_progress)); // Apply weight offset to torso
 
         for(int i=0; i<4; i++){
@@ -252,6 +254,12 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
             }
             offset[i] += weight_offset;
         }
+
+        for(int i=0; i<4; ++i){
+            offset[i] *= ik_mult;
+        }
+
+        //Print("IK mult: " + ik_mult + "\n"); 
 
         this_mo.SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],transition_progress));  // Set IK target offsets
         this_mo.SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],transition_progress));
@@ -264,6 +272,8 @@ vec3 ledge_grab_origin;             // Where was leg sphere origin when ledge gr
 float transition_speed;             // How fast to transition to new position
 float transition_progress;          // How far along the transition is (0-1)
 float leg_ik_mult;                  // How much we are allowing vertical leg IK displacement
+float ik_mult;
+bool ghost_movement;
 
 class LedgeInfo {
     bool on_ledge;                  // Grabbing ledge or not
@@ -272,6 +282,7 @@ class LedgeInfo {
     vec3 ledge_dir;                 // Direction to the ledge from the character
     bool climbed_up;                // Did we just climb up something? Queried by main movement update
     bool playing_animation;         // Are we currently playing an animation?
+    bool allow_ik;
     vec3 disp_ledge_dir;
     
     ShimmyAnimation shimmy_anim;    // Hand and foot animation class
@@ -280,6 +291,8 @@ class LedgeInfo {
         on_ledge = false;
         climbed_up = false;
         playing_animation = false;
+        allow_ik = true;
+        ghost_movement = false;
     }
 
     void UpdateLedgeAnimation() {
@@ -522,38 +535,64 @@ class LedgeInfo {
                 playing_animation = false;                                      // Otherwise go straight into ledge pose
                 leg_ik_mult = 1.0f;
             }
+            ik_mult = 1.0f;
 
             ledge_grab_origin = this_mo.position;                               // Record current position for smooth transition
             transition_progress = 0.0f;
             transition_speed = 10.0f/(abs(ledge_height - char_height)+0.05f);
             
+            allow_ik = true;
             on_ledge = true;                                                    // Set up ledge grab starting conditions
             disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
             this_mo.velocity = vec3(0.0f);
             ledge_grab_pos = CalculateGrabPos();
             shimmy_anim.Start(ledge_grab_pos, possible_ledge_dir, this_mo.velocity);
+            ghost_movement = false;
 
             this_mo.MaterialEvent("edge_grab", this_mo.position + ledge_dir * _leg_sphere_size);
         }
     }
 
     void EndClimbAnim(){
+        if(ghost_movement){
+            on_ledge = false;    
+            climbed_up = true;
+            jump_info.hit_wall = false;
+            this_mo.velocity = vec3(0.0f);
+        }
         playing_animation = false; 
+        allow_ik = true;
+        ghost_movement = false;
     }
     
     void UpdateLedge() {
-        CheckLedges();
-        /*DebugDrawWireSphere(this_mo.position,
-                            _leg_sphere_size,
-                            vec3(1.0f),
-                            _delete_on_update);
-        */
+        if(allow_ik){
+            ik_mult = min(1.0f, ik_mult + time_step * num_frames * 5.0f);
+        } else {
+            ik_mult = max(0.0f, ik_mult - time_step * num_frames * 5.0f);
+        }
+
         if(transition_progress < 1.0f){
             transition_progress += time_step * num_frames * transition_speed;   // Update transition to ledge grab
             transition_progress = min(1.0f, transition_progress); 
             cam_pos_offset = (ledge_grab_origin - this_mo.position)*(1.0f-transition_progress);
         }
+
+        if(ghost_movement){
+            this_mo.velocity = vec3(0.0f,0.1f,0.0f);
+            /*DebugDrawWireSphere(this_mo.position,
+                                _leg_sphere_size,
+                                vec3(1.0f),
+                                _delete_on_update);*/
+            return;
+        }
+
+        CheckLedges();
+        /*DebugDrawWireSphere(this_mo.position,
+                            _leg_sphere_size,
+                            vec3(1.0f),
+                            _delete_on_update);*/
 
         if(!WantsToGrabLedge()){
             on_ledge = false;    // If let go or not in contact with wall, 
@@ -604,17 +643,22 @@ class LedgeInfo {
                          pow(inertia,num_frames));
         this_mo.SetRotationFromFacing(disp_ledge_dir); 
         if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
-            on_ledge = false;    
-            climbed_up = true;
-            jump_info.hit_wall = false;
-            this_mo.velocity = vec3(0.0f);
-            this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
-            this_mo.position += ledge_dir * 0.7f;
-
-            //climbing_ledge = true;
-            //this_mo.StartAnimation("Data/Animations/r_ledge_climb_fast.anm",4.0f, _ANM_MOBILE);
-            //this_mo.SetAnimationCallback("void EndClimbAnim()");
-            //this_mo.velocity = vec3(0.0f);
+            if(this_mo.velocity.y >= 3.0f){
+                on_ledge = false;    
+                climbed_up = true;
+                jump_info.hit_wall = false;
+                this_mo.velocity = vec3(0.0f);
+                this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
+                this_mo.position += ledge_dir * 0.7f;
+            } else {
+                this_mo.position.y = target_height;
+                playing_animation = true;
+                allow_ik = false;
+                int flags = _ANM_SUPER_MOBILE;
+                this_mo.StartAnimation("Data/Animations/r_ledge_climb_fast.anm",8.0f,flags);
+                this_mo.SetAnimationCallback("void EndClimbAnim()");
+                ghost_movement = true;
+            }
         }
     }
 };

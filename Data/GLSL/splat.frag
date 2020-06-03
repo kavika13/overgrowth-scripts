@@ -26,12 +26,13 @@ void main()
     
     ws_normal = normalize(ws_normal);
 
-    float NdotL = GetDirectContrib(ws_light, ws_normal, 1.0);
+    float NdotL = GetDirectContribSoft(ws_light, ws_normal, 1.0);
+    NdotL *= (1.0-shadowed);
     vec3 diffuse_color = GetDirectColor(NdotL);
-    diffuse_color += LookupCubemapSimple(ws_normal, tex3);
+    diffuse_color += LookupCubemapSimple(ws_normal, tex3) * 0.5f;
     vec3 color = diffuse_color * colormap.xyz;
     
-    vec3 blood_spec = vec3(GetSpecContrib(ws_light, ws_normal, ws_vertex, 1.0, 450.0));
+    vec3 blood_spec = vec3(GetSpecContrib(ws_light, ws_normal, ws_vertex, 1.0, 450.0)) * (1.0-shadowed);
     color += blood_spec;
 
     color *= BalanceAmbient(NdotL);
