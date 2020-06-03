@@ -5,11 +5,16 @@ int controller_id = 0;
 bool reset_allowed = true;
 bool has_gui = false;
 uint32 gui_id;
+bool has_display_text = false;
+uint32 display_text_id;
 float time = 0.0f;
 
 void GUIDeleted(uint32 id){
     if(id == gui_id){
         has_gui = false;
+    }
+    if(id == display_text_id){
+        has_display_text = false;
     }
 }
 
@@ -38,8 +43,29 @@ void Reset(){
     ResetLevel();
 }
 
+void ReceiveMessage(string msg) {
+    if(msg == "reset"){
+        Reset();
+    }
+    if(msg == "cleartext"){
+        if(has_display_text){
+            gui.RemoveGUI(display_text_id);
+        }
+    }
+}
+
+void ReceiveMessage2(string msg, string msg2) {
+    if(msg == "displaytext"){
+       if(has_display_text){
+            gui.RemoveGUI(display_text_id);
+        }
+        display_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
+        gui.CallFunction(display_text_id,"SetText(\""+msg2+"\")");
+        has_display_text = true;
+    }
+}
+
 void Update() {
-    gui.Update();
     if(has_gui){
         SetGrabMouse(false);
         string callback = gui.GetCallback(gui_id);
@@ -66,10 +92,10 @@ void Update() {
         }
     }
     if(!has_gui && GetInputDown(controller_id, "esc") && GetPlayerCharacterID() == -1){
-        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,250);
+        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,250,0);
         has_gui = true;
-    }  /*
-    if(GetInputPressed("l")){
+    }
+    /*if(GetInputPressed("l")){
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }*/
     if(GetInputPressed(controller_id, "l")){
@@ -148,7 +174,7 @@ void VictoryCheck() {
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             if(reset_allowed && !has_gui){
-                gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
+                gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400,0);
                 has_gui = true;
                 UpdateTimerDisplay();
                 if(victory){

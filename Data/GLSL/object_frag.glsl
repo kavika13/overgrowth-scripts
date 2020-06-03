@@ -212,10 +212,10 @@ vec3 spec_color;\
 colormap.a = pow(colormap.a, max(0.1,min(1.0,4.0/length(ws_vertex))));
 
 #define CALC_COLOR_MAP \
-vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
+vec4 colormap = texture2D(color_tex,gl_TexCoord[0].xy);
 
 #define CALC_MORPHED_COLOR_MAP \
-vec4 colormap = texture2D(tex0,gl_TexCoord[0].zw);
+vec4 colormap = texture2D(color_tex,gl_TexCoord[0].zw);
 
 #define CALC_BLOOD_ON_COLOR_MAP \
 ApplyBloodToColorMap(colormap, blood_amount, wetblood);
