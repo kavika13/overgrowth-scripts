@@ -174,7 +174,7 @@ vec3 ws_normal;\
 vec4 normalmap = texture2D(normal_tex,tc0);\
 {\
     vec3 unpacked_normal = UnpackTanNormal(normalmap);\
-    ws_normal = tangent_to_world * unpacked_normal;\
+    ws_normal = normalize(tangent_to_world * unpacked_normal);\
 }
 
 #define CALC_OBJ_NORMAL \
@@ -227,11 +227,11 @@ vec4 colormap = texture2D(color_tex,gl_TexCoord[0].zw);
 #define CALC_MORPHED_AND_TINTED_COLOR_MAP \
 vec4 colormap = texture2D(color_tex,gl_TexCoord[0].zw); \
 vec4 tintmap = texture2D(tint_map,gl_TexCoord[0].zw); \
-vec3 tint_mult = mix(vec3(1.0), tint_palette[0], tintmap.r) * \
-                 mix(vec3(1.0), tint_palette[1], tintmap.g) * \
-                 mix(vec3(1.0), tint_palette[2], tintmap.b) * \
-                 mix(vec3(1.0), tint_palette[3], tintmap.a) * \
-                 mix(vec3(1.0), tint_palette[4], 1.0-(tintmap.r+tintmap.g+tintmap.b+tintmap.a)); \
+vec3 tint_mult = mix(vec3(0.0), tint_palette[0], tintmap.r) + \
+                 mix(vec3(0.0), tint_palette[1], tintmap.g) + \
+                 mix(vec3(0.0), tint_palette[2], tintmap.b) + \
+                 mix(vec3(0.0), tint_palette[3], tintmap.a) + \
+                 mix(vec3(0.0), tint_palette[4], 1.0-(tintmap.r+tintmap.g+tintmap.b+tintmap.a)); \
 colormap.xyz *= tint_mult;
 
 #define CALC_BLOOD_ON_COLOR_MAP \

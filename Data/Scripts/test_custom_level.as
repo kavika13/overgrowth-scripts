@@ -4,10 +4,6 @@
 float curr_difficulty;
 float player_skill;
 
-// Level reset timing info
-const float _reset_delay = 1.0f;
-float reset_timer;
-
 // For trying to complete level in a given amount of time
 float target_time;
 float time;
@@ -22,13 +18,9 @@ float crowd_cheer_vel;
 int fan_base;
 
 // Level state
-enum LevelState {
-    kIntro = 0,
-    kInProgress = 1,
-    kOutro = 2
-}
-LevelState level_state;
 vec3 initial_player_pos;
+bool initial_player_pos_set;
+
 enum LevelOutcome {
     kUnknown = 0,
     kVictory = 1,
@@ -36,29 +28,99 @@ enum LevelOutcome {
 }
 LevelOutcome level_outcome;
 
+enum MetaEventType {
+    kDisplay,
+    kWait,
+    kMessage
+}
+
+class MetaEvent {
+    MetaEventType type;
+    string data;
+}
+
+const int kMaxMetaStates = 10;
+array<string> meta_states;
+
+const int kMaxMetaEvents = 100;
+array<MetaEvent> meta_events;
+int meta_event_start;
+int meta_event_end;
+uint64 meta_event_wait;
+float wait_player_move_dist;
+bool wait_for_click;
+
+int player_id;
+
+uint64 global_time; // in ms
+
+array<int> match_score;
+
+array<vec3> player_colors;
+
 // Text display info
 int main_text_id;
+int ingame_text_id;
 float text_visible;
+bool show_text;
 
 // All objects spawned by the script
 array<int> spawned_object_ids;
 
-// For rendering text using Awesomium
-//TextRenderGUI text_render_gui;
+int TextInit(int width, int height){
+    int id = level.CreateTextElement();
+    TextCanvasTexture @text = level.GetTextElement(id);
+    text.Create(width, height);
+    return id;
+}
+
+void AddMetaEvent(MetaEventType type, string data) {
+    int next_meta_event_end = (meta_event_end+1)%kMaxMetaEvents;
+    if(next_meta_event_end == meta_event_start){
+        DisplayError("Error", "Too many meta events to add new one");
+        return;
+    }
+    meta_events[meta_event_end].type = type;
+    meta_events[meta_event_end].data = data;
+    meta_event_end = next_meta_event_end;
+}
+
+void ClearMetaEvents() {
+    meta_event_start = 0;
+    meta_event_end = 0;
+}
+
+void ClearMeta() {
+    ClearMetaEvents();
+    UpdateIngameText("");
+    show_text = false;
+    meta_event_wait = 0;
+    wait_player_move_dist = 0.0f;
+    wait_for_click = false;
+}
 
 // Called by level.cpp at start of level
 void Init(string str) {
-    main_text_id = level.CreateTextElement();
-    TextCanvasTexture @text = level.GetTextElement(main_text_id);
-    text.Create(512,512);
+    meta_states.resize(kMaxMetaStates);
+    meta_events.resize(kMaxMetaEvents);
+    int meta_event_start = 0;
+    int meta_event_end = 0;
+    meta_event_wait = global_time;
+    wait_player_move_dist = 0.0f;
+    wait_for_click = false;
+
+    main_text_id = TextInit(512,512);
+    ingame_text_id = TextInit(512,512);
     curr_difficulty = 0.5f;
     player_skill = 0.5f;
     audience_sound_handle = -1;
+    SetPlayerColors();
     SetUpLevel(curr_difficulty);
     crowd_cheer_amount = 0.0f;
     crowd_cheer_vel = 0.0f;
     fan_base = 0;
-    //text_render_gui.Create();
+    show_text = false;
+    text_visible = 0.0f;
 }
 
 void DeleteObjectsInList(array<int> &inout ids){
@@ -72,12 +134,13 @@ void DeleteObjectsInList(array<int> &inout ids){
 // Instantiate an object at the location of another object
 // E.g. create a character at the location of a placeholder spawn point
 Object@ SpawnObjectAtSpawnPoint(Object@ spawn, string &in path){
-    Print("Spawning \"" + path + "\"\n");
     int obj_id = CreateObject(path);
     spawned_object_ids.push_back(obj_id);
     Object @new_obj = ReadObjectFromID(obj_id);
     new_obj.SetTranslation(spawn.GetTranslation());
     new_obj.SetRotation(spawn.GetRotation());
+    ScriptParams@ params = new_obj.GetScriptParams();
+    params.AddIntCheckbox("No Save", true);
     return new_obj;
 }
 
@@ -96,11 +159,11 @@ void SetPlaceholderPreviews() {
         ScriptParams@ params = obj.GetScriptParams();
         if(params.HasParam("Name")){
             string name_str = params.GetString("Name");
-            if("player_spawn" == name_str){
-                SetSpawnPointPreview(obj,"Data/Objects/IGF_Characters/IGF_Turner.xml");
-            }
-            if("enemy_spawn" == name_str){
+            if("character_spawn" == name_str){
                 SetSpawnPointPreview(obj,"Data/Objects/IGF_Characters/IGF_Guard.xml");
+            }
+            if("weapon_spawn" == name_str){
+                SetSpawnPointPreview(obj,"Data/Objects/Weapons/DogWeapons/DogBroadsword.xml");
             }
         }
     }
@@ -112,7 +175,12 @@ bool HasFocus(){
 }
 
 // This script has no GUI elements
-void DrawGUI() {        
+void DrawGUI() {
+    // Do not draw the GUI in editor mode (it makes it hard to edit)
+    /*if(GetPlayerCharacterID() == -1){
+        return;
+    }*/
+
     float ui_scale = 0.5f;
     float visible = 1.0f;
     float display_time = time;
@@ -134,6 +202,13 @@ void DrawGUI() {
         image.position.y = GetScreenHeight()-500;
         image.position.z = 4;
         image.color = vec4(1,1,1,text_visible);}
+
+    {   HUDImage @image = hud.AddImage();
+        image.SetImageFromText(level.GetTextElement(ingame_text_id)); 
+        image.position.x = GetScreenWidth()/2-256;
+        image.position.y = GetScreenHeight()-500;
+        image.position.z = 4;
+        image.color = vec4(1,1,1,1);}
 }
 
 // Convert byte colors to float colors (255,0,0) to (1.0f,0.0f,0.0f)
@@ -156,8 +231,34 @@ vec3 RandReasonableColor(){
     return color;
 }
 
+class SpawnPoint {
+    int team;
+    int obj_id;
+}
+
+vec3 GetRandomFurColor() {
+    vec3 fur_color_byte;
+    int rnd = rand()%6;                    
+    switch(rnd){
+    case 0: fur_color_byte = vec3(255); break;
+    case 1: fur_color_byte = vec3(34); break;
+    case 2: fur_color_byte = vec3(137); break;
+    case 3: fur_color_byte = vec3(105,73,54); break;
+    case 4: fur_color_byte = vec3(53,28,10); break;
+    case 5: fur_color_byte = vec3(172,124,62); break;
+    }
+    return FloatTintFromByte(fur_color_byte);
+}
+
+void SetPlayerColors() {
+    player_colors.resize(4);
+    player_colors[0] = GetRandomFurColor();
+    player_colors[1] = GetRandomFurColor();
+    player_colors[3] = GetRandomFurColor();
+}
+
 // Create a random enemy at spawn point obj, with a given skill level
-void CreateEnemy(Object@ obj, float difficulty){
+void CreateEnemy(Object@ obj, float difficulty, int team){
     string actor_path; // Path to actor xml
     int fur_channel = -1; // Which tint mask channel corresponds to fur
     int rnd = rand()%2+1;
@@ -179,25 +280,23 @@ void CreateEnemy(Object@ obj, float difficulty){
     // Set palette colors randomly, darkening based on skill
     for(int i=0; i<4; ++i){
         vec3 color = FloatTintFromByte(RandReasonableColor());
+        float tint_amount = 0.5f;
+        if(team == 0){
+            color = mix(color, vec3(1,0,0), tint_amount);
+        } else if(team == 1){
+            color = mix(color, vec3(0,0,1), tint_amount);
+        } else if(team == 2){
+            color = mix(color, vec3(1,0.5f,0), tint_amount);
+        } else if(team == 3){
+            color = mix(color, vec3(0,1,1), tint_amount);
+        }
         color = mix(color, vec3(1.0-difficulty), 0.5f);
         char_obj.SetPaletteColor(i, color);
     }
-    // Set fur color to one of six reasonable fur colors
-    vec3 fur_color_byte;
-    rnd = rand()%6;                    
-    switch(rnd){
-    case 0: fur_color_byte = vec3(255); break;
-    case 1: fur_color_byte = vec3(34); break;
-    case 2: fur_color_byte = vec3(137); break;
-    case 3: fur_color_byte = vec3(105,73,54); break;
-    case 4: fur_color_byte = vec3(53,28,10); break;
-    case 5: fur_color_byte = vec3(172,124,62); break;
-    }
-    vec3 fur_color = FloatTintFromByte(fur_color_byte);
-    char_obj.SetPaletteColor(fur_channel, fur_color);
+    char_obj.SetPaletteColor(fur_channel, GetRandomFurColor());
     // Set character parameters based on difficulty
     ScriptParams@ params = char_obj.GetScriptParams();
-    params.SetString("Teams", "arena_enemy");
+    params.SetString("Teams", ""+team);
     params.SetFloat("Block Follow-up", mix(RangedRandomFloat(0.01f,0.25f), RangedRandomFloat(0.75f,1.0f), difficulty));
     params.SetFloat("Block Skill", mix(RangedRandomFloat(0.01f,0.25f), RangedRandomFloat(0.5f,0.8f), difficulty));
     params.SetFloat("Movement Speed", mix(RangedRandomFloat(0.8f,1.0f), RangedRandomFloat(0.9f,1.1f), difficulty));
@@ -206,50 +305,127 @@ void CreateEnemy(Object@ obj, float difficulty){
     params.SetFloat("Attack Knockback", damage);
     params.SetFloat("Attack Damage", damage);
     params.SetFloat("Aggression", RangedRandomFloat(0.25f,0.75f));
+    params.SetFloat("Ground Aggression", mix(0.0f, 1.0f, difficulty));
     params.SetFloat("Damage Resistance", mix(RangedRandomFloat(0.3f,0.5f), RangedRandomFloat(0.9f,1.1f), difficulty));
     params.SetInt("Left handed", (rand()%5==0)?1:0);
+    if(rand()%2==0){
+        params.SetString("Unarmed Stance Override", "Data/Animations/r_idle2.xml");
+    }
+    char_obj.UpdateScriptParams();
+
 }
 
 // Spawn all of the objects that we'll need in the level of given total difficulty
 void SetUpLevel(float initial_difficulty){
     // Remove all spawned objects
     DeleteObjectsInList(spawned_object_ids);
-    // Go through all spawn points, create player at player spawn, and remember enemy spawns
+    spawned_object_ids.resize(0);
+    
+    bool knife_test = false;
+    int game_type_int = rand()%3;
+    if(knife_test){
+        game_type_int = 0;
+    }
+    
+    // Identify all the spawn points for the current game type
     array<int> @object_ids = GetObjectIDs();
-    array<int> enemy_spawns;
+    array<SpawnPoint> character_spawns;
     int num_objects = object_ids.length();
     for(int i=0; i<num_objects; ++i){
         Object @obj = ReadObjectFromID(object_ids[i]);
         ScriptParams@ params = obj.GetScriptParams();
         if(params.HasParam("Name")){
             string name_str = params.GetString("Name");
-            if("player_spawn" == name_str){
-                Object@ char_obj = SpawnObjectAtSpawnPoint(obj,"Data/Objects/IGF_Characters/IGF_TurnerActor.xml");
-                char_obj.SetPlayer(true);
-                bool spawn_weapon = false;
-                if(spawn_weapon){
-                    if(rand()%2 == 0){
-                        string str;
-                        int rnd = rand()%3;
-                        switch(rnd){
-                        case 0: str = "Data/Items/DogWeapons/DogKnife.xml"; break;
-                        case 1: str = "Data/Items/DogWeapons/DogBroadSword.xml"; break;
-                        case 2: str = "Data/Items/DogWeapons/DogSword.xml"; break;
-                        }
-                        Object@ item_obj = SpawnObjectAtSpawnPoint(obj,str);
-                        char_obj.AttachItem(item_obj, _at_grip, false);
+            if("character_spawn" == name_str){
+                bool correct_game_type = false;
+                if(params.HasParam("game_type")){
+                    string game_type = params.GetString("game_type");
+                    if(game_type == ""+game_type_int){
+                        correct_game_type = true;
                     }
                 }
-                initial_player_pos = obj.GetTranslation();
+                if(correct_game_type){
+                    character_spawns.resize(character_spawns.size() + 1);
+                    SpawnPoint@ sp = character_spawns[character_spawns.size() - 1];
+                    sp.obj_id = object_ids[i];
+                    if(params.HasParam("team")){
+                        string team_str = params.GetString("team");
+                        sp.team = atoi(team_str);
+                    } else {
+                        sp.team = -1;                    
+                    }
+                }
             }
-            if("enemy_spawn" == name_str){
-                enemy_spawns.push_back(object_ids[i]);
+            /*if("weapon_spawn" == name_str){
+                Object@ weap_obj = SpawnObjectAtSpawnPoint(obj,"Data/Items/DogWeapons/DogBroadSword.xml");                
+            }*/
+        }
+    }
+    
+    // Spawn characters for each spawn point, with randomly selected player
+    int num_char_spawns = character_spawns.size();
+    player_id = rand()%num_char_spawns;
+    for(int i=0; i<num_char_spawns; ++i){
+        Object @obj = ReadObjectFromID(character_spawns[i].obj_id);
+        if(i != player_id){
+            CreateEnemy(obj, initial_difficulty-0.5f, character_spawns[i].team);
+        } else {
+            Object@ char_obj = SpawnObjectAtSpawnPoint(obj,"Data/Objects/IGF_Characters/pale_turner_actor.xml");
+            char_obj.SetPlayer(true);
+            ScriptParams@ char_params = char_obj.GetScriptParams();
+            int team = character_spawns[i].team;
+            char_params.SetString("Teams", ""+team);
+
+            vec3 color = FloatTintFromByte(RandReasonableColor());
+            float tint_amount = 0.5f;
+            if(team == 0){
+                color = mix(color, vec3(1,0,0), tint_amount);
+            } else if(team == 1){
+                color = mix(color, vec3(0,0,1), tint_amount);
+            } else if(team == 2){
+                color = mix(color, vec3(1,0.5f,0), tint_amount);
+            } else if(team == 3){
+                color = mix(color, vec3(0,1,1), tint_amount);
+            }
+            color = mix(color, vec3(1.0-(curr_difficulty-0.5f)), 0.5f);
+            player_colors[2] = color;
+            
+            for(int i=0; i<4; ++i){
+                char_obj.SetPaletteColor(i, player_colors[i]);
             }
         }
     }
+    
+    bool use_weapons = knife_test || rand()%3==0;
+    if(use_weapons){
+        string weap_str;
+        int rnd = rand()%3;
+        if(knife_test){
+            rnd = 0;
+        }
+        switch(rnd){
+        case 0: weap_str = "Data/Items/DogWeapons/DogKnife.xml"; break;
+        case 1: weap_str = "Data/Items/DogWeapons/DogBroadSword.xml"; break;
+        case 2: weap_str = "Data/Items/DogWeapons/DogSword.xml"; break;
+        }
+
+        int num_chars = GetNumCharacters();
+        for(int i=0; i<num_chars; ++i){
+            MovementObject@ char_obj = ReadCharacter(i);
+            Object@ obj = ReadObjectFromID(char_obj.GetID());
+            Object@ item_obj = SpawnObjectAtSpawnPoint(obj,weap_str);
+            ScriptParams@ params = obj.GetScriptParams();
+            bool mirrored = false;
+            if(params.HasParam("Left handed") && params.GetInt("Left handed") != 0){
+                mirrored = true;
+            }
+            obj.AttachItem(item_obj, _at_grip, mirrored);
+        }
+    }
+
     // Divide up difficulty to provide a mix of weak and strong enemies
     // that add up to the given total difficulty
-    float difficulty = initial_difficulty;
+    /*float difficulty = initial_difficulty;
     Print("Total difficulty: "+difficulty+"\n");
     array<float> enemy_difficulties;
     while(difficulty > 0.0f){
@@ -296,10 +472,10 @@ void SetUpLevel(float initial_difficulty){
         chosen[counter] = 1;
         Object @obj = ReadObjectFromID(enemy_spawns[counter]);
         CreateEnemy(obj, enemy_difficulties[i]-0.5f);
-    } 
+    } */
+
     // Reset level timer info
     target_time = 10.0f;
-    reset_timer = _reset_delay;   
     time = 0.0f;
     // Reset audience info
     audience_excitement = 0.0f;
@@ -309,16 +485,44 @@ void SetUpLevel(float initial_difficulty){
     if(audience_sound_handle == -1){
         audience_sound_handle = PlaySoundLoop("Data/Sounds/crowd/crowd_arena_general_1.wav",0.0f);
     }
-    SetIntroText();
-    level_state = kIntro;
     level_outcome = kUnknown;
-    text_visible = 1.0f;
-    
-    int num_chars = GetNumCharacters();
-    for(int i=0; i<num_chars; ++i){
-        MovementObject@ char = ReadCharacter(i);
-        char.ReceiveMessage("set_hostile false");
+    int num_scores = 4;
+    match_score.resize(num_scores);
+    for(int i=0; i<num_scores; ++i){
+        match_score[i] = 0;
     }
+    
+    SetAllHostile(false);
+    SendMessageToAllCharacters("in_arena true");
+    
+    ClearMeta();
+    AddMetaEvent(kMessage, "set_meta_state 0 pre_intro");
+    AddMetaEvent(kMessage, "set_intro_text");
+    AddMetaEvent(kMessage, "set show_text true");
+    AddMetaEvent(kMessage, "wait_for_player_move 1.0");
+
+    AddMetaEvent(kMessage, "set show_text false");
+    AddMetaEvent(kMessage, "set_meta_state 0 intro");
+    AddMetaEvent(kWait, "0.5");
+
+    AddMetaEvent(kDisplay, "Welcome to the arena!");
+    AddMetaEvent(kWait, "2.0");
+
+    if(use_weapons){
+        AddMetaEvent(kDisplay, "This is a fight to the death!");
+        AddMetaEvent(kMessage, "set_meta_state 1 one_point");
+    } else {
+        AddMetaEvent(kDisplay, "Two points to win!");
+        AddMetaEvent(kMessage, "set_meta_state 1 two_points");
+    }
+    AddMetaEvent(kWait, "2.0");
+
+    AddMetaEvent(kDisplay, "Time to fight!");
+    AddMetaEvent(kMessage, "set_all_hostile true");
+    AddMetaEvent(kMessage, "set_meta_state 0 fighting");
+    AddMetaEvent(kWait, "2.0");
+
+    AddMetaEvent(kDisplay, "");
     //TimedSlowMotion(0.5f,7.0f, 0.0f);
 }
 
@@ -326,6 +530,19 @@ enum MessageParseType {
     kSimple = 0,
     kOneInt = 1,
     kTwoInt = 2
+}
+
+void AggressionDetected(int attacker_id){
+    if(meta_states[0] != "fighting"){
+        if(ReadCharacterID(attacker_id).controlled){
+            ClearMeta();
+            AddMetaEvent(kMessage, "set_meta_state 0 disqualify");
+            AddMetaEvent(kDisplay, "Player is disqualified!");
+            AddMetaEvent(kWait, "2.0");
+            EndMatch(false);
+        }
+    }
+
 }
 
 // Parse string messages and react to them
@@ -339,8 +556,52 @@ void ReceiveMessage(string msg) {
     // Handle simple tokens, or mark as requiring extra parameters
     MessageParseType type = kSimple;
     string token = token_iter.GetToken(msg);
-    if(token == "reset"){
+    if(token == "post_reset"){
         SetUpLevel(curr_difficulty);    
+    } else if(token == "restore_health"){
+        int num_chars = GetNumCharacters();
+        for(int i=0; i<num_chars; ++i){
+            MovementObject@ char = ReadCharacter(i);
+            char.ReceiveMessage("restore_health");
+        }
+    } else if(token == "new_match"){
+        curr_difficulty = GetRandomDifficultyNearPlayerSkill();
+        SetUpLevel(curr_difficulty);    
+    } else if(token == "set_all_hostile"){
+        token_iter.FindNextToken(msg);
+        string param = token_iter.GetToken(msg);
+        if(param == "false"){
+            SetAllHostile(false);
+        } else if(param == "true"){
+            SetAllHostile(true);
+        }
+    } else if(token == "set"){
+        token_iter.FindNextToken(msg);
+        string param1 = token_iter.GetToken(msg);
+        token_iter.FindNextToken(msg);
+        string param2 = token_iter.GetToken(msg);
+        if(param1 == "show_text"){
+            if(param2 == "false"){
+                show_text = false;
+            } else if(param2 == "true"){
+                show_text = true;
+            }
+        }
+    } else if(token == "set_intro_text"){
+        SetIntroText();
+    } else if(token == "wait_for_player_move"){
+        token_iter.FindNextToken(msg);
+        string param1 = token_iter.GetToken(msg);
+        wait_player_move_dist = atof(param1); 
+        initial_player_pos_set = false;
+    } else if(token == "wait_for_click"){
+        wait_for_click = true;
+    } else if(token == "set_meta_state"){
+        token_iter.FindNextToken(msg);
+        string param1 = token_iter.GetToken(msg);
+        token_iter.FindNextToken(msg);
+        string param2 = token_iter.GetToken(msg);
+        meta_states[atoi(param1)] = param2;
     } else if(token == "dispose_level"){
         StopSound(audience_sound_handle);
     } else if(token == "knocked_over" ||
@@ -350,14 +611,16 @@ void ReceiveMessage(string msg) {
               token == "character_attack_feint" ||
               token == "character_attack_missed" ||
               token == "character_throw_escape" ||
-              token == "character_thrown")
+              token == "character_thrown" ||
+              token == "cut")
     {
         type = kTwoInt;
     } else if(token == "character_died" ||
               token == "character_knocked_out" ||
               token == "character_start_flip" ||
               token == "character_start_roll" ||
-              token == "character_failed_flip")
+              token == "character_failed_flip"||
+              token == "item_hit")
     {
         type = kOneInt;
     }
@@ -380,6 +643,9 @@ void ReceiveMessage(string msg) {
         } else if(token == "character_failed_flip"){
             Print("Player "+char_a+" failed a flip\n");
             audience_excitement += 1.0f;
+        } else if(token == "item_hit"){
+            Print("Player "+char_a+" was hit by an item\n");
+            audience_excitement += 1.5f;
         }
     } else if(type == kTwoInt){
         token_iter.FindNextToken(msg);
@@ -389,15 +655,19 @@ void ReceiveMessage(string msg) {
         if(token == "knocked_over"){
             Print("Player "+char_a+" was knocked over by player "+char_b+"\n");
             audience_excitement += 1.5f;
+            AggressionDetected(char_b);
         } else if(token == "passive_blocked"){
             Print("Player "+char_a+" passive-blocked an attack by player "+char_b+"\n");
             audience_excitement += 0.5f;
+            AggressionDetected(char_b);
         } else if(token == "active_blocked"){
             Print("Player "+char_a+" active-blocked an attack by player "+char_b+"\n");
             audience_excitement += 0.7f;
+            AggressionDetected(char_b);
         } else if(token == "dodged"){
             Print("Player "+char_a+" dodged an attack by player "+char_b+"\n");
             audience_excitement += 0.7f;
+            AggressionDetected(char_b);
         } else if(token == "character_attack_feint"){
             Print("Player "+char_a+" feinted an attack aimed at "+char_b+"\n");
             audience_excitement += 0.4f;
@@ -410,6 +680,10 @@ void ReceiveMessage(string msg) {
         } else if(token == "character_thrown"){
             Print("Player "+char_a+" was thrown by "+char_b+"\n");
             audience_excitement += 1.5f;
+        } else if(token == "cut"){
+            Print("Player "+char_a+" was cut by "+char_b+"\n");
+            audience_excitement += 2.0f;
+            AggressionDetected(char_b);
         }
     }
 }
@@ -428,81 +702,162 @@ float GetRandomDifficultyNearPlayerSkill() {
     return var;
 }
 
+void EndMatch(bool victory){            
+    float win_prob = ProbabilityOfWin(player_skill, curr_difficulty);
+    float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
+    const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
+
+    if(!victory){ // Decrease difficulty on failure
+        level_outcome = kFailure;   
+        float audience_fan_ratio = 0.0f;
+        if(win_prob < 0.5f){ // If you were predicted to lose, you still gain some fans
+            audience_fan_ratio += (0.5f - win_prob) * kMatchImportance;
+        }
+        audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level * 0.4f;
+        int new_fans = audience_size * audience_fan_ratio;
+        fan_base += new_fans;
+        player_skill -= player_skill * win_prob * kMatchImportance;
+        if(player_skill < 0.5f){
+            player_skill = 0.5f;
+        }         
+        SetLoseText(new_fans, excitement_level);
+    } else if(victory){ // Increase difficulty on win
+        level_outcome = kVictory;
+        player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;                
+        float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
+        audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
+        int new_fans = audience_size * audience_fan_ratio;
+        fan_base += new_fans;
+        SetWinText(new_fans, excitement_level);
+    }
+               
+    AddMetaEvent(kMessage, "set_all_hostile false");
+    AddMetaEvent(kMessage, "set_meta_state 0 resetting");
+    AddMetaEvent(kDisplay, "The match is over!");
+    AddMetaEvent(kWait, "2.0");
+    AddMetaEvent(kDisplay, "");
+    AddMetaEvent(kMessage, "set show_text true");
+    AddMetaEvent(kMessage, "wait_for_click");
+    AddMetaEvent(kMessage, "set show_text false");
+    AddMetaEvent(kMessage, "new_match");
+}
+
 // Check if level should be reset
 void VictoryCheck() {
     if(level_outcome == kUnknown){
-        int player_id = GetPlayerCharacterID();
-        if(player_id == -1){
-            return;
-        }
-        // Check if any enemies are still standing
-        bool victory = true;
-        for(int i=0; i<level.GetNumObjectives(); ++i){
-            int threats_remaining = ThreatsRemaining();
-            int threats_possible = ThreatsPossible();
-            if(threats_remaining > 0 || threats_possible == 0){
-                victory = false;
+        bool multiple_teams_alive = false;
+        bool any_team_alive = false;
+        string team_alive;
+                
+        int num = GetNumCharacters();
+        for(int i=0; i<num; ++i){
+            MovementObject@ char = ReadCharacter(i);
+            if(char.GetIntVar("knocked_out") == _awake){
+                ScriptParams@ params = ReadObjectFromID(char.GetID()).GetScriptParams(); 
+                if(!any_team_alive){
+                    any_team_alive = true;
+                    team_alive = params.GetString("Teams");
+                } else if(team_alive != params.GetString("Teams")){
+                    multiple_teams_alive = true;
+                }
             }
         }
-        // Check if player is still standing
-        bool failure = false;
-        MovementObject@ player_char = ReadCharacter(player_id);
-        if(player_char.GetIntVar("knocked_out") != _awake){
-            failure = true;
-        }
-        if(failure || victory){
-            reset_timer = _reset_delay;
-            level_state = kOutro;
-            float win_prob = ProbabilityOfWin(player_skill, curr_difficulty);
-            float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
-            const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
-            if(failure){ // Decrease difficulty on failure
-                level_outcome = kFailure;   
-                float audience_fan_ratio = 0.0f;
-                if(win_prob < 0.5f){ // If you were predicted to lose, you still gain some fans
-                    audience_fan_ratio += (0.5f - win_prob) * kMatchImportance;
+
+        if(!multiple_teams_alive && meta_states[0] == "fighting"){
+            // Store id of the team that won the last round
+            int last_round_winner = -1;
+            if("0" == team_alive){
+                last_round_winner = 0;
+            } else if("1" == team_alive){
+                last_round_winner = 1;
+            } else if("2" == team_alive){
+                last_round_winner = 2;
+            } else if("3" == team_alive){
+                last_round_winner = 3;
+            }
+            // Increment winning team score
+            if(last_round_winner != -1){
+                ++match_score[last_round_winner];
+            }
+            
+            Print("Last round winner: "+last_round_winner);
+            int max_score = 1;
+            if(meta_states[1] == "two_points"){
+                max_score = 2;
+            }
+
+            if(match_score[last_round_winner] < max_score){
+                ClearMeta();
+                AddMetaEvent(kMessage, "set_all_hostile false");
+                AddMetaEvent(kMessage, "set_meta_state 0 resetting");
+                AddMetaEvent(kDisplay, "The round is over!");
+                AddMetaEvent(kWait, "2.0");
+                AddMetaEvent(kMessage, "restore_health");
+                if(last_round_winner != -1){
+                    string team_color = "A";
+                    switch(last_round_winner){
+                    case 0: team_color = "Red"; break;
+                    case 1: team_color = "Blue"; break;
+                    case 2: team_color = "Tan"; break;
+                    case 3: team_color = "Cyan"; break;
+                    }
+                    string display_text = team_color+" team has "+match_score[last_round_winner]+" point";
+                    if(match_score[last_round_winner] != 1){
+                        display_text += "s";
+                    }
+                    display_text += "!";
+                    AddMetaEvent(kDisplay, display_text);
+                    AddMetaEvent(kWait, "2.0");
                 }
-                audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level * 0.4f;
-                int new_fans = audience_size * audience_fan_ratio;
-                fan_base += new_fans;
-                player_skill -= player_skill * win_prob * kMatchImportance;
-                if(player_skill < 0.5f){
-                    player_skill = 0.5f;
-                }         
-                SetLoseText(new_fans, excitement_level);
-            } else if(victory){ // Increase difficulty on win
-                level_outcome = kVictory;
-                player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;                
-                float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
-                audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
-                int new_fans = audience_size * audience_fan_ratio;
-                fan_base += new_fans;
-                SetWinText(new_fans, excitement_level);
+                AddMetaEvent(kDisplay, "Get ready for the next round...");
+                AddMetaEvent(kWait, "2.0");
+                AddMetaEvent(kDisplay, "Fight!");
+                AddMetaEvent(kMessage, "set_all_hostile true");
+                AddMetaEvent(kMessage, "set_meta_state 0 fighting");
+                AddMetaEvent(kWait, "2.0");
+                AddMetaEvent(kDisplay, "");
+            } else {
+                bool victory = false;
+                int num_chars = GetNumCharacters();
+                for(int i=0; i<num_chars; ++i){
+                    MovementObject@ char = ReadCharacter(i);
+                    Object@ obj = ReadObjectFromID(char.GetID());
+                    ScriptParams@ params = obj.GetScriptParams();                    
+                    if(char.controlled && params.HasParam("Teams") && params.GetString("Teams") == team_alive){
+                        victory = true;
+                    }
+                }
+                ClearMeta();
+                EndMatch(victory);
             }
         }        
     }
 
-    // If player is KO or enemies are KO, countdown to level reset
-    if(level_state == kOutro){
-        reset_timer -= time_step;
-        if(reset_timer <= 0.0f && GetInputPressed(0, "attack")){
-            if(level_outcome == kVictory){ 
-                PlaySoundGroup("Data/Sounds/versus/fight_win1.xml");  
-            } else if(level_outcome == kFailure){ 
-                PlaySoundGroup("Data/Sounds/versus/fight_lose1.xml");  
-            }
-            // Set up new level
-            curr_difficulty = GetRandomDifficultyNearPlayerSkill();
-            SetUpLevel(curr_difficulty);
-        }
-    }
-    if(level_state == kIntro || level_state == kOutro){
+    if(show_text){
         text_visible += time_step;
         text_visible = min(1.0f, text_visible);
     } else {
         text_visible -= time_step;
         text_visible = max(0.0f, text_visible);
     }
+}
+
+void UpdateIngameText(string str) {
+    TextCanvasTexture @text = level.GetTextElement(ingame_text_id);
+    text.ClearTextCanvas();
+    string font_str = "Data/UI/arena/images/arabtype.ttf";
+    TextStyle style;
+    style.font_face_id = GetFontFaceID(font_str, 48);
+
+    vec2 pen_pos = vec2(0,256);
+    int line_break_dist = 42;
+    text.SetPenPosition(pen_pos);
+    text.SetPenColor(255,255,255,255);
+    text.SetPenRotation(0.0f);
+    
+    text.AddText(str, style);
+
+    text.UploadTextCanvasToTexture();
 }
 
 void SetIntroText() {
@@ -668,28 +1023,91 @@ void OddsFromProbability(float prob, int &out a, int &out b) {
     b = closest_denominator;
 }
 
-void Update() {
+void SetAllHostile(bool val){
+    int num_chars = GetNumCharacters();
+    if(val == true){
+        for(int i=0; i<num_chars; ++i){
+             MovementObject@ char = ReadCharacter(i);
+             char.ReceiveMessage("set_combat_allowed true");
+             for(int j=i+1; j<num_chars; ++j){
+                 MovementObject@ char2 = ReadCharacter(j);
+                 char.ReceiveMessage("notice " + char2.GetID());
+                 char2.ReceiveMessage("notice " + char.GetID());
+             }
+         }
+    } else {
+        for(int i=0; i<num_chars; ++i){
+            MovementObject@ char = ReadCharacter(i);
+            char.ReceiveMessage("set_combat_allowed false");   
+        }
+    }
+}
+
+void SendMessageToAllCharacters(const string &in msg){
+    int num_chars = GetNumCharacters();
+    for(int i=0; i<num_chars; ++i){
+        MovementObject@ char = ReadCharacter(i);
+        char.ReceiveMessage(msg);   
+    }
+}
+
+// Returns true if a wait event was encountered
+void ProcessMetaEvent(MetaEvent me){
+    switch(me.type){
+    case kWait:
+        meta_event_wait = global_time + 1000 * atof(me.data);
+        break;
+    case kDisplay:
+        UpdateIngameText(me.data);
+        break;
+    case kMessage:
+        ReceiveMessage(me.data);
+        break;
+    }
+}
+
+void UpdateMetaEventWait() {
+    if(wait_player_move_dist > 0.0f){
+        if(player_id != -1){
+            MovementObject@ player_char = ReadCharacter(player_id);
+            if(!initial_player_pos_set){
+                initial_player_pos = player_char.position;
+                initial_player_pos_set = true;
+            }
+            if(xz_distance_squared(initial_player_pos, player_char.position) > wait_player_move_dist){
+                wait_player_move_dist = 0.0f;
+            }
+        }
+    }
+    if(wait_for_click){
+        if(GetInputDown(0, "attack")){
+            wait_for_click = false;
+        }
+    }
+}
+
+bool MetaEventWaiting(){
+    bool waiting = false;
+    if(global_time < meta_event_wait){
+        waiting = true;
+    }
+    if(wait_player_move_dist > 0.0f){
+        waiting = true;
+    }
+    if(wait_for_click){
+        waiting = true;
+    }
+    return waiting;
+}
+
+void Update() { 
+    global_time += time_step * 1000;
+
     SetPlaceholderPreviews();
     if(GetInputPressed(0, "t")){
         curr_difficulty = GetRandomDifficultyNearPlayerSkill();
         SetUpLevel(curr_difficulty);
     }
-
-    if(level_state == kIntro){
-        int player_id = GetPlayerCharacterID();
-        if(player_id != -1){
-            MovementObject@ player_char = ReadCharacter(player_id);
-            if(distance_squared(initial_player_pos, player_char.position) > 1.0f){
-                level_state = kInProgress;
-                int num_chars = GetNumCharacters();
-                for(int i=0; i<num_chars; ++i){
-                    MovementObject@ char = ReadCharacter(i);
-                    char.ReceiveMessage("set_hostile true");
-                }
-            }
-        }
-    }
-
 
     bool debug_text = false;
     VictoryCheck();
@@ -737,5 +1155,11 @@ void Update() {
         DebugText("hb","target_crowd_cheer_amount:  "+target_crowd_cheer_amount,0.5f);
         DebugText("i","crowd_cheer_amount:  "+crowd_cheer_amount,0.5f);
         DebugText("j","crowd_cheer_vel:  "+crowd_cheer_vel,0.5f);
+    }
+
+    UpdateMetaEventWait();
+    while(meta_event_start != meta_event_end && !MetaEventWaiting()){
+        ProcessMetaEvent(meta_events[meta_event_start]);
+        meta_event_start = (meta_event_start+1)%kMaxMetaEvents;
     }
 }

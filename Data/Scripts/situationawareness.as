@@ -143,7 +143,7 @@ class Situation {
     }
 
     int GetForceLookTarget() {
-        const float _target_look_threshold = 7.0f; // How close target must be to look at it
+        const float _target_look_threshold = this_mo.controlled?7.0f:30.0f; // How close target must be to look at it
         const float _target_look_threshold_sqrd = 
             _target_look_threshold * _target_look_threshold;
 

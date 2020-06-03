@@ -21,7 +21,7 @@ void main()
     vec4 colormap = texture2D(tex0,gl_TexCoord[0].st);
     if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
        gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
-        colormap.a <= 0.05) {
+        colormap.a <= 0.01) {
         discard;
     }
     // Calculate normal

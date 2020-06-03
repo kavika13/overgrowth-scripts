@@ -23,10 +23,6 @@ bool HasFocus(){
     return has_gui;
 }
 
-void Reset(){
-    ResetLevel();
-}
-
 void ReceiveMessage(string msg) {
     TokenIterator token_iter;
     token_iter.Init();
@@ -50,7 +46,7 @@ void ReceiveMessage(string msg) {
 	} else if(token == "manual_reset"){
         level.SendMessage("reset");
     } else if(token == "reset"){
-        Reset();
+        ResetLevel();
     } else if(token == "displaytext"){
         if(has_display_text){
             gui.RemoveGUI(display_text_id);
