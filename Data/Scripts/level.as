@@ -27,12 +27,11 @@ void UpdateTimerDisplay() {
 
 void Update() {
     gui.Update();
-    if(GetInputPressed("g") && !GetInputDown("ctrl")){
+     /*if(GetInputPressed("g") && !GetInputDown("ctrl")){
         gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
         has_gui = true;
         UpdateTimerDisplay();
     } 
-    /*
     if(GetInputPressed("l")){
         if(has_gui){
             gui.RemoveGUI(gui_id);
@@ -46,7 +45,7 @@ void Update() {
     
     time += time_step;
 
-    //VictoryCheck();
+    VictoryCheck();
     UpdateMusic();
 }
 
@@ -57,21 +56,22 @@ void VictoryCheck() {
     if(player_id == -1){
         return;
     }
-
-    MovementObject@ player_char = ReadCharacter(player_id);
+    bool victory = false;
     if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
-        reset_timer -= time_step;
-        if(reset_timer <= 0.0f){
-            ResetLevel();
-            reset_timer = _reset_delay;
-        }
+        victory = true;
     }
+    bool failure = false;
+    MovementObject@ player_char = ReadCharacter(player_id);
     if(player_char.IsKnockedOut() != _awake){
+        failure = true;
+    }
+    if(victory || failure){
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             ResetLevel();
-            reset_timer = _reset_delay;
         }
+    } else {
+        reset_timer = _reset_delay;
     }
 }
 
@@ -142,4 +142,14 @@ int ThreatsPossible() {
     }
     return num_threats;
 }
-   
+
+void HotspotEnter(string str, MovementObject @mo) {
+    Print("Enter hotspot: "+str+"\n");
+    if(str == "Stop"){
+        ResetLevel();
+    }
+}
+
+void HotspotExit(string str, MovementObject @mo) {
+    Print("Exit hotspot: "+str+"\n");
+}

@@ -300,7 +300,7 @@ class JumpInfo {
             jump_vel = GetJumpVelocity(target_velocity);
         }
         this_mo.velocity = jump_vel;
-        Print("Start jump: "+this_mo.velocity.y+"\n");
+        //Print("Start jump: "+this_mo.velocity.y+"\n");
         jetpack_fuel = _jump_fuel;
         jump_launch = 1.0f;
         down_jetpack_fuel = _jump_fuel*0.5f;

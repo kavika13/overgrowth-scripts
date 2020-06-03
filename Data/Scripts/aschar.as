@@ -461,9 +461,6 @@ void UpdateState() {
         HandleCollisions();
     }
 
-    if(!controlled && state != _ragdoll_state){
-        HandleCollisionsBetweenCharacters();
-    }
     this_mo.velocity = CheckTerminalVelocity(this_mo.velocity);   
 
     UpdateTilt();
@@ -617,13 +614,25 @@ void UpdateBlink() {
 }
 
 bool active_blocking = false;
+int active_block_flinch_layer = -1;
 
 void UpdateActiveBlock() {
     block_stunned = max(0.0f, block_stunned - time_step * num_frames);
-    if(controlled){
+    //if(controlled){
         UpdateActiveBlockMechanics();
-    } else {
+    /*} else {
         active_blocking = (rand()%4)==0;
+    }*/
+    if(active_blocking && state == _movement_state){
+        if(active_block_flinch_layer == -1){
+            active_block_flinch_layer = 
+                this_mo.AddLayer("Data/Animations/r_activeblockflinch.anm",10.0f,0);
+        }
+    } else {
+        if(active_block_flinch_layer != -1){
+            this_mo.RemoveLayer(active_block_flinch_layer, 4.0f);
+            active_block_flinch_layer = -1;
+        } 
     }
 }
 
@@ -972,6 +981,11 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
        !active_blocking || attack_getter2.GetUnblockable() != 0)
     {
         return _miss;
+    }
+
+    if(active_block_flinch_layer != -1){
+        this_mo.RemoveLayer(active_block_flinch_layer, 100.0f);
+        active_block_flinch_layer = -1;
     }
 
     reaction_getter.Load(attack_getter2.GetReactionPath());
@@ -1491,6 +1505,23 @@ void MoveIKTarget(string str, vec3 offset) {
 
 void draw() {
     this_mo.DrawBody();
+    /*mat4 transform = this_mo.GetAvgIKChainTransform("head");
+    mat4 transform_offset;
+    transform_offset.SetRotationX(-70);
+    transform.SetRotationPart(transform.GetRotationPart()*transform_offset);
+    DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _delete_on_draw); 
+    
+    array<int> nearby_characters;
+    GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
+    for(int i=0; i<nearby_characters.size(); ++i){
+        if(nearby_characters[i] == this_mo.getID()){
+            continue;    
+        }
+        DebugDrawWireSphere(ReadCharacterID(nearby_characters[i]).position,
+                            1.0f,
+                            vec3(1.0f,0.0f,0.0f),
+                            _delete_on_draw);
+    }*/
 }
 
 void ForceApplied(vec3 force) {
@@ -1507,7 +1538,7 @@ float GetTempHealth() {
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
     if(WantsToAttack()||WantsToThrowEnemy()){
-        TargetClosest();
+        TargetClosest(3.0f);
     }
     if(target_id == -1){
         return;
@@ -1539,7 +1570,7 @@ void UpdateGroundAttackControls() {
 
 void UpdateAirAttackControls() {
     if(WantsToAttack()){
-        TargetClosest();
+        TargetClosest(3.0f);
     }
     if(target_id == -1){
         return;
@@ -1642,55 +1673,35 @@ float GetVisionDistance(const vec3&in target_pos){
     return direct_vision * vision_threshold;
 }
 
-bool IsTargetInFOV(const vec3&in target_pos){
-    float dist = GetVisionDistance(target_pos);
-    if(distance_squared(this_mo.position, target_pos) > dist*dist){
-        return false;
-    }
-    return true;
-}
+void TargetClosestVisible(){
+    mat4 transform = this_mo.GetAvgIKChainTransform("head");
+    mat4 transform_offset;
+    transform_offset.SetRotationX(-70);
+    transform.SetRotationPart(transform.GetRotationPart()*transform_offset);
+    array<int> nearby_characters;
+    GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
+    //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _fade);
 
-int ThreatsPossible() {
-    int num = GetNumCharacters();
-    int num_threats = 0;
-    for(int i=0; i<num; ++i){
-        if(this_mo.WhichCharacterAmI() == i){
-            continue;
-        }
-        vec3 target_pos = ReadCharacter(i).position;
-        if(character_getter.OnSameTeam(ReadCharacter(i).char_path) == 0)
-        {
-            ++num_threats;
-        }
-    }
-    return num_threats;
-}
-
-void TargetClosest(){
-    int num = GetNumCharacters();
+    int num = nearby_characters.size();
     int closest_id = -1;
     float closest_dist = 0.0f;
 
     for(int i=0; i<num; ++i){
-        if(this_mo.WhichCharacterAmI() == i){
+        if(this_mo.getID() == nearby_characters[i]){
             continue;
         }
-        vec3 target_pos = ReadCharacter(i).position;
-        if(ReadCharacter(i).IsKnockedOut() != _awake){
+        MovementObject@ char = ReadCharacterID(nearby_characters[i]);
+        vec3 target_pos = char.position;
+        if(char.IsKnockedOut() != _awake){
             continue;
         }
-        
         character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(ReadCharacter(i).char_path) == 1){
+        if(character_getter.OnSameTeam(char.char_path) == 1){
             continue;
         }
-
-        if(!controlled && target_id != ReadCharacter(i).getID()){
-            if(!IsTargetInFOV(target_pos)){
-                continue;
-            }
+        if(!controlled && target_id != nearby_characters[i]){
             vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            if(!ReadCharacter(i).VisibilityCheck(head_pos)){
+            if(!char.VisibilityCheck(head_pos)){
                 continue;
             }
         }
@@ -1699,17 +1710,62 @@ void TargetClosest(){
            distance_squared(this_mo.position, target_pos) < closest_dist)
        {
            closest_dist = distance_squared(this_mo.position, target_pos);
-           closest_id = i;
+           closest_id = nearby_characters[i];
         }
     }
     if(closest_id != -1){
         if(target_id == -1){
-            last_seen_target_position = ReadCharacter(closest_id).position;
-            last_seen_target_velocity = ReadCharacter(closest_id).velocity;
+            last_seen_target_position = ReadCharacterID(closest_id).position;
+            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
         }
-        target_id = ReadCharacter(closest_id).getID();
+        target_id = closest_id;
+    }
+    //Print("Targeting character "+closest_id+" aka "+target_id+"\n");
+}
+
+void TargetClosest(float range){
+    array<int> nearby_characters;
+    GetCharactersInSphere(this_mo.position, range, nearby_characters);
+
+    int num = nearby_characters.size();
+    int closest_id = -1;
+    float closest_dist = 0.0f;
+
+    for(int i=0; i<num; ++i){
+        if(this_mo.getID() == nearby_characters[i]){
+            continue;
+        }
+        MovementObject@ char = ReadCharacterID(nearby_characters[i]);
+        vec3 target_pos = char.position;
+        if(char.IsKnockedOut() != _awake){
+            continue;
+        }
+        
+        character_getter.Load(this_mo.char_path);
+        if(character_getter.OnSameTeam(char.char_path) == 1){
+            continue;
+        }
+        
+        if(closest_id == -1 || 
+           distance_squared(this_mo.position, target_pos) < closest_dist)
+       {
+           closest_dist = distance_squared(this_mo.position, target_pos);
+           closest_id = nearby_characters[i];
+        }
+    }
+    if(closest_id != -1){
+        if(target_id == -1){
+            last_seen_target_position = ReadCharacterID(closest_id).position;
+            last_seen_target_velocity = ReadCharacterID(closest_id).velocity;
+        }
+        target_id = closest_id;
     } else {
-        target_id = -1;
+        if(target_id != -1){
+            MovementObject@ char = ReadCharacterID(target_id);
+            if(char.IsKnockedOut() != _awake){
+                target_id = -1;   
+            }
+        }
     }
     //Print("Targeting character "+closest_id+" aka "+target_id+"\n");
 }
@@ -2079,6 +2135,10 @@ void UpdateAirWhooshSound() { // air whoosh sounds get louder at higher speed.
 
 int IsRagdoll() {
     return state==_ragdoll_state?1:0;
+}
+
+int GetState() {
+    return state;
 }
 
 // called when state equals _attack_state
@@ -2563,11 +2623,7 @@ void DecalCheck(){
     }
 }
 
-void HandleCollisionsBetweenTwoCharacters(int which){
-    if(this_mo.position == ReadCharacter(which).position){
-        return;
-    }
-
+void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
     if(state == _attack_state && attack_getter.IsThrow() == 1){
         return;
     }
@@ -2575,34 +2631,25 @@ void HandleCollisionsBetweenTwoCharacters(int which){
         return;
     }
 
-    if(knocked_out == _awake && ReadCharacter(which).IsKnockedOut() == _awake){
+    if(knocked_out == _awake && other.IsKnockedOut() == _awake){
         float distance_threshold = 0.7f;
         vec3 this_com = this_mo.GetCenterOfMass();
-        vec3 other_com = ReadCharacter(which).GetCenterOfMass();
+        vec3 other_com = other.GetCenterOfMass();
         this_com.y = this_mo.position.y;
-        other_com.y = ReadCharacter(which).position.y;
+        other_com.y = other.position.y;
         if(distance_squared(this_com, other_com) < distance_threshold*distance_threshold){
             vec3 dir = other_com - this_com;
             float dist = length(dir);
             dir /= dist;
             dir *= distance_threshold - dist;
-            MovementObject @char = ReadCharacter(which);
-            if(on_ground || char.IsOnGround()==1){
-                char.position += dir * 0.5f;
+            if(on_ground || other.IsOnGround()==1){
+                other.position += dir * 0.5f;
                 this_mo.position -= dir * 0.5f;
             } else {
-                char.velocity += dir * 0.5f / (time_step * num_frames);
-                this_mo.velocity -= dir * 0.5f / (time_step * num_frames);
+                other.velocity += dir * 0.5f / (time_step);
+                this_mo.velocity -= dir * 0.5f / (time_step);
             }
         }    
-    }
-}
-
-void HandleCollisionsBetweenCharacters() {
-    int num_chars = GetNumCharacters();
-
-    for(int i=0; i<num_chars; ++i){
-        HandleCollisionsBetweenTwoCharacters(i);
     }
 }
 
@@ -2988,7 +3035,7 @@ void init(string character_path) {
 
 void ScriptSwap() {
     last_col_pos = this_mo.position;
-    this_mo.position.y += 0.5f;
+    //this_mo.position.y += 0.5f;
     DropWeapon();
     Print("Dropping weapon\n");
 }

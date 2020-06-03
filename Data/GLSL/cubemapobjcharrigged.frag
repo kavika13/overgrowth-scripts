@@ -109,7 +109,5 @@ void main()
     // Add haze
     AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 
-    //color = vec3(rand(gl_FragCoord.xy));
-
     gl_FragColor = vec4(color,1.0);
 }

@@ -6,13 +6,19 @@ bool ai_attacking = false;
 bool hostile_switchable = true;
 int waypoint_target = -1;
 int old_waypoint_target = -1;
+const float _view_distance = 90.0f;
+
+const float _block_reflex_delay_min = 0.1f;
+const float _block_reflex_delay_max = 0.2f;
+float block_delay;
+bool going_to_block = false;
 
 void UpdateBrain(){
     if(GetInputDown("c") && !GetInputDown("ctrl")){
         if(hostile_switchable){
             hostile = !hostile;
             if(hostile){
-                TargetClosest();
+                TargetClosestVisible();
                 ai_attacking = true;
                 listening = true;
             } else {
@@ -32,7 +38,7 @@ void UpdateBrain(){
         ai_attacking = false;
     }
     if(target_id == -1 && hostile){
-        TargetClosest();
+        TargetClosestVisible();
     }
     //HandleDebugRayDraw();
 }
@@ -69,7 +75,7 @@ void HandleDebugRayDraw() {
 }
 
 void ActiveBlocked(){
-    ai_attacking = true;
+    //ai_attacking = true;
 }
 
 bool WantsToCrouch() {
@@ -86,7 +92,7 @@ bool WantsToDropItem() {
 
 
 bool WantsToThrowEnemy() {
-    return ai_attacking && (rand()%3 == 0);
+    return false;//return true;//ai_attacking && (rand()%3 == 0);
 }
 
 bool WantsToRoll() {
@@ -105,7 +111,34 @@ bool WantsToRollFromRagdoll(){
     return false;
 }
 
+bool ShouldBlock(){
+    if(active_block_recharge > 0.0f){
+        return false;
+    }
+    if(target_id == -1 || !hostile){
+        return false;
+    }
+    MovementObject @char = ReadCharacterID(target_id);
+    if(char.QueryIntFunction("int GetState()") == _attack_state){
+        return true;
+    } else {
+        return false;
+    }
+}
+
 bool WantsToStartActiveBlock(){
+    bool should_block = ShouldBlock();
+    if(should_block && !going_to_block){
+        going_to_block = true;
+        block_delay = RangedRandomFloat(_block_reflex_delay_min,_block_reflex_delay_max);
+    }
+    if(going_to_block){
+        block_delay -= time_step * num_frames;
+        if(block_delay <= 0.0f){
+            going_to_block = false;
+            return true;
+        }
+    }
     return false;
 }
 
@@ -130,7 +163,7 @@ bool WantsToFlipOffWall() {
 }
 
 bool WantsToCancelAnimation() {
-    return false;
+    return true;
 }
 
 NavPath path;
