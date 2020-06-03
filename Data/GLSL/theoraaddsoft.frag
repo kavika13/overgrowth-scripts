@@ -1,3 +1,4 @@
+#pragma blendmode_add
 #extension GL_ARB_texture_rectangle : enable
 
 uniform sampler2D tex0;
@@ -21,6 +22,8 @@ void main()
 	float avg_color = (colormap[0]+colormap[1]+colormap[2])/3.0;
 	colormap.xyz = min(1.0,colormap.xyz + (colormap.xyz - vec3(avg_color))*0.5);
 
+	colormap.xyz = max(0.0,colormap.xyz-vec3(0.05));
+
 	float scale_down = 3.0;
 
 	float env_depth = LinearizeDepth(texture2DRect(tex5,gl_FragCoord.xy).r);
@@ -31,6 +34,6 @@ void main()
 	depth_blend = max(0.0,min(1.0,depth_blend));
 	depth_blend *= max(0.0,min(1.0, (particle_depth-0.4)*scale_down));
 	
-	colormap.xyz = mix(vec3(1.0),colormap.xyz,depth_blend);
+	colormap.xyz *= depth_blend;
 	gl_FragColor = colormap;
 }

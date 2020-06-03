@@ -20,9 +20,30 @@ void update() {
 	}
 	
 	if(GetInputPressed("v") && !GetInputDown("ctrl")){
-		vec3 sprite_pos = co.position + camera.GetFacing()*4.0;
+		vec3 sprite_pos = co.position + camera.GetFacing()*4.0f+vec3(0.0f,1.0f,0.0f);
 		MakeParticle("Data/Particles/bigfire.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*30.0f+vec3(0.0f,10.0f,0.0f);
+		//MakeParticle("Data/Particles/bigexplosion.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*8.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/fireball.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/bulletwater.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/propane.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/molotovs.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/sparks.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/dustblast.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*5.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/dustpuff.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*3.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/bloodgush.xml",sprite_pos,vec3(0.0f));
+		//vec3 sprite_pos = co.position + camera.GetFacing()*3.0f+vec3(0.0f,0.0f,0.0f);
+		//MakeParticle("Data/Particles/bloodmist.xml",sprite_pos,vec3(0.0f));
 	}
+
 
 	if(GetInputPressed("o") && GetInputDown("ctrl")){
 		camera_animation_reader.AttachTo("Data/Animations/test.canm");
