@@ -65,6 +65,14 @@ void UpdateBrain(){
     }
 }
 
+vec3 GetTargetJumpVelocity() {
+    return vec3(0.0f);    
+}
+
+bool TargetedJump() {
+    return false;
+}
+
 bool IsAware(){
     return true;
 }

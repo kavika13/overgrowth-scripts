@@ -258,9 +258,6 @@ void UpdateVersusUI(){
     }
 }
 
-int versus_help_text_id = -1;
-int sp_help_text_id = -1;
-
 void Update() {
 
 
@@ -270,25 +267,6 @@ void Update() {
         UpdateVersusUI();
     } else {
         game_type = _normal;
-    }
-    
-    if(versus_mode && versus_help_text_id == -1){
-        versus_help_text_id = gui.AddGUI("helptext","versusdirections.html",600,200,_GG_IGNORES_MOUSE);    
-        gui.MoveTo(versus_help_text_id, 0, GetScreenHeight() - 140);
-    } 
-    if(!versus_mode && versus_help_text_id != -1){
-        gui.RemoveGUI(versus_help_text_id);
-        versus_help_text_id = -1;
-    }
-
-    bool sp_mode = !versus_mode && GetPlayerCharacterID() != -1;
-    if(sp_mode && sp_help_text_id == -1){
-        sp_help_text_id = gui.AddGUI("helptext","spdirections.html",650,200,_GG_IGNORES_MOUSE);    
-        gui.MoveTo(sp_help_text_id, 0, GetScreenHeight() - 160);
-    } 
-    if(!sp_mode && sp_help_text_id != -1){
-        gui.RemoveGUI(sp_help_text_id);
-        sp_help_text_id = -1;
     }
 
     if(has_gui){
@@ -331,7 +309,9 @@ void Update() {
     }*/
     if(GetInputPressed(controller_id, "l")){
         Reset();
-        ClearVersusScores();
+        if(game_type == _versus){
+            ClearVersusScores();
+        }
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     

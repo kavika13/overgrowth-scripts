@@ -5,6 +5,10 @@ Situation situation;
 
 float startle_time;
 
+bool has_jump_target = false;
+vec3 jump_target_vel;
+
+
 bool hostile = true;
 bool listening = true;
 bool ai_attacking = false;
@@ -31,6 +35,15 @@ vec3 nav_target;
 int ally_id = -1;
 int escort_id = -1;
 int weapon_target_id = -1;
+
+enum PathFindType {_pft_nav_mesh, _pft_climb, _pft_drop, _pft_jump};
+PathFindType path_find_type = _pft_nav_mesh;
+vec3 path_find_point;
+float path_find_give_up_time;
+
+enum ClimbStage {_nothing, _jump, _wallrun, _grab, _climb_up};
+ClimbStage trying_to_climb = _nothing;
+vec3 climb_dir;
 
 int IsUnaware() {
     return (goal == _patrol || startled)?1:0;
@@ -101,8 +114,29 @@ void HandleAIEvent(AIEvent event){
     if(event == _ragdolled){
         roll_after_ragdoll_delay = RangedRandomFloat(0.1f,1.0f);
     }
+    if(event == _jumped){
+        has_jump_target = false;
+        if(trying_to_climb == _jump){
+            trying_to_climb = _wallrun;
+        }   
+    }
+    if(event == _grabbed_ledge){
+        if(trying_to_climb == _wallrun){
+            trying_to_climb = _climb_up;
+        }   
+    }
+    if(event == _climbed_up){
+        if(trying_to_climb == _climb_up){
+            trying_to_climb = _nothing;
+            path_find_type = _pft_nav_mesh;
+        }   
+    }
     if(event == _thrown){
         will_throw_counter = RangedRandomFloat(0.0f,1.0f)<_throw_counter_probability;        
+    }
+    if(event == _can_climb){
+        trying_to_climb = _jump;
+        Print("Trying to climb = jump\n");
     }
     if(event == _activeblocked){
         if(RangedRandomFloat(0.0f, 1.0f) < p_block_followup){
@@ -292,6 +326,15 @@ void UpdateBrain(){
             }
             break;
     }
+
+    if(path_find_type != _pft_nav_mesh){
+        path_find_give_up_time -= time_step * num_frames;
+        if(path_find_give_up_time <= 0.0f){
+            path_find_type = _pft_nav_mesh;
+        }
+    }
+
+
     //MouseControlPathTest();
     //HandleDebugRayDraw();
 
@@ -392,9 +435,16 @@ bool WantsToFeint(){
     return false;
 }
 
+vec3 GetTargetJumpVelocity() {
+    return vec3(jump_target_vel);
+}
+
+bool TargetedJump() {
+    return has_jump_target;
+}
 
 bool WantsToJump() {
-    return false;
+    return has_jump_target || trying_to_climb == _jump;
 }
 
 bool WantsToAttack() { 
@@ -451,11 +501,11 @@ bool WantsToFlip() {
 }
 
 bool WantsToAccelerateJump() {
-    return false;
+    return trying_to_climb == _wallrun;
 }
 
 bool WantsToGrabLedge() {
-    return false;
+    return trying_to_climb == _wallrun || trying_to_climb == _climb_up;
 }
 
 bool WantsToJumpOffWall() {
@@ -548,14 +598,197 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius){
     return GetMovementToPoint(point, slow_radius, 0.0f, 0.0f);
 }
 
+const bool _debug_draw_jump_path = false;
+
+bool JumpToTarget(vec3 jump_target, vec3 &out vel){
+    vec3 start_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, time);
+    if(start_vel.y != 0.0f){
+        bool low_success = false;
+        bool med_success = false;
+        bool high_success = false;
+        const float _success_threshold = 0.1f;
+        vec3 end;
+        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.15f, time);
+        jump_info.jump_start_vel = low_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        if(_debug_draw_jump_path){
+            for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+                DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    vec3(1.0f,0.0f,0.0f), 
+                    _delete_on_update);
+            }
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            if(_debug_draw_jump_path){
+                DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+            }
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                low_success = true;
+            }
+        } 
+        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, time);
+        jump_info.jump_start_vel = med_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        if(_debug_draw_jump_path){
+            for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+                DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    vec3(0.0f,0.0f,1.0f), 
+                    _delete_on_update);
+            }
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            if(_debug_draw_jump_path){
+                DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+            }
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                med_success = true;
+            }
+        } 
+        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 1.0f, time);
+        jump_info.jump_start_vel = high_vel;
+        JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
+        end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        if(_debug_draw_jump_path){
+            for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+                DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                    vec3(0.0f,1.0f,0.0f), 
+                    _delete_on_update);
+            }
+        }
+        if(jump_info.jump_path.size() != 0){
+            vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+            if(_debug_draw_jump_path){
+                DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+            }
+            if(distance_squared(land_point, jump_target) < _success_threshold){
+                high_success = true;
+            }
+        }
+        jump_info.jump_path.resize(0);
+
+        if(low_success){
+            vel = low_vel;
+            return true;
+        } else if(med_success){
+            vel = med_vel;
+            return true;
+        } else if(high_success){
+            vel = high_vel;
+            return true;
+        } else {
+            vel = vec3(0.0f);
+            return false;
+        }
+
+        /*
+        if(GetInputPressed(this_mo.controller_id, "mouse0") && start_vel.y != 0.0f){
+            jump_info.StartJump(start_vel, true);
+            SetOnGround(false);
+        }*/
+    }
+    return false;
+}
+
+// Pathfinding options
+// Find ground path on nav mesh
+// Run straight towards target (fall off edge)
+// Run straight towards target and climb up wall
+// Jump towards target (and possibly climb wall)
+
 vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float strafe_vel){
+    if(path_find_type == _pft_nav_mesh){
+        //Print("NAV MESH\n");
+        return GetNavMeshMovement(point, slow_radius, target_dist, strafe_vel);
+    } else if(path_find_type == _pft_climb){
+        //Print("CLIMB\n");
+        vec3 dir = path_find_point - this_mo.position;
+        dir.y = 0.0f;
+        if(trying_to_climb != _nothing && trying_to_climb != _jump && on_ground){
+            trying_to_climb = _nothing;
+            path_find_type = _pft_nav_mesh;
+        }
+        if(length_squared(dir) < 0.5f && trying_to_climb == _nothing){
+            trying_to_climb = _jump;
+        }
+        if(trying_to_climb != _nothing){
+            return climb_dir;
+        }
+        dir = normalize(dir);
+        return dir;
+    } else if(path_find_type == _pft_drop){
+        //Print("DROP\n");
+        vec3 dir = path_find_point - this_mo.position;
+        dir.y = 0.0f;
+        dir = normalize(dir);
+        if(!on_ground){
+            path_find_type = _pft_nav_mesh;
+        }
+        return dir;
+    }
+
+    return vec3(0.0f);
+}
+
+vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float strafe_vel){
     // Get path to estimated target position
     vec3 target_velocity;
-    vec3 target_point = point;
+    vec3 target_point = NavPoint(point);
     GetPath(target_point);
     vec3 next_path_point = GetNextPathPoint();
     if(next_path_point != vec3(0.0f)){
         target_point = next_path_point;
+    }
+
+    if(path.NumPoints() > 0 && on_ground){
+       if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
+           PredictPathOutput predict_path_output = PredictPath(this_mo.position, point);
+           if(predict_path_output.type == _ppt_climb){
+               path_find_type = _pft_climb;
+               path_find_point = predict_path_output.start_pos;
+               climb_dir = predict_path_output.normal;
+               path_find_give_up_time = 2.0f;
+           } else if(predict_path_output.type == _ppt_drop){
+               path_find_type = _pft_drop;
+               path_find_point = predict_path_output.start_pos;
+               path_find_give_up_time = 2.0f;
+           }
+       }
+       // If pathfind failed, then check for jump path
+       /*if(distance_squared(path.GetPoint(path.NumPoints()-1), NavPoint(point)) > 1.0f){
+            NavPath back_path;
+            back_path = GetPath(NavPoint(point), this_mo.position); 
+            if(back_path.NumPoints() > 0){
+                vec3 targ_point = back_path.GetPoint(back_path.NumPoints()-1);
+                targ_point = NavRaycast(targ_point, targ_point + vec3(RangedRandomFloat(-3.0f,3.0f),
+                                                                      0.0f,
+                                                                      RangedRandomFloat(-3.0f,3.0f)));
+                targ_point.y += _leg_sphere_size;
+                //DebugDrawWireSphere(targ_point, 1.0f, vec3(1.0f), _delete_on_update);
+                vec3 vel;
+                if(JumpToTarget(targ_point, vel)){
+                    //Print("Jump target success\n");
+                    has_jump_target = true;
+                    jump_target_vel = vel;
+                } else {
+                    //Print("Jump target fail\n");
+                }
+            //    DebugDrawWireSphere(back_path.GetPoint(back_path.NumPoints()-1), 1.0f, vec3(1.0f), _fade);    
+            }
+            for(int i=0; i<back_path.NumPoints()-1; ++i){
+            //    DebugDrawLine(back_path.GetPoint(i), back_path.GetPoint(i+1), vec3(1.0f), _fade);
+            }
+            
+            //has_jump_target = true;
+
+            //jump_target_vel = vec3(0.0f,10.0f,0.0f);
+       }*/
     }
 
     vec3 rel_dir = point - this_mo.position;
@@ -599,6 +832,15 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float 
         target_velocity = normalize(target_velocity);
     }
     return target_velocity;
+
+    // Test direct running
+    /*vec3 direct_move = point - this_mo.position;
+    direct_move.y = 0.0f;
+    if(length(direct_move) > 0.6f){
+        return normalize(direct_move);
+    } else {
+        return vec3(0.0f);
+    }*/
 }
 
 vec3 GetAttackMovement() {
@@ -616,6 +858,8 @@ vec3 GetAttackMovement() {
 
     vec3 move_vel = GetMovementToPoint(last_seen_target_position, max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
     
+    //CheckJumpTarget(last_seen_target_position);
+
     return move_vel;    
 }
 
@@ -626,9 +870,10 @@ void MouseControlPathTest() {
     col.GetSweptSphereCollision(start, end, _leg_sphere_size);
     DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
     
-    if(GetInputDown(this_mo.controller_id, "mouse0")){
+    if(GetInputDown(this_mo.controller_id, "g") ){
         goal = _navigate;
         nav_target = sphere_col.position;
+        path_find_type = _pft_nav_mesh;
     }
 }
 
@@ -738,4 +983,70 @@ bool WantsToWalkBackwards() {
 
 bool WantsReadyStance() {
     return (goal != _patrol);
+}
+
+bool _debug_draw_jump = false;
+
+void CheckJumpTarget(vec3 target) {
+    NavPath old_path;
+    old_path = GetPath(this_mo.position, target);
+    float old_path_length = 0.0f;
+    for(int i=0; i<old_path.NumPoints() - 1; ++i){
+        old_path_length += distance(old_path.GetPoint(i), old_path.GetPoint(i+1));
+    }
+
+    float max_horz = run_speed * 1.5f;
+    float max_vert = _jump_vel * 1.7f;
+
+    vec3 jump_vel(RangedRandomFloat(-max_horz,max_horz),
+                  RangedRandomFloat(3.0f,max_vert),
+                  RangedRandomFloat(-max_horz,max_horz));
+    JumpTestEq(this_mo.position, jump_vel, jump_info.jump_path); 
+    vec3 end = jump_info.jump_path[jump_info.jump_path.size()-1];
+    if(_debug_draw_jump){
+        for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
+            DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                jump_info.jump_path[i+1] - vec3(0.0f, _leg_sphere_size, 0.0f), 
+                vec3(1.0f,0.0f,0.0f), 
+                _delete_on_update);
+        }
+    }
+    if(jump_info.jump_path.size() != 0){
+        vec3 land_point = jump_info.jump_path[jump_info.jump_path.size()-1];
+        if(_debug_draw_jump){
+            DebugDrawWireSphere(land_point, _leg_sphere_size, vec3(1.0f,0.0f,0.0f), _fade);
+        }
+        
+        bool old_path_fail = false;
+        if(old_path.NumPoints() == 0 ||
+           distance_squared(old_path.GetPoint(old_path.NumPoints()-1), NavPoint(target)) > 1.0f){
+            old_path_fail = true;
+        }
+
+        NavPath new_path;
+        new_path = GetPath(land_point, target);
+
+        bool new_path_fail = false;
+        if(new_path.NumPoints() == 0 ||
+           distance_squared(new_path.GetPoint(new_path.NumPoints()-1), NavPoint(target)) > 1.0f){
+            new_path_fail = true;
+        }
+
+        float new_path_length = 0.0f;
+        for(int i=0; i<new_path.NumPoints() - 1; ++i){
+            new_path_length += distance(new_path.GetPoint(i), new_path.GetPoint(i+1));
+        }
+
+        if(new_path_fail){
+            return;
+        }
+        if(!old_path_fail && !new_path_fail && new_path_length >= old_path_length){
+            return;
+        }
+        Print("Old path fail: "+old_path_fail+"\nNew path fail: "+new_path_fail+"\n");
+        Print("Old path length: "+old_path_length+"\nNew path length: "+new_path_length+"\n");
+        Print("Path ok!\n");
+        has_jump_target = true;
+        jump_target_vel = jump_vel;
+    } 
 }

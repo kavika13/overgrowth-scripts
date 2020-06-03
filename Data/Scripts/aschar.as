@@ -2,7 +2,7 @@
 
 int num_frames; //How many timesteps passed since the last update
 
-enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking};
+enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking, _jumped, _can_climb, _grabbed_ledge, _climbed_up};
 
 int head_choke_queue = -1;
 
@@ -28,7 +28,7 @@ void HitByItem(string material, vec3 point, int id, int type) {
     if(type == 2){
         TakeBloodDamage(force_len / 8.0f);
     }
-    if(length(force) > 20.0f || knocked_out != _awake){
+    if(length(force) > 20.0f || knocked_out != _awake || !on_ground){
         HandleRagdollImpactImpulse(force * 200.0f, point, 0.0f);
     } else {
         vec3 face_dir = lin_vel * -1.0f;
@@ -347,13 +347,19 @@ void ApplyLevelBoundaries(){
     }
 }
 
+void MakeBeaconParticle(){
+    if(!this_mo.controlled && knocked_out == _awake && distance_squared(camera.GetPos(), this_mo.position) > 100.0f){
+        MakeParticle("Data/Particles/rayspark.xml",this_mo.position,vec3(0.0f,500.0f,0.0f));
+    }
+}
+
 void Update(int _num_frames) {
     num_frames = _num_frames;
     ApplyLevelBoundaries();
+    /*if(this_mo.controlled){
+        PredictPath(this_mo.position, this_mo.position + this_mo.GetFacing() * 5.0f);
+    }*/
 
-    if(!this_mo.controlled && knocked_out == _awake && distance_squared(camera.GetPos(), this_mo.position) > 100.0f){
-        MakeParticle("Data/Particles/rayspark.xml",this_mo.position,vec3(0.0f,500.0f,0.0f));
-    } 
     /*if(holding_weapon){
         if(target_id != -1){
             MovementObject@ char = ReadCharacterID(target_id);
@@ -512,7 +518,7 @@ void JumpTestEq(const vec3&in initial_pos,
     float time = 0.0f;
     float height;
     for(int i=0; i< 400; ++i){
-        time += time_step * num_frames * _jump_test_steps;
+        time += time_step * _jump_test_steps;
         height = flat_vel.y * time + 0.5f * physics.gravity_vector.y * time * time;
         end = initial_pos + flat_dir * time;
         end.y += height;
@@ -2665,7 +2671,12 @@ void UpdateGroundMovementControls() {
         // Preparing for the jump
         if(pre_jump){
             if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
-                jump_info.StartJump(target_velocity, false);
+                if(TargetedJump()){
+                    jump_info.StartJump(GetTargetJumpVelocity(), true);
+                } else {
+                    jump_info.StartJump(target_velocity, false);
+                }
+                HandleAIEvent(_jumped);
                 //jump_info.StartJump(jump_info.jump_start_vel, true);
                 SetOnGround(false);
                 pre_jump = false;
@@ -3348,8 +3359,86 @@ void CheckForVelocityShock(float vert_vel) {
     }
 }
 
+const bool _draw_predict_path = true;
+
+enum PredictPathType {_ppt_drop, _ppt_climb, _ppt_none};
+class PredictPathOutput {
+    PredictPathType type;
+    vec3 start_pos;
+    vec3 end_pos;
+    vec3 normal;
+};
+
+PredictPathOutput PredictPath(vec3 start, vec3 end){
+    PredictPathOutput predict_path_output;
+    predict_path_output.type = _ppt_none;
+
+    vec3 raycast_point = NavRaycast(start, end);
+    if(distance_squared(raycast_point, NavRaycast(start, end + normalize(end-start))) > 0.01f){
+        return predict_path_output;
+    }
+    vec3 dir = end - start;
+    dir.y = 0.0f;
+    dir = normalize(dir);
+    vec3 right = vec3(-dir.z, 0.0f, dir.x);
+    
+    vec3 point = raycast_point + vec3(0.0f,2.5f,0.0f);
+    col.GetSlidingSphereCollision(point,2.0f);
+    if(sphere_col.NumContacts() == 0){
+        //DebugDrawWireSphere(point,2.0f,vec3(1.0f,0.0f,0.0f),_delete_on_update);
+        col.GetSweptSphereCollision(point + dir * 4.0f, point + dir * 4.0f+ vec3(0.0f,-100.0f,0.0f), _leg_sphere_size);
+        vec3 fall_point = sphere_col.position;
+        //DebugDrawWireSphere(fall_point,_leg_sphere_size,vec3(1.0f,1.0f,1.0f),_delete_on_update);
+        
+        vec3 low = fall_point;
+        vec3 high = fall_point;
+        high.y = start.y;
+        /*DebugDrawLine(low, high, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(low, low+right*0.1f, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(low, low-right*0.1f, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(high, high+right*0.1f, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(high, high-right*0.1f, vec3(1.0f), _delete_on_update);
+*/
+        predict_path_output.type = _ppt_drop;
+        predict_path_output.start_pos = high;
+        predict_path_output.end_pos = low;
+    } else {
+        //DebugDrawWireSphere(point,2.0f,vec3(1.0f,1.0f,1.0f),_delete_on_update);
+        vec3 sphere_offset = normalize(point - sphere_col.adjusted_position);
+        vec3 intersect = sphere_col.adjusted_position + sphere_offset * 2.0f;
+        sphere_offset.y = 0.0f;
+        sphere_offset = normalize(sphere_offset);
+        //DebugDrawWireSphere(intersect,1.0f,vec3(0.0f,1.0f,0.0f),_delete_on_update);
+        vec3 ledge_height_check = intersect - sphere_offset*_leg_sphere_size;
+        ledge_height_check.y = start.y;
+        LedgeHeightInfo ledge_height_info = GetLedgeHeightInfo(ledge_height_check, sphere_offset);
+        if(ledge_height_info.success){
+            vec3 low = raycast_point;
+            vec3 high = point;
+            high.y = ledge_height_info.edge_height;
+            vec3 sphere_offset_right(-sphere_offset.z, 0.0f, sphere_offset.x);
+            /*DebugDrawLine(low, high, vec3(1.0f), _delete_on_update);
+            DebugDrawLine(low, low+sphere_offset_right*0.1f, vec3(1.0f), _delete_on_update);
+            DebugDrawLine(low, low-sphere_offset_right*0.1f, vec3(1.0f), _delete_on_update);
+            DebugDrawLine(high, high+sphere_offset_right*0.1f+vec3(0.0f,-0.3f,0.0f), vec3(1.0f), _delete_on_update);
+            DebugDrawLine(high, high-sphere_offset_right*0.1f+vec3(0.0f,-0.3f,0.0f), vec3(1.0f), _delete_on_update);*/
+            predict_path_output.type = _ppt_climb;
+            predict_path_output.start_pos = low;
+            predict_path_output.end_pos = high;
+            predict_path_output.normal = sphere_offset;
+        }
+    }
+    return predict_path_output;
+}
+
 void HandleGroundCollisions() {
-    this_mo.velocity += HandleBumperCollision() / (time_step * num_frames); // Push away from wall, and apply velocity change verlet style
+    vec3 bumper_collision_response = HandleBumperCollision();
+    /*if(!this_mo.controlled && length_squared(bumper_collision_response) > 0.0f){
+        if(ledge_info.CheckLedges(true)){
+            HandleAIEvent(_can_climb);
+        }
+    }*/
+    this_mo.velocity += bumper_collision_response / (time_step * num_frames); // Push away from wall, and apply velocity change verlet style
 
     //if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
     //    GoLimp();    
@@ -4163,17 +4252,17 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
             float dist = length(dir);
             dir /= dist;
             dir *= distance_threshold - dist;
-            if(on_ground || other.IsOnGround()==1){
+            //if(on_ground || other.IsOnGround()==1){
                 other.position += dir * 0.5f;
                 this_mo.position -= dir * 0.5f;
                 
                 vec3 other_push = dir * 0.5f / (time_step) * 0.15f;
                 push_velocity -= other_push;
                 other.Execute("push_velocity += vec3("+other_push.x+","+other_push.y+","+other_push.z+");");
-            } else {
+            /*} else {
                 other.velocity += dir * 0.5f / (time_step);
                 this_mo.velocity -= dir * 0.5f / (time_step);
-            }
+            }*/
         }    
     }
 }
