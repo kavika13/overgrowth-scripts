@@ -60,4 +60,5 @@ void main()
 	gl_TexCoord[0] = gl_MultiTexCoord0;
 	gl_TexCoord[1] = gl_MultiTexCoord3;//+vertex_offset;
 //	gl_TexCoord[2] = gl_MultiTexCoord4;
+	gl_FrontColor = gl_Color;
 } 

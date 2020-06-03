@@ -42,9 +42,17 @@ vec3 LookupCubemapSimple(const vec3 vec,
 	return textureCube(cube_map,world_space_vec).xyz;
 }
 
+float GetAmbientMultiplier() {
+	return (1.5-gl_LightSource[0].diffuse.a*0.5);
+}
+
+float GetAmbientMultiplierScaled() {
+	return GetAmbientMultiplier()/1.5;
+}
+
 float GetAmbientContrib (const float unshadowed) {
 	float contrib = min(1.0,max(unshadowed * 1.5, 0.5));
-	contrib *= (1.5-gl_LightSource[0].diffuse.a*0.5);
+	contrib *= GetAmbientMultiplier();
 	return contrib;
 }
 

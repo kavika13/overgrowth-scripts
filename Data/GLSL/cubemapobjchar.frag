@@ -62,6 +62,7 @@ void main()
 
 	//color = vec3(NdotL*0.6);
 
+	//color = gl_Color.xyz;
 
 	gl_FragColor = vec4(color,1.0);
 }
