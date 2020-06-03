@@ -2,6 +2,7 @@ uniform sampler2D tex;
 uniform sampler2D tex2;
 uniform samplerCube tex3;
 uniform samplerCube tex4;
+uniform sampler2D tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
@@ -42,5 +43,7 @@ void main()
 	rel_pos.y *= -1.0;
 	
 	gl_Position = ftransform();
+	//gl_Position = vec4((gl_MultiTexCoord0.st - vec2(0.5)) * vec2(2.0),0.0,1.0);
 	gl_TexCoord[0] = gl_MultiTexCoord0;
+	gl_TexCoord[1] = gl_MultiTexCoord3;
 } 
