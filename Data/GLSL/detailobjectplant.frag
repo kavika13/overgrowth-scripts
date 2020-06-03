@@ -9,12 +9,9 @@ uniform sampler2D tex5;
 uniform sampler2D tex6;
 uniform sampler2D tex7;
 uniform vec3 cam_pos;
-uniform float in_light;
 uniform float time;
 uniform vec3 ws_light;
 uniform float extra_ao;
-uniform float fade;
-uniform vec3 color_tint;
 uniform vec3 avg_color;
 
 varying mat3 tangent_to_world;
@@ -65,9 +62,6 @@ void main()
     colormap.xyz = base_color * colormap.xyz / avg_color;
     vec3 translucent_map = texture2D(tex5,tc0).xyz;
     vec3 color = diffuse_color * colormap.xyz;
-    //             + translucent_lighting * translucent_map ;
-    color *= color_tint;
-                 //+ spec_color * GammaCorrectFloat(normalmap.a);
     
 
     color *= BalanceAmbient(NdotL);

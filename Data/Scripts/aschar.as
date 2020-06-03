@@ -1147,7 +1147,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
             PlaySoundGroup(sound, pos);        
         }
     } else {
-        string sound = "Data/Sounds/weapon_foley/cut/slice.xml";
+        string sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
         PlaySoundGroup(sound, pos);   
     }
 
