@@ -48,8 +48,8 @@ void main()
     float detail_fade = min(1.0,max(0.0,length(ws_vertex)/detail_fade_distance));
 
     // Get normal
-    vec3 base_normalmap = texture2D(tex1,tc0).xyz;
-    vec3 base_normal = UnpackObjNormalV3(base_normalmap);
+    vec4 base_normalmap = texture2D(tex1,tc0);
+    vec3 base_normal = UnpackObjNormalV3(base_normalmap.xyz);
     vec3 base_bitangent = normalize(cross(tangent,base_normal));
     vec3 base_tangent = normalize(cross(base_normal,base_bitangent));
     base_bitangent *= -1.0;
@@ -93,7 +93,7 @@ void main()
                          avg_color3 * weight_map[3];
     vec3 terrain_color = texture2D(tex0,tc0).xyz;
     average_color = max(average_color, vec3(0.01));
-    vec3 tint = terrain_color / average_color * mix(vec3(1.0),color_tint,normalmap.a);
+    vec3 tint = terrain_color / average_color * mix(vec3(1.0),color_tint,base_normalmap.a);
 
     // Get colormap
     vec4 colormap = texture2D(tex6,tc2) * weight_map[0] +

@@ -83,8 +83,10 @@ class JumpInfo {
         up_coord = min(1.5f,up_coord)+jump_launch*0.5f;
         up_coord *= -0.5f;
         up_coord += 0.5f;
+        float flailing = min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*0.75f)*_shock_damage_multiplier*0.75f));
         this_mo.SetBlendCoord("up_coord",up_coord);
         this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
+        this_mo.SetBlendCoord("flail_coord",flailing);
         int8 flags = 0;
         if(left_foot_jump){
             flags = _ANM_MIRRORED;

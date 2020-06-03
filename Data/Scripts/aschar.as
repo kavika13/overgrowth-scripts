@@ -442,6 +442,7 @@ const int _ragdoll_state = 4; // character is falling in ragdoll mode
 int state = _movement_state;
 
 void UpdateState() {
+    cam_pos_offset = vec3(0.0f);
     UpdateHeadLook();
     UpdateBlink();
     UpdateEyeLook();
@@ -831,10 +832,10 @@ float ragdoll_limp_stun;
 
 void SetRagdollType(int type) {
     if(ragdoll_type == type){
-        Print("*Setting ragdoll type to "+type+"\n");
+        //Print("*Setting ragdoll type to "+type+"\n");
         return;
     }
-    Print("Setting ragdoll type to "+type+"\n");
+    //Print("Setting ragdoll type to "+type+"\n");
     ragdoll_type = type;
     switch(ragdoll_type){
         case _RGDL_LIMP:
@@ -1763,22 +1764,24 @@ void CheckForVelocityShock(float vert_vel) {
 }
 
 void HandleGroundCollision() {
-    vec3 air_vel = this_mo.velocity;
+    vec3 initial_vel = this_mo.velocity;
     if(on_ground){
-        this_mo.velocity += HandleBumperCollision() / (time_step * num_frames);
+        this_mo.velocity += HandleBumperCollision() / (time_step * num_frames); // Push away from wall, and apply velocity change verlet style
 
-        if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
-            //GoLimp();    
-        }
+        //if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
+        //    GoLimp();    
+        //}
 
-        if((sphere_col.NumContacts() != 0 ||
-            ground_normal.y < _ground_normal_y_threshold)
-            && this_mo.velocity.y > 0.2f){
+        if((/*sphere_col.NumContacts() != 0 ||*/                                // If standing on overly-sloped surface, start controlled fall
+            ground_normal.y < _ground_normal_y_threshold)                       
+            && this_mo.velocity.y > 0.2f &&
+            false)
+        {
             SetOnGround(false);
             jump_info.StartFall();
         }
 
-        bool in_air = HandleStandingCollision();
+        bool in_air = HandleStandingCollision();                                // Move vertically to stand on surface, or fall if there is no surface
         if(in_air){
             SetOnGround(false);
             jump_info.StartFall();
@@ -1790,8 +1793,9 @@ void HandleGroundCollision() {
                                 _delete_on_update);*/
             for(int i=0; i<sphere_col.NumContacts(); i++){
                 const CollisionPoint contact = sphere_col.GetContact(i);
-                if(distance(contact.position, this_mo.position)<=_leg_sphere_size+0.01f){
-                    ground_normal = ground_normal * 0.9f +
+                float dist = distance(contact.position, this_mo.position);
+                if(dist <= _leg_sphere_size + 0.01f){
+                    ground_normal = ground_normal * 0.9f +                      // Calculate ground_normal with moving average of contact point normals
                                     contact.normal * 0.1f;
                     ground_normal = normalize(ground_normal);
                     /*DebugDrawLine(sphere_col.position,
@@ -1806,10 +1810,10 @@ void HandleGroundCollision() {
                               _delete_on_update);
             */
             
-            if(flip_info.ShouldRagdollIntoSteepGround() &&
+            /*if(flip_info.ShouldRagdollIntoSteepGround() &&
                dot(this_mo.GetFacing(),ground_normal) < -0.6f){
-                //GoLimp();    
-            }
+                GoLimp();    
+            }*/
         }
     } else {
         vec3 offset = this_mo.position - last_col_pos; 
@@ -1817,18 +1821,19 @@ void HandleGroundCollision() {
         bool landing = false;
         vec3 landing_normal;
         vec3 old_vel = this_mo.velocity;
-        for(int i=0; i<num_frames; ++i){
+        for(int i=0; i<num_frames; ++i){                                        // Divide movement into multiple pieces to help prevent surface penetration
             if(on_ground){
                 break;
             }
             this_mo.position += offset/num_frames;
             this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
-            this_mo.position = sphere_col.adjusted_position;
-            this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / (time_step * num_frames);
+            this_mo.position = sphere_col.adjusted_position;                    // Collide like a sliding sphere with verlet-integrated velocity response
+            vec3 adjustment = (this_mo.position - sphere_col.position);
+            this_mo.velocity += adjustment / (time_step * num_frames);
             offset += (sphere_col.adjusted_position - sphere_col.position) * (num_frames);
             for(int i=0; i<sphere_col.NumContacts(); i++){
                 const CollisionPoint contact = sphere_col.GetContact(i);
-                if(contact.normal.y < _ground_normal_y_threshold){
+                if(contact.normal.y < _ground_normal_y_threshold){              // If collision with a surface that can't be walked on, check for wallrun
                     jump_info.HitWall(normalize(contact.position-this_mo.position));
                 }
             }    
@@ -1839,7 +1844,7 @@ void HandleGroundCollision() {
                 const CollisionPoint contact = sphere_col.GetContact(i);
                 if(contact.normal.y > _ground_normal_y_threshold ||
                    (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f))
-                {
+                {                                                               // If collision with a surface that can be walked on, then land
                     if(air_time > 0.1f){
                         landing = true;
                         landing_normal = contact.normal;
@@ -1848,10 +1853,10 @@ void HandleGroundCollision() {
             }
         }
         if(landing){
-            CheckForVelocityShock(old_vel.y);
-            if(knocked_out == _awake){
+            CheckForVelocityShock(old_vel.y);                                   // Check landing damage from high-speed falls
+            if(knocked_out == _awake){                                          // If still conscious, land properly
                 ground_normal = landing_normal;
-                Land(air_vel);
+                Land(initial_vel);
                 if(state != _ragdoll_state){
                     SetState(_movement_state);
                 }
@@ -1859,14 +1864,16 @@ void HandleGroundCollision() {
         }
     }
     last_col_pos = this_mo.position;
-    /*if(on_ground){
-        vec3 y_vec = ground_normal;
-        vec3 x_vec = normalize(cross(y_vec,vec3(0,0,1)));
-        vec3 z_vec = cross(y_vec, x_vec);
-        this_mo.velocity = x_vec * ground_vel.x +
-                           y_vec * ground_vel.y +
-                           z_vec * ground_vel.z;
-    }*/
+
+    if(dot(initial_vel, this_mo.velocity) < 0.0f){                              // If velocity is in opposite direction from old velocity,
+        vec3 initial_dir = normalize(initial_vel);                              // flatten it against plane with normal of old velocity
+        float wrong_dist = -dot(initial_dir, this_mo.velocity);
+        this_mo.velocity += initial_dir * wrong_dist;
+    }
+
+    if(length_squared(initial_vel) < length_squared(this_mo.velocity)){         // If speed is greater than before collision, set it to the
+        this_mo.velocity = normalize(this_mo.velocity)*length(initial_vel);     // old speed
+    }
 }
 
 float duck_amount = 0.0f; // duck_amount is changed incrementally to animate crouching or standing up from a crouch
@@ -2459,6 +2466,7 @@ float cam_rotation2 = 0.0f;
 float cam_distance = 1.0f;
 
 vec3 ragdoll_cam_pos;
+vec3 cam_pos_offset;
 
 void ApplyCameraControls() {
     const float _camera_rotation_inertia = 0.5f;
@@ -2484,7 +2492,7 @@ void ApplyCameraControls() {
 
     target_rotation2 = min(target_rotation2, max_rotation2);*/
 
-    vec3 cam_pos = this_mo.position;
+    vec3 cam_pos = this_mo.position + cam_pos_offset;
     if(state != _ragdoll_state){
         cam_pos += vec3(0.0f,0.6f,0.0f);
     } else {
