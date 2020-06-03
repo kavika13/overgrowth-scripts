@@ -18,25 +18,25 @@ varying vec3 rel_pos;
 #include "transposemat3.glsl"
 
 void main()
-{	
-	mat4 obj2world = GetPseudoInstanceMat4();
-	mat3 obj2worldmat3 = GetPseudoInstanceMat3();
+{    
+    mat4 obj2world = GetPseudoInstanceMat4();
+    mat3 obj2worldmat3 = GetPseudoInstanceMat3();
 
-	vec3 normal = normalize(gl_Normal);
-	tangent = normalize(gl_MultiTexCoord1.xyz);
-	vec3 bitangent = normalize(gl_MultiTexCoord2.xyz);
-	
-	mat3 tangent_to_world = obj2worldmat3*mat3(tangent, bitangent, normal);
-	
-	vec3 eyeSpaceVert = (gl_ModelViewMatrix * obj2world * gl_Vertex).xyz;
-	vertex_pos = transposeMat3(gl_NormalMatrix) * eyeSpaceVert;
-	
-	light_pos = transposeMat3(gl_NormalMatrix) * gl_LightSource[0].position.xyz;
+    vec3 normal = normalize(gl_Normal);
+    tangent = normalize(gl_MultiTexCoord1.xyz);
+    vec3 bitangent = normalize(gl_MultiTexCoord2.xyz);
+    
+    mat3 tangent_to_world = obj2worldmat3*mat3(tangent, bitangent, normal);
+    
+    vec3 eyeSpaceVert = (gl_ModelViewMatrix * obj2world * gl_Vertex).xyz;
+    vertex_pos = transposeMat3(gl_NormalMatrix) * eyeSpaceVert;
+    
+    light_pos = transposeMat3(gl_NormalMatrix) * gl_LightSource[0].position.xyz;
  
-	gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;
-	
-	rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
-	
-	gl_TexCoord[0] = gl_MultiTexCoord0;	
-	gl_TexCoord[1] = gl_MultiTexCoord3*0.1;
+    gl_Position = gl_ProjectionMatrix * gl_ModelViewMatrix * obj2world * gl_Vertex;
+    
+    rel_pos = CalcRelativePositionForSky(obj2world, cam_pos);
+    
+    gl_TexCoord[0] = gl_MultiTexCoord0;    
+    gl_TexCoord[1] = gl_MultiTexCoord3*0.1;
 } 

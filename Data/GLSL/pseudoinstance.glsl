@@ -7,15 +7,15 @@ uniform mat3 normalMatrix;
 #ifdef VERTEX_SHADER
 
 mat4 GetPseudoInstanceMat4() {
-	return modelMatrix;
+    return modelMatrix;
 }
  
 mat3 GetPseudoInstanceMat3() {
- 	return normalMatrix;
+     return normalMatrix;
 }
 
 mat3 GetPseudoInstanceMat3Normalized() {
-	return normalMatrix;
+    return normalMatrix;
 }
 #endif
 

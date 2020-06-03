@@ -14,16 +14,16 @@ varying vec3 tangent;
 #include "pseudoinstance.glsl"
 
 void main()
-{	
-	tangent = gl_MultiTexCoord1.xyz;
+{    
+    tangent = gl_MultiTexCoord1.xyz;
 
-	mat4 obj2world = GetPseudoInstanceMat4();
-	
-	vec4 transformed_vertex = obj2world * gl_Vertex;
+    mat4 obj2world = GetPseudoInstanceMat4();
+    
+    vec4 transformed_vertex = obj2world * gl_Vertex;
 
-	ws_vertex = transformed_vertex.xyz - cam_pos;
-	
-	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
+    ws_vertex = transformed_vertex.xyz - cam_pos;
+    
+    gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
+    
+    gl_TexCoord[0] = gl_MultiTexCoord0;
 } 

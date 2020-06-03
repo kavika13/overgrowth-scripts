@@ -1,4 +1,4 @@
 void main()
-{	
-	discard;
+{    
+    discard;
 }

@@ -4,10 +4,10 @@ varying vec3 normal;
 varying float opac;
 
 void main()
-{	
-	vec3 color;
+{    
+    vec3 color;
 
-	color = textureCube(tex2,normal).xyz;
+    color = textureCube(tex2,normal).xyz;
 
-	gl_FragColor = vec4(color,opac);
+    gl_FragColor = vec4(color,opac);
 }

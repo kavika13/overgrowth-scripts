@@ -15,14 +15,14 @@ varying vec3 ws_vertex;
 #include "texturepack.glsl"
 
 void main()
-{	
-	mat4 obj2world = GetPseudoInstanceMat4();
+{    
+    mat4 obj2world = GetPseudoInstanceMat4();
 
-	vec4 transformed_vertex = obj2world * gl_Vertex;
+    vec4 transformed_vertex = obj2world * gl_Vertex;
 
-	ws_vertex = transformed_vertex.xyz - cam_pos;
-	gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-	
-	tc0 = gl_MultiTexCoord0.xy;
-	tc1 = GetShadowCoords();
+    ws_vertex = transformed_vertex.xyz - cam_pos;
+    gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
+    
+    tc0 = gl_MultiTexCoord0.xy;
+    tc1 = GetShadowCoords();
 } 

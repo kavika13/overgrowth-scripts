@@ -21,24 +21,24 @@ varying vec3 tangent_to_world3;
 #include "relativeskypos.glsl"
 
 void main()
-{	
-	vec4 colormap = texture2D(tex0,gl_TexCoord[0].st);
-	if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
-		gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
-		colormap.a <= 0.05) {
-		discard;
-	} else {
-		// Calculate normal
-		vec4 normalmap = texture2D(tex1,gl_TexCoord[0].st);
-		vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
-							  tangent_to_world1 * (normalmap.r*2.0-1.0) +
-							  tangent_to_world2 * (normalmap.g*2.0-1.0));
+{    
+    vec4 colormap = texture2D(tex0,gl_TexCoord[0].st);
+    if(gl_TexCoord[0].x<0.0 || gl_TexCoord[0].x>1.0 ||
+        gl_TexCoord[0].y<0.0 || gl_TexCoord[0].y>1.0 ||
+        colormap.a <= 0.05) {
+        discard;
+    } else {
+        // Calculate normal
+        vec4 normalmap = texture2D(tex1,gl_TexCoord[0].st);
+        vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                              tangent_to_world1 * (normalmap.r*2.0-1.0) +
+                              tangent_to_world2 * (normalmap.g*2.0-1.0));
 
-		colormap.a *= 2.0 * gl_Color.a * (gl_LightSource[0].diffuse.a * 0.4 + 0.3);
-		//ws_normal = tangent_to_world3;
-		vec3 color = vec3(dot(ws_light, ws_normal)-dot(ws_light, tangent_to_world3)+1.0)*colormap.a;
-		color *= colormap.xyz;
+        colormap.a *= 2.0 * gl_Color.a * (gl_LightSource[0].diffuse.a * 0.4 + 0.3);
+        //ws_normal = tangent_to_world3;
+        vec3 color = vec3(dot(ws_light, ws_normal)-dot(ws_light, tangent_to_world3)+1.0)*colormap.a;
+        color *= colormap.xyz;
 
-		gl_FragColor = vec4(color,colormap.a);
-	}
+        gl_FragColor = vec4(color,colormap.a);
+    }
 }

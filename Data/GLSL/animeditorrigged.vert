@@ -21,35 +21,35 @@ varying vec3 concat_bone3;
 #include "relativeskypos.glsl"
 
 void main()
-{	
-	mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
+{    
+    mat3 transpose_normal_matrix = transposeMat3(gl_NormalMatrix);
 
-	mat4 concat_bone;
+    mat4 concat_bone;
 
-	concat_bone[0] = vec4(gl_MultiTexCoord1[0],gl_MultiTexCoord2[0],gl_MultiTexCoord4[0],0.0);
-	concat_bone[1] = vec4(gl_MultiTexCoord1[1],gl_MultiTexCoord2[1],gl_MultiTexCoord4[1],0.0);
-	concat_bone[2] = vec4(gl_MultiTexCoord1[2],gl_MultiTexCoord2[2],gl_MultiTexCoord4[2],0.0);
-	concat_bone[3] = vec4(gl_MultiTexCoord1[3],gl_MultiTexCoord2[3],gl_MultiTexCoord4[3],1.0);
-	
-	concat_bone1 = concat_bone[0].xyz;
-	concat_bone2 = concat_bone[1].xyz;
-	concat_bone3 = concat_bone[2].xyz;
+    concat_bone[0] = vec4(gl_MultiTexCoord1[0],gl_MultiTexCoord2[0],gl_MultiTexCoord4[0],0.0);
+    concat_bone[1] = vec4(gl_MultiTexCoord1[1],gl_MultiTexCoord2[1],gl_MultiTexCoord4[1],0.0);
+    concat_bone[2] = vec4(gl_MultiTexCoord1[2],gl_MultiTexCoord2[2],gl_MultiTexCoord4[2],0.0);
+    concat_bone[3] = vec4(gl_MultiTexCoord1[3],gl_MultiTexCoord2[3],gl_MultiTexCoord4[3],1.0);
+    
+    concat_bone1 = concat_bone[0].xyz;
+    concat_bone2 = concat_bone[1].xyz;
+    concat_bone3 = concat_bone[2].xyz;
 
-	vec3 eyeSpaceVert = (gl_ModelViewMatrix * concat_bone * gl_Vertex).xyz;
-	vertex_pos = normalize(transpose_normal_matrix * eyeSpaceVert);
-	
-	mat3 light_to_world = mat3(obj2world[0].xyz,obj2world[1].xyz,obj2world[2].xyz) * transposeMat3(gl_NormalMatrix);	
+    vec3 eyeSpaceVert = (gl_ModelViewMatrix * concat_bone * gl_Vertex).xyz;
+    vertex_pos = normalize(transpose_normal_matrix * eyeSpaceVert);
+    
+    mat3 light_to_world = mat3(obj2world[0].xyz,obj2world[1].xyz,obj2world[2].xyz) * transposeMat3(gl_NormalMatrix);    
 
-	world_light = normalize(light_to_world * gl_LightSource[0].position.xyz);
-	world_light.x *= -1.0;
-	world_light.y *= -1.0;
+    world_light = normalize(light_to_world * gl_LightSource[0].position.xyz);
+    world_light.x *= -1.0;
+    world_light.y *= -1.0;
 
-	//mat3 concat_bone_mat3 = mat3(concat_bone[0].xyz,concat_bone[1].xyz,concat_bone[2].xyz);
+    //mat3 concat_bone_mat3 = mat3(concat_bone[0].xyz,concat_bone[1].xyz,concat_bone[2].xyz);
 
-	light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
+    light_pos = normalize(transpose_normal_matrix * gl_LightSource[0].position.xyz);
 
-	rel_pos = CalcRelativePositionForSky(concat_bone, cam_pos);
+    rel_pos = CalcRelativePositionForSky(concat_bone, cam_pos);
  
-	gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
-	gl_TexCoord[0] = gl_MultiTexCoord0;
+    gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
+    gl_TexCoord[0] = gl_MultiTexCoord0;
 } 

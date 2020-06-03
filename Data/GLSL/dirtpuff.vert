@@ -15,15 +15,15 @@ varying vec3 tangent_to_world3;
 varying vec3 ws_vertex;
 
 void main()
-{	
-	tangent_to_world3 = normalize(gl_Normal * -1.0);
-	tangent_to_world1 = normalize(gl_MultiTexCoord1.xyz);
-	tangent_to_world2 = normalize(cross(tangent_to_world1,tangent_to_world3));
-	ws_vertex = gl_Vertex.xyz - cam_pos;
+{    
+    tangent_to_world3 = normalize(gl_Normal * -1.0);
+    tangent_to_world1 = normalize(gl_MultiTexCoord1.xyz);
+    tangent_to_world2 = normalize(cross(tangent_to_world1,tangent_to_world3));
+    ws_vertex = gl_Vertex.xyz - cam_pos;
 
-	gl_Position = ftransform();
-	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
-	
-	gl_FrontColor = gl_Color;
+    gl_Position = ftransform();
+    
+    gl_TexCoord[0] = gl_MultiTexCoord0;
+    
+    gl_FrontColor = gl_Color;
 } 

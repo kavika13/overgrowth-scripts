@@ -12,29 +12,29 @@ varying vec3 rel_pos;
 #include "lighting.glsl"
 
 void main()
-{	
-	/*if(int(mod(gl_FragCoord.x+gl_FragCoord.y,2.0))==0){
-		discard;
-	}*/
-	if(int(mod(gl_FragCoord.x,2.0))!=0||int(mod(gl_FragCoord.y,2.0))!=0){
-		discard;
-	}
+{    
+    /*if(int(mod(gl_FragCoord.x+gl_FragCoord.y,2.0))==0){
+        discard;
+    }*/
+    if(int(mod(gl_FragCoord.x,2.0))!=0||int(mod(gl_FragCoord.y,2.0))!=0){
+        discard;
+    }
 
-	float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
-	
-	vec3 color = GetDirectColor(NdotL);
+    float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
+    
+    vec3 color = GetDirectColor(NdotL);
 
-	color += textureCube(tex3,world_normal).xyz	* GetAmbientContrib(1.0);
-	
-	color *= BalanceAmbient(NdotL);
-	
-	color *= gl_Color.xyz;
-	
-	color += emission.xyz;
-	
-	AddHaze(color, rel_pos, tex3);
+    color += textureCube(tex3,world_normal).xyz    * GetAmbientContrib(1.0);
+    
+    color *= BalanceAmbient(NdotL);
+    
+    color *= gl_Color.xyz;
+    
+    color += emission.xyz;
+    
+    AddHaze(color, rel_pos, tex3);
 
-	color *= Exposure();
+    color *= Exposure();
 
-	gl_FragColor = vec4(color,1.0);
+    gl_FragColor = vec4(color,1.0);
 }
