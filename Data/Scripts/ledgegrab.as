@@ -352,8 +352,8 @@ class LedgeInfo {
 		this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f;
 		this_mo.velocity.y *= 0.92f;
 		
-		this_mo.velocity.y = 0.0f;
-		this_mo.position.y = target_height;
+		//this_mo.velocity.y = 0.0f;
+		//this_mo.position.y = target_height;
 
 		vec3 target_velocity = GetTargetVelocity();
 		float ledge_dir_dot = dot(target_velocity, ledge_dir);

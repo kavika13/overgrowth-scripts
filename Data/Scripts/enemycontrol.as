@@ -28,6 +28,18 @@ bool WantsToAccelerateJump() {
 	return false;
 }
 
+bool WantsToGrabLedge() {
+	return false;
+}
+
+bool WantsToJumpOffWall() {
+	return false;
+}
+
+bool WantsToFlipOffWall() {
+	return false;
+}
+
 vec3 GetTargetVelocity() {
 	//if(distance_squared(this_mo.position, target.position) < 9.0f){
 		vec3 target_velocity;

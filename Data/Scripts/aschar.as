@@ -616,13 +616,14 @@ float time = 0;
 
 void update(bool _controlled) {
 	time += time_step;
-	this_mo.SetMorphTargetWeight("wink_r",sin(time*3),1.0f);
+	//this_mo.SetMorphTargetWeight("fist_l",min(1,max(0,sin(time*3))),0.0f);
+	/*this_mo.SetMorphTargetWeight("wink_r",sin(time*3),1.0f);
 	this_mo.SetMorphTargetWeight("wink_l",sin(time*2+0.3),1.0f);
 	this_mo.SetMorphTargetWeight("squint_l",sin(time*3),1.0f);
 	this_mo.SetMorphTargetWeight("squint_r",sin(time*2),1.0f);
 	this_mo.SetMorphTargetWeight("oh",sin(time*3),1.0f);
 	this_mo.SetMorphTargetWeight("mouth_open",sin(time*4),1.0f);
-	this_mo.SetMorphTargetWeight("sniff",sin(time*20)*0.5+0.5,1.0f);
+	this_mo.SetMorphTargetWeight("sniff",sin(time*20)*0.5+0.5,1.0f);*/
 
 	if(testing_mocap) {
 		this_mo.cam_rotation += 0.05f;
