@@ -282,11 +282,11 @@ void GoLimp() {
 	recovery_time = _ragdoll_recovery_time;
 	pose_handler.clear();
 	pose_handler.AddLayer("Data/Animations/run.pos",
-						  1.0f,
+						  0.000f,
 						  false);
-	pose_handler.AddLayer("Data/Animations/test.pos",
-						  1.0f,
-						  false);
+	//pose_handler.AddLayer("Data/Animations/test.pos",
+	//					  1.0f,
+	//					  false);
 }
 
 void UpdateDuckAmount() {
