@@ -5,7 +5,7 @@ bool limp = false;
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0);
 	if(GetInputDown("move_up")){
-		target_velocity += camera.GetFacing();
+		target_velocity += camera.GetFlatFacing();
 	}
 	if(GetInputDown("move_right")){
 		vec3 temp = camera.GetFlatFacing();
@@ -22,7 +22,7 @@ vec3 GetTargetVelocity() {
 		target_velocity += temp;
 	}
 	if(GetInputDown("move_down")){
-		target_velocity -= camera.GetFacing();
+		target_velocity -= camera.GetFlatFacing();
 	}
 	if(GetInputDown("jump")){
 		target_velocity.y += 1.0;
@@ -47,6 +47,7 @@ void draw() {
 }
 
 const float _inertia = 0.95f;
+const float _run_threshold = 0.8f;
 const float _walk_threshold = 0.2f;
 const float _walk_speed = 30.0f;
 
@@ -60,12 +61,19 @@ void update() {
 	vec3 flat_velocity = vec3(velocity.x,0,velocity.z);
 	this.SetRotationFromFacing(flat_velocity);
 	
+	this.ClearAnimations();
+	
 	if(!limp){
-		if(length(flat_velocity) > _walk_threshold){
-			this.SetAnimation("Data/Animations/walk.anm");
-		} else {
-			this.SetAnimation("Data/Animations/idle.anm");
-		}
+		float run_amount, walk_amount, idle_amount;
+		float speed = length(flat_velocity);
+		run_amount = speed - _run_threshold;
+		run_amount = max(0.0,min(1.0,run_amount));
+		walk_amount = speed - _walk_threshold;
+		walk_amount = max(0.0,min(1.0-run_amount,walk_amount));
+		idle_amount = max(0.0,1.0-run_amount-walk_amount);
+		this.AddAnimation("Data/Animations/walk.anm",walk_amount);
+		this.AddAnimation("Data/Animations/run.anm",run_amount);
+		this.AddAnimation("Data/Animations/idle.anm",idle_amount);
 	}
 	
 	velocity += GetTargetVelocity() * time_step * _walk_speed;

@@ -3,9 +3,11 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform sampler2DShadow tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
+uniform mat4 shadowmat;
 //uniform mat4 bones[64];
 
 varying vec3 vertex_pos;
@@ -23,6 +25,8 @@ void main()
 	vec3 color;
 	
 	vec3 shadow_tex = vec3(1.0);
+	shadow_tex.x = shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+;
 	
 	vec4 normalmap = texture2D(tex1,gl_TexCoord[0].xy);
 	
@@ -66,8 +70,10 @@ void main()
 	//rim_lit = pow(rim_lit,0.8);
 	//rim_lit *= min(1.0,max(0.0,(obj2world*vec4(normal,0.0)).y+0.5));
 	rim_lit *= pow((dot(light_pos,normal)+1.0)*0.5,0.5);
-	color += vec3(back_lit*rim_lit) * normalmap.a * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
+	color += vec3(back_lit*rim_lit) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
 	
+	//color = diffuse_color;
+
 	//color = back_lit;
 
 	//color = spec_color;

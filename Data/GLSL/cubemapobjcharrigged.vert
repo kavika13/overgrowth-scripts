@@ -3,9 +3,11 @@ uniform sampler2D tex1;
 uniform samplerCube tex2;
 uniform samplerCube tex3;
 uniform sampler2D tex4;
+uniform sampler2DShadow tex5;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
 uniform float in_light;
+uniform mat4 shadowmat;
 //uniform mat4 bones[64];
 
 varying vec3 vertex_pos;
@@ -52,4 +54,5 @@ void main()
 	gl_Position = gl_ModelViewProjectionMatrix * concat_bone * gl_Vertex;
 	gl_TexCoord[0] = gl_MultiTexCoord0;
 	gl_TexCoord[1] = gl_MultiTexCoord3;
+	gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * concat_bone * gl_Vertex;
 } 

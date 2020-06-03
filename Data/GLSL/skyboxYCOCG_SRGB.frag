@@ -15,21 +15,24 @@ vec3 YCOCGtoRGB(in vec4 YCoCg) {
 	float b = t - Co * 0.5;
 	float r = b + Co;
 	
+	b = max(0.0,min(1.0,b));
+
 	return vec3(r,g,b);
 }
 
 void main()
 {	
-	vec3 color;
+	vec4 color;
 	
-	color = YCOCGtoRGB(textureCube(tex2,normal));
+	color = vec4(YCOCGtoRGB(textureCube(tex2,normal)),1.0);
+	//color = textureCube(tex2,normal);
 	//color = textureCube(tex3,normal).xyz;
-	
+
 	color.x = pow(color.x,2.2);
 	color.y = pow(color.y,2.2);
 	color.z = pow(color.z,2.2);
 
-	color *= Exposure();
+	//color *= Exposure();
 
-	gl_FragColor = vec4(color,opac);
+	gl_FragColor = vec4(color.xyz,opac);
 }
