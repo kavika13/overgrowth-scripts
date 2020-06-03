@@ -34,7 +34,8 @@ void Update() {
         vec3 pos = camera_animation_reader.GetPosition();
         pos = vec3(pos.x, pos.z, -pos.y);
         co.position = pos;
-        quaternion quat(camera_animation_reader.GetRotationVec4());
+        vec4 v = camera_animation_reader.GetRotationVec4();
+        quaternion quat(v.x, v.y, v.z, v.a);
         vec3 facing = Mult(quat, vec3(0.0f,0.0f,1.0f));
         facing = vec3(facing.x, facing.z, -facing.y);
         /*DebugDrawLine(pos,
@@ -120,6 +121,7 @@ void Update() {
 
         camera.SetYRotation(rotation);    
         camera.SetXRotation(rotation2);
+        camera.SetZRotation(0.0f);
         camera.SetPos(co.position);
 
         camera.SetDistance(0);
