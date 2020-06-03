@@ -102,7 +102,7 @@ void update() {
 				moving = true;
 			}
 		
-			if(GetInputDown("move_down") && GetInputDown("shift")) {
+			if(GetInputDown("move_down") && GetInputDown("crouch")) {
 				target_velocity+=vec3(0,-1,0);
 				moving = true;
 			}
@@ -111,7 +111,7 @@ void update() {
 				moving = true;
 			}
 			
-			if( GetInputDown("move_up") && GetInputDown("shift")) {
+			if( GetInputDown("move_up") && GetInputDown("crouch")) {
 				target_velocity+=vec3(0,1,0);
 				moving = true;
 			}
