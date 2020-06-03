@@ -2,7 +2,13 @@
 
 int num_frames; //How many timesteps passed since the last update
 
-enum AIEvent{_ragdolled, _activeblocked, _thrown};
+enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking};
+
+int head_choke_queue = -1;
+
+void ChokedOut(int target){
+    head_choke_queue = target;
+}
 
 vec3 GetVelocityForTarget(const vec3&in start, const vec3&in end, float max_horz, float max_vert, float arc){
     vec3 rel_vec = end - start;
@@ -159,6 +165,10 @@ const float _spurt_frequency = 7.0f;
 float spurt_sound_delay = 0.0f;
 const float _spurt_delay_amount = 6.283185f/_spurt_frequency;
 
+int GetTetherID(){
+    return tether_id;
+}
+
 void UpdateCutThroatEffect() {
     if(blood_delay <= 0){
         if(rand()%16 == 0){
@@ -194,7 +204,70 @@ void UpdateCutThroatEffect() {
     -- blood_delay;
 }
 
+const float _body_part_drag_dist = 0.2f;
+
+void StartBodyDrag(string part, int part_id, int char_id){
+    MovementObject@ char = ReadCharacterID(char_id);
+    drag_body_part = part;
+    drag_body_part_id = part_id;
+    tether_id = char_id;
+    tethered = _TETHERED_DRAGBODY;
+    drag_strength_mult = 0.0f;
+    char.PassIntFunction("void SetTetherID(int)",this_mo.getID());
+    char.PassIntFunction("void SetTethered(int)",_TETHERED_DRAGGEDBODY);
+}
+
+void CheckForStartBodyDrag(){
+    if(tethered == _TETHERED_FREE && this_mo.controlled && WantsToDragBody()){
+        int closest_id = GetClosestCharacterID(2.0f, _TC_RAGDOLL | _TC_UNCONSCIOUS);
+        if(closest_id != -1){
+            vec3 drag_offset_world;
+            drag_offset_world.x = this_mo.position.x;
+            drag_offset_world.z = this_mo.position.z;
+            MovementObject@ char = ReadCharacterID(closest_id);
+            string closest_part = "";
+            string test_part;
+            int closest_part_id;
+            int test_part_id;
+            float closest_dist = 0.0f;
+            for(int i=0; i<5; ++i){
+                switch(i){
+                    case 0: test_part = "head"; test_part_id = 0; break;
+                    case 1: test_part = "leftarm"; test_part_id = 0;  break;
+                    case 2: test_part = "rightarm"; test_part_id = 0;  break;
+                    case 3: test_part = "left_leg"; test_part_id = 0;  break;
+                    case 4: test_part = "right_leg"; test_part_id = 0; break;
+                }
+                float dist;
+                dist = distance_squared(char.GetIKChainPos(test_part,test_part_id),
+                                              this_mo.position);
+                if(closest_part == "" || dist < closest_dist){
+                    closest_dist = dist;
+                    closest_part_id = test_part_id;
+                    closest_part = test_part;
+                }
+            }
+            if(head_choke_queue == closest_id){
+                closest_part = "head";
+                closest_part_id = 0;
+                closest_dist = 0.0f;
+                head_choke_queue = -1;
+            }
+            if(closest_dist <= _body_part_drag_dist * 1.5f){
+                if(active_block_flinch_layer != -1){
+                    this_mo.RemoveLayer(active_block_flinch_layer, 4.0f);
+                    active_block_flinch_layer = -1;
+                } 
+
+                StartBodyDrag(closest_part, closest_part_id, closest_id);
+            }
+        }
+    }
+}
+
 void Update(int _num_frames) {
+    
+
     /*if(holding_weapon){
         ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
         vec3 start, end;
@@ -479,6 +552,24 @@ vec3 CheckTerminalVelocity(const vec3&in velocity){
     return velocity;
 }
 
+void UnTether() {
+    if(tether_id != -1){
+        MovementObject @char = ReadCharacterID(tether_id);
+        char.PassIntFunction("void SetTethered(int)", _TETHERED_FREE);
+        char.PassIntFunction("void SetTetherID(int)", -1);
+        tether_id = -1;
+        tethered = _TETHERED_FREE;
+    }
+}
+
+float GetDuckAmount(){
+    return duck_amount;
+}
+
+void SetDuckAmount(float val){
+    duck_amount = val;
+}
+
 // States are used to differentiate between various widely different situations
 const int _movement_state = 0; // character is moving on the ground
 const int _ground_state = 1; // character has fallen down or is raising up, ATM ragdolls handle most of this
@@ -509,6 +600,7 @@ void UpdateState() {
         UpdateDuckAmount();
         UpdateGroundAndAirTime();
         HandleAccelTilt();
+        CheckForStartBodyDrag();
         UpdateMovementControls();
         UpdateAnimation();
         ApplyPhysics();
@@ -539,6 +631,8 @@ void UpdateState() {
         }
     }
 
+    HandleTethering();
+
     this_mo.velocity = CheckTerminalVelocity(this_mo.velocity);   
 
     UpdateTilt();
@@ -550,6 +644,96 @@ void UpdateState() {
     right_smear_time += time_step * num_frames;
     smear_sound_time += time_step * num_frames;
 }
+
+vec3 drag_target;
+
+void HandleTethering() {
+    
+    if(tethered == _TETHERED_REARCHOKE){
+        MovementObject @char = ReadCharacterID(tether_id);
+        if(!WantsToThrowEnemy() || abs(this_mo.position.y - char.position.y) > _max_tether_height_diff){
+            UnTether();
+            return;
+        }
+        if(tether_id != -1 && state == _movement_state){
+            vec3 rel = char.position - this_mo.position;
+            rel.y = 0.0f;
+            rel = normalize(rel);
+            tether_rel = mix(rel, tether_rel, pow(0.1f, num_frames));
+            vec3 mid_point = (char.position + this_mo.position)*0.5f;
+            vec3 old_pos0;
+            vec3 old_pos1;
+            old_pos0 = this_mo.position;
+            old_pos1 = char.position;
+            char.position = mix(char.position, mid_point + tether_rel*tether_dist*0.5f, 1.0f);
+            this_mo.position = mix(this_mo.position, mid_point - tether_rel*tether_dist*0.5f, 1.0f);
+            this_mo.position.y = old_pos0.y;
+            char.position.y = old_pos1.y;
+            this_mo.velocity += (this_mo.position - old_pos0)/(time_step*num_frames);
+            char.velocity += (char.position - old_pos1)/(time_step*num_frames);
+            char.SetRotationFromFacing(tether_rel);
+            this_mo.SetRotationFromFacing(tether_rel);
+
+            //DebugDrawWireSphere(char.GetAvgIKChainPos("head"), 0.1f, vec3(1.0f), _delete_on_update);
+            //DebugDrawWireSphere(this_mo.GetAvgIKChainPos("torso"), 0.1f, vec3(1.0f), _delete_on_update);
+            /*mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+            Print("Vec: ");
+            PrintVec3(invert(torso_transform)*char.GetAvgIKChainPos("head"));
+            Print("\n");
+            vec3 target_offset = vec3(-0.1f, 0.2f, 0.3f);
+            DebugDrawWireSphere(torso_transform * target_offset, 0.1f, vec3(1.0f), _delete_on_update);
+*/
+            float avg_duck = duck_amount;
+            avg_duck += char.QueryFloatFunction("float GetDuckAmount()");
+            avg_duck *= 0.5f;
+            duck_amount = avg_duck;
+            char.PassFloatFunction("void SetDuckAmount(float)", avg_duck);
+        }
+    }
+    if(tethered == _TETHERED_REARCHOKED){
+        // Choking
+        TakeDamage(time_step * num_frames * 0.25f);
+        if(knocked_out != _awake){
+            int other_char_id = tether_id;
+            Ragdoll(_RGDL_LIMP);
+            ReadCharacterID(other_char_id).PassIntFunction("void ChokedOut(int)", this_mo.getID());
+        }
+    }
+    if(tethered == _TETHERED_DRAGBODY){
+        if(!WantsToDragBody()){
+            UnTether();
+            return;
+        }
+        MovementObject@ char = ReadCharacterID(tether_id);
+        vec3 arm_pos = GetDragOffsetWorld();
+        vec3 head_pos = char.GetIKChainPos(drag_body_part,drag_body_part_id);
+        vec3 arm_pos_flat = vec3(arm_pos.x, 0.0f, arm_pos.z);
+        vec3 head_pos_flat = vec3(head_pos.x, 0.0f, head_pos.z);
+        float dist = distance(arm_pos_flat, head_pos_flat);
+        if(dist > 0.2f){
+            this_mo.velocity += (normalize(head_pos_flat - arm_pos_flat) * (dist - 0.2f)) * 5.0f * drag_strength_mult;            
+        }
+        if(drag_strength_mult > 0.3f){
+            drag_target = mix(arm_pos, drag_target, pow(0.95f, num_frames));
+            char.MoveRagdollPart(drag_body_part,drag_target,drag_strength_mult);
+        } else {
+            drag_target = head_pos;
+        }
+        char.PassIntFunction("void RagdollRefresh(int)",1);
+        
+        float old_drag_strength_mult = drag_strength_mult;
+        drag_strength_mult = mix(1.0f, drag_strength_mult, pow(0.95f,num_frames));
+        if(old_drag_strength_mult < 0.7f && drag_strength_mult >= 0.7f){
+            PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
+        }
+        //DebugDrawWireSphere(head_pos,0.2f, vec3(1.0f), _delete_on_update);
+        tether_rel = char.position - this_mo.position;
+        tether_rel.y = 0.0f;
+        tether_rel = normalize(tether_rel);
+        this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),tether_rel,1.0 - pow(0.95f, num_frames)));
+    }
+}
+
 
 vec3 target_tilt(0.0f);
 vec3 tilt(0.0f);
@@ -569,31 +753,44 @@ const float _target_look_threshold = 7.0f; // How close target must be to look a
 const float _target_look_threshold_sqrd = 
     _target_look_threshold * _target_look_threshold;
     
+float head_look_opac;
+float choke_look_time = 0.0f;
+
 void UpdateHeadLook() {
     const float _head_inertia = 0.8f;
 
     bool look_at_target = false;
     vec3 target_dir;
-    if(target_id != -1){
-        vec3 target_pos = ReadCharacterID(target_id).GetAvgIKChainPos("head");
-        if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
-            look_at_target = true;
-            target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
+    if(tethered != _TETHERED_REARCHOKED){
+        if(target_id != -1){
+            vec3 target_pos = ReadCharacterID(target_id).GetAvgIKChainPos("head");
+            if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
+                look_at_target = true;
+                target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
+            }
         }
-    }
-    if(this_mo.controlled){
-        if(!look_at_target){
-            target_head_dir = camera.GetFacing();
-            target_head_dir.y *= 0.5f;
+        if(this_mo.controlled){
+            if(!look_at_target){
+                target_head_dir = camera.GetFacing();
+                target_head_dir.y *= 0.5f;
+            } else {
+                target_head_dir = target_dir;
+            }
         } else {
-            target_head_dir = target_dir;
+            if(!look_at_target){
+                target_head_dir = this_mo.GetFacing();
+            } else {
+                target_head_dir = target_dir;
+            }
         }
     } else {
-        if(!look_at_target){
-            target_head_dir = this_mo.GetFacing();
-        } else {
-            target_head_dir = target_dir;
+        if(choke_look_time <= 0.0f){
+            target_head_dir = vec3(RangedRandomFloat(-1.0f, 1.0f),
+                                   RangedRandomFloat(-0.2f, 0.2f),
+                                   RangedRandomFloat(-1.0f, 1.0f));
+            choke_look_time = RangedRandomFloat(0.1f,0.3f);
         }
+        choke_look_time = max(0.0f, choke_look_time - time_step * num_frames);
     }
 
     if(trying_to_get_weapon != 0){
@@ -606,8 +803,16 @@ void UpdateHeadLook() {
         DebugDrawLine(head_pos, head_pos + target_head_dir, vec3(1.0f), _delete_on_update);
     }
 
+    float target_head_look_opac = 1.0f;
+    if((state == _attack_state && attacking_with_throw != 0) ||
+        tethered == _TETHERED_REARCHOKE || tethered == _TETHERED_DRAGBODY)
+    {
+        target_head_look_opac = 0.0f;
+    }
+
+    head_look_opac = mix(target_head_look_opac, head_look_opac, pow(0.95f, num_frames));
     head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
-    this_mo.SetIKTargetOffset("head",head_dir);
+    this_mo.SetIKTargetOffset("head",head_dir * head_look_opac);
     if(!stance_move){
         stance_move_fade_val = mix(stance_move_fade,stance_move_fade_val,pow(0.9f,num_frames));
     } else {
@@ -621,6 +826,7 @@ void UpdateHeadLook() {
     flat_head_dir = normalize(flat_head_dir);
     float torso_control = min(0.0,dot(flat_head_dir, this_mo.GetFacing()))+1.0f;
     torso_control *= stance_move_fade_val;
+    torso_control = min(head_look_opac, torso_control);
     this_mo.SetIKTargetOffset("torso",head_dir*torso_control);
     stance_move_fade = max(0.0f, stance_move_fade - time_step * num_frames);
     //Print("stance_move_fade: "+stance_move_fade+"\n");
@@ -715,6 +921,9 @@ bool active_blocking = false;
 int active_block_flinch_layer = -1;
 
 void UpdateActiveBlockAndDodge() {
+    if(tethered != _TETHERED_FREE){
+        return;
+    }
     block_stunned = max(0.0f, block_stunned - time_step * num_frames);
     UpdateActiveBlockMechanics();
     UpdateActiveDodgeMechanics();
@@ -850,6 +1059,13 @@ void UpdateRagDoll() {
                   this_mo.position + torso_vec,
                   vec3(1.0f),
                   _delete_on_update);*/
+}
+
+void RagdollRefresh(int val){
+    ragdoll_static_time = 0.0f;
+    frozen = false;
+    this_mo.SetRagdollDamping(0.0f);
+    this_mo.RefreshRagdoll();
 }
 
 float ragdoll_static_time; // How long ragdoll has been stationary
@@ -1016,6 +1232,7 @@ void SetRagdollType(int type) {
 }
 
 void Ragdoll(int type){
+    UnTether();
     this_mo.SetRagdollDamping(0.0f);
     HandleAIEvent(_ragdolled);
     const float _ragdoll_recovery_time = 1.0f;
@@ -1064,7 +1281,7 @@ const int _invalid = 4;
 
 bool startled = false;
 const float drop_weapon_probability = 0.3f;
-    
+
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
 // Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id) {
@@ -1111,11 +1328,15 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),5.0f,flags);
     this_mo.AddAnimationOffset(offset);
     this_mo.AddAnimationRotOffset(rot_offset);
+    this_mo.SetAnimationCallback("void EndHitReaction()");
     HandleAIEvent(_thrown);
     SetState(_hit_reaction_state);
     hit_reaction_anim_set = true;
     hit_reaction_thrown = true;
     flip_info.EndFlip();
+    if(tethered == _TETHERED_REARCHOKED){
+        HandleAIEvent(_choking);
+    }
     return _hit;
 }
 
@@ -1608,7 +1829,7 @@ void TakeDamage(float how_much){
         if(this_mo.controlled){
             TimedSlowMotion(0.1f,0.7f, 0.05f);
         }
-        if(!this_mo.controlled){
+        if(!this_mo.controlled && tethered == _TETHERED_FREE){
             this_mo.PlaySoundGroupVoice("death",0.4f);
         }
     }
@@ -1650,7 +1871,7 @@ bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
 bool hit_reaction_dodge = false;
 bool hit_reaction_thrown = false;
-bool attacking_with_throw;
+int attacking_with_throw;
 
 const float _attack_range = 1.5f;
 const float _close_attack_range = 1.0f;
@@ -1874,34 +2095,39 @@ void UpdateGroundMovementControls() {
     } else {
         target_duck_amount = 0.0f;
     }
-    
-    if(WantsToRoll() && length_squared(target_velocity)>0.2f){
-        // flip_info handles actions in the air, including jump flips
-        if(!flip_info.IsFlipping()){
-            flip_info.StartRoll(target_velocity);
+    if(tethered == _TETHERED_DRAGBODY && drag_strength_mult < 0.7f){
+        target_duck_amount = 1.0f;    
+    }
+        
+     if(tethered == _TETHERED_FREE){
+        if(WantsToRoll() && length_squared(target_velocity)>0.2f){
+            // flip_info handles actions in the air, including jump flips
+            if(!flip_info.IsFlipping()){
+                flip_info.StartRoll(target_velocity);
+            }
         }
-    }
 
-    // If the characters has been touching the ground for longer than _jump_threshold_time and isn't already jumping, update variables 
-    // Actual jump is activated after the if(pre_jump) clause below.
-    if(WantsToJump() && on_ground_time > _jump_threshold_time && !pre_jump){
-        pre_jump = true;
-        const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
-        pre_jump_time = _pre_jump_delay;
-        duck_vel = 30.0f * (1.0f-duck_amount * 0.6f); // The character crouches down, getting ready for the jump
-        vec3 target_jump_vel = jump_info.GetJumpVelocity(target_velocity);
-        target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
-    }
+        // If the characters has been touching the ground for longer than _jump_threshold_time and isn't already jumping, update variables 
+        // Actual jump is activated after the if(pre_jump) clause below.
+        if(WantsToJump() && on_ground_time > _jump_threshold_time && !pre_jump){
+            pre_jump = true;
+            const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
+            pre_jump_time = _pre_jump_delay;
+            duck_vel = 30.0f * (1.0f-duck_amount * 0.6f); // The character crouches down, getting ready for the jump
+            vec3 target_jump_vel = jump_info.GetJumpVelocity(target_velocity);
+            target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
+        }
 
-    // Preparing for the jump
-    if(pre_jump){
-        if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
-            jump_info.StartJump(target_velocity, false);
-            //jump_info.StartJump(jump_info.jump_start_vel, true);
-            SetOnGround(false);
-            pre_jump = false;
-        } else {
-            pre_jump_time -= time_step * num_frames;
+        // Preparing for the jump
+        if(pre_jump){
+            if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
+                jump_info.StartJump(target_velocity, false);
+                //jump_info.StartJump(jump_info.jump_start_vel, true);
+                SetOnGround(false);
+                pre_jump = false;
+            } else {
+                pre_jump_time -= time_step * num_frames;
+            }
         }
     }
     
@@ -1931,6 +2157,12 @@ void UpdateGroundMovementControls() {
 
     // Adjust speed based on ground slope
     max_speed = _run_speed;
+    if(tethered != _TETHERED_FREE){
+        max_speed *= 0.5f;   
+        //if(tethered == _TETHERED_DRAGBODY){
+            max_speed *= 0.5f;   
+        //}
+    }
     float curr_speed = length(this_mo.velocity);
 
     max_speed *= 1.0 - adjusted_vel.y;
@@ -2006,6 +2238,41 @@ float GetTempHealth() {
 
 bool feinting;
 bool can_feint;
+float tether_dist;
+vec3 tether_rel;
+
+const int _TETHERED_FREE = 0;
+const int _TETHERED_REARCHOKE = 1;
+const int _TETHERED_REARCHOKED = 2;
+const int _TETHERED_DRAGBODY = 3;
+const int _TETHERED_DRAGGEDBODY = 4;
+string drag_body_part;
+int drag_body_part_id;
+float drag_strength_mult;
+const vec3 drag_offset(0.15f, 0.0f, 0.3f);
+int tethered = _TETHERED_FREE;
+int tether_id = -1;
+
+vec3 GetDragOffsetWorld(){
+    vec3 facing = this_mo.GetFacing();
+    vec3 right_facing = vec3(-facing.z, 0.0f, facing.x);
+    vec3 drag_offset_world = this_mo.position + 
+        facing * drag_offset.z + 
+        right_facing * drag_offset.x +
+        vec3(0.0f,1.0f,0.0f) * drag_offset.y;
+    drag_offset_world.y += 0.1f - duck_amount * 0.2f;
+    return drag_offset_world;
+}
+
+void SetTethered(int val){
+    tethered = val;
+}
+
+void SetTetherID(int val){
+    tether_id = val;
+}
+
+const float _max_tether_height_diff = 0.2f;
 
 // Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
@@ -2013,6 +2280,7 @@ void UpdateGroundAttackControls() {
     const float range = _attack_range + range_extender - _leg_sphere_size;
     int attack_id = -1;
     int throw_id = -1;
+    int sneak_throw_id = -1;
     if(WantsToAttack()){
         int closest_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS);
         if(closest_id != -1){
@@ -2026,18 +2294,38 @@ void UpdateGroundAttackControls() {
     }
     if(WantsToThrowEnemy()){
         throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_THROWABLE);
+        sneak_throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_UNAWARE);
     }
     if(throw_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
-        attacking_with_throw = true;
+        attacking_with_throw = 1;
         can_feint = false;
         feinting = false;
         target_id = throw_id;
+    } else if(sneak_throw_id != -1 && 
+        abs(this_mo.position.y - ReadCharacterID(sneak_throw_id).position.y) < 
+        _max_tether_height_diff)
+    {
+        SetState(_attack_state);
+        attack_animation_set = false;
+        attacking_with_throw = 2;
+        can_feint = false;
+        feinting = false;
+        target_id = sneak_throw_id;
+        tethered = _TETHERED_REARCHOKE;
+        tether_id = target_id;
+        MovementObject @char = ReadCharacterID(target_id);
+        tether_rel = char.position - this_mo.position;
+        tether_rel.y = 0.0f;
+        tether_rel = normalize(tether_rel);
+        char.PassIntFunction("void SetTethered(int)", _TETHERED_REARCHOKED);
+        char.PassIntFunction("void SetTetherID(int)", this_mo.getID());
+        PlaySoundGroup("Data/Sounds/hit/grip.xml", this_mo.position);
     } else if(attack_id != -1){
         SetState(_attack_state);
         attack_animation_set = false;
-        attacking_with_throw = false;
+        attacking_with_throw = 0;
         can_feint = true;
         feinting = false;
         target_id = attack_id;
@@ -2065,13 +2353,15 @@ void UpdateAirAttackControls() {
         can_feint = false;
         feinting = false;
         attack_animation_set = false;
-        attacking_with_throw = false;
+        attacking_with_throw = 0;
     }
 }
 
 // Executed only when the  character is in _movement_state.  Called by UpdateMovementControls() .
 void UpdateGroundControls() {
-    UpdateGroundAttackControls();
+    if(tethered == _TETHERED_FREE){
+        UpdateGroundAttackControls();
+    }
     UpdateGroundMovementControls();
 }
 
@@ -2158,15 +2448,18 @@ float GetVisionDistance(const vec3&in target_pos){
     return direct_vision * vision_threshold;
 }
 
-const uint8 _TC_ENEMY = (1<<0);
-const uint8 _TC_CONSCIOUS = (1<<1);
-const uint8 _TC_THROWABLE = (1<<2);
-const uint8 _TC_NON_RAGDOLL = (1<<3);
-const uint8 _TC_ALLY = (1<<4);
-const uint8 _TC_IDLE = (1<<5);
-const uint8 _TC_VEL_OFFSET = (1<<6);
+const uint16 _TC_ENEMY = (1<<0);
+const uint16 _TC_CONSCIOUS = (1<<1);
+const uint16 _TC_THROWABLE = (1<<2);
+const uint16 _TC_NON_RAGDOLL = (1<<3);
+const uint16 _TC_ALLY = (1<<4);
+const uint16 _TC_IDLE = (1<<5);
+const uint16 _TC_VEL_OFFSET = (1<<6);
+const uint16 _TC_UNAWARE = (1<<7);
+const uint16 _TC_RAGDOLL = (1<<8);
+const uint16 _TC_UNCONSCIOUS = (1<<9);
 
-int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags, float range){
+int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint16 flags, float range){
     int num = characters.size();
     int closest_id = -1;
     float closest_dist = 0.0f;
@@ -2177,6 +2470,10 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags, flo
         }
         MovementObject@ char = ReadCharacterID(characters[i]);
         if(flags & _TC_CONSCIOUS != 0 && char.IsKnockedOut() != _awake){
+            continue;
+        }
+
+        if(flags & _TC_UNCONSCIOUS != 0 && char.IsKnockedOut() == _awake){
             continue;
         }
         
@@ -2212,6 +2509,18 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags, flo
             continue;
         }
         
+        if(flags & _TC_RAGDOLL != 0 && 
+           char.QueryIntFunction("int IsRagdoll()")==0)
+        {
+            continue;
+        }
+        
+        if(flags & _TC_UNAWARE != 0 && 
+           char.QueryIntFunction("int IsUnaware()")!=1)
+        {
+            continue;
+        }
+        
         vec3 target_pos = char.position;
         if(flags & _TC_VEL_OFFSET != 0){
             target_pos += char.velocity * 0.2f;
@@ -2228,7 +2537,7 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint8 flags, flo
     return closest_id;
 }
 
-int GetClosestVisibleCharacterID(uint8 flags){
+int GetClosestVisibleCharacterID(uint16 flags){
     mat4 transform = this_mo.GetAvgIKChainTransform("head");
     mat4 transform_offset;
     transform_offset.SetRotationX(-70);
@@ -2240,7 +2549,7 @@ int GetClosestVisibleCharacterID(uint8 flags){
     return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags, 0.0f);
 }
 
-int GetClosestCharacterID(float range, uint8 flags){
+int GetClosestCharacterID(float range, uint16 flags){
     array<int> nearby_characters;
     GetCharactersInSphere(this_mo.position, range + 1.0f, nearby_characters);
     return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags, range + _leg_sphere_size);
@@ -2402,12 +2711,14 @@ void HandleGroundCollisions() {
     {
         SetOnGround(false);
         jump_info.StartFall();
+        UnTether();
     }
 
     bool in_air = HandleStandingCollision();                                // Move vertically to stand on surface, or fall if there is no surface
     if(in_air){
         SetOnGround(false);
         jump_info.StartFall();
+        UnTether();
     } else {
         this_mo.position = sphere_col.position;
         /*DebugDrawWireSphere(sphere_col.position,
@@ -2659,6 +2970,8 @@ void UpdateAttacking() {
                 MovementObject @char = ReadCharacterID(target_id);
                 char.velocity.x = this_mo.velocity.x;
                 char.velocity.z = this_mo.velocity.z;
+                //tether_dist = distance(char.position, this_mo.position);
+                tether_dist = 0.4f;
                 //char.position = this_mo.position;
             }
             //ReadCharacter(target_id).position = this_mo.position;
@@ -2725,8 +3038,12 @@ void UpdateAttacking() {
         // Defined in playercontrol.as and enemycontrol.as. Boolean front tells if the character is standing still, and if it's true a front kick may be performed.
         // ChooseAttack() sets the value of the curr_attack variable.
         string attack_path;
-        if(attacking_with_throw){
-            attack_path="Data/Attacks/throw.xml";
+        if(attacking_with_throw != 0){
+            if(attacking_with_throw == 1){
+                attack_path="Data/Attacks/throw.xml";
+            } else if(attacking_with_throw == 2){
+                attack_path="Data/Attacks/rearchoke.xml";
+            }
         } else {
             ChooseAttack(front);
             attack_path;
@@ -2795,6 +3112,7 @@ void UpdateAttacking() {
             flags = flags | _ANM_FLIP_FACING;
         }
 
+                
 
         string anim_path;
         if(attack_getter.IsThrow() == 0){
@@ -2805,6 +3123,8 @@ void UpdateAttacking() {
             if(target_id != -1){
                 hit = ReadCharacterID(target_id).WasHit(
                     "grabbed", attack_getter.GetPath(), direction, this_mo.position, this_mo.getID());        
+            } else {
+                Print("Grabbing no target\n");
             }
             if(hit == _miss){
                 EndAttack();
@@ -2885,7 +3205,7 @@ void UpdateHitReaction() {
         EndHitReaction();
     }
     if(this_mo.GetStatusKeyValue("escape")>=1.0f && WantsToCounterThrow()){
-        this_mo.SwapAnimation("Data/Animations/r_throwncounter.anm");
+        this_mo.SwapAnimation(attack_getter2.GetThrownCounterAnimPath());
         string sound = "Data/Sounds/weapon_foley/swoosh/weapon_whoos_big.xml";
         this_mo.PlaySoundGroupAttached(sound,this_mo.position);
         //TimedSlowMotion(0.1f,0.3f, 0.1f);
@@ -3133,7 +3453,8 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
     if(state == _ragdoll_state || 
        other.QueryIntFunction("int GetState()") == _ragdoll_state ||
        (state == _attack_state && attack_getter.IsThrow() == 1) ||
-       (state == _hit_reaction_state && attack_getter2.IsThrow() == 1))
+       (state == _hit_reaction_state && attack_getter2.IsThrow() == 1) ||
+       (tethered != _TETHERED_FREE && other.getID() == tether_id))
     {
         return;
     }
@@ -3299,14 +3620,15 @@ void ApplyCameraControls() {
     if(QueryLevelIntFunction("int HasFocus()")==0){
         SetGrabMouse(true);
     }
-    if(!camera.GetAutoCamera() &&
-       QueryLevelIntFunction("int HasFocus()")==0){   
-        target_rotation -= GetLookXAxis(this_mo.controller_id);
-        target_rotation2 -= GetLookYAxis(this_mo.controller_id);    
+    if(!camera.GetAutoCamera()){
+        if(QueryLevelIntFunction("int HasFocus()")==0){   
+            target_rotation -= GetLookXAxis(this_mo.controller_id);
+            target_rotation2 -= GetLookYAxis(this_mo.controller_id);   
+        }
     } else {
-       float old_tr = target_rotation;
-       float old_tr2 = target_rotation2;
-       chase_cam_pos = mix(cam_pos - camera.GetFacing() * cam_distance, 
+        float old_tr = target_rotation;
+        float old_tr2 = target_rotation2;
+        chase_cam_pos = mix(cam_pos - camera.GetFacing() * cam_distance, 
                            chase_cam_pos, 
                            pow(0.9f, num_frames));
        
@@ -3733,6 +4055,10 @@ void UpdateAnimation() {
                     stance_move_fade = 1.0f;
                 }
             }
+            if(tethered != _TETHERED_FREE){
+                stance_move = true;
+
+            }
             if(speed > _walk_threshold && feet_moving && !stance_move){
                 this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                                normalize(flat_velocity),
@@ -3743,7 +4069,7 @@ void UpdateAnimation() {
                 mirrored_stance = false;
             } else {
                 if(stance_move){
-                    if(target_id != -1 && speed > 1.0f){
+                    if(target_id != -1 && speed > 1.0f && tethered == _TETHERED_FREE){
                         MovementObject@ char = ReadCharacterID(target_id);
                         vec3 dir = char.position - this_mo.position;
                         dir.y = 0.0f;
@@ -3753,11 +4079,22 @@ void UpdateAnimation() {
                     }
                     HandleFootStance();
                 }
-                if(!mirrored_stance){
-                    this_mo.SetCharAnimation("idle");
+                if(tethered == _TETHERED_FREE){
+                    if(!mirrored_stance){
+                        this_mo.SetCharAnimation("idle");
+                    } else {
+                        this_mo.SetCharAnimation("idle",5.0f,_ANM_MIRRORED);
+                    }
                 } else {
-                    this_mo.SetCharAnimation("idle",5.0f,_ANM_MIRRORED);
+                    if(tethered == _TETHERED_REARCHOKE){
+                        this_mo.SetAnimation("Data/Animations/r_rearchokestance.xml", 5.0f, _ANM_MOBILE);
+                    } else if(tethered == _TETHERED_REARCHOKED){
+                        this_mo.SetAnimation("Data/Animations/r_rearchokedstance.xml", 5.0f, _ANM_MOBILE);
+                    } else if(tethered == _TETHERED_DRAGBODY){
+                        this_mo.SetAnimation("Data/Animations/r_dragstance.xml", 3.0f, _ANM_MOBILE);
+                    }
                 }
+
                 this_mo.SetIKEnabled(true);
             }
             roll_ik_fade = max(roll_ik_fade - time_step * 5.0f * num_frames, 0.0f);
@@ -3928,6 +4265,23 @@ void MovementState_UpdateIKTargets() {
         this_mo.SetIKTargetOffset("left_leg",left_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + l_foot_offset);
         this_mo.SetIKTargetOffset("right_leg",right_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + r_foot_offset);
             
+        
+        if(tethered == _TETHERED_DRAGBODY){
+            MovementObject@ char = ReadCharacterID(tether_id);
+            vec3 target = char.GetIKChainPos(drag_body_part,drag_body_part_id);
+
+            vec3 offset = target - ((this_mo.GetIKTargetPosition("leftarm") + this_mo.GetIKTargetPosition("rightarm"))*0.5f);
+            if(offset.y < -0.05f){
+                offset.y = -0.05f;
+            }
+            //this_mo.SetIKTargetOffset("leftarm",target - this_mo.GetIKTargetPosition("leftarm"));
+            //this_mo.SetIKTargetOffset("rightarm",target - this_mo.GetIKTargetPosition("rightarm"));
+            this_mo.SetIKTargetOffset("leftarm",offset * drag_strength_mult);
+            this_mo.SetIKTargetOffset("rightarm",offset * drag_strength_mult);
+        } else {
+            this_mo.SetIKTargetOffset("leftarm",vec3(0.0f,0.0f,0.0f));
+            this_mo.SetIKTargetOffset("rightarm",vec3(0.0f,0.0f,0.0f));
+        }
         //float curr_avg_offset_height = min(0.0f,
         //                          min(left_leg_offset.y, right_leg_offset.y));
         float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;

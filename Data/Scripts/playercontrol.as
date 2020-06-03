@@ -3,6 +3,10 @@
 float throw_key_time;
 bool listening = false;
 
+int IsUnaware() {
+    return 0;
+}
+
 void NotifySound(int created_by_id, float max_dist, vec3 pos) {
 }
 
@@ -67,6 +71,11 @@ bool WantsToThrowEnemy() {
     if(!this_mo.controlled) return false;
     //if(holding_weapon) return false;
     return throw_key_time > 0.2f;
+}
+
+bool WantsToDragBody() {
+    if(!this_mo.controlled) return false;
+    return GetInputDown(this_mo.controller_id, "grab");
 }
 
 bool WantsToPickUpItem() {

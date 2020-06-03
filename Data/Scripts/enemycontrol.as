@@ -21,13 +21,21 @@ bool going_to_block = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
 
-enum AIGoal {_patrol, _attack, _get_help, _escort, _get_weapon, _navigate};
+enum AIGoal {_patrol, _attack, _get_help, _escort, _get_weapon, _navigate, _struggle};
 AIGoal goal = _patrol;
 
 vec3 nav_target;
 int ally_id = -1;
 int escort_id = -1;
 int weapon_target_id = -1;
+
+int IsUnaware() {
+    return (goal == _patrol || startled)?1:0;
+}
+
+bool WantsToDragBody(){
+    return false;
+}
 
 void ResetMind() {
     goal = _patrol;
@@ -82,6 +90,9 @@ void HandleAIEvent(AIEvent event){
         if(!throw_after_active_block){
             ai_attacking = true;
         }
+    }
+    if(event == _choking){
+        SetGoal(_struggle);
     }
 }
 
@@ -163,6 +174,8 @@ void UpdateBrain(){
         if(closest_id != -1){
             Notice(closest_id);
         }
+    } else {
+        target_id = -1;
     }
 
     if(!hostile &&  goal == _attack){
@@ -206,6 +219,10 @@ void UpdateBrain(){
                 SetGoal(_attack);
             }
         }
+    } else if(goal == _struggle){
+        if(tethered == _TETHERED_FREE){
+            SetGoal(_patrol);
+        }
     }
     //MouseControlPathTest();
     //HandleDebugRayDraw();
@@ -246,7 +263,19 @@ bool WantsToDodge() {
     return false;
 }
 
+bool struggle_crouch = false;
+float struggle_crouch_change_time = 0.0f;
+
 bool WantsToCrouch() {
+    if(goal == _struggle){
+        if(struggle_crouch_change_time <= 0.0f){
+            struggle_crouch = (rand()%2==0);
+            struggle_crouch_change_time = RangedRandomFloat(0.1f,0.3f);
+        }
+        struggle_crouch_change_time = max(0.0f, 
+            struggle_crouch_change_time - time_step * num_frames);
+        return struggle_crouch;
+    }
     return false;
 }
 
@@ -485,6 +514,9 @@ void MouseControlPathTest() {
     }
 }
 
+float struggle_change_time = 0.0f;
+vec3 struggle_dir;
+
 int last_seen_sphere = -1;
 vec3 GetTargetVelocity() {
     if(startled){
@@ -502,6 +534,16 @@ vec3 GetTargetVelocity() {
         return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f, 0.0f); 
     } else if(goal == _navigate){
         return GetMovementToPoint(nav_target, 1.0f, 0.0f); 
+    } else if(goal == _struggle){
+        if(struggle_change_time <= 0.0f){
+            struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 
+                                     0.0f, 
+                                     RangedRandomFloat(-1.0f,1.0f)));
+            struggle_change_time = RangedRandomFloat(0.1f,0.3f);
+        }
+        struggle_change_time = max(0.0f, 
+            struggle_change_time - time_step * num_frames);
+        return struggle_dir; 
     } else {
         return vec3(0.0f);
     }

@@ -118,7 +118,13 @@ void SetAnimUpdateFreqs() {
             continue;
         }
         int period = 120.0f/(framerate_request[i]*scale);
-        char.SetAnimUpdatePeriod(period);
+        if(char.QueryIntFunction("int GetTetherID()") != -1){
+            char.SetAnimUpdatePeriod(2);
+            char.SetScriptUpdatePeriod(2);
+        } else {
+            char.SetAnimUpdatePeriod(period);
+            char.SetScriptUpdatePeriod(4);
+        }
     }
 }
 
