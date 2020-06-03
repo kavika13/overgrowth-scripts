@@ -222,12 +222,12 @@ vec3 GetTargetVelocity() {
         bool vis = false;
         last_seen_target_position += last_seen_target_velocity * time_step * num_frames;
         last_seen_target_velocity *= pow(0.995f, num_frames);
-        vec3 real_target_pos = this_mo.ReadCharacterID(target_id).position;
+        vec3 real_target_pos = ReadCharacterID(target_id).position;
         //if(IsTargetInFOV(real_target_pos)){
             vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            if(this_mo.ReadCharacterID(target_id).VisibilityCheck(head_pos)){
+            if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
                 last_seen_target_position = real_target_pos;
-                last_seen_target_velocity = this_mo.ReadCharacterID(target_id).velocity;
+                last_seen_target_velocity = ReadCharacterID(target_id).velocity;
                 vis = true;
             }
         //}
@@ -244,7 +244,7 @@ vec3 GetTargetVelocity() {
         }
         last_seen_sphere = 
             DebugDrawWireSphere(last_seen_target_position, 0.5f, color, _persistent);*/
-        vec3 target_point = last_seen_target_position;//this_mo.ReadCharacterID(target_id).position;
+        vec3 target_point = last_seen_target_position;//ReadCharacterID(target_id).position;
         
         GetPath(target_point);
         vec3 next_path_point = GetNextPathPoint();

@@ -171,7 +171,7 @@ class JumpInfo {
                             time_step * 
                             _wall_run_friction;
         */
-        this_mo.GetSlidingSphereCollision(this_mo.position, 
+        col.GetSlidingSphereCollision(this_mo.position, 
                                           _leg_sphere_size * 1.05f);
         if(sphere_col.NumContacts() == 0){
             LostWallContact();
@@ -286,7 +286,7 @@ class JumpInfo {
     }
 
     void StartJump(vec3 target_velocity, bool follow_path) {
-        this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
+        col.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
         this_mo.position = sphere_col.adjusted_position;
         follow_jump_path = follow_path;
         

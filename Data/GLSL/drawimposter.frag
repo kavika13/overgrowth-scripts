@@ -27,7 +27,7 @@ float rand(vec2 co){
 
 void main()
 {        
-    if((rand(gl_FragCoord.xy)) > fade){
+    if((rand(gl_FragCoord.xy)) >= fade){
         discard;
     };
         
@@ -80,5 +80,5 @@ void main()
 
     color *= Exposure();
 
-    gl_FragColor = vec4(color,colormap.a);
+    gl_FragColor = vec4(vec3(1.0,0.0,0.0),colormap.a);
 }

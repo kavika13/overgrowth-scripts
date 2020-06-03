@@ -44,8 +44,31 @@ void main()
     }
     shadow_tex.r *= shadow_amount;*/
 
-    shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+    
+    /*float shadow_amount = 0.0;
+    for(int i=0; i<4; ++i){
+        float offset_scale = 0.005f;
+        vec4 offset = vec4((rand(gl_FragCoord.xy+vec2(i))-0.5)*offset_scale,
+                           (rand(gl_FragCoord.xy*2.0+vec2(i))-0.5)*offset_scale,
+                           (rand(gl_FragCoord.xy*3.0+vec2(i)))*-0.00001,
+                           0.0);
+        shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0) + offset).r * 0.25;
+    }
+    shadow_tex.r *= shadow_amount;*/
+    
+    float offset = 2.0/512.0;
+    float shadow_amount = 0.0;
+    float z_bias = -0.00002;
+    shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,z_bias,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset,offset*0.2,z_bias,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset,offset*-0.2,z_bias,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset*0.2,offset,z_bias,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset*0.2,-offset,z_bias,0.0)).r * 0.2;
+    shadow_tex.r *= shadow_amount;
+
+    //shadow_tex.r *= shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
     shadow_tex.g = 1.0;
+
     
     float blood_amount = min(texture2D(tex6,gl_TexCoord[1].xy).r*5.0, 1.0);
 

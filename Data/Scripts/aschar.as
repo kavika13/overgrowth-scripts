@@ -53,7 +53,7 @@ int IsBlockStunned() {
 void MouseControlJumpTest() {
     vec3 start = camera.GetPos();
     vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
-    this_mo.GetSweptSphereCollision(start, end, _leg_sphere_size);
+    col.GetSweptSphereCollision(start, end, _leg_sphere_size);
     DebugDrawWireSphere(sphere_col.position, _leg_sphere_size, vec3(0.0f,1.0f,0.0f), _delete_on_update);
     vec3 rel_dist = sphere_col.position - this_mo.position;
     vec3 flat_rd = vec3(rel_dist.x, 0.0f, rel_dist.z);
@@ -136,39 +136,6 @@ void MouseControlJumpTest() {
     }
 }
 
-const float _reset_delay = 4.0f;
-float reset_timer = _reset_delay;
-void VictoryCheck() {
-    /*if(ThreatsRemaining() <= 0 && ThreatsPossible() > 0){
-        reset_timer -= time_step * num_frames;
-        if(reset_timer <= 0.0f){
-            this_mo.ResetLevel();
-            reset_timer = _reset_delay;
-        }
-    }
-    if(knocked_out != _awake){
-        reset_timer -= time_step * num_frames;
-        if(reset_timer <= 0.0f){
-            this_mo.ResetLevel();
-            reset_timer = _reset_delay;
-        }
-    }*/
-}
-
-
-void UpdateMusic() {
-    int threats_remaining = ThreatsRemaining();
-    if(threats_remaining == 0){
-        PlaySong("ambient-happy");
-        return;
-    }
-    if(target_id != -1 && this_mo.ReadCharacterID(target_id).IsKnockedOut() == _awake){
-        PlaySong("combat");
-        return;
-    }
-    PlaySong("ambient-tense");
-}
-
 vec3 old_slide_vel;
 vec3 new_slide_vel;
 float friction = 1.0f;
@@ -242,12 +209,6 @@ void Update(bool _controlled, int _num_frames) {
         //MouseControlJumpTest();
     }
 
-    if(controlled){
-        VictoryCheck();
-        UpdateMusic();
-    }
-
-
     HandleSpecialKeyPresses();
     if(in_animation){
         return;
@@ -286,7 +247,7 @@ void JumpTest(const vec3&in initial_pos,
             end += fake_vel * time_step * num_frames;
         }
         jump_path.push_back(start);
-        this_mo.GetSweptSphereCollision(start,
+        col.GetSweptSphereCollision(start,
                                      end,
                                      _leg_sphere_size);
         start = end;
@@ -318,7 +279,7 @@ void JumpTestEq(const vec3&in initial_pos,
         end = initial_pos + flat_dir * time;
         end.y += height;
         jump_path.push_back(start);
-        this_mo.GetSweptSphereCollision(start,
+        col.GetSweptSphereCollision(start,
                                      end,
                                      _leg_sphere_size);
         start = end;
@@ -392,10 +353,6 @@ void HandleSpecialKeyPresses() {
     }
 
     if(controlled){
-        if(GetInputPressed("l")){
-            //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
-            this_mo.ResetLevel();
-        }
         if(GetInputPressed("v")){
             string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
@@ -430,11 +387,14 @@ void HandleSpecialKeyPresses() {
             //this_mo.velocity = vec3(0.0f);
             //this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
         }
+        if(GetInputPressed("h")){
+            context.PrintGlobalVars();
+        } 
     }
     if(GetInputPressed("p") && target_id != -1){
         Print("Getting path");
         NavPath temp = this_mo.GetPath(this_mo.position,
-                                        this_mo.ReadCharacterID(target_id).position);
+                                        ReadCharacterID(target_id).position);
         int num_points = temp.NumPoints();
         for(int i=0; i<num_points-1; i++){
             DebugDrawLine(temp.GetPoint(i),
@@ -538,7 +498,7 @@ void UpdateHeadLook() {
     bool look_at_target = false;
     vec3 target_dir;
     if(target_id != -1){
-        vec3 target_pos = this_mo.ReadCharacterID(target_id).GetAvgIKChainPos("head");
+        vec3 target_pos = ReadCharacterID(target_id).GetAvgIKChainPos("head");
         if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
             look_at_target = true;
             target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
@@ -695,9 +655,6 @@ float block_health = 1.0f; // How strong is auto-block? Similar to ssb shield
 float temp_health = 1.0f; // Remaining regenerating health until knocked out
 float permanent_health = 1.0f; // Remaining non-regenerating health until killed
 
-const int _awake = 0;
-const int _unconscious = 1;
-const int _dead = 2;
 int knocked_out = _awake;
 
 void RegenerateHealth() {
@@ -777,16 +734,16 @@ void UpdateRagdollDamping() {
 void SetActiveRagdollFallPose() {
     const float danger_radius = 4.0f;
     vec3 danger_vec;
-    this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.25f); // Create sliding sphere at ragdoll center to detect nearby surfaces
+    col.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.25f); // Create sliding sphere at ragdoll center to detect nearby surfaces
     danger_vec = this_mo.position - sphere_col.adjusted_position;
     danger_vec += normalize(danger_vec) * danger_radius * 0.75f;
     if(sphere_col.NumContacts() == 0){
-        this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.5f); // Create sliding sphere at ragdoll center to detect nearby surfaces
+        col.GetSlidingSphereCollision(this_mo.position, danger_radius * 0.5f); // Create sliding sphere at ragdoll center to detect nearby surfaces
         danger_vec = this_mo.position - sphere_col.adjusted_position;
         danger_vec += normalize(danger_vec) * danger_radius * 0.5f;
     }
     if(sphere_col.NumContacts() == 0){
-        this_mo.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
+        col.GetSlidingSphereCollision(this_mo.position, danger_radius); // Create sliding sphere at ragdoll center to detect nearby surfaces
         danger_vec = this_mo.position - sphere_col.adjusted_position;
     }
     float penetration = length(danger_vec);
@@ -934,7 +891,7 @@ void NotifySound(int created_by_id, vec3 pos) {
     if(target_id == -1){
         bool same_team = false;
         character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(this_mo.ReadCharacterID(created_by_id).char_path) == 1){
+        if(character_getter.OnSameTeam(ReadCharacterID(created_by_id).char_path) == 1){
             same_team = true;
         }
         if(!same_team){
@@ -1076,7 +1033,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
             if(attack_getter2.GetMirrored() == 1){
                 cut_plane_local.x *= -1.0f;
             }
-            vec3 facing = this_mo.ReadCharacterID(attacker_id).GetFacing();
+            vec3 facing = ReadCharacterID(attacker_id).GetFacing();
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 up(0.0f,1.0f,0.0f);
             vec3 cut_plane_world = facing * cut_plane_local.z +
@@ -1094,7 +1051,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
             }
         }
         if(attack_getter2.HasStabDir()){
-            int attack_weapon_id = this_mo.ReadCharacterID(attacker_id).weapon_id;
+            int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
             int stab_type = attack_getter2.GetStabDirType();
             Print("Weapon id: "+attack_weapon_id);
             this_mo.ReadItem(attack_weapon_id);
@@ -1375,12 +1332,12 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
         attack_event = true;
     }
     if(attack_event == true && target_id != -1){
-        vec3 target_pos = this_mo.ReadCharacterID(target_id).position;
+        vec3 target_pos = ReadCharacterID(target_id).position;
         if(distance(this_mo.position, target_pos) < _attack_range + range_extender){
             vec3 facing = this_mo.GetFacing();
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 dir = normalize(target_pos - this_mo.position);
-            int return_val = this_mo.ReadCharacterID(target_id).WasHit(
+            int return_val = ReadCharacterID(target_id).WasHit(
                    event, attack_getter.GetPath(), dir, world_pos, this_mo.getID());
             if(return_val == _going_to_block){
                 WasBlocked();
@@ -1394,8 +1351,8 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
             if(event == "frontkick"){
                 if(distance(this_mo.position, target_pos) < 1.0f){
                     vec3 dir = normalize(target_pos - this_mo.position);
-                    this_mo.ReadCharacterID(target_id).position = 
-                        this_mo.position + dir;
+                    MovementObject @char = ReadCharacterID(target_id);
+                    char.position = this_mo.position + dir;
                 }
             }
             /*if((return_val == _hit) && !controlled){
@@ -1555,7 +1512,7 @@ void UpdateGroundAttackControls() {
     if(target_id == -1){
         return;
     }
-    if(WantsToAttack() && distance(this_mo.position,this_mo.ReadCharacterID(target_id).position) <= _attack_range + range_extender){
+    if(WantsToAttack() && distance(this_mo.position,ReadCharacterID(target_id).position) <= _attack_range + range_extender){
         SetState(_attack_state);
         //Print("Starting attack\n");
         attack_animation_set = false;
@@ -1568,8 +1525,8 @@ void UpdateGroundAttackControls() {
             TimedSlowMotion(0.2f,0.4f, 0.15f);
         }*/
     } else if(WantsToThrowEnemy() && 
-              distance(this_mo.position,this_mo.ReadCharacterID(target_id).position) <= _attack_range + range_extender &&
-              this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsBlockStunned()") == 1){
+              distance(this_mo.position,ReadCharacterID(target_id).position) <= _attack_range + range_extender &&
+              ReadCharacterID(target_id).QueryIntFunction("int IsBlockStunned()") == 1){
         SetState(_attack_state);
         //Print("Starting attack\n");
         attack_animation_set = false;
@@ -1589,7 +1546,7 @@ void UpdateAirAttackControls() {
     }
     if(WantsToAttack() && !flip_info.IsFlipping() &&
         distance(this_mo.position + this_mo.velocity * 0.3f,
-                 this_mo.ReadCharacterID(target_id).position + this_mo.ReadCharacterID(target_id).velocity * 0.3f) <= _attack_range + range_extender)
+                 ReadCharacterID(target_id).position + ReadCharacterID(target_id).velocity * 0.3f) <= _attack_range + range_extender)
     {
         SetState(_attack_state);
         attack_animation_set = false;
@@ -1694,31 +1651,14 @@ bool IsTargetInFOV(const vec3&in target_pos){
 }
 
 int ThreatsPossible() {
-    int num = this_mo.GetNumCharacters();
+    int num = GetNumCharacters();
     int num_threats = 0;
     for(int i=0; i<num; ++i){
         if(this_mo.WhichCharacterAmI() == i){
             continue;
         }
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
-        {
-            ++num_threats;
-        }
-    }
-    return num_threats;
-}
-
-int ThreatsRemaining() {
-    int num = this_mo.GetNumCharacters();
-    int num_threats = 0;
-    for(int i=0; i<num; ++i){
-        if(this_mo.WhichCharacterAmI() == i){
-            continue;
-        }
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(this_mo.ReadCharacter(i).IsKnockedOut() == _awake &&
-           character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 0)
+        vec3 target_pos = ReadCharacter(i).position;
+        if(character_getter.OnSameTeam(ReadCharacter(i).char_path) == 0)
         {
             ++num_threats;
         }
@@ -1727,7 +1667,7 @@ int ThreatsRemaining() {
 }
 
 void TargetClosest(){
-    int num = this_mo.GetNumCharacters();
+    int num = GetNumCharacters();
     int closest_id = -1;
     float closest_dist = 0.0f;
 
@@ -1735,22 +1675,22 @@ void TargetClosest(){
         if(this_mo.WhichCharacterAmI() == i){
             continue;
         }
-        vec3 target_pos = this_mo.ReadCharacter(i).position;
-        if(this_mo.ReadCharacter(i).IsKnockedOut() != _awake){
+        vec3 target_pos = ReadCharacter(i).position;
+        if(ReadCharacter(i).IsKnockedOut() != _awake){
             continue;
         }
         
         character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 1){
+        if(character_getter.OnSameTeam(ReadCharacter(i).char_path) == 1){
             continue;
         }
 
-        if(!controlled && target_id != this_mo.ReadCharacter(i).getID()){
+        if(!controlled && target_id != ReadCharacter(i).getID()){
             if(!IsTargetInFOV(target_pos)){
                 continue;
             }
             vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-            if(!this_mo.ReadCharacter(i).VisibilityCheck(head_pos)){
+            if(!ReadCharacter(i).VisibilityCheck(head_pos)){
                 continue;
             }
         }
@@ -1764,10 +1704,10 @@ void TargetClosest(){
     }
     if(closest_id != -1){
         if(target_id == -1){
-            last_seen_target_position = this_mo.ReadCharacter(closest_id).position;
-            last_seen_target_velocity = this_mo.ReadCharacter(closest_id).velocity;
+            last_seen_target_position = ReadCharacter(closest_id).position;
+            last_seen_target_velocity = ReadCharacter(closest_id).velocity;
         }
-        target_id = this_mo.ReadCharacter(closest_id).getID();
+        target_id = ReadCharacter(closest_id).getID();
     } else {
         target_id = -1;
     }
@@ -1830,7 +1770,7 @@ vec3 HandleBumperCollision(){
     vec3 offset(0.0f,mix(0.3f,0.15f,duck_amount),0.0f);
     float size = _bumper_size;
     vec3 scale(1.0f,mix(1.2f,0.6f,duck_amount),1.0f);
-    this_mo.GetSlidingScaledSphereCollision(this_mo.position+offset, size, scale);
+    col.GetSlidingScaledSphereCollision(this_mo.position+offset, size, scale);
     if(_draw_collision_spheres){
         DebugDrawWireScaledSphere(this_mo.position+offset,size,scale,vec3(0.0f,1.0f,0.0f),_delete_on_update);
     }
@@ -1846,19 +1786,19 @@ vec3 HandlePiecewiseBumperCollision(vec3 old_pos){
     new_pos.y += 0.3f;
     vec3 offset;
     vec3 test_pos = mix(old_pos, new_pos, 0.25f);
-    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    col.GetSlidingSphereCollision(test_pos, _bumper_size);
     offset = sphere_col.adjusted_position - sphere_col.position;
     new_pos += offset/0.25f;
     test_pos = mix(old_pos, new_pos, 0.5f);
-    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    col.GetSlidingSphereCollision(test_pos, _bumper_size);
     offset = sphere_col.adjusted_position - sphere_col.position;
     new_pos += offset/0.5f;
     test_pos = mix(old_pos, new_pos, 0.75f);
-    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    col.GetSlidingSphereCollision(test_pos, _bumper_size);
     offset = sphere_col.adjusted_position - sphere_col.position;
     new_pos += offset/0.75f;
     test_pos = mix(old_pos, new_pos, 1.0f);
-    this_mo.GetSlidingSphereCollision(test_pos, _bumper_size);
+    col.GetSlidingSphereCollision(test_pos, _bumper_size);
     offset = sphere_col.adjusted_position - sphere_col.position;
     new_pos += offset/1.0f;
     new_pos.y -= 0.3f;
@@ -1882,7 +1822,7 @@ vec3 HandleSweptBumperCollision(vec3 old_pos){
 bool HandleStandingCollision() {
     vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
     vec3 lower_pos = this_mo.position+vec3(0,-0.2f,0);
-    this_mo.GetSweptSphereCollision(upper_pos,
+    col.GetSweptSphereCollision(upper_pos,
                                  lower_pos,
                                  _leg_sphere_size);
 
@@ -1985,7 +1925,7 @@ void HandleAirCollisions() {
         this_mo.position += offset/num_frames;
         vec3 col_offset(0.0f,mix(0.2f,0.35f,flip_info.GetTuck()),0.0f);
         vec3 col_scale(1.0f,mix(1.25f,1.0f,flip_info.GetTuck()),1.0f);
-        this_mo.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
+        col.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
         if(_draw_collision_spheres){
             DebugDrawWireScaledSphere(this_mo.position+col_offset, _leg_sphere_size, col_scale, vec3(0.0f,1.0f,0.0f), _delete_on_update);
         }
@@ -2043,7 +1983,7 @@ void HandleLedgeCollisions() {
     }
     vec3 col_offset(0.0f,0.8f,0.0f);
     vec3 col_scale(1.05f);
-    this_mo.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
+    col.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
     if(_draw_collision_spheres){
         DebugDrawWireScaledSphere(this_mo.position+col_offset, _leg_sphere_size, col_scale, vec3(0.0f,1.0f,0.0f), _delete_on_update);
     }
@@ -2146,7 +2086,7 @@ void UpdateAttacking() {
     flip_info.UpdateRoll();
 
     if(target_id != -1){
-        vec3 avg_pos = this_mo.ReadCharacterID(target_id).GetAvgPosition();
+        vec3 avg_pos = ReadCharacterID(target_id).GetAvgPosition();
         //DebugDrawWireSphere(avg_pos, 0.5f, vec3(1.0f), _delete_on_update);
         //DebugDrawWireSphere(this_mo.GetAvgPosition(), 0.5f, vec3(1.0f), _delete_on_update);
         float height_rel = avg_pos.y - this_mo.GetAvgPosition().y;
@@ -2156,7 +2096,7 @@ void UpdateAttacking() {
 
     vec3 direction;
     if(target_id != -1){
-        direction = this_mo.ReadCharacterID(target_id).position - this_mo.position;
+        direction = ReadCharacterID(target_id).position - this_mo.position;
     } else {
         direction = this_mo.GetFacing();
     }
@@ -2179,12 +2119,13 @@ void UpdateAttacking() {
                                                            1.0-pow(attack_facing_inertia,num_frames)));
         } else {
             if(target_id != -1){
-                this_mo.ReadCharacterID(target_id).velocity = this_mo.velocity;
+                MovementObject @char = ReadCharacterID(target_id);
+                char.velocity = this_mo.velocity;
             }
-            //this_mo.ReadCharacter(target_id).position = this_mo.position;
-            //this_mo.ReadCharacter(target_id).position -= 
-            //    this_mo.ReadCharacter(target_id).GetFacing() * 0.2f;
-            //this_mo.ReadCharacter(target_id).SetRotationFromFacing(this_mo.GetFacing());
+            //ReadCharacter(target_id).position = this_mo.position;
+            //ReadCharacter(target_id).position -= 
+            //    ReadCharacter(target_id).GetFacing() * 0.2f;
+            //ReadCharacter(target_id).SetRotationFromFacing(this_mo.GetFacing());
         }
     }
     vec3 right_direction;
@@ -2193,7 +2134,7 @@ void UpdateAttacking() {
     if(!on_ground){
         float leg_cannon_target_flip;
         if(target_id != -1){
-            float rel_height = normalize(this_mo.ReadCharacterID(target_id).position - this_mo.position).y;
+            float rel_height = normalize(ReadCharacterID(target_id).position - this_mo.position).y;
             leg_cannon_target_flip = -1.4f - rel_height;
         } else {
             leg_cannon_target_flip = -1.4f;
@@ -2231,10 +2172,10 @@ void UpdateAttacking() {
         bool ragdoll_enemy = false;
         bool ducking_enemy = false;
         if(target_id != -1){
-            if(this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsRagdoll()")==1){
+            if(ReadCharacterID(target_id).QueryIntFunction("int IsRagdoll()")==1){
                 ragdoll_enemy = true;
             }
-            if(this_mo.ReadCharacterID(target_id).QueryIntFunction("int IsDucking()")==1){
+            if(ReadCharacterID(target_id).QueryIntFunction("int IsDucking()")==1){
                 ducking_enemy = true;
             }
         }
@@ -2320,7 +2261,7 @@ void UpdateAttacking() {
             anim_path = attack_getter.GetThrowAnimPath();
             int hit = _miss;
             if(target_id != -1){
-                hit = this_mo.ReadCharacterID(target_id).WasHit(
+                hit = ReadCharacterID(target_id).WasHit(
                     "grabbed", attack_getter.GetPath(), direction, this_mo.position, this_mo.getID());        
             }
             if(hit == _miss){
@@ -2508,7 +2449,7 @@ void WakeUp(int how) {
 bool CanRoll() {
     vec3 sphere_center = this_mo.position;
     float radius = 1.0f;
-    this_mo.GetSlidingSphereCollision(sphere_center, radius);
+    col.GetSlidingSphereCollision(sphere_center, radius);
     bool can_roll = true;
     vec3 roll_point;
     if(sphere_col.NumContacts() == 0){
@@ -2623,7 +2564,7 @@ void DecalCheck(){
 }
 
 void HandleCollisionsBetweenTwoCharacters(int which){
-    if(this_mo.position == this_mo.ReadCharacter(which).position){
+    if(this_mo.position == ReadCharacter(which).position){
         return;
     }
 
@@ -2634,22 +2575,23 @@ void HandleCollisionsBetweenTwoCharacters(int which){
         return;
     }
 
-    if(knocked_out == _awake && this_mo.ReadCharacter(which).IsKnockedOut() == _awake){
+    if(knocked_out == _awake && ReadCharacter(which).IsKnockedOut() == _awake){
         float distance_threshold = 0.7f;
         vec3 this_com = this_mo.GetCenterOfMass();
-        vec3 other_com = this_mo.ReadCharacter(which).GetCenterOfMass();
+        vec3 other_com = ReadCharacter(which).GetCenterOfMass();
         this_com.y = this_mo.position.y;
-        other_com.y = this_mo.ReadCharacter(which).position.y;
+        other_com.y = ReadCharacter(which).position.y;
         if(distance_squared(this_com, other_com) < distance_threshold*distance_threshold){
             vec3 dir = other_com - this_com;
             float dist = length(dir);
             dir /= dist;
             dir *= distance_threshold - dist;
-            if(on_ground || this_mo.ReadCharacter(which).IsOnGround()==1){
-                this_mo.ReadCharacter(which).position += dir * 0.5f;
+            MovementObject @char = ReadCharacter(which);
+            if(on_ground || char.IsOnGround()==1){
+                char.position += dir * 0.5f;
                 this_mo.position -= dir * 0.5f;
             } else {
-                this_mo.ReadCharacter(which).velocity += dir * 0.5f / (time_step * num_frames);
+                char.velocity += dir * 0.5f / (time_step * num_frames);
                 this_mo.velocity -= dir * 0.5f / (time_step * num_frames);
             }
         }    
@@ -2657,7 +2599,7 @@ void HandleCollisionsBetweenTwoCharacters(int which){
 }
 
 void HandleCollisionsBetweenCharacters() {
-    int num_chars = this_mo.GetNumCharacters();
+    int num_chars = GetNumCharacters();
 
     for(int i=0; i<num_chars; ++i){
         HandleCollisionsBetweenTwoCharacters(i);
@@ -2777,7 +2719,7 @@ void ApplyCameraControls() {
 
 /*
     vec3 true_pos = camera.GetPos() + camera.GetFacing() * cam_distance;
-    this_mo.GetSweptSphereCollision(true_pos,
+    col.GetSweptSphereCollision(true_pos,
                                     true_pos - vec3(0.0f,5.0f,0.0f),
                                     _cam_collision_radius);
     vec3 new_pos = sphere_col.position;
@@ -2789,7 +2731,7 @@ void ApplyCameraControls() {
 
     vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
 
-    this_mo.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
+    col.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
     vec3 cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
 
 
@@ -2801,7 +2743,7 @@ void ApplyCameraControls() {
         } else {
             cam_offset = vec3(0.0f,0.6f,0.0f);
         }
-        this_mo.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, _cam_collision_radius);
+        col.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, _cam_collision_radius);
         cam_pos = sphere_col.position;
     } else {
         cam_pos += vec3(0.0f,0.3f,0.0f);
@@ -2868,7 +2810,7 @@ void ApplyCameraControls() {
 
     camera.SetVelocity(this_mo.velocity); 
 
-    this_mo.GetSweptSphereCollision(cam_pos,
+    col.GetSweptSphereCollision(cam_pos,
                                     cam_pos - facing * 
                                                 _cam_follow_distance,
                                     _cam_collision_radius);
@@ -2893,7 +2835,7 @@ void ApplyCameraControls() {
         new_follow_distance = 5.0f;
         vec3 temp_pos = 
             cam_pos - facing * new_follow_distance;
-        this_mo.GetSweptSphereCollision(temp_pos + vec3(0.0f,5.0f,0.0f),
+        col.GetSweptSphereCollision(temp_pos + vec3(0.0f,5.0f,0.0f),
                                         temp_pos,
                                         _cam_collision_radius);
         vec3 new_pos = sphere_col.position;
@@ -2934,7 +2876,7 @@ void ApplyCameraCones(vec3 cam_pos){
     if(debug_viz){
         DebugDrawWireSphere(cam_pos, radius, vec3(1.0f,0.0f,0.0f), _delete_on_update);
     }
-    this_mo.GetSlidingSphereCollision(cam_pos, radius);
+    col.GetSlidingSphereCollision(cam_pos, radius);
     vec3 offset = sphere_col.adjusted_position - cam_pos;
     vec3 bad_dir = normalize(offset*-1.0f);
     if(debug_viz){
@@ -3047,9 +2989,12 @@ void init(string character_path) {
 void ScriptSwap() {
     last_col_pos = this_mo.position;
     this_mo.position.y += 0.5f;
+    DropWeapon();
+    Print("Dropping weapon\n");
 }
 
 void Reset() {
+    DropWeapon(); 
     if(state == _ragdoll_state){
         this_mo.UnRagdoll();
         this_mo.StartCharAnimation("idle");
@@ -3122,7 +3067,7 @@ vec3 GetLegTargetOffset(vec3 initial_pos, vec3 anim_pos){
                   initial_pos + vec3(0.0f,_check_down,0.0f),
                   vec3(1.0f),
                   _delete_on_draw);*/
-    this_mo.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
+    col.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
                                     initial_pos + vec3(0.0f,_check_down,0.0f),
                                     0.05f);
 
@@ -3159,7 +3104,7 @@ vec3 GetLimbTargetOffset(vec3 initial_pos, vec3 anim_pos){
                   vec3(1.0f),
                   _delete_on_draw);
     */
-    this_mo.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
+    col.GetSweptSphereCollision(initial_pos + vec3(0.0f,_check_up,0.0f),
                                     initial_pos + vec3(0.0f,_check_down,0.0f),
                                     0.05f);
 

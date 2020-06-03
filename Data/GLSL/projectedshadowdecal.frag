@@ -40,10 +40,10 @@ void main()
         vec4 color = vec4(0.0,0.0,0.0,1.0);
 
         color.a -= (shadow2DProj(tex0,ProjShadow).r)*0.2;
-        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(blur_offset,0.0,0.0,0.0)).r)*0.2;
-        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(-blur_offset,0.0,0.0,0.0)).r)*0.2;
-        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,blur_offset,0.0,0.0)).r)*0.2;
-        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(0.0,-blur_offset,0.0,0.0)).r)*0.2;
+        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(blur_offset,blur_offset*0.2,0.0,0.0)).r)*0.2;
+        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(-blur_offset,blur_offset*-0.2,0.0,0.0)).r)*0.2;
+        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(-blur_offset*0.2,blur_offset,0.0,0.0)).r)*0.2;
+        color.a -= (shadow2DProj(tex0,ProjShadow+vec4(blur_offset*0.2,-blur_offset,0.0,0.0)).r)*0.2;
 
         // Fade shadow based on distance
         color.a *= pow(texture2D(tex4,gl_TexCoord[1].xy).r,0.25);

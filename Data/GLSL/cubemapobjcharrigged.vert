@@ -10,6 +10,7 @@ uniform mat4 shadowmat;
 uniform vec3 ws_light;
 //uniform mat4 bones[64];
 
+varying vec3 vertex_pos;
 varying vec3 ws_vertex;
 varying vec3 concat_bone1;
 varying vec3 concat_bone2;
@@ -29,6 +30,7 @@ void main()
 
     vec4 transformed_vertex = concat_bone * gl_Vertex;
     ws_vertex = transformed_vertex.xyz - cam_pos;
+    vertex_pos = transformed_vertex.xyz;
  
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
     gl_TexCoord[0] = gl_MultiTexCoord0;

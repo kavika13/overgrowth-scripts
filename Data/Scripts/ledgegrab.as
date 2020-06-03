@@ -169,7 +169,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
 
         vec3 check_pos = this_mo.GetIKTargetPosition("leftarm")+offset[0]+ledge_dir*0.1f;    
         vec3 check_dir = normalize(vec3(0.0f,-1.0f,0.0f)+ledge_dir*0.5f);
-        this_mo.GetSweptSphereCollision(check_pos-check_dir*0.2f,
+        col.GetSweptSphereCollision(check_pos-check_dir*0.2f,
                                         check_pos+check_dir*0.4f,
                                         0.05f);
         if(sphere_col.NumContacts() != 0){
@@ -183,7 +183,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         }
 
         check_pos = this_mo.GetIKTargetPosition("rightarm")+offset[1]+ledge_dir*0.1f;    
-        this_mo.GetSweptSphereCollision(check_pos-check_dir*0.2f,
+        col.GetSweptSphereCollision(check_pos-check_dir*0.2f,
                                         check_pos+check_dir*0.4f,
                                         0.05f); 
         if(sphere_col.NumContacts() != 0){
@@ -327,7 +327,7 @@ class LedgeInfo {
         vec3 test_start = test_end+ledge_dir*-2.0f;
         test_end.y = ledge_height;
         test_start.y = ledge_height;
-        this_mo.GetSweptCylinderCollision(test_start,
+        col.GetSweptCylinderCollision(test_start,
                                           test_end,
                                           _leg_sphere_size,
                                           1.0f);
@@ -360,7 +360,7 @@ class LedgeInfo {
     void CheckLedges() {                            // Get info about the ledge if there is one,
         vec3 possible_ledge_dir;                                                // and grab on if not already grabbing
         
-        this_mo.GetSlidingSphereCollision(this_mo.position,                 // Otherwise try to detect the wall by colliding an enlarged 
+        col.GetSlidingSphereCollision(this_mo.position,                 // Otherwise try to detect the wall by colliding an enlarged 
                                               _leg_sphere_size*1.5f);           // player sphere with the scene, and finding the closest 
         if(sphere_col.NumContacts() == 0){                                  // collision
             return;
@@ -411,7 +411,7 @@ class LedgeInfo {
         vec3 test_start = this_mo.position+vec3(0.0f,5.0f,0.0f)+possible_ledge_dir * 0.5f;
         vec3 test_end = this_mo.position+vec3(0.0f,0.5f,0.0f)+possible_ledge_dir * 0.5f;
         
-        this_mo.GetSweptCylinderCollision(test_start,
+        col.GetSweptCylinderCollision(test_start,
                                           test_end,
                                           _leg_sphere_size,
                                           1.0f);
@@ -454,7 +454,7 @@ class LedgeInfo {
 
         vec3 surface_pos = sphere_col.position;
 
-        this_mo.GetCylinderCollision(surface_pos + vec3(0.0f,0.07f,0.0f),       // Make sure that top surface is clear, i.e. player could stand on it
+        col.GetCylinderCollision(surface_pos + vec3(0.0f,0.07f,0.0f),       // Make sure that top surface is clear, i.e. player could stand on it
                                     _leg_sphere_size,
                                     1.0f);
 
@@ -492,7 +492,7 @@ class LedgeInfo {
         test_end = this_mo.position+possible_ledge_dir*1.0f;                             // Use a swept cylinder to detect the distance
         test_end.y = ledge_height;                                              // of the ledge from the player sphere origin
         test_start = test_end+possible_ledge_dir*-1.0f;
-        this_mo.GetSweptCylinderCollision(test_start,
+        col.GetSweptCylinderCollision(test_start,
                                           test_end,
                                           _leg_sphere_size,
                                           1.0f);
