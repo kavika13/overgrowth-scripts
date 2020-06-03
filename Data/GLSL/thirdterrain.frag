@@ -29,9 +29,9 @@ void main()
 	vec3 normal = normalize(vec3((detail.x-0.5)*2.0, (detail.y-0.5)*-2.0, detail.z - 0.5) + 
 							vec3((detail2.x-0.5)*2.0, (detail2.y-0.5)*-2.0, detail2.z - 0.5) + 
 							vec3((detail3.x-0.5)*2.0, (detail3.y-0.5)*-2.0, detail3.z - 0.5));	
-	float NdotL = max(dot(normal,normalize(light_pos)),0.0) / light_pos.z;
+	float NdotL = dot(normal,normalize(light_pos)) / light_pos.z;
 	
-	diffuse_color = diffuse_color * mix(1.0, NdotL, light_pos.z);
+	diffuse_color = diffuse_color * mix(1.0, NdotL, light_pos.z * 0.5);
 	
 	vec3 color = diffuse_color;
 	
