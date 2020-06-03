@@ -15,6 +15,10 @@ vec3 YCOCGtoRGB(in vec4 YCoCg) {
 	float b = t - Co * 0.5;
 	float r = b + Co;
 	
+	r = max(0.0,min(1.0,r));
+	g = max(0.0,min(1.0,g));
+	b = max(0.0,min(1.0,b));
+
 	return vec3(r,g,b);
 }
 

@@ -80,6 +80,7 @@ void main()
 						 avg_color2 * weight_map[2] +
 						 avg_color3 * weight_map[3];
 	vec3 terrain_color = texture2D(tex1,tc0).xyz;
+	average_color = max(average_color, vec3(0.01));
 	vec3 tint = terrain_color / average_color;
 
 	// Get colormap
@@ -93,8 +94,10 @@ void main()
 	// Put it all together
 	vec3 color = diffuse_color * colormap.xyz * tint + spec_color * GammaCorrectFloat(colormap.a);
 	color *= BalanceAmbient(NdotL);
+	color *= vec3(min(1.0,shadow_tex.g*2.0));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
+
 
 	gl_FragColor = vec4(color,alpha);
 }

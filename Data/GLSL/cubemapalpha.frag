@@ -50,6 +50,7 @@ void main()
 	
 	color *= BalanceAmbient(NdotL);
 	
+	color *= vec3(min(1.0,shadow_tex.g*2.0));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 
 	color *= Exposure();

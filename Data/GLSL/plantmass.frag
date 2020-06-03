@@ -49,6 +49,7 @@ void main()
 	vec3 color = diffuse_color * colormap.xyz + translucent_lighting * translucent_map;
 	
 	color *= BalanceAmbient(NdotL);
+	color *= vec3(min(1.0,shadow_tex.g*2.0));
 	AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
 	color *= Exposure();
 
