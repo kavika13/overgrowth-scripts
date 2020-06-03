@@ -24,10 +24,10 @@ void draw() {
 
 void ForceApplied(vec3 force) {
 	if(!limp){
-		PlaySound("Data/Sounds/Revolver.wav", this.position);
+		PlaySound("Data/Sounds/FistImpact5.wav", this.position);
 		velocity += force;
-		this.GoLimp();
-		velocity -= force;		
+		this.Ragdoll();
+		//velocity -= force;		
 		limp = true;
 		limp_delay = 1.0;
 	}
@@ -41,10 +41,8 @@ void update() {
 	} else {
 		limp_delay -= time_step;
 		if(limp_delay <= 0){
+			this.UnRagdoll();
 			limp = false;
-			this.position = this.GetAvgPosition();
-			velocity = this.GetAvgVelocity();
-			this.ResolveCollisions();
 		}
 	}
 }

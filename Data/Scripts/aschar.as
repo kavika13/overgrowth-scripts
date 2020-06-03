@@ -4,6 +4,10 @@ bool limp = false;
 bool attacking = false;
 float attacking_time;
 
+void EndAttack() {
+	attacking = false;
+}
+
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0);
 	if(GetInputDown("move_up")){
@@ -29,24 +33,6 @@ vec3 GetTargetVelocity() {
 	if(GetInputDown("jump")){
 		target_velocity.y += 1.0;
 	}
-	if(GetInputDown("attack")){
-		//vec3 direction = normalize(target.position - this.position);
-		attacking = true;
-		attacking_time = 0.0;
-		/*if(this.HasTarget()){
-			target.ApplyForce(direction*20);
-		}*/
-	}
-	if(GetInputDown("crouch")){		
-		limp = true;
-		this.GoLimp();
-		//target_velocity.y -= 1.0;
-	} else {
-		if(limp == true){
-			this.UnRagdoll();
-		}
-		limp = false;
-	}
 	
 	if(length_squared(target_velocity)>1){
 		target_velocity = normalize(target_velocity);
@@ -61,20 +47,39 @@ void draw() {
 
 void update() {
 	if(!attacking){
+		if(GetInputDown("attack") && distance_squared(this.position,target.position) < 1.0){
+			attacking = true;
+			attacking_time = 0.0;
+			this.StartAnimation("Data/Animations/kick.anm");
+			this.SetAnimationCallback("void EndAttack()");
+		}
+		if(GetInputDown("crouch")){		
+			limp = true;
+			this.Ragdoll();
+			//target_velocity.y -= 1.0;
+		} else {
+			if(limp == true){
+				this.UnRagdoll();
+			}
+			limp = false;
+		}
+	}
+	
+	if(!attacking){
 		UpdateVelocity();
 		SetAnimationFromVelocity();
 		ApplyPhysics();
 	} else {
-		vec3 direction = normalize(target.position - this.position);
+		velocity *= 0.95;
+		vec3 direction = target.position - this.position;
+		direction.y = 0.0;
+		direction = normalize(direction);
 		this.SetRotationFromFacing(direction);
-		this.ClearAnimations();
-		this.AddAnimation("Data/Animations/kick.anm",1.0);
+		float old_attacking_time = attacking_time;
 		attacking_time += time_step;
-		if(attacking_time > 0.3){
+		if(attacking_time > 0.25 && old_attacking_time <= 0.25){
 			target.ApplyForce(direction*20);
-		}
-		if(attacking_time > 0.6){
-			attacking = false;
+			TimedSlowMotion(0.1,0.7);
 		}
 	}
 }
