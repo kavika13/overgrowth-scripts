@@ -1,13 +1,15 @@
 #include "interpdirection.as"
 
-bool limp = false;
+bool limp = false; // true if ragdoll is enabled
 
 float air_time = 0.0f;
 
+// Pre-jump happens after jump key is pressed and before the character gets upwards velocity. The time available for the jump animation that happens on the ground. 
 bool pre_jump = false;
 float pre_jump_time;
 const float _pre_jump_delay = 0.04f; // the time between a jump being initiated and the jumper getting upwards velocity, time available for pre-jump animation
 
+// whether the character is in the ground or in the air, and how long time has passed since the status changed. 
 bool on_ground = false;
 float on_ground_time = 0.0f;
 
@@ -28,6 +30,7 @@ const float _tilt_transition_vel = 8.0f;
 
 vec3 ground_normal(0,1,0);
 
+// feet are moving if character isn't standing still, defined by targetvelocity being larger than 0.0 in UpdateGroundMovementControls()
 bool feet_moving = false;
 float getting_up_time;
 
@@ -35,20 +38,22 @@ int run_phase = 1;
 
 string hit_reaction_event;
 
-const int _movement_state = 0;
-const int _ground_state = 1; 
-const int _attack_state = 2; 
-const int _hit_reaction_state = 3; 
+// states are used to differentiate between various widely different situations
+const int _movement_state = 0; // character is moving on the ground
+const int _ground_state = 1; // character has fallen down or is raising up, ATM ragdolls handle most of this
+const int _attack_state = 2; // character is performing an attack
+const int _hit_reaction_state = 3; // character was hit or dealt damage to and has to react to it in some manner
 int state;
 
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
 
+// running and movement
 const float _run_threshold = 0.8f; // when character is moving faster than this, it runs
 const float _walk_threshold = 0.6f; // when character is moving slower than this, it's idling
 const float _walk_accel = 35.0f; // how fast characters accelerate when moving
-float duck_amount = 0.0f;
-float target_duck_amount = 0.0f;
+float duck_amount = 0.0f; // duck_amount is changed incrementally to animate crouching or standing up from a crouch
+float target_duck_amount = 0.0f; // this is 1.0 when the character crouches down,  0.0 otherwise. Used in UpdateDuckAmount() 
 float duck_vel = 0.0f;
 const float _duck_accel = 120.0f;
 const float _duck_vel_inertia = 0.89f;
@@ -62,8 +67,11 @@ vec3 roll_direction;
 
 float leg_cannon_flip;
 
+// The 'controlled' variable is true when the character is controlled by a human, false when the character is controlled by AI. 
+// It's changed in the update(bool _controlled) function.
 bool controlled = false;
 
+// center of mass offset that will eventually be used for animation, but is probably used yet.
 vec3 com_offset;
 vec3 com_offset_vel;
 
@@ -72,10 +80,11 @@ bool mirrored_stance = false;
 float block_health = 1.0f;
 float temp_health = 1.0f;
 float permanent_health = 1.0f;
-int knocked_out = 0;
+int knocked_out = 0; // zero means conscious, 1 unconscious
 
 vec3 old_vel;
 vec3 accel_tilt;
+vec3 last_col_pos;
 
 float cancel_delay;
 
@@ -86,6 +95,8 @@ float active_block_recharge = 0.0f;
 string curr_attack; 
 int target_id = -1;
 int self_id;
+
+int num_frames;
 
 void EndAttack() {
 	SetState(_movement_state);
@@ -99,13 +110,16 @@ void EndHitReaction() {
 	SetState(_movement_state);
 }
 
+// WasBlocked() is executed if this character's attack was blocked by a different character
 void WasBlocked() {
 	this_mo.SwapAnimation(attack_getter.GetBlockedAnimPath());
-	if(attack_getter.GetSwapStance() != 0){
+	if(attack_getter.GetSwapStance() != attack_getter.GetSwapStanceBlocked()){
 		mirrored_stance = !mirrored_stance;
 	}
 }
 
+// Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
+// Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
 int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	attack_getter2.Load(attack_path);
 
@@ -121,7 +135,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	if(type == "blockprepare")
 	{
 		if(state == _movement_state && limp == false){
-			if(active_blocking){
+			if(active_blocking && attack_getter2.GetUnblockable() == 0){
 				reaction_getter.Load(attack_getter2.GetReactionPath());
 				SetState(_hit_reaction_state);
 				hit_reaction_anim_set = false;
@@ -159,6 +173,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 			GoLimp();
 			
 			vec3 impact_dir = attack_getter2.GetImpactDir();
+			//Print(""+impact_dir.x + "\n" + impact_dir.y + "\n" + impact_dir.z + "\n\n");
 			vec3 right;
 			right.x = -dir.z;
 			right.z = dir.x;
@@ -209,6 +224,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 	return 2;
 }
 
+// Animation events are created by the animation files themselves. For example, when the run animation is played, it calls HandleAnimationEvent( "leftrunstep", left_foot_pos ) when the left foot hits the ground.
 void HandleAnimationEvent(string event, vec3 world_pos){
 	//Print("Angelscript received event: "+event+"\n");
 	if(event == "golimp"){
@@ -301,6 +317,7 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 
 #include "aircontrols.as"
 
+// remove Y component, the up component, from a vector. 
 vec3 flatten(vec3 vec){
 	return vec3(vec.x,0.0,vec.z);
 }
@@ -314,12 +331,16 @@ vec3 WorldToGroundSpace(vec3 world_space_vec){
 	return ground_space_vec;
 }
 
+// WantsToDoSomething functions are called by the player or the AI in playercontrol.as or enemycontrol.as
+// For the player, they return true when the appopriate control key is down.
 void UpdateGroundMovementControls() {
+	// GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
 	vec3 target_velocity = GetTargetVelocity();
 	if(length_squared(target_velocity)>0.0f){
 		feet_moving = true;
 	}
 
+	// target_duck_amount is used in UpdateDuckAmount() 
 	if(WantsToCrouch()){
 		target_duck_amount = 1.0f;
 	} else {
@@ -327,30 +348,35 @@ void UpdateGroundMovementControls() {
 	}
 	
 	if(WantsToRoll() && length_squared(target_velocity)>0.2f){
+		// flip_info handles actions in the air, including jump flips
 		if(!flip_info.IsFlipping()){
 			flip_info.StartRoll(target_velocity);
 		}
 	}
 
+	// If the characters has been touching the ground for longer than _jump_threshold_time and isn't already jumping, update variables 
+	// Actual jump is activated after the if(pre_jump) clause below.
 	if(WantsToJump() && 
 	   on_ground_time > _jump_threshold_time && 
 	   !pre_jump)
 	{
 		pre_jump = true;
 		pre_jump_time = _pre_jump_delay;
+		// the character crouches down, getting ready for the jump
 		duck_vel = 30.0f * (1.0f-duck_amount * 0.6f);
 
 		vec3 target_jump_vel = jump_info.GetJumpVelocity(target_velocity);
 		target_tilt = vec3(target_jump_vel.x, 0, target_jump_vel.z)*2.0f;
 	}
 
+	// preparing for the jump
 	if(pre_jump){
 		if(pre_jump_time <= 0.0f && !flip_info.IsFlipping()){
 			jump_info.StartJump(target_velocity);
 			SetOnGround(false);
 			pre_jump = false;
 		} else {
-			pre_jump_time -= time_step;
+			pre_jump_time -= time_step * num_frames;
 		}
 	}
 	
@@ -381,19 +407,18 @@ void UpdateGroundMovementControls() {
 	// Adjust speed based on ground slope
 	max_speed = _run_speed;
 	float curr_speed = length(this_mo.velocity);
-	if(adjusted_vel.y>0.0){
-		max_speed *= 1.0 - adjusted_vel.y;
-	} else if(adjusted_vel.y<0.0){
-		max_speed *= 1.0 - adjusted_vel.y;
-	}
+
+	max_speed *= 1.0 - adjusted_vel.y;
 	max_speed = max(curr_speed * 0.98f, max_speed);
 
 	float speed = _walk_accel * run_phase;
 	speed = mix(speed,speed*_duck_speed_mult,duck_amount);
-	this_mo.velocity += adjusted_vel * time_step * speed;
 
+	this_mo.velocity += adjusted_vel * time_step * num_frames * speed;
 }
 
+// Draws a sphere on the position of the bone's IK target. Useful for understanding what the IK targets do, or are supposed to do.
+// Useful strings:  leftarm, rightarm, left_leg, right_leg
 void DrawIKTarget(string str) {
 	vec3 pos = this_mo.GetIKTargetPosition(str);
 	DebugDrawWireSphere(pos,
@@ -402,7 +427,7 @@ void DrawIKTarget(string str) {
 						_delete_on_draw);
 }
 
-
+// sets IK target and draws a debugging line between the old and new positions of the IK target.
 void MoveIKTarget(string str, vec3 offset) {
 	vec3 pos = this_mo.GetIKTargetPosition(str);
 	DebugDrawLine(pos,
@@ -420,6 +445,7 @@ void draw() {
 void ForceApplied(vec3 force) {
 }
 
+// knocked_out 0 means conscious, 1 unconscious
 int IsKnockedOut() {
 	return knocked_out;
 }
@@ -428,6 +454,7 @@ float GetTempHealth() {
 	return temp_health;
 }
 
+// Executed only when the  character is in _movement_state. Called by UpdateGroundControls() 
 void UpdateGroundAttackControls() {
 	if(WantsToAttack()){
 		TargetClosest();
@@ -461,19 +488,21 @@ void UpdateAirAttackControls() {
 	}
 }
 
+// Executed only when the  character is in _movement_state.  Called by UpdateMovementControls() .
 void UpdateGroundControls() {
 	UpdateGroundAttackControls();
 	UpdateGroundMovementControls();
 }
 
+// handles tilting caused by accelerating when moving on the ground.
 void HandleAccelTilt() {
 	if(on_ground){
 		if(feet_moving && state == _movement_state){
 			target_tilt = this_mo.velocity * 0.5f;
-			accel_tilt = mix(accel_tilt, (this_mo.velocity - old_vel)*120.0f, 0.05f);
+			accel_tilt = mix((this_mo.velocity - old_vel)*120.0f/num_frames, accel_tilt, pow(0.95f,num_frames));
 		} else {
 			target_tilt = vec3(0.0f);
-			accel_tilt *= 0.8f;
+			accel_tilt *= pow(0.8f,num_frames);
 		}
 		target_tilt += accel_tilt;
 		target_tilt.y = 0.0f;
@@ -484,6 +513,7 @@ void HandleAccelTilt() {
 	}
 }
 
+// Executed only when the  character is in _movement_state.  Called from the update() function.
 void UpdateMovementControls() {
 	if(on_ground){ 
 		if(!flip_info.HasControl()){
@@ -521,6 +551,7 @@ void UpdateMovementControls() {
 	}
 }
 
+// Used when the character starts or stops touching the ground. The timer affects how quickly a character can jump after landing, and other things. 
 void SetOnGround(bool _on_ground){
 	on_ground_time = 0.0f;
 	air_time = 0.0f;
@@ -538,6 +569,10 @@ void TargetClosest(){
 			continue;
 		}
 		if(this_mo.ReadCharacter(i).IsKnockedOut() != 0){
+			continue;
+		}
+		character_getter.Load(this_mo.char_path);
+		if(character_getter.OnSameTeam(this_mo.ReadCharacter(i).char_path) == 1){
 			continue;
 		}
 		
@@ -597,6 +632,7 @@ const float offset = 0.05f;
 
 vec3 HandleBumperCollision(){
 	this_mo.GetSlidingSphereCollision(this_mo.position+vec3(0,0.3f,0), _bumper_size);
+	// the value of sphere_col.adjusted_position variable was set by the GetSlidingSphereCollision() called on the previous line.
 	this_mo.position = sphere_col.adjusted_position-vec3(0,0.3f,0);
 	return (sphere_col.adjusted_position - sphere_col.position);
 }
@@ -611,19 +647,9 @@ bool HandleStandingCollision() {
 }
 
 void HandleGroundCollision() {
-	/*vec3 ground_vel;
-	if(on_ground) {
-		vec3 y_vec = ground_normal;
-		vec3 x_vec = normalize(cross(y_vec,vec3(0,0,1)));
-		vec3 z_vec = cross(y_vec, x_vec);
-		ground_vel = vec3(dot(x_vec, this_mo.velocity),
-						  dot(y_vec, this_mo.velocity),
-						  dot(z_vec, this_mo.velocity));
-	}*/
-
 	vec3 air_vel = this_mo.velocity;
 	if(on_ground){
-		this_mo.velocity += HandleBumperCollision() / time_step;
+		this_mo.velocity += HandleBumperCollision() / (time_step * num_frames);
 
 		if(sphere_col.NumContacts() != 0 && flip_info.ShouldRagdollIntoWall()){
 			//GoLimp();	
@@ -670,32 +696,47 @@ void HandleGroundCollision() {
 			}
 		}
 	} else {
-		this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
-		this_mo.position = sphere_col.adjusted_position;
-		this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / time_step;
-		for(int i=0; i<sphere_col.NumContacts(); i++){
-			const CollisionPoint contact = sphere_col.GetContact(i);
-			if(contact.normal.y < _ground_normal_y_threshold){
-				jump_info.HitWall(normalize(contact.position-this_mo.position));
+		vec3 offset = this_mo.position - last_col_pos; 
+		this_mo.position = last_col_pos;
+		bool landing = false;
+		vec3 landing_normal;
+		for(int i=0; i<num_frames; ++i){
+			if(on_ground){
+				break;
 			}
-		}	
-			
-		if(sphere_col.NumContacts() != 0 && flip_info.RagdollOnImpact()){
-			//GoLimp();	
-		}
-		
-		for(int i=0; i<sphere_col.NumContacts(); i++){
-			const CollisionPoint contact = sphere_col.GetContact(i);
-			if(contact.normal.y > _ground_normal_y_threshold ||
-			   (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f)){
-				if(air_time > 0.1f){
-					ground_normal = contact.normal;
-					Land(air_vel);
-					SetState(_movement_state);
+			this_mo.position += offset/num_frames;
+			this_mo.GetSlidingSphereCollision(this_mo.position, _leg_sphere_size);
+			this_mo.position = sphere_col.adjusted_position;
+			this_mo.velocity += (sphere_col.adjusted_position - sphere_col.position) / (time_step);
+			offset += (sphere_col.adjusted_position - sphere_col.position) * (num_frames);
+			for(int i=0; i<sphere_col.NumContacts(); i++){
+				const CollisionPoint contact = sphere_col.GetContact(i);
+				if(contact.normal.y < _ground_normal_y_threshold){
+					jump_info.HitWall(normalize(contact.position-this_mo.position));
+				}
+			}	
+			for(int i=0; i<sphere_col.NumContacts(); i++){
+				if(landing){
+					break;
+				}
+				const CollisionPoint contact = sphere_col.GetContact(i);
+				if(contact.normal.y > _ground_normal_y_threshold ||
+				   (this_mo.velocity.y < 0.0f && contact.normal.y > 0.2f))
+				{
+					if(air_time > 0.1f){
+						landing = true;
+						landing_normal = contact.normal;
+					}
 				}
 			}
 		}
+		if(landing){
+			ground_normal = landing_normal;
+			Land(air_vel);
+			SetState(_movement_state);
+		}
 	}
+	last_col_pos = this_mo.position;
 /*
 	if(on_ground){
 		vec3 y_vec = ground_normal;
@@ -722,20 +763,23 @@ void GoLimp() {
 	//					  false);
 }
 
+// target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
 void UpdateDuckAmount() {
-	duck_vel += (target_duck_amount - duck_amount) * time_step * _duck_accel;
-	duck_amount += duck_vel * time_step;
-	duck_vel *= _duck_vel_inertia;
+	duck_vel += (target_duck_amount - duck_amount) * time_step * num_frames * _duck_accel;
+	duck_vel *= pow(_duck_vel_inertia,num_frames);
+	duck_amount += duck_vel * time_step * num_frames;
 }
 
+// tells how long the character has been touching the ground, or been in the air
 void UpdateGroundAndAirTime() {
 	if(on_ground){
-		on_ground_time += time_step;
+		on_ground_time += time_step * num_frames;
 	} else {
-		air_time += time_step;
+		air_time += time_step * num_frames;
 	}
 }
 
+// air whoosh sounds get louder at higher speed.
 void UpdateAirWhooshSound() {
 	float whoosh_amount = length(this_mo.velocity)*0.05f;
 	if(!limp){
@@ -748,6 +792,7 @@ void UpdateAirWhooshSound() {
 	SetAirWhoosh(whoosh_amount*0.5f,whoosh_pitch);
 }
 
+// called when state equals _attack_state
 void UpdateAttacking() {	
 	flip_info.UpdateRoll();
 
@@ -755,13 +800,13 @@ void UpdateAttacking() {
 	direction.y = 0.0f;
 	direction = normalize(direction);
 	if(on_ground){
-		this_mo.velocity *= 0.95f;
+		this_mo.velocity *= pow(0.95f,num_frames);
 	} else {
 		ApplyPhysics();
 	}
 	this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
 												   direction,
-												   0.1f));
+												   1.0-pow(0.9f,num_frames)));
 
 	vec3 right_direction;
 	right_direction.x = direction.z;
@@ -775,10 +820,12 @@ void UpdateAttacking() {
 	
 	bool mirrored;
 	if(!mirrored_stance){
+		// GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
 		mirrored = (dot(right_direction, GetTargetVelocity())>0.1f);
 	} else {
 		mirrored = (dot(right_direction, GetTargetVelocity())>-0.1f);
 	}
+	// Checks if the character is standing still. Used in ChooseAttack() to see if the character should perform a front kick.
 	bool front = //(dot(direction, GetTargetVelocity())>0.7f) || 
 				 length_squared(GetTargetVelocity())<0.1f;
 
@@ -791,12 +838,14 @@ void UpdateAttacking() {
 		if(cancel_delay <= 0.0f){
 			EndAttack();
 		}
-		cancel_delay -= time_step;
+		cancel_delay -= time_step * num_frames;
 	} else {
 		cancel_delay = 0.01f;
 	}
 
 	if(!attack_animation_set){
+		// Defined in playercontrol.as and enemycontrol.as. Boolean front tells if the character is standing still, and if it's true a front kick may be performed.
+		// ChooseAttack() sets the value of the curr_attack variable.
 		ChooseAttack(front);
 		string attack_path;
 		if(curr_attack == "stationary"){
@@ -811,6 +860,10 @@ void UpdateAttacking() {
 		attack_getter.Load(attack_path);
 		if(attack_getter.GetSpecial() == "legcannon"){	
 			leg_cannon_flip = 0.0f;
+		}
+
+		if(attack_getter.GetDirection() == _left) {
+			mirrored = !mirrored;
 		}
 
 		bool flipped = false;
@@ -829,19 +882,24 @@ void UpdateAttacking() {
 		} else {
 			duck_amount = 0.0f;
 		}
-		if(attack_getter.GetDirection() == _right){
-			if(!mirrored){
-				this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
-				mirrored_stance = false;
-			} else {
-				this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
-				mirrored_stance = true;
-			}
+		bool mirror = false;
+		if(attack_getter.GetDirection() != _front){
+			mirror = mirrored;
+			mirrored_stance = mirrored;
 		} else {
-			if(mirrored_stance){
+			mirror = mirrored_stance;
+		}
+		if(attack_getter.GetMobile() == 1){
+			if(mirror){
 				this_mo.StartMirroredMobileAnimation(attack_getter.GetUnblockedAnimPath());
 			} else {
 				this_mo.StartMobileAnimation(attack_getter.GetUnblockedAnimPath());
+			}
+		} else {
+			if(mirror){
+				this_mo.StartMirroredAnimation(attack_getter.GetUnblockedAnimPath());
+			} else {
+				this_mo.StartAnimation(attack_getter.GetUnblockedAnimPath());
 			}
 		}
 		string material_event = attack_getter.GetMaterialEvent();
@@ -865,6 +923,7 @@ void UpdateAttacking() {
 	}*/
 }
 
+// the animations referred here are mostly blocks, and they're defined in the character-specific XML files.
 void UpdateHitReaction() {
 	if(!hit_reaction_anim_set){
 		if(hit_reaction_event == "blockprepare"){
@@ -907,7 +966,7 @@ void UpdateHitReaction() {
 		hit_reaction_anim_set = true;
 		this_mo.SetFlip(vec3(1.0f,0.0f,0.0f),0.0f,0.0f);
 	}
-	this_mo.velocity *= 0.95f;
+	this_mo.velocity *= pow(0.95f,num_frames);
 	if(this_mo.GetStatusKeyValue("cancel")>=1.0f && WantsToCancelAnimation()){
 		EndHitReaction();
 	}
@@ -936,7 +995,7 @@ const int _wake_flip = 1;
 const int _wake_roll = 2;
 const int _wake_fall = 3;
 
-
+// WakeUp is called when a character gets out of the ragdoll mode. 
 void WakeUp(int how) {
 	SetState(_movement_state);
 	this_mo.UnRagdoll();
@@ -1013,6 +1072,7 @@ bool CanRoll() {
 	return can_roll;
 }
 
+// UpdateRagDoll() is called every time update() is called, regardless of if the character is in ragdoll mode or not
 void UpdateRagDoll() {
 	if(GetInputDown("z")){		
 		GoLimp();
@@ -1028,7 +1088,7 @@ void UpdateRagDoll() {
 		//}
 	}
 	if(limp == true && knocked_out==0){
-		recovery_time -= time_step;
+		recovery_time -= time_step * num_frames;
 		if(recovery_time <= 0.0f){
 			bool can_roll = CanRoll();
 			if(can_roll){
@@ -1053,6 +1113,7 @@ void UpdateRagDoll() {
 }
 
 
+// motion capture test functions
 bool testing_mocap = false;
 void TestMocap(){
 	//this_mo.SetAnimation("Data/Animations/mocapsit.anm");
@@ -1095,9 +1156,11 @@ void HandleGroundStateCollision() {
 	}
 }
 
+// Nothing() does nothing.
 void Nothing() {
 }
 
+// Called only when state equals _ground_state
 void UpdateGroundState() {
 	this_mo.velocity = vec3(0.0f);
 	
@@ -1106,11 +1169,13 @@ void UpdateGroundState() {
 	this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel;
 	*/
 	HandleGroundStateCollision();
-	getting_up_time += time_step;
+	getting_up_time += time_step * num_frames;
 }
 
+// the main timer of the script, used whenever anything has to know how much time has passed since something else happened.
 float time = 0;
 
+// The following variables and function affect the track decals foots make on the ground, when that feature is enabled
 const float _smear_time_threshold = 0.3f;
 float smear_sound_time = 0.0f;
 float left_smear_time = 0.0f;
@@ -1161,6 +1226,7 @@ void DecalCheck(){
 	}
 }
 
+// blocking actions for combat, including a quick hack for the AI
 void HandleActiveBlock() {
 	if(WantsToStartActiveBlock()){
 		if(active_block_recharge <= 0.0f){
@@ -1170,15 +1236,16 @@ void HandleActiveBlock() {
 		active_block_recharge = 0.2f;
 	} 
 	if(active_blocking){
-		active_block_duration -= time_step;
+		active_block_duration -= time_step * num_frames;
 		if(active_block_duration <= 0.0f){
 			active_blocking = false;
 		}
 	} else {
 		if(active_block_recharge > 0.0f){
-			active_block_recharge -= time_step;
+			active_block_recharge -= time_step * num_frames;
 		}
 	}
+	// the AI blocks randomly
 	if(!controlled){
 		active_blocking = (rand()%4)==0;
 	}
@@ -1191,8 +1258,8 @@ void HandleCollisionsBetweenTwoCharacters(int which){
 
 	if(knocked_out == 0 && this_mo.ReadCharacter(which).IsKnockedOut() == 0){
 		float distance_threshold = 0.7f;
-		vec3 this_com = this_mo.GetCenterOfMass()*0.33;
-		vec3 other_com = this_mo.ReadCharacter(which).GetCenterOfMass()*0.33;
+		vec3 this_com = this_mo.GetCenterOfMass();
+		vec3 other_com = this_mo.ReadCharacter(which).GetCenterOfMass();
 		this_com.y = this_mo.position.y;
 		other_com.y = this_mo.ReadCharacter(which).position.y;
 		if(distance_squared(this_com, other_com) < distance_threshold*distance_threshold){
@@ -1204,8 +1271,8 @@ void HandleCollisionsBetweenTwoCharacters(int which){
 				this_mo.ReadCharacter(which).position += dir * 0.5f;
 				this_mo.position -= dir * 0.5f;
 			} else {
-				this_mo.ReadCharacter(which).velocity += dir * 0.5f / time_step;
-				this_mo.velocity -= dir * 0.5f / time_step;
+				this_mo.ReadCharacter(which).velocity += dir * 0.5f / (time_step * num_frames);
+				this_mo.velocity -= dir * 0.5f / (time_step * num_frames);
 			}
 		}	
 	}
@@ -1219,7 +1286,12 @@ void HandleCollisionsBetweenCharacters() {
 	}
 }
 
-void update(bool _controlled) {	
+// THIS IS WHERE THE MAGIC HAPPENS.
+// update() function is called once per every time unit for every player and AI character, and most things that must be constantly updated will be called from this function.
+// the bool _controlled is true when character is controlled by a human, false when it's controlled by AI.
+void update(bool _controlled, int _num_frames) {
+	num_frames = _num_frames;
+
 	HandleActiveBlock();
 
 	AIUpdate();
@@ -1234,7 +1306,7 @@ void update(bool _controlled) {
 	this_mo.SetMorphTargetWeight("sniff",sin(time*20)*0.5+0.5,1.0f);*/
 
 	if(testing_mocap) {
-		this_mo.cam_rotation += 0.05f;
+		this_mo.cam_rotation += 0.05f * num_frames;
 		return;
 	}
 	controlled = _controlled;
@@ -1261,9 +1333,9 @@ void update(bool _controlled) {
 
 	//MakeImpactParticle(this_mo.position);
 
-	block_health += time_step * 0.3f;
+	block_health += time_step * 0.3f * num_frames;
 	block_health = min(temp_health, block_health);
-	temp_health += time_step * 0.05f;
+	temp_health += time_step * 0.05f * num_frames;
 	temp_health = min(permanent_health, temp_health);
 
 	if(state == _movement_state){
@@ -1300,36 +1372,40 @@ void update(bool _controlled) {
 		}
 	}*/
 	if(controlled && GetInputPressed("1")){	
-		character_getter.Load("Data/Characters/guard.xml");
+		this_mo.char_path = "Data/Characters/guard.xml";
+		character_getter.Load(this_mo.char_path);
 		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 									 character_getter.GetSkeletonPath());
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("2")){
-		character_getter.Load("Data/Characters/guard2.xml");
+		this_mo.char_path = "Data/Characters/guard2.xml";
+		character_getter.Load(this_mo.char_path);
 		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 									 character_getter.GetSkeletonPath());
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("3")){
-		character_getter.Load("Data/Characters/turner.xml");
+		this_mo.char_path = "Data/Characters/turner.xml";
+		character_getter.Load(this_mo.char_path);
 		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 									 character_getter.GetSkeletonPath());
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("4")){
-		character_getter.Load("Data/Characters/civ.xml");
+		this_mo.char_path = "Data/Characters/civ.xml";
+		character_getter.Load(this_mo.char_path);
 		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 									 character_getter.GetSkeletonPath());
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
 		SetState(_movement_state);
 	}
 	if(controlled && GetInputPressed("5")){
-		
-		character_getter.Load("Data/Characters/wolf.xml");
+		this_mo.char_path = "Data/Characters/wolf.xml";
+		character_getter.Load(this_mo.char_path);
 		this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 									 character_getter.GetSkeletonPath());
 		this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
@@ -1337,6 +1413,7 @@ void update(bool _controlled) {
 	}
 	/*
 	if(GetInputPressed("c")){
+		// if you were looking for the controls to change if the AI is hostile or not, look at enemycontrol.as
 		if(state == _movement_state){
 			SetState(_ground_state);
 		} else {
@@ -1345,15 +1422,17 @@ void update(bool _controlled) {
 //		TestMocap();
 	}*/
 
-	HandleCollisionsBetweenCharacters();
+	if(!controlled){
+		HandleCollisionsBetweenCharacters();
+	}
 
 	float terminal_velocity = 50.0f;
 	if(length_squared(this_mo.velocity) > terminal_velocity*terminal_velocity){
-		this_mo.velocity *= 0.99f;
+		this_mo.velocity *= pow(0.99f,num_frames);
 	}	
 	
-	tilt = tilt * _tilt_inertia +
-		   target_tilt * (1.0f - _tilt_inertia);
+	tilt = tilt * pow(_tilt_inertia,num_frames) +
+		   target_tilt * (1.0f - pow(_tilt_inertia,num_frames));
 
 	//tilt = vec3(sin(time*2.0f)*20.0f,0.0f,0.0f);
 
@@ -1363,19 +1442,21 @@ void update(bool _controlled) {
 	if(on_ground && state == _movement_state){
 		DecalCheck();
 	}
-	left_smear_time += time_step;
-	right_smear_time += time_step;
-	smear_sound_time += time_step;
+	left_smear_time += time_step * num_frames;
+	right_smear_time += time_step * num_frames;
+	smear_sound_time += time_step * num_frames;
 }
 
 void init(string character_path) {
-	character_getter.Load(character_path);
+	this_mo.char_path = character_path;
+	character_getter.Load(this_mo.char_path);
 	this_mo.RecreateRiggedObject(character_getter.GetObjPath(),
 								 character_getter.GetSkeletonPath());
 	for(int i=0; i<5; ++i){
 		HandleBumperCollision();
 		HandleStandingCollision();
 		this_mo.position = sphere_col.position;
+		last_col_pos = this_mo.position;
 	}
 }
 
@@ -1394,7 +1475,7 @@ void UpdateAnimation() {
 			float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
 			this_mo.SetBlendCoord("forward_roll_coord",forwards_rollness);
 			this_mo.SetIKEnabled(false);
-			roll_ik_fade = min(roll_ik_fade + time_step * 5.0f, 1.0f);
+			roll_ik_fade = min(roll_ik_fade + time_step * 5.0f * num_frames, 1.0f);
 		} else {
 			// running, walking and idle animation
 			this_mo.SetIKEnabled(true);
@@ -1407,7 +1488,7 @@ void UpdateAnimation() {
 			if(speed > _walk_threshold && feet_moving){
 				this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
 															   normalize(flat_velocity),
-															   0.2f));
+															   1.0 - pow(0.8f, num_frames)));
 				this_mo.SetAnimation(character_getter.GetAnimPath("movement"));
 				this_mo.SetBlendCoord("speed_coord",speed);
 				this_mo.SetBlendCoord("ground_speed",speed);
@@ -1419,12 +1500,13 @@ void UpdateAnimation() {
 				}
 				this_mo.SetIKEnabled(true);
 			}
-			roll_ik_fade = max(roll_ik_fade - time_step * 5.0f, 0.0f);
+			roll_ik_fade = max(roll_ik_fade - time_step * 5.0f * num_frames, 0.0f);
 		}
 	} else {
 		jump_info.UpdateAirAnimation();
 	}
 
+	// center of mass offset
 	this_mo.SetCOMOffset(com_offset, com_offset_vel);
 }
 
@@ -1571,7 +1653,7 @@ void MovementState_UpdateIKTargets() {
 		float min_offset_height = min(0.0f, min(left_leg_offset.y, right_leg_offset.y));
 		float mix_amount = 1.0f;//min(1.0f,length(this_mo.velocity));
 		float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
-		offset_height = mix(offset_height, curr_offset_height, 0.1f);
+		offset_height = mix(offset_height, curr_offset_height, 1.0f-(pow(0.9f,num_frames)));
 		vec3 height_offset = vec3(0.0f,offset_height*(1.0f-roll_ik_fade)-0.1f*roll_ik_fade,0.0f);
 		this_mo.SetIKTargetOffset("full_body",tilt_offset + height_offset);
 
@@ -1600,21 +1682,22 @@ void UpdateIKTargets() {
 }
 
 void UpdateVelocity() {
-	this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel;
+	// GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
+	this_mo.velocity += GetTargetVelocity() * time_step * _walk_accel * num_frames;
 }
 
 void ApplyPhysics() {
 	if(!on_ground){
-		this_mo.velocity += physics.gravity_vector * time_step;
+		this_mo.velocity += physics.gravity_vector * time_step * num_frames;
 	}
 	if(on_ground){
-		if(feet_moving){
+		if(!feet_moving){
+			this_mo.velocity *= pow(0.95f,num_frames);
+		} else {
 			const float e = 2.71828183f;
 			float exp = _walk_accel*time_step*-1/max_speed;
 			float current_movement_friction = pow(e,exp);
-			this_mo.velocity *= current_movement_friction;
-		} else {
-			this_mo.velocity *= 0.95f;
+			this_mo.velocity *= pow(current_movement_friction, num_frames);
 		}
 	}
 }

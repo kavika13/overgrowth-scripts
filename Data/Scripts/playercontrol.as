@@ -72,6 +72,7 @@ bool WantsToCancelAnimation() {
 		   GetInputDown("move_down");
 }
 
+// Converts the keyboard controls into a target velocity that is used for movement calculations in aschar.as and aircontrol.as.
 vec3 GetTargetVelocity() {
 	vec3 target_velocity(0.0f);
 	if(!controlled) return target_velocity;
@@ -103,6 +104,7 @@ vec3 GetTargetVelocity() {
 	return target_velocity;
 }
 
+// Called from aschar.as, bool front tells if the character is standing still. Only characters that are standing still may perform a front kick.
 void ChooseAttack(bool front) {
 	curr_attack = "";
 	if(on_ground){

@@ -23,7 +23,7 @@ class JumpInfo {
 	vec3 wall_dir;
 	vec3 wall_run_facing;
 
-	float down_jetpack_fuel;
+	float down_jetpack_fuel; // pushes the character down after upwards velocity of the jump has stopped
 
 	LedgeInfo ledge_info;
 
@@ -129,6 +129,7 @@ class JumpInfo {
 		}
 	}
 
+	// returns ledge_dir rotated 90 degrees clockwise
 	vec3 WallRight() {
 		vec3 wall_right = wall_dir;
 		float temp = wall_dir.x;
@@ -138,7 +139,7 @@ class JumpInfo {
 	}
 
 	void UpdateWallRun() {
-		wall_hit_time += time_step;
+		wall_hit_time += time_step * num_frames;
 		if(wall_hit_time > 0.1f && this_mo.velocity.y < -1.0f && !ledge_info.on_ledge){
 			LostWallContact();
 		}
@@ -181,13 +182,14 @@ class JumpInfo {
 		if(WantsToAccelerateJump()){
 			// if there's fuel left and character is not moving down, height can still be increased
 			if(jetpack_fuel > 0.0 && this_mo.velocity.y > 0.0) {
-				jetpack_fuel -= time_step * _jump_fuel_burn;
-				this_mo.velocity.y += time_step * _jump_fuel_burn;
+				jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
+				this_mo.velocity.y += time_step * _jump_fuel_burn * num_frames;
 			}
 		} else {
+			// the character is pushed downwards to allow for smaller, controlled jumps
 			if(down_jetpack_fuel > 0.0){
-				down_jetpack_fuel -= time_step * _jump_fuel_burn;
-				this_mo.velocity.y -= time_step * _jump_fuel_burn;
+				down_jetpack_fuel -= time_step * _jump_fuel_burn * num_frames;
+				this_mo.velocity.y -= time_step * _jump_fuel_burn * num_frames;
 			}
 		}
 
@@ -218,10 +220,10 @@ class JumpInfo {
 			ledge_info.UpdateLedge(hit_wall);
 		} else {
 			vec3 target_velocity = GetTargetVelocity();
-			this_mo.velocity += time_step * target_velocity * _air_control;
+			this_mo.velocity += time_step * target_velocity * _air_control * num_frames;
 		}
 
-		jump_launch -= _jump_launch_decay * time_step;
+		jump_launch -= _jump_launch_decay * time_step * num_frames;
 		jump_launch = max(0.0f, jump_launch);
 	}
 

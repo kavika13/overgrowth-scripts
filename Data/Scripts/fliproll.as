@@ -149,7 +149,7 @@ class FlipInfo {
 
 	void UpdateFlipProgress(){
 		if(flipping){
-			flip_progress += time_step * _flip_speed;
+			flip_progress += time_step * _flip_speed * num_frames;
 			if(flip_progress > 0.5f){
 				flipped = true;
 			}
@@ -161,9 +161,9 @@ class FlipInfo {
 
 	void RotateTowardsCameraFacing() {
 		if(flipping){
-			vec3 facing = InterpDirections(this_mo.GetFacing(),
-										   camera.GetFlatFacing(),
-										   _flip_facing_inertia);
+			vec3 facing = InterpDirections(camera.GetFlatFacing(),
+										   this_mo.GetFacing(),
+										   pow(1.0-_flip_facing_inertia,num_frames));
 			this_mo.SetRotationFromFacing(facing);
 		}
 	}
@@ -177,9 +177,9 @@ class FlipInfo {
 	}
 
 	void UpdateFlipAngle() {
-		flip_vel += (target_flip_angle - flip_angle) * time_step * _flip_accel;
-		flip_angle += flip_vel * time_step;
-		flip_vel *= _flip_vel_inertia;
+		flip_vel += (target_flip_angle - flip_angle) * time_step * num_frames * _flip_accel;
+		flip_angle += flip_vel * time_step * num_frames ;
+		flip_vel *= pow(_flip_vel_inertia, num_frames);
 	}
 
 	void UpdateFlip() {
@@ -191,9 +191,9 @@ class FlipInfo {
 		UpdateFlipTuckAmount();
 		UpdateFlipAngle();
 		
-		flip_axis = InterpDirections(flip_axis,
-									 target_flip_axis,
-									 1.0f-_flip_axis_inertia);
+		flip_axis = InterpDirections(target_flip_axis,
+									 flip_axis,
+									 pow(_flip_axis_inertia,num_frames));
 
 		this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
 
@@ -241,7 +241,7 @@ class FlipInfo {
 	}
 
 	void UpdateRollProgress(){
-		flip_progress += time_step * _roll_speed;
+		flip_progress += time_step * _roll_speed * num_frames;
 		if(flip_progress > 1.0f){
 			flipping = false;
 		}
@@ -250,9 +250,9 @@ class FlipInfo {
 	void UpdateRollVelocity(){
 		if(flip_progress < 0.95f){
 			vec3 adjusted_vel = WorldToGroundSpace(roll_direction);
-			this_mo.velocity = mix(this_mo.velocity, 
-								adjusted_vel * _roll_ground_speed,
-								0.05f);
+			this_mo.velocity = mix(adjusted_vel * _roll_ground_speed,
+								this_mo.velocity, 
+								pow(0.95f,num_frames));
 		}
 	}
 
@@ -267,8 +267,8 @@ class FlipInfo {
 
 	void UpdateRollAngle() {
 		float old_flip_angle = flip_angle;
-		flip_angle = mix(flip_angle, target_flip_angle, 0.2f);
-		flip_vel = (flip_angle - old_flip_angle)/time_step;
+		flip_angle = mix(target_flip_angle, flip_angle, pow(0.8f,num_frames));
+		flip_vel = (flip_angle - old_flip_angle)/(time_step*num_frames);
 	}
 
 	void UpdateRoll() {

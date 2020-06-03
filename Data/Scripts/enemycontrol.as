@@ -5,15 +5,19 @@ bool ai_attacking = false;
 bool hostile_switchable = true;
 
 void AIUpdate(){
-	if(GetInputDown("c")){
+	if(GetInputDown("c") && !GetInputDown("ctrl")){
 		if(hostile_switchable){
 			hostile = !hostile;
+			if(hostile){
+				TargetClosest();
+				ai_attacking = true;
+			}
 		}
 		hostile_switchable = false;
 	} else {
 		hostile_switchable = true;
 	}
-	if(hostile && rand()%150==0){
+	if(hostile && rand()%(150/num_frames)==0){
 		ai_attacking = !ai_attacking;
 	}
 	if(!hostile){
@@ -73,6 +77,7 @@ bool WantsToCancelAnimation() {
 	return false;
 }
 
+// Uses the position of the target character to calculate a target velocity (towards the target) that is used for movement calculations in aschar.as and aircontrol.as.
 vec3 GetTargetVelocity() {
 	if(target_id == -1){
 		return vec3(0.0f);
@@ -110,6 +115,7 @@ vec3 GetTargetVelocity() {
 	}*/
 }
 
+// Called from aschar.as, bool front tells if the character is standing still. 
 void ChooseAttack(bool front) {
 	curr_attack = "";
 	if(on_ground){

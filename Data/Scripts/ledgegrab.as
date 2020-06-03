@@ -42,7 +42,7 @@ class TargetMove {
 	}
 
 	void Update() {
-		time += time_step * speed;
+		time += time_step * speed * num_frames;
 		if(time >= end_time){
 			if(id < 2 && distance(start_pos, end_pos)>0.1f){
 				//string path = "Data/Sounds/concrete_foley/bunny_edgecrawl_concrete.xml";
@@ -122,7 +122,7 @@ class ShimmyAnimation {
 	void Update(vec3 _target_pos, vec3 dir){
 		target_pos = _target_pos;
 		float old_progress = progress;
-		progress += time_step;
+		progress += time_step * num_frames;
 
 		hand_pos[0].SetEndPos(target_pos);
 		hand_pos[1].SetEndPos(target_pos);
@@ -142,7 +142,7 @@ class ShimmyAnimation {
 		foot_pos[0].SetSpeed(speed);
 		foot_pos[1].SetSpeed(speed);
 
-		lag_vel = mix(this_mo.velocity, lag_vel, 0.95f); 
+		lag_vel = mix(this_mo.velocity, lag_vel, pow(0.95f,num_frames)); 
 
 		ledge_dir = dir;
 	}
@@ -365,11 +365,11 @@ class LedgeInfo {
 			on_ledge = false;	
 		}
 
-		this_mo.velocity += ledge_dir * 0.1f;
+		this_mo.velocity += ledge_dir * 0.1f * num_frames;
 
 		float target_height = ledge_height - _height_under_ledge;
 		this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f;
-		this_mo.velocity.y *= 0.92f;
+		this_mo.velocity.y *= pow(0.92f, num_frames);
 		
 		if(this_mo.position.y > target_height + 0.5f){
 			this_mo.position.y = target_height + 0.5f;
@@ -386,11 +386,11 @@ class LedgeInfo {
 		vec3 horz_vel = target_velocity - (ledge_dir * ledge_dir_dot);
 		vec3 real_velocity = horz_vel;
 		if(ledge_dir_dot > 0.0f){
-			real_velocity.y += ledge_dir_dot * time_step * _ledge_move_speed * 70.0f;
+			real_velocity.y += ledge_dir_dot * time_step * num_frames * _ledge_move_speed * 70.0f;
 		}	
-		this_mo.velocity += real_velocity * time_step * _ledge_move_speed;
-		this_mo.velocity.x *= _ledge_move_damping;
-		this_mo.velocity.z *= _ledge_move_damping;
+		this_mo.velocity += real_velocity * time_step * num_frames * _ledge_move_speed;
+		this_mo.velocity.x *= pow(_ledge_move_damping, num_frames);
+		this_mo.velocity.z *= pow(_ledge_move_damping, num_frames);
 
 		vec3 new_ledge_grab_pos = CalculateGrabPos();
 		shimmy_anim.Update(new_ledge_grab_pos, ledge_dir);
