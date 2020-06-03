@@ -108,7 +108,7 @@ class FlipInfo {
 
 		vec3 flat_facing = vec3(facing.x,0.0f,facing.z);
 		if(rotation_amount > 0.5f){
-			flat_facing *= -1.0f;
+			flat_facing *= -1.0f; 
 		}
 		this_mo.SetRotationFromFacing(flat_facing);
 	}

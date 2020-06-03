@@ -104,10 +104,21 @@ int num_frames;
 
 const float _ragdoll_static_threshold = 0.4f;
 float ragdoll_static_time;
+float ragdoll_time;
 bool frozen;
 bool no_freeze = false;
 bool holding_weapon = false;
+float injured_mouth_open;
 int weapon_id = -1;
+
+const int _RGDL_FALL = 0;
+const int _RGDL_LIMP = 1;
+const int _RGDL_INJURED = 2;
+
+int ragdoll_type;
+int ragdoll_layer_fetal;
+int ragdoll_layer_catchfallfront;
+float ragdoll_limp_stun;
 
 void EndAttack() {
 	SetState(_movement_state);
@@ -196,7 +207,8 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos) {
 			MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
 			float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f);
 			GoLimp();
-			
+			ragdoll_limp_stun = 0.9f;
+
 			vec3 impact_dir = attack_getter2.GetImpactDir();
 			//Print(""+impact_dir.x + "\n" + impact_dir.y + "\n" + impact_dir.z + "\n\n");
 			vec3 right;
@@ -789,7 +801,7 @@ void HandleGroundCollision() {
 	}*/
 }
 
-void GoLimp() {
+void Ragdoll(int type){
 	recovery_time = _ragdoll_recovery_time;
 	
 	if(limp){
@@ -800,12 +812,50 @@ void GoLimp() {
 	limp = true;
 	this_mo.Ragdoll();
 	ragdoll_static_time = 0.0f;
+	ragdoll_time = 0.0f;
+	ragdoll_limp_stun = 0.0f;
 	frozen = false;
 	no_freeze = false;
-	{
-		//no_freeze = true;
-		//this_mo.StartAnimation("Data/Animations/r_combatidle.anm");
+
+	ragdoll_type = type;
+
+	if(ragdoll_type == _RGDL_LIMP){
+		this_mo.EnableSleep();
+		this_mo.SetRagdollStrength(0.0);
+		this_mo.StartAnimation("Data/Animations/r_idle.anm",4.0f);
 	}
+
+	if(ragdoll_type == _RGDL_FALL) {
+		this_mo.DisableSleep();
+		no_freeze = true;
+		//this_mo.StartAnimation("Data/Animations/r_idle.anm");
+		//int layer = this_mo.AddLayer("Data/Animations/r_catchfallright.anm",20.0f,_ANM_MIRRORED);
+		//this_mo.SetLayerOpacity(layer, 1.0);
+		//this_mo.SetFrozenRagdollStrength(0.0);
+		this_mo.SetRagdollStrength(1.0);
+		this_mo.StartAnimation("Data/Animations/r_flail.anm",4.0f);
+		ragdoll_layer_catchfallfront = 
+			this_mo.AddLayer("Data/Animations/r_catchfallfront.anm",4.0f,0);
+		ragdoll_layer_fetal = 
+			this_mo.AddLayer("Data/Animations/r_fetal.anm",4.0f,0);
+		//this_mo.StartAnimation("Data/Animations/r_ragdollbase.anm",0.1f);
+		//this_mo.AddLayer("Data/Animations/r_protecthead.anm",4.0f,0.0f);
+		//this_mo.AddLayer("Data/Animations/r_grabface.anm",20.0f,0);
+		//this_mo.AddLayer("Data/Animations/r_protecthead.anm",20.0f,0);
+		//this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
+	}
+
+	if(ragdoll_type == _RGDL_INJURED) {
+		this_mo.DisableSleep();
+		no_freeze = true;
+		this_mo.SetRagdollStrength(1.0);
+		this_mo.StartAnimation("Data/Animations/r_writhe.anm",4.0f);
+		injured_mouth_open = 0.0f;
+	}
+}
+
+void GoLimp() {
+	Ragdoll(_RGDL_FALL);
 }
 
 // target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
@@ -1158,8 +1208,18 @@ bool CanRoll() {
 
 // UpdateRagDoll() is called every time update() is called, regardless of if the character is in ragdoll mode or not
 void UpdateRagDoll() {
-	if(GetInputDown("z")){		
+	if(GetInputDown("z")){
 		GoLimp();
+	}
+	if(GetInputDown("n")){				
+		if(!limp){
+			string sound = "Data/Sounds/hit/hit_hard.xml";
+			PlaySoundGroup(sound, this_mo.position);
+		}
+		Ragdoll(_RGDL_INJURED);
+	}
+	if(GetInputDown("m")){		
+		Ragdoll(_RGDL_LIMP);
 	}
 	if(GetInputDown("x")){		
 		//if(knocked_out != 0){
@@ -1171,10 +1231,59 @@ void UpdateRagDoll() {
 			//this_mo.UnRagdoll();
 		//}
 	}
-	if(limp == true && !frozen){
+	if(!limp){
+		return;
+	}
+
+	/*mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+	vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
+	Print(""+torso_vec.x +" "+torso_vec.y+" "+torso_vec.z+"\n");
+	DebugDrawLine(this_mo.position,
+				  this_mo.position + torso_vec,
+				  vec3(1.0f),
+				  _delete_on_update);*/
+
+	ragdoll_time += time_step * num_frames;
+	ragdoll_limp_stun -= time_step * num_frames;
+	ragdoll_limp_stun = max(0.0, ragdoll_limp_stun);
+
+	if(ragdoll_type == _RGDL_FALL){
+		const float radius = 4.0f;
+		this_mo.GetSlidingSphereCollision(this_mo.position, radius);
+		vec3 hazard_dir = normalize(this_mo.position - sphere_col.adjusted_position);
+		float penetration = distance(this_mo.position, sphere_col.adjusted_position);
+		float protect_amount = min(1.0f,max(0.0f,(penetration / radius)*4.0f-2.0));
+		this_mo.SetLayerOpacity(ragdoll_layer_fetal, protect_amount);
+		mat4 torso_transform = this_mo.GetAvgIKChainTransform("torso");
+		vec3 torso_vec = torso_transform.GetColumn(1);//(torso_transform * vec4(0.0f,0.0f,1.0f,0.0));
+		float front_protect_amount = max(0.0f,dot(torso_vec, hazard_dir) * protect_amount);
+		this_mo.SetLayerOpacity(ragdoll_layer_catchfallfront, front_protect_amount);
+
+		float ragdoll_strength = length(this_mo.GetAvgVelocity())*0.1f;
+		ragdoll_strength = min(0.8f, ragdoll_strength);
+		ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+		this_mo.SetRagdollStrength(ragdoll_strength);
+	}
+	if(ragdoll_type == _RGDL_INJURED){
+		float ragdoll_strength = min(1.0f,max(0.2f,2.0f-length(this_mo.GetAvgVelocity())*0.3));
+		ragdoll_strength *= 1.2f - ragdoll_time * 0.1f;
+		ragdoll_strength = min(0.9f, ragdoll_strength);
+		ragdoll_strength = max(0.0f, ragdoll_strength - ragdoll_limp_stun);
+		this_mo.SetRagdollStrength(ragdoll_strength);
+		injured_mouth_open = mix(injured_mouth_open, sin(time*4)*0.5f+sin(time*6.3)*0.5, ragdoll_strength);
+		this_mo.SetMorphTargetWeight("mouth_open",injured_mouth_open,1.0f);
+		if(ragdoll_strength < 0.01f){
+			ragdoll_type = _RGDL_LIMP;
+			no_freeze = false;
+			ragdoll_static_time = 0.0f;
+			this_mo.EnableSleep();
+			this_mo.SetRagdollStrength(0.0f);
+		}
+	}
+	//this_mo.SetRagdollStrength(max(0.0,0.9-ragdoll_time));
+	if(!frozen){
 		vec3 color;
-		if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold &&
-		   !no_freeze)
+		if(length(this_mo.GetAvgVelocity())<_ragdoll_static_threshold)
 		{
 			color = vec3(1.0f,0.0f,0.0f);
 			ragdoll_static_time += time_step * num_frames;
@@ -1182,17 +1291,23 @@ void UpdateRagDoll() {
 			color = vec3(1.0f,1.0f,1.0f);
 			ragdoll_static_time = 0.0f;
 		}
+
 		/*DebugDrawLine(this_mo.position,
 					  this_mo.position + this_mo.GetAvgVelocity(),
 					  color,
 					  _delete_on_update);*/
-		float damping = min(1.0f,ragdoll_static_time*0.5f);
-		this_mo.SetRagdollDamping(damping);
-		if(damping >= 1.0f){
-			frozen = true;
+		
+		if(!no_freeze){
+			float damping = min(1.0f,ragdoll_static_time*0.5f);
+			this_mo.SetRagdollDamping(damping);
+			if(damping >= 1.0f){
+				frozen = true;
+			}
+		} else {
+			this_mo.SetRagdollDamping(0.0f);
 		}
 	}
-	if(limp == true && knocked_out==0){
+	if(knocked_out==0){
 		recovery_time -= time_step * num_frames;
 		if(recovery_time <= 0.0f){
 			bool can_roll = CanRoll();
@@ -1222,10 +1337,12 @@ void UpdateRagDoll() {
 bool testing_mocap = false;
 void TestMocap(){
 	//this_mo.SetAnimation("Data/Animations/mocapsit.anm");
-	this_mo.SetAnimation("Data/Animations/r_bow.anm");
-	this_mo.SetAnimationCallback("void EndTestMocap()");
-	testing_mocap = true;
-	this_mo.velocity = vec3(0.0f);
+	//this_mo.SetAnimation("Data/Animations/r_bow.anm");
+	this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
+	//this_mo.SetAnimationCallback("void EndTestMocap()");
+	//testing_mocap = true;
+	//this_mo.velocity = vec3(0.0f);
+	
 	//this_mo.position += vec3(0.0f,-0.1f,0.0f);
 	//this_mo.position = vec3(16.23, 109.45, 11.71);
 	//this_mo.SetRotationFromFacing(vec3(0.0f,0.0f,1.0f));
