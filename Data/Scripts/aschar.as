@@ -221,7 +221,7 @@ void UpdateMovementControls() {
 			duck_amount = 1.0f;
 			duck_vel = 2.0f;
 			target_duck_amount = 1.0f;
-			this_mo.StartAnimation("Data/Animations/idle.xml",20.0f);
+			this_mo.StartAnimation("Data/Animations/r_idle.anm",20.0f);
 			HandleBumperCollision();
 			HandleStandingCollision();
 			this_mo.position = sphere_col.position;
@@ -261,8 +261,8 @@ void Land(vec3 vel) {
 	SetOnGround(true);
 	
 	float land_speed = 10.0f;//min(30.0f,max(10.0f, -vel.y));
-	this_mo.SetAnimation("Data/Animations/idle.xml",land_speed);
-	
+	this_mo.StartAnimation("Data/Animations/r_idle.xml",land_speed);
+
 	if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
 		string sound = "Data/Sounds/Impact-Grass2.wav";
 		PlaySound(sound, this_mo.position);
@@ -399,9 +399,9 @@ void GoLimp() {
 	this_mo.Ragdoll();
 	recovery_time = _ragdoll_recovery_time;
 	pose_handler.clear();
-	pose_handler.AddLayer("Data/Animations/run.pos",
-						  0.000f,
-						  false);
+	//pose_handler.AddLayer("Data/Animations/run.pos",
+	//					  0.000f,
+	//					  false);
 	//pose_handler.AddLayer("Data/Animations/test.pos",
 	//					  1.0f,
 	//					  false);
@@ -450,7 +450,8 @@ void UpdateAttacking() {
 void SetState(int _state) {
 	state = _state;
 	if(state == _ground_state){
-		this_mo.StartAnimation("Data/Animations/kipup.anm");
+		//this_mo.StartAnimation("Data/Animations/kipup.anm");
+		this_mo.StartAnimation("Data/Animations/r_idle.anm");
 		this_mo.SetAnimationCallback("void EndGetUp()");
 		getting_up_time = 0.0f;	
 	}
@@ -481,17 +482,17 @@ void WakeUp(int how) {
 	} else if(how == _wake_fall){
 		SetOnGround(true);
 		flip_info.Land();
-		this_mo.StartAnimation("Data/Animations/idle.xml");
+		this_mo.StartAnimation("Data/Animations/r_idle.xml");
 	} else if (how == _wake_flip) {
 		SetOnGround(false);
 		jump_info.StartFall();
 		flip_info.StartFlip();
 		flip_info.FlipRecover();
-		this_mo.StartAnimation("Data/Animations/jump.xml");
+		this_mo.StartAnimation("Data/Animations/r_jump.xml");
 	} else if (how == _wake_roll) {
 		SetOnGround(true);
 		flip_info.Land();
-		this_mo.StartAnimation("Data/Animations/idle.xml");
+		this_mo.StartAnimation("Data/Animations/r_idle.xml");
 		vec3 roll_dir = GetTargetVelocity();
 		vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
 		if(length(flat_vel)>1.0f){
@@ -557,7 +558,8 @@ void UpdateRagDoll() {
 
 bool testing_mocap = false;
 void TestMocap(){
-	this_mo.SetAnimation("Data/Animations/mocapsit.anm");
+	//this_mo.SetAnimation("Data/Animations/mocapsit.anm");
+	this_mo.SetAnimation("Data/Animations/r_idle.anm");
 	this_mo.SetAnimationCallback("void EndTestMocap()");
 	testing_mocap = true;
 	this_mo.velocity = vec3(0.0f);
@@ -685,7 +687,7 @@ void UpdateAnimation() {
 	
 	if(on_ground){
 		if(flip_info.UseRollAnimation()){
-			this_mo.SetAnimation("Data/Animations/roll.xml",7.0f);
+			this_mo.SetAnimation("Data/Animations/r_roll.xml",7.0f);
 			float forwards_rollness = 1.0f-abs(dot(flip_info.GetAxis(),this_mo.GetFacing()));
 			this_mo.SetBlendCoord("forward_roll_coord",forwards_rollness);
 			this_mo.SetIKEnabled(false);
@@ -695,11 +697,11 @@ void UpdateAnimation() {
 				this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
 															   normalize(flat_velocity),
 															   0.3f));
-				this_mo.SetAnimation("Data/Animations/movement.xml");
+				this_mo.SetAnimation("Data/Animations/r_movement.xml");
 				this_mo.SetBlendCoord("speed_coord",speed);
 				this_mo.SetBlendCoord("ground_speed",speed);
 			} else {
-				this_mo.SetAnimation("Data/Animations/idle.xml");
+				this_mo.SetAnimation("Data/Animations/r_idle.xml");
 				this_mo.SetIKEnabled(true);
 			}
 		}
@@ -789,7 +791,7 @@ void GroundState_UpdateIKTargets() {
 	SetLimbTargetOffset("right_leg");
 	SetLimbTargetOffset("leftarm");
 	SetLimbTargetOffset("rightarm");
-	this_mo.SetIKTargetOffset("full_body", vec3(0.0f));
+	this_mo.SetIKTargetOffset("full_body", vec3(0.0f,-0.1f,0.0f));
 	//this_mo.SetIKTargetOffset("full_body", ground_normal * 0.05);
 	
 	vec3 axis = cross(ground_normal, vec3(0.0f,1.0f,0.0f));
@@ -823,6 +825,7 @@ void MovementState_UpdateIKTargets() {
 		offset_height = mix(offset_height, curr_offset_height, 0.1f);
 		this_mo.SetIKTargetOffset("full_body", vec3(0.0f,offset_height,0.0f));
 	}
+	this_mo.SetIKTargetOffset("full_body", vec3(0.0f,-0.1f,0.0f));
 }
 
 void UpdateIKTargets() {

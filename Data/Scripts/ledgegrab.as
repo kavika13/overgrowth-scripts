@@ -186,7 +186,7 @@ class LedgeInfo {
 	}
 
 	void UpdateLedgeAnimation() {
-		this_mo.SetAnimation("Data/Animations/ledge.anm",5.0f);
+		this_mo.SetAnimation("Data/Animations/r_ledge.anm",5.0f);
 	}
 
 	void UpdateIKTargets() {
@@ -351,8 +351,9 @@ class LedgeInfo {
 		float target_height = ledge_height - _height_under_ledge;
 		this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f;
 		this_mo.velocity.y *= 0.92f;
-		//this_mo.velocity.y = 0.0f;
-		//this_mo.position.y = target_height;
+		
+		this_mo.velocity.y = 0.0f;
+		this_mo.position.y = target_height;
 
 		vec3 target_velocity = GetTargetVelocity();
 		float ledge_dir_dot = dot(target_velocity, ledge_dir);

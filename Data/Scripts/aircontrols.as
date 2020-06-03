@@ -64,9 +64,11 @@ class JumpInfo {
 	void UpdateFreeAirAnimation() {
 		float up_coord = this_mo.velocity.y/_jump_vel + 0.5f;
 		up_coord = min(1.5f,up_coord)+jump_launch*0.5f;
+		up_coord *= -0.5f;
+		up_coord += 0.5f;
 		this_mo.SetBlendCoord("up_coord",up_coord);
 		this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
-		this_mo.SetAnimation("Data/Animations/jump.xml",20.0f);
+		this_mo.SetAnimation("Data/Animations/r_jump.xml",20.0f);
 		this_mo.SetIKEnabled(false);
 	}
 
@@ -76,7 +78,8 @@ class JumpInfo {
 		wall_right.x = -wall_dir.z;
 		wall_right.z = temp;
 		float speed = length(this_mo.velocity);
-		this_mo.SetAnimation("Data/Animations/wall.xml",5.0f);
+		this_mo.SetAnimation("Data/Animations/r_wall.xml",5.0f);
+		//this_mo.StartAnimation("Data/Animations/r_idle.anm");
 		this_mo.SetBlendCoord("ground_speed",speed);
 		this_mo.SetBlendCoord("speed_coord",speed*0.25f);
 		this_mo.SetBlendCoord("dir_coord",dot(normalize(this_mo.velocity), wall_right));
@@ -91,7 +94,8 @@ class JumpInfo {
 	}
 
 	void UpdateLedgeAnimation() {
-		this_mo.SetAnimation("Data/Animations/ledge.anm",5.0f);
+		this_mo.StartAnimation("Data/Animations/r_idle.anm");
+		//this_mo.SetAnimation("Data/Animations/ledge.anm",5.0f);
 	}
 
 	void UpdateIKTargets() {
