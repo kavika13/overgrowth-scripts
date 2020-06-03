@@ -4,6 +4,7 @@ uniform samplerCube tex3;
 uniform samplerCube tex4;
 uniform mat4 obj2world;
 uniform vec3 cam_pos;
+uniform float in_light;
 
 varying vec3 vertex_pos;
 varying vec3 light_pos;

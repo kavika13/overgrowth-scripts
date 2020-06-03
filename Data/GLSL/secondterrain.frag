@@ -12,7 +12,7 @@ void main()
 	vec4 shadow_texture = texture2D(tex5,gl_TexCoord[0].xy);
 	vec4 shadow_texture_offset = texture2D(tex5,gl_TexCoord[0].xy + vec2(light_pos.x * texture_offset, light_pos.z * texture_offset));
 	
-	vec3 color = vec3(shadow_texture_offset.r * shadow_texture.b);
+	vec3 color = vec3(shadow_texture_offset.r * shadow_texture_offset.a * shadow_texture.b);
 	
 	// Add ambient lighting to baked texture
 	vec3 diffuse_map_vec = normal;
