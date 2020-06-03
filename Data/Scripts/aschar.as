@@ -61,7 +61,6 @@ int BlockStunnedBy() {
     return block_stunned_by_id;
 }
 
-
 void MouseControlJumpTest() {
     vec3 start = camera.GetPos();
     vec3 end = camera.GetPos() + camera.GetMouseRay()*400.0f;
@@ -344,7 +343,9 @@ void HandleSpecialKeyPresses() {
         }
         Ragdoll(_RGDL_INJURED);
     }
-    if(GetInputDown(",")){                
+    if(GetInputPressed(",")){   
+        //this_mo.CreateBloodDrip("head", 1, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.3f,0.3f),1.0f));//head_transform * vec3(0.0f,1.0f,0.0f));
+        
         if(!cut_throat){
             string sound = "Data/Sounds/hit/hit_splatter.xml";
             PlaySoundGroup(sound, this_mo.position);
@@ -1179,8 +1180,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         if(attack_getter2.HasStabDir()){
             int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
             int stab_type = attack_getter2.GetStabDirType();
-            Print("Weapon id: "+attack_weapon_id);
-            ItemObject@ item_obj = ReadItem(attack_weapon_id);
+            ItemObject@ item_obj = ReadItemID(attack_weapon_id);
             mat4 trans = item_obj.GetPhysicsTransform();
             mat4 trans_rotate = trans;
             trans_rotate.SetColumn(3, vec3(0.0f));
@@ -1436,7 +1436,7 @@ void HandleAnimationEvent(string event, vec3 world_pos){
 }
 
 void AttachWeapon(int which){
-    ItemObject@ item_obj = ReadItem(which);
+    ItemObject@ item_obj = ReadItemID(which);
     vec3 pos = item_obj.GetPhysicsPosition();
     string sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
     PlaySoundGroup(sound, pos,0.5f);
@@ -1450,14 +1450,17 @@ void AttachWeapon(int which){
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
     if(event == "grabitem" && !holding_weapon)
     {
-        Print("Grabbing item");
+        Print("Grabbing item\n");
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
             ItemObject@ item_obj = ReadItem(i);
+            if(item_obj.IsHeld()){
+                continue;
+            }
             vec3 pos = item_obj.GetPhysicsPosition();
             vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
             if(distance(hand_pos, pos)<0.9f){ 
-                AttachWeapon(i);
+                AttachWeapon(item_obj.GetID());
                 if(pickup_layer != -1){
                     this_mo.RemoveLayer(pickup_layer, 4.0f);
                     pickup_layer = -1;
@@ -2862,14 +2865,25 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
     }
 }
 
+void NoWeapon() {
+    holding_weapon = false;
+    range_extender = 0.0f;
+}
+
+void DeletedWeapon(int id){
+    Print("Deleting weapon!\n");
+    if(this_mo.weapon_id == id){
+        Print("Deleting weapon success!\n");
+        this_mo.weapon_id = -1;
+        NoWeapon();
+    }
+}
+
 void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
         this_mo.DetachItem(this_mo.weapon_id);
-        ItemObject@ item_obj = ReadItem(this_mo.weapon_id);
-        item_obj.ActivatePhysics();
-        holding_weapon = false;
-        range_extender = 0.0f;
+        NoWeapon();
     }
 }
 
@@ -2895,7 +2909,7 @@ void HandlePickUp() {
                 vec3 hand_pos = this_mo.GetIKTargetTransform("rightarm").GetTranslationPart();
                 if(distance(hand_pos, pos)<0.9f){ 
                     if(flip_info.IsFlipping()){
-                        AttachWeapon(i);
+                        AttachWeapon(item_obj.GetID());
                     } else {
                         if(pickup_layer == -1){
                             pickup_layer = this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);

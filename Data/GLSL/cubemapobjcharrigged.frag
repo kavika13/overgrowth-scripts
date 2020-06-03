@@ -71,7 +71,7 @@ void main()
     
     vec3 spec_map_vec = reflect(ws_vertex, ws_normal);
     spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.25 *
-                  GetAmbientContrib(shadow_tex.g) * (1.0 - blood_amount);
+                  GetAmbientContrib(shadow_tex.g) * max(0.0,(1.0 - blood_amount * 2.0));
 
     // Put it all together
     vec4 colormap = texture2D(tex0,gl_TexCoord[1].xy);
@@ -92,6 +92,8 @@ void main()
     
     // Add haze
     AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
+
+    //color = texture2D(tex6,gl_TexCoord[1].xy).xyz;
 
     gl_FragColor = vec4(color,1.0);
 }

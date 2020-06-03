@@ -128,7 +128,7 @@ void UpdateBrain(){
                 continue;
             }
             if(nearest_weapon == -1 || dist < nearest_dist){ 
-                nearest_weapon = i;
+                nearest_weapon = item_obj.GetID();
                 nearest_dist = dist;
             }
         }
@@ -168,8 +168,8 @@ void UpdateBrain(){
             char.ReceiveMessage(this_mo.getID(), int(_escort_me));
         }
     } else if(goal == _get_weapon){
-        if(holding_weapon){
-            SetGoal(_patrol);
+        if(holding_weapon || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
+            SetGoal(_patrol);            
         }
     }
     //HandleDebugRayDraw();
@@ -437,7 +437,7 @@ vec3 GetTargetVelocity() {
     } else if(goal == _get_help){
         return GetMovementToPoint(ReadCharacterID(ally_id).position, 1.0f); 
     } else if(goal == _get_weapon){
-        vec3 pos = ReadItem(weapon_target_id).GetPhysicsPosition();
+        vec3 pos = ReadItemID(weapon_target_id).GetPhysicsPosition();
         return GetMovementToPoint(pos, 0.0f); 
     } else if(goal == _escort){
         return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 

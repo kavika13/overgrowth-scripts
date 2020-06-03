@@ -1,6 +1,7 @@
 void init() {
 }
 
+bool reset_allowed = true;
 bool has_gui = false;
 uint32 gui_id;
 float time = 0.0f;
@@ -31,6 +32,8 @@ int HasFocus(){
 
 void Reset(){
     time = 0.0f;
+    reset_allowed = true;
+    reset_timer = _reset_delay;
     ResetLevel();
 }
 
@@ -52,24 +55,30 @@ void Update() {
                 has_gui = false;
                 break;
             }
+            if(callback == "mainmenu"){
+                gui.RemoveGUI(gui_id);
+                has_gui = false;
+                LoadLevel("mainmenu");
+                break;
+            }
             callback = gui.GetCallback(gui_id);
         }
     }
-    if(GetInputPressed("g") && !GetInputDown("ctrl")){
-        gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
+    if(!has_gui && GetInputDown("esc") && GetPlayerCharacterID() == -1){
+        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,250);
         has_gui = true;
-        UpdateTimerDisplay();
     }  /*
     if(GetInputPressed("l")){
         //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }*/
     if(GetInputPressed("l")){
         Reset();
+        //LoadLevel("Data/Levels/Project60/8_dead_volcano.xml");
     }
     
     time += time_step;
 
-    //VictoryCheck();
+    VictoryCheck();
     UpdateMusic();
 }
 
@@ -92,7 +101,13 @@ void VictoryCheck() {
     if(victory || failure){
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
-            Reset();
+            if(reset_allowed && !has_gui){
+                gui_id = gui.AddGUI("levelend","dialogs\\levelend.html",400,400);
+                has_gui = true;
+                UpdateTimerDisplay();
+                reset_allowed = false;
+            }
+            //Reset();
         }
     } else {
         reset_timer = _reset_delay;
