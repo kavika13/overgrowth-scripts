@@ -109,7 +109,7 @@ void main()
 	
 	color = diffuse_color * colormap.xyz * tint + spec_color * colormap.a;
 	
-color *= BalanceAmbient(NdotL);
+	color *= BalanceAmbient(NdotL);
 	
 	AddHaze(color, rel_pos, tex3);
 
