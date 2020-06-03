@@ -35,7 +35,7 @@ void main()
 	vec3 eyeSpaceVert = (gl_ModelViewMatrix * gl_Vertex).xyz;
 	vertex_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * eyeSpaceVert;
 	
-	light_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz;
+	light_pos = normalize(transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz);
  
 	rel_pos = vec3(obj2world * gl_Vertex) - cam_pos;
 	rel_pos.y *= -1.0;
