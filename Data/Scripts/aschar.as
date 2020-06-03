@@ -2556,8 +2556,17 @@ int GetClosestVisibleCharacterID(uint16 flags){
     array<int> nearby_characters;
     GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
     //DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _fade);
+    vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+    array<int> visible_characters;
+    for(uint i=0; i<nearby_characters.size(); ++i){
+        if(this_mo.getID() != nearby_characters[i] &&
+           ReadCharacterID(nearby_characters[i]).VisibilityCheck(head_pos))
+        {
+            visible_characters.push_back(nearby_characters[i]);
+        }
+    }
 
-    return GetClosestCharacterInArray(this_mo.position, nearby_characters, flags, 0.0f);
+    return GetClosestCharacterInArray(this_mo.position, visible_characters, flags, 0.0f);
 }
 
 int GetClosestCharacterID(float range, uint16 flags){

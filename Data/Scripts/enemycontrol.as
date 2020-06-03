@@ -21,7 +21,7 @@ bool going_to_block = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
 
-enum AIGoal {_patrol, _attack, _get_help, _escort, _get_weapon, _navigate, _struggle};
+enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle};
 AIGoal goal = _patrol;
 
 vec3 nav_target;
@@ -39,6 +39,7 @@ bool WantsToDragBody(){
 
 void ResetMind() {
     goal = _patrol;
+    target_id = -1;
 }
 
 int IsIdle() {
@@ -53,12 +54,20 @@ void Notice(int character_id){
     target_id = character_id;
     last_seen_target_position = ReadCharacterID(character_id).position;
     last_seen_target_velocity = ReadCharacterID(character_id).velocity;
-    if(goal == _patrol){
-        startled = true;
-        startle_time = 1.0f;
-    }
-    if(goal == _patrol || goal == _escort){
-        SetGoal(_attack);
+    switch(goal){
+        case _patrol:
+            startled = true;
+            startle_time = 1.0f;
+            SetGoal(_attack);
+            break;
+        case _investigate:
+            startled = true;
+            startle_time = 1.0f;
+            SetGoal(_attack);
+            break;
+        case _escort:
+            SetGoal(_attack);
+            break;
     }
 }
 
@@ -66,14 +75,16 @@ void NotifySound(int created_by_id, float max_dist, vec3 pos) {
     if(!listening){
         return;
     }
-    if(goal == _patrol){
+    if(goal == _patrol || goal == _investigate){
         bool same_team = false;
         character_getter.Load(this_mo.char_path);
         if(character_getter.OnSameTeam(ReadCharacterID(created_by_id).char_path) == 1){
             same_team = true;
         }
         if(!same_team){
-            Notice(created_by_id);
+            nav_target = pos;
+            SetGoal(_investigate);
+            //Notice(created_by_id);
         }
     }
 }
@@ -182,47 +193,73 @@ void UpdateBrain(){
         SetGoal(_patrol);
     }
 
-    if(goal == _patrol || goal == _escort){
-        ai_attacking = false;
-    } else if(goal == _attack){
-        MovementObject@ target = ReadCharacterID(target_id);
-        if(target.QueryIntFunction("int IsKnockedOut()") == 1){
-            SetGoal(_patrol);
-        }
-        if(rand()%(150/num_frames)==0){
-            ai_attacking = !ai_attacking;
-        }
-        if(rand()%(150/num_frames)==0){
-            target_attack_range = RangedRandomFloat(0.0f, 3.0f);
-        }
-        if(rand()%(150/num_frames)==0){
-            strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
-        }
-        if(temp_health < 0.5f){
-            ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
-            if(ally_id != -1){
-                //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
-                SetGoal(_get_help);
+    switch(goal){
+        case _patrol:
+        case _escort:
+            ai_attacking = false;
+            break;
+        case _investigate:
+            ai_attacking = false;
+            {
+                GetPath(nav_target);
+                if(path.NumPoints() > 0){
+                    vec3 path_end = path.GetPoint(path.NumPoints()-1);
+                    //DebugDrawWireSphere(path_end, 1.0f, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+                    //DebugDrawWireSphere(nav_target, 1.0f, vec3(0.0f,1.0f,0.0f), _delete_on_update);
+                    //Print("Dist: "+distance_squared(this_mo.position, path_end)+"\n");
+                    if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
+                        SetGoal(_patrol);
+                    }      
+                }
             }
-        }
-    } else if(goal == _get_help){
-        MovementObject@ char = ReadCharacterID(ally_id);
-        if(distance_squared(this_mo.position, char.position) < 5.0f){
-            SetGoal(_attack);
-            char.ReceiveMessage(this_mo.getID(), int(_escort_me));
-        }
-    } else if(goal == _get_weapon){
-        if(holding_weapon || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
-            if(target_id == -1){
-                SetGoal(_patrol);           
-            } else {
-                SetGoal(_attack);
+            break;
+        case _attack:
+            {
+                MovementObject@ target = ReadCharacterID(target_id);
+                if(target.QueryIntFunction("int IsKnockedOut()") == 1){
+                    SetGoal(_patrol);
+                }
+                if(rand()%(150/num_frames)==0){
+                    ai_attacking = !ai_attacking;
+                }
+                if(rand()%(150/num_frames)==0){
+                    target_attack_range = RangedRandomFloat(0.0f, 3.0f);
+                }
+                if(rand()%(150/num_frames)==0){
+                    strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
+                }
+                if(temp_health < 0.5f){
+                    ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
+                    if(ally_id != -1){
+                        //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
+                        SetGoal(_get_help);
+                    }
+                }
             }
-        }
-    } else if(goal == _struggle){
-        if(tethered == _TETHERED_FREE){
-            SetGoal(_patrol);
-        }
+            break;
+        case _get_help:
+            {
+                MovementObject@ char = ReadCharacterID(ally_id);
+                if(distance_squared(this_mo.position, char.position) < 5.0f){
+                    SetGoal(_attack);
+                    char.ReceiveMessage(this_mo.getID(), int(_escort_me));
+                }
+            }
+            break;
+        case _get_weapon:
+            if(holding_weapon || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
+                if(target_id == -1){
+                    SetGoal(_patrol);           
+                } else {
+                    SetGoal(_attack);
+                }
+            }
+            break;
+        case _struggle:
+            if(tethered == _TETHERED_FREE){
+                SetGoal(_patrol);
+            }
+            break;
     }
     //MouseControlPathTest();
     //HandleDebugRayDraw();
@@ -465,12 +502,14 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float 
 
     if(distance_squared(target_point, point) < target_dist*target_dist){
         vec3 right_dir(rel_dir.z, 0.0f, -rel_dir.x);
-        target_point = NavRaycast(point, point - rel_dir * target_dist + right_dir * strafe_vel);
-                
-        GetPath(target_point);
-        vec3 next_path_point = GetNextPathPoint();
-        if(next_path_point != vec3(0.0f)){
-            target_point = next_path_point;
+        vec3 raycast_point = NavRaycast(point, point - rel_dir * target_dist + right_dir * strafe_vel);
+        if(raycast_point != vec3(0.0f)){                    
+            target_point = raycast_point;
+            GetPath(target_point);
+            vec3 next_path_point = GetNextPathPoint();
+            if(next_path_point != vec3(0.0f)){
+                target_point = next_path_point;
+            }
         }
     } 
 
@@ -541,6 +580,8 @@ vec3 GetTargetVelocity() {
         return GetMovementToPoint(ReadCharacterID(escort_id).position, 1.0f); 
     } else if(goal == _navigate){
         return GetMovementToPoint(nav_target, 1.0f); 
+    } else if(goal == _investigate){
+        return GetMovementToPoint(nav_target, 0.0f) * 0.2f; 
     } else if(goal == _struggle){
         if(struggle_change_time <= 0.0f){
             struggle_dir = normalize(vec3(RangedRandomFloat(-1.0f,1.0f), 
