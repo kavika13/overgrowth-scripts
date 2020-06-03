@@ -58,5 +58,7 @@ void main()
 
     color *= Exposure();
 
+    //color = vec3(gl_Color.r);
+
     gl_FragColor = vec4(color,1.0);
 }

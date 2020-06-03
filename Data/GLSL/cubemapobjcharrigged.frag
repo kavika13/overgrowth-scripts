@@ -81,7 +81,7 @@ void main()
     float back_lit = max(0.0,dot(normalize(ws_vertex),ws_light)); 
     float rim_lit = max(0.0,(1.0-dot(view,ws_normal)));
     rim_lit *= pow((dot(ws_light,ws_normal)+1.0)*0.5,0.5);
-    color += vec3(back_lit*rim_lit) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
+    color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
     
     // Add haze
     AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);

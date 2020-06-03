@@ -46,6 +46,7 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!controlled) return false;
+    if(holding_weapon) return false;
     return GetInputDown("grab");
 }
 

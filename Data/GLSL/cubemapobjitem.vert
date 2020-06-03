@@ -25,5 +25,6 @@ void main()
 
     tc0 = gl_MultiTexCoord0.xy;
     tc1 = GetShadowCoords();
+    //gl_FrontColor = gl_Color;
     gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
 } 
