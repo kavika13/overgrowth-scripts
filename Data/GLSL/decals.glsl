@@ -78,7 +78,7 @@ mat3 mat_from_quat(vec4 q) {
 }
 
 #if !defined(DEPTH_ONLY)
-void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec_amount, inout float roughness, inout float ambient_mult, inout float env_ambient_mult, in vec3 world_vert, float time, uint decal_val,
+void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec_amount, inout float roughness, inout float preserve_wetness, inout float ambient_mult, inout float env_ambient_mult, in vec3 world_vert, float time, uint decal_val,
     inout vec3 flame_final_color, inout float flame_final_contrib) {
     // number of decals in current cluster
     uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
@@ -142,6 +142,15 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                     #ifdef PARTICLE
                         ws_normal = vec3(-1.0);
                     #endif
+                    skip = true;
+                    break;}
+                case decalSpongeSquare:{
+                    preserve_wetness *= 1.0 - decal.tint[0];
+                    skip = true;
+                    break;}
+                case decalSpongeRound:{
+                    float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 8.0))) - 0.5) * 2.0, 1.0, 1.0 - decal.tint[0]);
+                    preserve_wetness *= mult;
                     skip = true;
                     break;}
             #ifdef WATER

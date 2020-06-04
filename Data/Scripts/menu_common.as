@@ -4,8 +4,7 @@
 
 // Common items for all menus in the system
 
-string col = "#fff";
-vec4 white = HexColor(col);
+vec4 white = HexColor("#fff");
 vec4 brightYellow = HexColor("#ffe600");
 vec4 mediumYellow = HexColor("#ffde00");
 vec4 khakiYellow = HexColor("#8b864e");
@@ -61,6 +60,10 @@ IMMouseOverPulseColor mouseover_pulse_full(vec4(1.0f,1.0f,1.0f,1.0f), vec4(1.0f,
 
 IMPulseAlpha pulse(1.0f, 0.0f, 2.0f);
 IMMouseOverShowBorder show_borders();
+
+IMMouseOverFadeIn hover_fade_in(100, inSineTween);
+IMMouseOverFadeIn hover_fade_in_half(10, inSineTween, 0.5f);
+
 string button_background_diamond = "Textures/ui/menus/main/button-diamond.png";
 string button_background_diamond_light = "Textures/ui/menus/main/button-diamond-light.png";
 string button_background_diamond_thin = "Textures/ui/menus/main/button-diamond-thin.png";
@@ -154,6 +157,13 @@ class GUIElement{
             next.EnableElement();
         }
     }
+    void SetPauseBehaviors(bool pause) {
+        if(container !is null) {
+            container.setPauseBehaviors(pause);
+        }
+        if(restore_container !is null)
+            restore_container.setPauseBehaviors(pause);
+    }
 }
 
 class CategoryButton : GUIElement{
@@ -244,13 +254,19 @@ class KeyRebind : GUIElement{
         parent.setElement(rebind_button);
         element_open = true;        
     }
-    void SwitchOption(uint32 value){
-        SetKeyboardBindingValue(binding_category, binding, value);
-        ToggleElement();
-        PutCurrentValue();
-    }
     void PutCurrentValue(){
-        current_value.setText(GetLocaleStringForScancode(GetCodeForKey(GetBindingValue(binding_category,binding))));
+        string binding_value = GetBindingValue(binding_category,binding);
+        if(binding_category == "key") {
+            if(binding_value.substr(0, 5) != "mouse") {
+                current_value.setText(GetLocaleStringForScancode(GetCodeForKey(binding_value)));
+            } else {
+                current_value.setText(GetStringForMouseString(binding_value));
+            }
+        } else if(binding_category.findFirst("gamepad_") == 0) {
+            current_value.setText(binding_value);
+        } else {
+            current_value.setText("N/A");
+        }
     }
     void DisableElement(){
         vec2 orig_size = parent.getSize();
@@ -475,11 +491,11 @@ class Slider : GUIElement{
         float multiplier = 5.0f;
         float new_slider_displacement;
         if(value == "+"){
-            slider_value += min(1.0f,(1.0f / 100.0f) * multiplier);
+            slider_value = max(0.0f, min(1.0f, slider_value + (1.0f / 100.0f) * multiplier));
             new_slider_displacement = max_x_slide * slider_value;
         }
         else if(value == "-"){
-            slider_value -= max(0.0f, (1.0f / 100.0f) * multiplier);
+            slider_value = max(0.0f, min(1.0f, slider_value - (1.0f / 100.0f) * multiplier));
             new_slider_displacement = max_x_slide * slider_value;
         }
         else if(value == "click_jump_value"){
@@ -581,6 +597,7 @@ class DropdownMenu : GUIElement{
         parent.clear();
         parent.setSize(orig_size);
         IMDivider choices_divider(name, DOVertical);
+        parent.addFloatingElement(choices_divider, "choices", vec2(0,0));
         choices_divider.setSizeX(restore_container.getSizeX());
         array<string> options = configuration.GetDisplayOptions();
         int current_index = 0;
@@ -616,15 +633,16 @@ class DropdownMenu : GUIElement{
                 current_index = i;
             }
 
+            choice.updateEngineTextObject();
+
             IMImage background_image(white_background);
             background_image.addMouseOverBehavior(mouseover_color_background, "");
-            background_image.setSize(vec2(restore_container.getSizeX(), restore_container.getSizeY()));
+            background_image.setSize(vec2(max(choice.getSizeX(), restore_container.getSizeX()), restore_container.getSizeY()));
             background_image.setClip(false);
             background_image.setColor(vec4(0,0,0,1));
             choice_holder.addFloatingElement(background_image, "background", vec2(0,0));
         }
         choices_divider.setZOrdering(4);
-        parent.addFloatingElement(choices_divider, "choices", vec2(0,0));
         SetCurrentControllerItem(current_index);
     }
     void SwitchOption(string value){
@@ -686,6 +704,31 @@ class DropdownConfigurationStringArray : DropdownConfigurationBaseClass{
             label.setText(display_values[current_option_index]);
         } else {
             label.setText(current_value);
+        }
+    }
+    void SetConfigValue(string value){
+        int index = display_values.find(value);
+        if(index != -1){
+            SetConfigValueString(config_name, config_values[index]);
+        }
+    }
+}
+
+class DropdownConfigurationStringArrayDefault : DropdownConfigurationBaseClass{
+    array<string>@ config_values;
+    string default_text;
+    DropdownConfigurationStringArrayDefault(array<string> _config_values, array<string> _display_values, string _default_text){
+        @config_values = @_config_values;
+        @display_values = @_display_values;
+        default_text = _default_text;
+    }
+    void SetCurrentValue(IMText@ label){
+        string current_value = GetConfigValueString(config_name);
+        current_option_index = config_values.find(current_value);
+        if(current_option_index != -1){
+            label.setText(display_values[current_option_index]);
+        } else {
+            label.setText(current_value + default_text);
         }
     }
     void SetConfigValue(string value){
@@ -791,6 +834,10 @@ class DropdownConfiguration{
     
     DropdownConfiguration(array<string> config_values, array<string> display_values, string config_name){
         @conf = DropdownConfigurationStringArray(config_values, display_values);
+        conf.config_name = config_name;
+    }
+    DropdownConfiguration(array<string> config_values, array<string> display_values, string config_name, string default_text){
+        @conf = DropdownConfigurationStringArrayDefault(config_values, display_values, default_text);
         conf.config_name = config_name;
     }
     DropdownConfiguration(array<int> config_values, array<string> display_values, string config_name){
@@ -913,7 +960,7 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
             if(nr_rows > _max_rows){
                 break;
             }else{
-                IMDivider new_row_container("row_container", DOHorizontal);
+                IMDivider new_row_container("row_container" + i, DOHorizontal);
                 @current_row = @new_row_container;
                 level_holder.append(new_row_container);
             }
@@ -939,18 +986,20 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
         if(kAnimateMenu){
             left_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
         }
+        IMMessage on_click("shift_menu", -1);
         left_arrow_container.addFloatingElement(left_arrow, "left_arrow", vec2((extra / 2.0f), (extra / 2.0f)), 1);
         left_arrow.scaleToSizeX(arrow_width);
         left_arrow.setColor(button_font.color);
         left_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-        left_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", -1), "");
+        left_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(on_click), "");
+        AddControllerItem(left_arrow_container, on_click);
     }
     menu_holder.append(left_arrow_container);
 
     menu_holder.append(menu_container);
 
     //The right arrow in the level select menu.
-    IMContainer right_arrow_container("left_arrow_container", DOHorizontal);
+    IMContainer right_arrow_container("right_arrow_container", DOHorizontal);
     right_arrow_container.setAlignment(CACenter, CACenter);
     right_arrow_container.setSize(vec2(arrow_width + extra, arrow_height + extra));
     if(MenuCanShift(1)){
@@ -958,13 +1007,15 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
         if(kAnimateMenu){
             right_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * 1, 0), inQuartTween ), "");
         }
+        IMMessage on_click("shift_menu", 1);
         right_arrow_container.addFloatingElement(right_arrow, "right_arrow", vec2((extra / 2.0f), (extra / 2.0f)), 1);
         right_arrow.scaleToSizeX(arrow_width);
         right_arrow.setColor(button_font.color);
         right_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-        right_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", 1), "");
+        right_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(on_click), "");
         //To make the right arrow point in the opposite direction, just rotate it 180 degrees.
         right_arrow.setRotation(180);
+        AddControllerItem(right_arrow_container, on_click);
     }
     menu_holder.append(right_arrow_container);
 }
@@ -984,10 +1035,11 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
     FontSetup menu_item_font(button_font_small.fontName, int((level_item_width + level_item_height) / max(13.0f, level.name.length() * 0.65f)) , button_font_small.color, button_font_small.shadowed);
 
     //This divider has all the elements of a level.
-    IMDivider level_divider("button_divider", DOHorizontal);
+    IMDivider level_divider("button_divider" + number, DOHorizontal);
 
     //The container is used to add floating elements.
-    IMContainer level_container(level_item_width, level_item_height);
+    IMContainer level_container("level_container" + number, level_item_width, level_item_height);
+    level_container.sendMouseOverToChildren(true);
     level_divider.sendMouseOverToChildren(true);
     level_divider.append(level_container);
     IMImage background( white_background );
@@ -1022,11 +1074,20 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
         IMImage level_preview( level.image );
         level_preview.setSize(vec2(level_item_width - preview_size_offset, level_item_height - preview_size_offset));
         level_container.addFloatingElement(level_preview, "preview", vec2(middle_x - (level_preview.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f)), 3);
+
+        if(level.completed_levels != -1 && level.total_levels != -1) {
+            IMImage fade_background( white_background );
+            fade_background.setSize(vec2(level_item_width - preview_size_offset, level_item_height - preview_size_offset));
+            level_container.addFloatingElement(fade_background, "fade_background", vec2(middle_x - (level_preview.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f)), 4);
+            fade_background.setColor(vec4(0.0f, 0.0f, 0.0f, 0.0f));
+            fade_background.addMouseOverBehavior(mouseover_scale, "");
+            fade_background.addMouseOverBehavior(hover_fade_in_half, "");
+        }
         
         if(level.disabled) {
             IMImage color_overlay( color_overlay_image );
             color_overlay.setSize(vec2(level_item_width - preview_size_offset, level_item_height - preview_size_offset));
-            level_container.addFloatingElement(color_overlay, "preview_overlay", vec2(middle_x - (level_preview.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f)), 4);
+            level_container.addFloatingElement(color_overlay, "preview_overlay", vec2(middle_x - (level_preview.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f)), 5);
             color_overlay.setColor(vec4(0.3f,0.3f,0.3f,0.50f));
         } else if(level.coming_soon){
             IMContainer text_holder(0,0);
@@ -1064,7 +1125,8 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
         level_container.addFloatingElement(title_background, "title_background", vec2(middle_x - (title_background.getSizeX() / 2.0f), level_container.getSizeY() - title_background.getSizeY()), 4);
 
         //This is the text used to show the level name.
-        IMText level_text(level.name, menu_item_font);
+        string level_name = GetLocalizedLevelName(GetConfigValueString("language"), level.file);
+        IMText level_text(level_name.isEmpty() ? level.name : level_name, menu_item_font);
         if(level.disabled) {
             level_text.setColor(vec4(0.3f,0.3f,0.3f,0.50f));
         }         
@@ -1227,6 +1289,21 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
             level_number_container.setElement(level_number);
             level_container.addFloatingElement(level_number_container, "level_number", vec2(middle_x - (background.getSizeX() / 2.0f) - (level_number_container.getSizeX() / 2.0f) * 0.6f, middle_y - (background.getSizeY() / 2.0f) - (level_number_container.getSizeY() / 2.0f) * 0.6f) , 4);
         }
+
+        if(level.completed_levels != -1 && level.total_levels != -1) {
+            IMText completed_text(level.completed_levels + "/" + level.total_levels, FontSetup("edosz", 120, HexColor("#CCCCCC"), true));
+            completed_text.setAlpha(0.0f);
+            completed_text.addMouseOverBehavior(hover_fade_in, "");
+
+            IMDivider title_text_holder_holder("title_text_holder_holder", DOVertical);
+            IMDivider title_text_holder("title_text_holder", DOHorizontal);
+            title_text_holder.setSize(vec2(level_item_width, level_item_height));
+            title_text_holder_holder.setSize(vec2(level_item_width, level_item_height));
+            title_text_holder_holder.append(title_text_holder);
+            title_text_holder.append(completed_text);
+            completed_text.setZOrdering(10);
+            level_container.addFloatingElement(title_text_holder_holder, "completed_text", vec2(middle_x - title_text_holder_holder.getSizeX() / 2.0f, middle_y - title_text_holder_holder.getSizeY() / 2.0f), 1);
+        }
         
         ControllerItem new_controller_item();
         if(number % max_items == 0){
@@ -1239,6 +1316,7 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
         @new_controller_item.message = on_click;
         level_container.setName("menu_item" + (number - 1));
         @new_controller_item.element = level_container;
+        level_container.sendMouseOverToChildren(true);
         AddControllerItem(@new_controller_item);
     }
     row.append(level_divider);
@@ -1867,7 +1945,7 @@ void AddCategoryButton(string text, IMDivider@ parent){
     IMDivider main_divider(DOHorizontal);
     IMMessage message("switch_category");
     message.addString(text);
-    IMContainer new_container(button_width + extra_space, button_height + extra_space);
+    IMContainer new_container("Category_" + text, button_width + extra_space, button_height + extra_space);
     new_container.addLeftMouseClickBehavior( IMFixedMessageOnClick(message), "" );
     new_container.setAlignment(CALeft, CACenter);
 
@@ -1953,6 +2031,7 @@ void AddCheckBox(string text, IMDivider@ parent, string config_name, float leadi
     checkbox_and_title_divider.sendMouseOverToChildren();
     
     AddControllerItem(checkbox_and_title_container, onclick);
+    checkbox_and_title_container.sendMouseOverToChildren(true);
     gui_elements.insertLast(Checkbox(text, checkbox_parent, checkbox_holder, config_name));
 
     main_container.setElement(main_divider);
@@ -1985,7 +2064,7 @@ void AddSlider(string text, IMDivider@ parent, string config_name, float max_val
     left_container.setElement(title);
     title.setZOrdering(2);
 
-    IMContainer slider_parent(slider_width, slider_height);
+    IMContainer slider_parent(text + "_sliders", slider_width, slider_height);
     slider_parent.setAlignment(CACenter, CACenter);
 
     IMContainer slider_holder(slider_width, slider_height);
@@ -2062,8 +2141,8 @@ void AddScrollBar(IMDivider@ parent, float bar_width, float bar_height, int num_
         return;
     }
     
-    IMDivider main_divider("main_divider", DOVertical);
-    IMContainer main_container(bar_width, bar_height);
+    IMDivider main_divider("slider_main_divider", DOVertical);
+    IMContainer main_container("scrollbar", bar_width, bar_height);
     AddNextPageArrow(main_divider, -1);
     
     main_container.setAlignment(CACenter, CACenter);
@@ -2098,15 +2177,10 @@ void AddScrollBar(IMDivider@ parent, float bar_width, float bar_height, int num_
 
     main_divider.append(slider_holder);
     
-    IMMessage message_left("option_changed");
-    message_left.addString("scroll_bar");
-    message_left.addString("-");
+    IMMessage message_up("shift_menu", -1);
+    IMMessage message_down("shift_menu", 1);
     
-    IMMessage message_right("option_changed");
-    message_right.addString("scroll_bar");
-    message_right.addString("+");
-    
-    //AddControllerItem(slider_parent, message_left, message_right);
+    AddControllerItem(main_container, null, null, null, message_up, message_down);
     gui_elements.insertLast(ScrollBar(main_container, slider_button_image));
     AddNextPageArrow(main_divider, 1);
     main_container.setElement(main_divider);
@@ -2492,13 +2566,13 @@ class Search {
     }
     void Update(){
         if(active){
-            if(GetInputPressed(0, "left")){
+            if(GetInputPressed(0, "menu_left")){
                 if((cursor_offset) < int(query.length())){
                     cursor_offset++;
                     SetCurrentSearchQuery();
                 }
             }
-            else if(GetInputPressed(0, "right")){
+            else if(GetInputPressed(0, "menu_right")){
                 if(cursor_offset > 0){
                     cursor_offset--;
                     SetCurrentSearchQuery();
@@ -2533,7 +2607,7 @@ class Search {
                         }
                         return;
                     }
-                }else if(GetInputDown(0, "left")){
+                }else if(GetInputDown(0, "menu_left")){
                     long_press_input_timer += time_step;
                     if(long_press_input_timer > long_press_interval){
                         long_press_input_timer = 0.0f;
@@ -2543,7 +2617,7 @@ class Search {
                         }
                     }
                     return;
-                }else if(GetInputDown(0, "right")){
+                }else if(GetInputDown(0, "menu_right")){
                     long_press_input_timer += time_step;
                     if(long_press_input_timer > long_press_interval){
                         long_press_input_timer = 0.0f;
@@ -2556,11 +2630,11 @@ class Search {
                 }else{
                     long_press_input_timer = 0.0f;
                 }
-                if(!GetInputDown(0, "delete") && !GetInputDown(0, "backspace") && !GetInputDown(0, "left") && !GetInputDown(0, "right")){
+                if(!GetInputDown(0, "delete") && !GetInputDown(0, "backspace") && !GetInputDown(0, "menu_left") && !GetInputDown(0, "menu_right")){
                     long_press_timer = 0.0f;
                 }
             }else{
-                if(GetInputDown(0, "delete") || GetInputDown(0, "backspace") || GetInputDown(0, "left") || GetInputDown(0, "right")){
+                if(GetInputDown(0, "delete") || GetInputDown(0, "backspace") || GetInputDown(0, "menu_left") || GetInputDown(0, "menu_right")){
                     long_press_timer += time_step;
                 }else{
                     long_press_timer = 0.0f;

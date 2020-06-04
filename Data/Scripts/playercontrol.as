@@ -5,6 +5,8 @@ float grab_key_time;
 bool listening = false;
 bool delay_jump;
 
+const float kWalkSpeed = 0.2f;
+
 // For pressing crouch to drop off ledges
 bool crouch_pressed_on_ledge = false;
 bool crouch_pressable_on_ledge = false;
@@ -370,8 +372,14 @@ vec3 GetTargetVelocity() {
     target_velocity -= GetMoveYAxis(this_mo.controller_id)*camera.GetFlatFacing();
     target_velocity += GetMoveXAxis(this_mo.controller_id)*right;
 
-    if(length_squared(target_velocity)>1){
-        target_velocity = normalize(target_velocity);
+    if(GetInputDown(this_mo.controller_id, "walk")) {
+        if(length_squared(target_velocity)>kWalkSpeed*kWalkSpeed){
+            target_velocity = normalize(target_velocity)*kWalkSpeed;
+        }
+    } else {
+        if(length_squared(target_velocity)>1){
+            target_velocity = normalize(target_velocity);
+        }
     }
     
     if(trying_to_get_weapon > 0){

@@ -106,7 +106,7 @@ void BuildUI(){
     float vertical_arrow_height = 200.0f;
 
     //Create the actual level select menu between the two arrows.
-    IMContainer menu_container(menu_width, menu_height);
+    IMContainer menu_container("menu_container", menu_width, menu_height);
 
     float item_width = 500; 
     float item_height = 300;
@@ -156,10 +156,8 @@ void BuildUI(){
                 current_column_b++;
             }
 
-            if( li.unlocked ) {
-                if( 1+menu_column > int(visible_columns) ) {
-                    visible_columns = menu_column+1;
-                }
+            if( 1+menu_column > int(visible_columns) ) {
+                visible_columns = menu_column+1;
             }
 
             if( menu_column >= int(current_page) && menu_column < int(current_page) + 4  ) {
@@ -174,7 +172,7 @@ void BuildUI(){
     }
 
     for(uint i = 0; i < current_screen_levels.size(); i++) {
-        IMDivider@ level_item_container = @IMDivider();
+        IMDivider@ level_item_container = @IMDivider("level_item_container" + i);
         LevelInfo@ li = current_screen_levels[i];
         ModLevel ml = li.GetModLevel();
         Parameter connections = ml.GetParameter()["levelnext"];
@@ -251,68 +249,69 @@ void BuildUI(){
             if( level_links[ml.GetID()].isEmpty() == false ) {
                 if( IsSubMenuUnlocked( level_links[ml.GetID()].asString() ) ) {
                     string menulink = level_links[ml.GetID()].asString();
-                    IMContainer arrow_container("menulink_arrow", DOHorizontal);
-                    if( menu_page == "a" ) {
-                        IMImage up_arrow( navigation_arrow );
-                        if(kAnimateMenu){
-                            up_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
-                        }
-                        vec2 arrow_top_offset(0.0f, -(vertical_arrow_height - preview_size_offset));
-                        arrow_container.addFloatingElement(up_arrow, "up_arrow_"+menulink, arrow_top_offset + vertical_arrow_middle_offset - vertical_arrow_margin, 12);
-                        up_arrow.scaleToSizeX(vertical_arrow_width);
-                        up_arrow.setColor(button_font.color);
-                        up_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-                        up_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("set_sub_menu", menulink), "");
-                        up_arrow.setRotation(270);
-                    } else { 
-                        IMImage down_arrow( navigation_arrow );
-                        if(kAnimateMenu){
-                            down_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
-                        }
-                        vec2 arrow_bottom_offset(0.0f, item_height);
-                        arrow_container.addFloatingElement(down_arrow, "down_arrow_"+menulink, arrow_bottom_offset + vertical_arrow_middle_offset + vertical_arrow_margin, 12);
-                        down_arrow.setClip(false);
-                        down_arrow.scaleToSizeX(100.0f);
-                        down_arrow.setColor(button_font.color);
-                        down_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-                        down_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("set_sub_menu", menulink), "");
-                        down_arrow.setRotation(90);
+                    //IMContainer arrow_container("menulink_arrow"+menulink);
+                    IMImage arrow(navigation_arrow);
+                    if(kAnimateMenu){
+                        arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
                     }
-                    menu_container.addFloatingElement(arrow_container, "arrow_container_"+menulink, positions[i], 1);
+                    IMMessage message("set_sub_menu", menulink);
+                    arrow.setColor(button_font.color);
+                    arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
+                    arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(message), "");
+                    vec2 arrow_position;
+                    if( menu_page == "a" ) {
+                        vec2 offset(0.0f, -(vertical_arrow_height - preview_size_offset));
+                        arrow_position = offset + vertical_arrow_middle_offset - vertical_arrow_margin;
+                        //arrow_container.addFloatingElement(up_arrow, "up_arrow_"+menulink, arrow_top_offset + vertical_arrow_middle_offset - vertical_arrow_margin, 12);
+                        arrow.scaleToSizeX(vertical_arrow_width);
+                        arrow.setRotation(270);
+                    } else { 
+                        vec2 offset(0.0f, item_height);
+                        arrow_position = offset + vertical_arrow_middle_offset + vertical_arrow_margin;
+                        //arrow_container.addFloatingElement(down_arrow, "down_arrow_"+menulink, arrow_bottom_offset + vertical_arrow_middle_offset + vertical_arrow_margin, 12);
+                        arrow.setClip(false);
+                        arrow.scaleToSizeX(100.0f);
+                        arrow.setRotation(90);
+                    }
+                    menu_container.addFloatingElement(arrow, "arrow"+menulink, positions[i] + arrow_position, 12);
+                    AddControllerItem(arrow, message);
+                    //menu_container.addFloatingElement(arrow_container, "arrow_container_"+menulink, positions[i], 1);
                 }
             }
 
             if( columns[i] == 0 && current_page_data["back"].isEmpty() == false) {
                 string menulink = level_links[ml.GetID()].asString();
-                IMContainer arrow_container("menulink_arrow", DOHorizontal);
-                if( current_page_data["back_direction"].asString() == "up" ) {
-                    IMImage up_arrow( navigation_arrow );
-                    if(kAnimateMenu){
-                        up_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
-                    }
-                    vec2 arrow_top_offset(0.0f, 50.0f);
-                    arrow_container.addFloatingElement(up_arrow, "up_arrow_"+menulink, arrow_top_offset + vertical_arrow_middle_offset - vertical_arrow_margin, 12);
-                    up_arrow.scaleToSizeX(vertical_arrow_width);
-                    //up_arrow.setColor(vec4(0.0f,0.0f,0.0f,1.0f));
-                    up_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-                    up_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("set_sub_menu", current_page_data["back"].asString()), "");
-                    up_arrow.setRotation(270);
-                } else { 
-                    IMImage down_arrow( navigation_arrow );
-                    if(kAnimateMenu){
-                        down_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
-                    }
-                    vec2 arrow_bottom_offset(0.0f, 50.0f);
-                    arrow_container.addFloatingElement(down_arrow, "down_arrow_"+menulink, arrow_bottom_offset + vertical_arrow_middle_offset + vertical_arrow_margin, 12);
-                    down_arrow.setClip(false);
-                    down_arrow.scaleToSizeX(100.0f);
-                    //down_arrow.setColor(vec4(0.0f,0.0f,0.0f,1.0f));
-                    down_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-                    down_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("set_sub_menu", current_page_data["back"].asString()), "");
-                    down_arrow.setRotation(90);
+                //IMContainer arrow_container("menulink_arrow");
+                IMImage arrow(navigation_arrow);
+                if(kAnimateMenu){
+                    arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
                 }
-                menu_container.addFloatingElement(arrow_container, "arrow_container_"+menulink, positions[i], 1);
+                arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
+                IMMessage message("set_sub_menu", current_page_data["back"].asString());
+                arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(message), "");
+                vec2 arrow_position;
+                if( current_page_data["back_direction"].asString() == "up" ) {
+                    arrow_position = vec2(0.0f, 50.0f) + vertical_arrow_middle_offset - vertical_arrow_margin;
+                    //arrow_container.addFloatingElement(up_arrow, "up_arrow_"+menulink, arrow_top_offset + vertical_arrow_middle_offset - vertical_arrow_margin, 12);
+                    arrow.scaleToSizeX(vertical_arrow_width);
+                    //up_arrow.setColor(vec4(0.0f,0.0f,0.0f,1.0f));
+                    arrow.setRotation(270);
+                } else { 
+                    arrow_position = vec2(0.0f, 50.0f) + vertical_arrow_middle_offset + vertical_arrow_margin;
+                    //arrow_container.addFloatingElement(down_arrow, "down_arrow_"+menulink, arrow_bottom_offset + vertical_arrow_middle_offset + vertical_arrow_margin, 12);
+                    arrow.setClip(false);
+                    arrow.scaleToSizeX(100.0f);
+                    //down_arrow.setColor(vec4(0.0f,0.0f,0.0f,1.0f));
+                    arrow.setRotation(90);
+                }
+                menu_container.addFloatingElement(arrow, "arrow"+menulink, positions[i] + arrow_position, 12);
+                AddControllerItem(arrow, message);
+                //menu_container.addFloatingElement(arrow_container, "arrow_container_"+menulink, positions[i], 1);
             }
+        } else {
+            li.disabled = true;
+            CreateMenuItem(level_item_container, li, false, false, current_screen_level_indices[i]+1, item_width, item_height, false, false, false, true);
+            menu_container.addFloatingElement(level_item_container, "level_" + li.id + "_container", positions[i], 1);
         }
     }
 
@@ -329,11 +328,13 @@ void BuildUI(){
         if(kAnimateMenu){
             left_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
         }
+        IMMessage message("shift_menu", -1);
         left_arrow_container.addFloatingElement(left_arrow, "left_arrow", vec2((extra / 2.0f), (extra / 2.0f)), 1);
         left_arrow.scaleToSizeX(arrow_width);
         left_arrow.setColor(button_font.color);
         left_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-        left_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", -1), "");
+        left_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(message), "");
+        AddControllerItem(left_arrow_container, message);
     } 
     mainDiv.append(left_arrow_container);
 
@@ -348,13 +349,15 @@ void BuildUI(){
         if(kAnimateMenu){
             right_arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * 1, 0), inQuartTween ), "");
         }
+        IMMessage message("shift_menu", 1);
         right_arrow_container.addFloatingElement(right_arrow, "right_arrow", vec2((extra / 2.0f), (extra / 2.0f)), 1);
         right_arrow.scaleToSizeX(arrow_width);
         right_arrow.setColor(button_font.color);
         right_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
-        right_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", 1), "");
+        right_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick(message), "");
         //To make the right arrow point in the opposite direction, just rotate it 180 degrees.
         right_arrow.setRotation(180);
+        AddControllerItem(right_arrow_container, message);
         is_last = false;
     } else {
         is_last = true;

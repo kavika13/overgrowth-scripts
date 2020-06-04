@@ -205,7 +205,7 @@ class Situation {
                     } else {
                         dist = distance_squared(char.position, this_mo.position);
                     }
-                    if(char.GetIntVar("knocked_out") == _awake && dist < _target_look_threshold_sqrd){
+                    if(dist < _target_look_threshold_sqrd){
                         if(closest_id == -1 || dist < closest_dist){
                             closest_id = known_chars[i].id;
                             closest_dist = dist;

@@ -6,7 +6,7 @@ MusicLoad ml("Data/Music/menu.xml");
 
 IMGUI@ imGUI;
 
-
+bool capture_input = false;
 
 bool HasFocus() {
     return false;
@@ -29,24 +29,31 @@ void Dispose() {
 }
 
 bool CanGoBack() {
-    return true;
+    return !capture_input;
 }
 
 void Update() {
-    UpdateSettings();
+    UpdateSettings(true);
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
         //Log( info, "Got processMessage " + message.name );
         if( message.name == "Back" ){
             this_ui.SendCallback( "back" );
-        }else{
+        } else if ( message.name == "capture_input" ){
+            capture_input = true;
+        } else if( message.name == "release_input" ){
+            capture_input = false;
+        } else if( message.name == "rebuild_settings"){
+            ScriptReloaded();
+        } else {
             ProcessSettingsMessage(message);
         }
     }
     // Do the general GUI updating
     imGUI.update();
-    UpdateController();
+    if(!capture_input)
+        UpdateController();
 }
 
 

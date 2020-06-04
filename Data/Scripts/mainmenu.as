@@ -50,7 +50,7 @@ void BuildUI(){
     left_panel.append(IMSpacer(DOVertical, 100));
     IMDivider horizontal_buttons_holder(DOHorizontal);
     horizontal_buttons_holder.append(IMSpacer(DOHorizontal, 75));
-    IMDivider buttons_holder(DOVertical);
+    IMDivider buttons_holder("buttons_holder", DOVertical);
     buttons_holder.append(IMSpacer(DOHorizontal, 200));
     buttons_holder.setAlignment(CACenter, CACenter);
     horizontal_buttons_holder.append(buttons_holder);

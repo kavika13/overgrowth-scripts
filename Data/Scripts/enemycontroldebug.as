@@ -173,11 +173,11 @@ void DebugDrawAIState()
     if( GetConfigValueBool( "debug_show_ai_state" ) )
     {
         ai_state_debug.SetActive( true  );
-        ai_state_debug.SetText("Player "+this_mo.GetID() + "\n" + GetAIGoalString(goal) + "\n" + GetAISubGoalString(sub_goal) + "\n" + GetGeneralStateString(state) + "\n", head_pos );
+        ai_state_debug.SetText("Player "+this_mo.GetID() + "\n" + GetAIGoalString(goal) + "\n" + GetAISubGoalString(sub_goal) + "\n" + GetGeneralStateString(state) + "\n" + GetIsGroupLeaderString() + "\n", head_pos );
 
         string label = "P"+this_mo.GetID()+"goal: ";
         string text = label;
-        text += GetAIGoalString(goal) + ", " + GetAISubGoalString(sub_goal) + ", " + GetPathFindTypeString(path_find_type) + ", " + GetClimbStageString(trying_to_climb) + ", " + GetGeneralStateString(state);
+        text += GetAIGoalString(goal) + ", " + GetAISubGoalString(sub_goal) + ", " + GetPathFindTypeString(path_find_type) + ", " + GetClimbStageString(trying_to_climb) + ", " + GetGeneralStateString(state) + ", " + GetIsGroupLeaderString();
         DebugText(label, text,0.1f);
     }
     else
@@ -278,4 +278,8 @@ string GetGeneralStateString( int state )
         case _ragdoll_state: return "ragdoll_state";
     }
     return "unknown";
+}
+
+string GetIsGroupLeaderString() {
+    return "Group Leader: " + (group_leader == -1 && followers.size() > 0);
 }
