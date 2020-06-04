@@ -37,6 +37,10 @@ int IsAggro() {
     return 1;
 }
 
+bool StuckToNavMesh() {
+    return false;
+}
+
 void UpdateBrain(const Timestep &in ts){
     startled = false;    
     if(GetInputDown(this_mo.controller_id, "grab")){
@@ -165,9 +169,9 @@ bool ActiveDodging(int attacker_id) {
         }
     }
     if(attack_getter2.GetFleshUnblockable() == 1 && knife_attack){
-        return active_dodge_time > time - 0.4f; // Player gets bonus to dodge vs knife attacks
+        return active_dodge_time > time - (HowLongDoesActiveDodgeLast()+0.2); // Player gets bonus to dodge vs knife attacks
     } else {
-        return active_dodge_time > time - 0.2f;
+        return active_dodge_time > time - HowLongDoesActiveDodgeLast();
     }
 }
 

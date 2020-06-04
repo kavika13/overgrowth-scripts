@@ -81,7 +81,7 @@ mat3 mat_from_quat(vec4 q) {
 void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec_amount, inout float roughness, inout float ambient_mult, inout float env_ambient_mult, in vec3 world_vert, float time, uint decal_val,
     inout vec3 flame_final_color, inout float flame_final_contrib) {
     // number of decals in current cluster
-    uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
+    uint decal_count = (decal_val >> 24u) & 0x000000FFu;
 
     //colormap.xyz = vec3(decal_count) / 16.0;
     //return;
@@ -91,7 +91,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
     //colormap.xyz = vec3(g.z / grid_size.z);
 
     // index into cluster_decals
-    uint first_decal_index = decal_val & INDEX_MASK;
+    uint first_decal_index = decal_val & 0x00FFFFFFu;
 
     // decal list data is immediately after cluster lookup data
     uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -125,26 +125,41 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
             int type = int(decal.tint[3]);
             bool skip = false;
             switch (type) {
-            case decalShadow: {
-                #if defined(CHARACTER) || defined(ITEM)
-                #else
-                    float mult = max(0.5, min(1.0, pow(length(temp*2.0), 1.0)));
-                    ambient_mult *= mult;
-                #endif
+                case decalShadow: {
+                    #if defined(CHARACTER) || defined(ITEM)
+                    #else
+                        float mult = max(0.5, min(1.0, pow(length(temp*2.0), 1.0)));
+                        ambient_mult *= mult;
+                    #endif
+                        skip = true;
+                    break;}
+                case decalEnvShadow:{
+                    float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, decal.tint[0]);
+                    env_ambient_mult *= mult;
                     skip = true;
-                break;}
-            case decalEnvShadow:{
-                float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, decal.tint[0]);
-                env_ambient_mult *= mult;
-                skip = true;
-                break;}
-            #if defined(CHARACTER) || defined(ITEM)
+                    break;}
+                case decalUnderwater:{
+                    #ifdef PARTICLE
+                        ws_normal = vec3(-1.0);
+                    #endif
+                    skip = true;
+                    break;}
+            #ifdef WATER
+                case decalWaterFroth: {
+                    const float fade_time = 2.0;
+                    float opac = max(decal.tint[0], min(1.0, (time - spawn_time)*3.0) * max(0.0, (spawn_time - time + fade_time)/fade_time));
+                    float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, 1.0-opac);
+                    roughness = max(1.0-mult, roughness);
+                    skip = true;}
+                    break;
+            #endif
+            #if defined(CHARACTER) || defined(ITEM) || defined(PARTICLE)
             #else
-            case decalDefault:
-            case decalBlood:
-            case decalWatersplat:
-            case decalFire:
-                break;
+                case decalDefault:
+                case decalBlood:
+                case decalWatersplat:
+                case decalFire:
+                    break;
             #endif
             default:
                 skip = true;
@@ -157,7 +172,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                 vec2 color_tex_dx = ((inv_rotation_mat * world_dx) * inv_scale).xz * size_uv;
                 vec2 color_tex_dy = ((inv_rotation_mat * world_dy) * inv_scale).xz * size_uv;
 
-                vec2 color_tex_coord = start_uv + size_uv * (temp.xz + vec2(0.5));
+                vec2 color_tex_coord = start_uv + size_uv * vec2(temp.x + 0.5, 1.0 - (temp.z + 0.5));
                 vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
 
         #ifdef DECAL_NORMALS

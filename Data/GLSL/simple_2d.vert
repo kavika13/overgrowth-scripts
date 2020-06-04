@@ -17,7 +17,11 @@ out vec4 color;
 void main() {    
     gl_Position = mvp_mat * vec4(vert_coord,0.0,1.0);
 #ifdef TEXTURE
-	var_tex_coord = tex_coord;
+    #ifdef FLIPPED
+        var_tex_coord = vec2(tex_coord[0], 1.0 - tex_coord[1]);
+    #else
+    	var_tex_coord = tex_coord;
+    #endif 
 #endif 
 
  #ifdef COLOREDVERTICES

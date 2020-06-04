@@ -165,9 +165,13 @@ class Situation {
     bool PlayCombatSong() {
         for(uint i=0; i<known_chars.size(); ++i){
             if(!known_chars[i].friendly){
-                MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                if(char.QueryIntFunction("int IsAggressive()") == 1){
-                    return true;
+                if( MovementObjectExists(known_chars[i].id) ) {
+                    MovementObject@ char = ReadCharacterID(known_chars[i].id);
+                    if(char.QueryIntFunction("int IsAggressive()") == 1){
+                        return true;
+                    }
+                } else {
+                    Log(warning, "Character " + known_chars[i].id + " appears to have disappeared.");
                 }
             }
         }
@@ -189,19 +193,23 @@ class Situation {
 
         for(uint i=0; i<known_chars.size(); ++i){
             if(!known_chars[i].friendly){
-                MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                float dist;
-                if(this_mo.controlled) {
-                    vec3 cam_dir = normalize(char.position - camera.GetPos());
-                    dist = -dot(cam_dir, camera.GetFacing());
-                } else {
-                    dist = distance_squared(char.position, this_mo.position);
-                }
-                if(char.GetIntVar("knocked_out") == _awake && dist < _target_look_threshold_sqrd){
-                    if(closest_id == -1 || dist < closest_dist){
-                        closest_id = known_chars[i].id;
-                        closest_dist = dist;
+                if( MovementObjectExists(known_chars[i].id) ) {
+                    MovementObject@ char = ReadCharacterID(known_chars[i].id);
+                    float dist;
+                    if(this_mo.controlled) {
+                        vec3 cam_dir = normalize(char.position - camera.GetPos());
+                        dist = -dot(cam_dir, camera.GetFacing());
+                    } else {
+                        dist = distance_squared(char.position, this_mo.position);
                     }
+                    if(char.GetIntVar("knocked_out") == _awake && dist < _target_look_threshold_sqrd){
+                        if(closest_id == -1 || dist < closest_dist){
+                            closest_id = known_chars[i].id;
+                            closest_dist = dist;
+                        }
+                    }
+                } else {
+                    Log(warning, "Character " + known_chars[i].id + " appears to have disappeared.");
                 }
             }
         }

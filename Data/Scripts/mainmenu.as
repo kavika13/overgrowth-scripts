@@ -1,262 +1,162 @@
-#include "ui_effects.as"
-#include "ui_tools.as"
-#include "arena_meta_persistence.as"
 #include "music_load.as"
-
-AHGUI::FontSetup labelFont("edosz", 70,HexColor("#fff"));
-AHGUI::FontSetup versionFont("edosz", 65, HexColor("#fff"));
-
-int title_spacing = 100;
-int menu_item_spacing = 20;
+#include "menu_common.as"
 
 MusicLoad ml("Data/Music/menu.xml");
 
-AHGUI::MouseOverPulseColor buttonHover(
-                                        HexColor("#ffde00"),
-                                        HexColor("#ffe956"), .25 );
-
-bool draw_settings = false;
-
-class MainMenuGUI : AHGUI::GUI {
-    RibbonBackground ribbon_background;
-
-    MainMenuGUI()
-    {
-        //restrict16x9(false);
-
-        super();
-
-        ribbon_background.Init();
-
-        Init();
-    }
-
-    void Init()
-    {
-        AHGUI::Divider@ mainpane = root.addDivider( DDTop,
-                                                    DOVertical,
-                                                    ivec2( UNDEFINEDSIZEI, 1140 ) );
-
-        /*
-        AHGUI::Image alphasticker = AHGUI::Image("Textures/ui/main_menu/alphasticker.png");
-        alphasticker.scaleToSizeX( 350 );
-        mainpane.addFloatingElement( alphasticker, "alphasticker", ivec2( 2100, 100 ));
-        */
-
-        /* 
-        // TODO: Why is this making it crash on MAC?? -David
-        AHGUI::Text alphaversion = AHGUI::Text( GetBuildVersionShort().split("-")[0], versionFont );
-        mainpane.addFloatingElement( alphaversion, "alphaversion", ivec2( 1800, 300 ));
-        */
-
-        AHGUI::Image titleImage = AHGUI::Image("Textures/ui/main_menu/overgrowth.png");
-        mainpane.addElement(titleImage,DDTop);
-
-        mainpane.addSpacer(title_spacing,DDTop);
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Lugaru", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Tutorial", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("tutorial") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Arena", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("arena") );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Versus", labelFont);
-            buttonText.addMouseOverBehavior( buttonHover );
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("versus") );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-/*
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Editor", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("old_alpha_menu") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Settings", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("settings") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Mods", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mods") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Credits", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("credits") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Exit", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("exit") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }*/
-    }
-
-    void processMessage( AHGUI::Message@ message )
-    {
-        Log( info, "Got processMessage " + message.name );
-        if( message.name == "arena" )
-        {
-            // global_data.clearSessionProfile();
-            // global_data.clearArenaSession();
-            // this_ui.SendCallback( "arena_meta.as" );
-
-            global_data.clearSessionProfile();
-            global_data.clearArenaSession();
-            this_ui.SendCallback( "arena_simple.as" );
-        }
-        else if( message.name == "versus" )
-        {
-            this_ui.SendCallback("Project60/22_grass_beach.xml");
-        }
-        else if( message.name == "lugaru" )
-        {
-			this_ui.SendCallback( "lugaru_menu_simple.as" );
-        }
-		else if( message.name == "tutorial" )
-        {
-			this_ui.SendCallback("tutorial.xml");
-        }
-		else if( message.name == "credits" )
-        {
-			this_ui.SendCallback( "credits.as" );
-        }
-        else if( message.name == "mods" )
-        {
-            this_ui.SendCallback( "mods" );
-        }
-        else if( message.name == "old_alpha_menu" )
-        {
-            this_ui.SendCallback( "old_alpha_menu" );
-        }
-        else if( message.name == "exit" )
-        {
-            this_ui.SendCallback( "exit" );
-        }
-        else if( message.name == "settings" )
-        {
-            draw_settings = true;
-        }
-    }
-
-    void update()
-    {
-        //Other things here, before
-
-        AHGUI::GUI::update();
-    }
-
-
-    void render() {
-        EnterTelemetryZone("MainMenuGUI::render()");
-
-        EnterTelemetryZone("ribbon_background.Update()");
-        ribbon_background.Update();
-        LeaveTelemetryZone();
-
-        EnterTelemetryZone("ribbon_background.DrawGUI");
-        ribbon_background.DrawGUI(1.1f);
-        LeaveTelemetryZone();
-
-        EnterTelemetryZone("hud.Draw()");
-        hud.Draw();
-        LeaveTelemetryZone();
-
-        EnterTelemetryZone("AHGUI::GUI::render()");
-        AHGUI::GUI::render();
-        LeaveTelemetryZone();
-
-        LeaveTelemetryZone();
-
-        if(draw_settings){
-            ImGui_Begin("Settings", draw_settings);
-            ImGui_DrawSettings();
-            ImGui_End();
-        }
-    }
-
-}
-
-MainMenuGUI@ mainmenuGUI = @MainMenuGUI();
-// Comment out the above and uncomment to enable the new feature demo
-//NewFeaturesExampleGUI exampleGUI;
+IMGUI imGUI;
 
 bool HasFocus() {
     return false;
 }
 
 void Initialize() {
+
+    // Start playing some music
     PlaySong("overgrowth_main");
+
+    // We're going to want a 100 'gui space' pixel header/footer
+    imGUI.setFooterHeight(200);
+
+    // Actually setup the GUI -- must do this before we do anything
+    imGUI.setup();
+
+    IMDivider mainDiv( "mainDiv", DOHorizontal );
+    mainDiv.append(IMSpacer(DOHorizontal, 200));
+    mainDiv.setAlignment(CARight, CATop);
+
+    IMDivider left_panel("left_panel", DOVertical);
+    left_panel.setAlignment(CALeft, CACenter);
+    mainDiv.append(left_panel);
+
+    IMImage logo("Textures/ui/menus/main/overgrowth.png");
+    IMDivider logo_holder(DOVertical);
+    IMDivider logo_holder_holder(DOHorizontal);
+    logo_holder_holder.setSize(vec2(UNDEFINEDSIZE,UNDEFINEDSIZE));
+    logo_holder.append(IMSpacer(DOVertical, 50));
+    logo_holder.append(logo);
+    logo_holder_holder.append(logo_holder);
+    left_panel.append(logo_holder);
+
+    left_panel.append(IMSpacer(DOVertical, 100));
+    IMDivider horizontal_buttons_holder(DOHorizontal);
+    horizontal_buttons_holder.append(IMSpacer(DOHorizontal, 75));
+    IMDivider buttons_holder(DOVertical);
+    buttons_holder.append(IMSpacer(DOHorizontal, 200));
+    buttons_holder.setAlignment(CACenter, CACenter);
+    horizontal_buttons_holder.append(buttons_holder);
+    left_panel.append(horizontal_buttons_holder);
+
+    AddButton("Play", buttons_holder, play_icon);
+
+    /*array<ModID>@ active_sids = GetActiveModSids();
+    for( uint i = 0; i < active_sids.length(); i++ ) {
+        array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]); 
+        for( uint k = 0; k < menu_items.length(); k++ ) {
+            if( menu_items[k].GetCategory() == "main" ) {
+                IMMessage@ imfmoc = IMMessage("run_file", menu_items[k].GetPath());
+                AddButton(menu_items[k].GetTitle(),buttons_holder,play_icon,button_background_diamond,true,default_button_width,text_trailing_space,move_button_background,imfmoc);
+            }
+        }
+    }*/
+
+    AddButton("Settings", buttons_holder, settings_icon);
+    AddButton("Mods",     buttons_holder, mods_icon);
+    AddButton("Exit",     buttons_holder, exit_icon);
+
+    // Align the contained element to the left
+    imGUI.getMain().setAlignment( CALeft, CATop );
+
+    // Add it to the main panel of the GUI
+    imGUI.getMain().setElement( @mainDiv );
+	if(GetInterlevelData("background") == ""){
+		SetInterlevelData("background", GetRandomBackground());
+	}
+	setBackGround();
+	AddVerticalBar();
+	controller_wraparound = true;
 }
 
 void Dispose() {
+    imGUI.clear();
 }
 
 bool CanGoBack() {
-    return false;
+    return true;
 }
 
 void Update() {
+	UpdateController();
+    // process any messages produced from the update
+    while( imGUI.getMessageQueueSize() > 0 ) {
+        IMMessage@ message = imGUI.getNextMessage();
 
-    mainmenuGUI.update();
+		if( message.name == "run_file" )
+        {
+            this_ui.SendCallback(message.getString(0));
+        }
+        else if( message.name == "Editor" )
+        {
+            LoadEditorLevel();
+        }
+        else if( message.name == "Credits" )
+        {
+            this_ui.SendCallback( "credits.as" );
+        }
+        else if( message.name == "Mods" )
+        {
+            this_ui.SendCallback( "mods" );
+        }
+        else if( message.name == "Play" ) 
+        {
+            this_ui.SendCallback( "play_menu.as" );
+        }
+        else if( message.name == "Exit" )
+        {
+            this_ui.SendCallback( "exit" );
+        }
+        else if( message.name == "Settings" )
+        {
+			this_ui.SendCallback( "main_menu_settings.as" );
+        }
+        else if( message.name == "Credits" ) 
+        {
+            this_ui.SendCallback( "credits.as" );
+        }
+        else if( message.name == "News" ) 
+        {
+            Log( info, "Placeholder for news button" );
+        }
+    }
+	// Do the general GUI updating
+	imGUI.update();
+    /* 
+    array<KeyboardPress> inputs = GetRawKeyboardInputs();
+    if( inputs.size() > 0 ) {
+        Log( info, "Hello: " + inputs[inputs.size()-1].s_id + " " + inputs[inputs.size()-1].keycode );
+    }
+    */
+}
+
+
+void Resize() {
+    imGUI.doScreenResize(); // This must be called first
+	setBackGround();
+	AddVerticalBar();
+}
+
+void ScriptReloaded() {
+    // Clear the old GUI
+    imGUI.clear();
+    // Rebuild it
+    Initialize();
 }
 
 void DrawGUI() {
-    EnterTelemetryZone("DrawGUI");
-    mainmenuGUI.render();
-    LeaveTelemetryZone();
+    imGUI.render();
 }
 
 void Draw() {
 }
 
 void Init(string str) {
-}
-
-void StartMainMenu() {
-
 }

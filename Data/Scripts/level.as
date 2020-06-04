@@ -1,8 +1,10 @@
-#include "ui_effects.as"
 #include "dialogue.as"
+#include "menu_common.as"
+#include "settings.as"
 
 int controller_id = 0;
 bool has_gui = false;
+bool toggle_gui = false;
 bool draw_settings = false;
 bool has_display_text = false;
 string display_text = "";
@@ -13,6 +15,7 @@ bool allow_retry = true;
 int hotspot_message_text_id = -1;
 
 Dialogue dialogue;
+IMGUI imGUI;
 
 class DialogueTextCanvas {
     string text;
@@ -21,7 +24,6 @@ class DialogueTextCanvas {
 };
 
 array<DialogueTextCanvas> dialogue_text_canvases;
-array<int> number_text_canvases;
 
 void SaveHistoryState(SavedChunk@ chunk) {
     dialogue.SaveHistoryState(chunk);
@@ -77,28 +79,7 @@ void DrawDialogueTextCanvas(int obj_id){
 
 void Init(string p_level_name) {
     dialogue.Init();
-
-    int num_number_canvases = 9;
-    number_text_canvases.resize(num_number_canvases);
-    for(int i=0; i<num_number_canvases; ++i){
-        number_text_canvases[i] = level.CreateTextElement();
-        TextCanvasTexture @text = level.GetTextElement(number_text_canvases[i]);
-        text.Create(32, 32);
-        text.ClearTextCanvas();
-        string font_str = "Data/Fonts/arial.ttf";
-        TextStyle small_style;
-        int font_size = 24;
-        small_style.font_face_id = GetFontFaceID(font_str, font_size);
-        text.SetPenColor(255,255,255,255);
-        text.SetPenRotation(0.0f);
-        TextMetrics metrics;
-        string new_string = ""+(i+1);
-        text.GetTextMetrics(new_string, small_style, metrics, UINT32MAX);
-        text.SetPenPosition(vec2(16-metrics.advance_x/64.0f*0.5f, 24));
-        text.AddText(new_string, small_style,UINT32MAX);
-        text.UploadTextCanvasToTexture();
-    }
-
+	imGUI.setup();
     if( hotspot_message_text_id == -1 ) {
         hotspot_message_text_id = level.CreateTextElement();
         TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
@@ -109,13 +90,7 @@ void Init(string p_level_name) {
 int HasCameraControl() {
     return dialogue.HasCameraControl()?1:0;
 }
-/*
-void GUIDeleted(uint32 id){
-    if(id == gui_id){
-        has_gui = false;
-    }
-}
-*/
+
 bool HasFocus(){
     return has_gui;
 }
@@ -168,14 +143,6 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         display_text = token_iter.GetToken(msg);
 
-    }else if(token == "displayvideo"){
-		//token_iter.FindNextToken(msg);
-		//DebugText("awe", "" + msg, _fade);
-        //gui_id = gui.AddGUI("video",token_iter.GetToken(msg),GetScreenWidth() - 200,GetScreenHeight() - 200,0);
-        Log( error, "No Support for display video" );
-    } else if(token == "removevideo"){
-		//gui.RemoveGUI(gui_id);
-        Log( error, "No Support for remove video" );
     }else if(token == "displaygui"){
         /*token_iter.FindNextToken(msg);
         gui_id = gui.AddGUI("displaygui_call",token_iter.GetToken(msg),220,250,0);
@@ -195,58 +162,23 @@ void ReceiveMessage(string msg) {
 		token_iter.FindNextToken(msg);
         dialogue.StartDialogue(token_iter.GetToken(msg));
     } else if(token == "open_menu") {
-        if(!level.HasFocus()){
-            /*if(EditorEnabled()){
-                gui_id = gui.AddGUI("gamemenu","dialogs\\editorgamemenu.html",220,290,0);
-            } else {
-                if(allow_retry){
-                    gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,260,0);                    
-                } else {
-                    gui_id = gui.AddGUI("gamemenu","dialogs\\arenagamemenu.html",220,230,0);                     
-                }
-            }*/
-            SetPaused(true);
-            menu_paused = true;
-            has_gui = true;
-        }
+		if(!has_gui){
+			toggle_gui = true;
+			SetPaused(true);
+			menu_paused = true;
+		}else{
+			if(draw_settings){
+				ProcessSettingsMessage(IMMessage("back"));
+			}else{
+				toggle_gui = true;
+			}
+		}
     } else {
         dialogue.ReceiveMessage(msg);
     }
 }
 
 void DrawGUI() {
-    if(has_gui){
-        ImGui_Begin("Menu");
-        if(ImGui_Button("Continue")){
-            has_gui = false;
-        }
-        if(allow_retry){
-            if(ImGui_Button("Reset Level")){
-                has_gui = false;
-                level.SendMessage("reset");
-            }
-        }
-        if(ImGui_Button("Settings")){
-            draw_settings = true;
-        }
-        if(EditorEnabled()){
-            if(ImGui_Button("Media Mode")){
-                SetMediaMode(true);
-                has_gui = false;
-            }
-        }
-        if(ImGui_Button("Main Menu")){
-            level.SendMessage("go_to_main_menu");
-        }
-        ImGui_End();
-        if(draw_settings){
-            ImGui_Begin("Settings", draw_settings);
-            ImGui_DrawSettings();
-            ImGui_End();
-        }
-    } else {
-        draw_settings = false;
-    }
     if(hotspot_image_string.length() != 0){
         HUDImage@ image = hud.AddImage();
         image.SetImageFromPath(hotspot_image_string);
@@ -304,10 +236,23 @@ void DrawGUI() {
 
     }
     /**********************************/
+	if(has_gui){
+		imGUI.render();
+	}
 }
-
-void Update(int paused) {  
-
+void Update(int paused) {
+	
+	if(!has_gui && toggle_gui){
+		AddPauseMenu();
+		toggle_gui = false;
+		has_gui = true;
+	}
+	else if(has_gui && toggle_gui){
+		imGUI.clear();
+		toggle_gui = false;
+		has_gui = false;
+	}
+	
     if(level.HasFocus()){
         SetGrabMouse(false);
     } else {
@@ -316,17 +261,47 @@ void Update(int paused) {
             menu_paused = false;
         }
     }
-
-    /*SetSunColor(vec3(sin(the_time*1.35)*0.5f+0.5f, sin(the_time*1.15)*0.5f+0.5f, sin(the_time*1.75)*0.5f+0.5f)*3.0f);
-    SetSunPosition(vec3(sin(the_time), 1.0, cos(the_time)));
-    SetSunAmbient((sin(the_time*1.25)*0.5f+0.5f) * 3.0);
-    SetFlareDiffuse((1.0f - (sin(the_time*1.25)*0.5f+0.5f)) * 5.0);
-    SetSkyTint(vec3(sin(the_time*1.3)*0.5f+0.5f, sin(the_time*1.1)*0.5f+0.5f, sin(the_time*1.7)*0.5f+0.5f)*3.0f);
-    */
-    /*
-    SetSunColor(vec3(0.0f));
-    SetSkyTint(vec3(0.0f));
-    SetSunAmbient(3.0);*/
+	
+	// process any messages produced from the update
+    while( imGUI.getMessageQueueSize() > 0 ) {
+        IMMessage@ message = imGUI.getNextMessage();
+		if( message.name == "" ){return;}
+        //Log( info, "Got processMessage " + message.name );
+		if(draw_settings){
+			if( message.name == "Back" ){
+				draw_settings = false;
+				category_elements.resize(0);
+				AddPauseMenu();
+			}else{
+				ProcessSettingsMessage(message);
+			}
+		}
+        if( message.name == "Continue" )
+        {
+            toggle_gui = true;
+        }
+        else if( message.name == "Settings" )
+        {
+			draw_settings = true;
+			ResetController();
+			AddSettingsMenu();
+        }
+		else if( message.name == "Retry")
+		{
+			toggle_gui = true;
+			level.SendMessage("reset");
+		}
+		else if( message.name == "Main Menu")
+		{
+			toggle_gui = true;
+			level.SendMessage("go_to_main_menu");
+		}
+		else if( message.name == "Media Mode")
+		{
+			toggle_gui = true;
+			SetMediaMode(true);
+		}
+    }
 
     if(paused == 0){
         if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
@@ -347,6 +322,11 @@ void Update(int paused) {
         SetAnimUpdateFreqs();
         LeaveTelemetryZone();
     }
+	if(has_gui){
+		UpdateController();
+		UpdateSettings();
+		imGUI.update();
+	}
 }
 
 const float _max_anim_frames_per_second = 100.0f;
@@ -372,6 +352,10 @@ void SetAnimUpdateFreqs() {
     }
     for(int i=0; i<num; ++i)
 {        MovementObject@ char = ReadCharacter(i);
+        //DebugText("update_script_period"+i, i+" script period: "+char.update_script_period, 0.5);
+        //DebugText("update_script_counter"+i, i+" script counter: "+char.update_script_counter, 0.5);
+        //DebugText("anim_update_period"+i, i+" anim_update_period: "+char.rigged_object().anim_update_period, 0.5);
+        //DebugText("curr_anim_update_time"+i, i+" curr_anim_update_time: "+char.rigged_object().curr_anim_update_time, 0.5);
         int needs_anim_frames = char.QueryIntFunction("int NeedsAnimFrames()");
         if(char.controlled || needs_anim_frames==0){
             continue;
@@ -453,4 +437,79 @@ void SetWindowDimensions(int w, int h)
     dialogue.ResizeUpdate(w,h);
     TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
     text.Create(w-(w/16)*2, 200);
+	imGUI.doScreenResize();
+}
+
+void AddPauseMenu(){
+	float background_height = 1200;
+	float background_width = 1200;
+	float header_width = 550;
+	float header_height = 128;
+
+	imGUI.clear();
+    imGUI.setup();
+	ResetController();
+	category_elements.resize(0);
+	@current_item = null;
+
+	string ingame_menu_background = "Textures/ui/menus/main/inGameMenu-bg.png";
+
+	IMContainer background_container(background_width, background_height);
+	float middle_x = background_container.getSizeX() / 2.0f;
+	float middle_y = background_container.getSizeY() / 2.0f;
+	background_container.setAlignment(CACenter, CACenter);
+	IMImage menu_background(ingame_menu_background);
+
+    if(kAnimateMenu){
+    	menu_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+	}
+
+	menu_background.scaleToSizeX(450);
+	menu_background.setZOrdering(0);
+	menu_background.setColor(vec4(0,0,0,0.85f));
+	background_container.addFloatingElement(menu_background, "menu_background", vec2(middle_x - menu_background.getSizeX() / 2.0f, middle_y - menu_background.getSizeY() / 2.0f), 0);
+	
+	IMDivider mainDiv( "mainDiv", DOVertical );
+	background_container.setElement(mainDiv);
+    mainDiv.setAlignment(CACenter, CACenter);
+	
+    IMDivider buttons_holder(DOVertical);
+	buttons_holder.setSizeX(1200);
+	buttons_holder.setBorderColor(vec4(1,0,0,1));
+
+    IMImage header_background( title_background );
+    if(kAnimateMenu){
+    	header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+    }
+	header_background.scaleToSizeX(header_width);
+    header_background.setColor(button_background_color);
+    IMDivider header_holder("header_holder", DOHorizontal);
+    IMText header_text("Game Menu", button_font);
+    if(kAnimateMenu){
+    	header_text.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+    }
+	IMContainer header_container(header_background.getSizeX(), header_background.getSizeY());
+    header_container.setElement(header_text);
+    header_container.setAlignment(CACenter, CACenter);
+    header_text.setZOrdering(3);
+    header_container.setBorderColor(vec4(1,0,0,1));
+    header_container.addFloatingElement(header_background, "background", vec2(0.0f, (0.0f)), 1);
+    header_holder.append(header_container);
+    buttons_holder.append(header_holder);
+
+	buttons_holder.append(IMSpacer(DOVertical, 25.0f));
+
+    buttons_holder.setAlignment(CACenter, CACenter);
+    mainDiv.append(buttons_holder);
+    AddButton("Continue", buttons_holder, 125);
+    AddButton("Retry", buttons_holder, 125);
+    AddButton("Settings", buttons_holder, 125);
+	if(EditorEnabled()){
+		AddButton("Media Mode", buttons_holder, 125);
+	}
+    AddButton("Main Menu", buttons_holder, 125);
+	
+	buttons_holder.append(IMSpacer(DOVertical, 100.0f));
+	imGUI.getMain().setElement(@background_container);
+	controller_wraparound = true;
 }

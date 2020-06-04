@@ -798,6 +798,7 @@ void UpdateMusic() {
 }
 
 void KeyPressed( string command, bool repeated ) {
+	Print("Pressed " + command + "\n");
     if( command == "n" && repeated == false ) {
         if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()){
             currentAssignment++;

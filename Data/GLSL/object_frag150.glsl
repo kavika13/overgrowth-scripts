@@ -35,9 +35,14 @@ struct PointLightData {
 #define light_decal_data_buffer tex15
 #define cluster_buffer tex13
 
-#define COUNT_BITS 24u
-#define COUNT_MASK ((1u << (32u - COUNT_BITS)) - 1u)
-#define INDEX_MASK ((1u << (COUNT_BITS)) - 1u)
+// Using these defines causes problems on Intel HD 4000 cards, therefore they have been search/replaced in the shader directly.
+//#define COUNT_BITS 24u
+//#define COUNT_MASK ((1u << (32u - 24u)) - 1u)
+//#define INDEX_MASK ((1u << (24u)) - 1u)
+//#define COUNT_BITS (24u)
+//#define COUNT_MASK (0x000000FFu)
+//#define INDEX_MASK (0x00FFFFFFu)
+
 
 #if !defined(DEPTH_ONLY)
 uniform samplerBuffer light_decal_data_buffer;
@@ -60,10 +65,10 @@ PointLightData FetchPointLight(uint light_index) {
 
 void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness, uint light_val, float ambient_mult) {
 	// number of lights in current cluster
-	uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
+	uint light_count = (light_val >> 24u) & (0x000000FFu);
 
 	// index into cluster_lights
-	uint first_light_index = light_val & INDEX_MASK;
+	uint first_light_index = light_val & (0x00FFFFFFu);
 
 	// light list data is immediately after cluster lookup data
 	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -111,6 +116,39 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
 	}
 }
 #endif
+
+// From iq on shadertoy
+float hash(vec2 p)
+{
+    float h = dot(p, vec2(127.1, 311.7));
+
+    return -1.0 + 2.0*fract(sin(h)*43758.5453123);
+}
+
+float noise(in vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    vec2 u = f*f*(3.0 - 2.0*f);
+
+    return mix(mix(hash(i + vec2(0.0, 0.0)),
+        hash(i + vec2(1.0, 0.0)), u.x),
+        mix(hash(i + vec2(0.0, 1.0)),
+            hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fractal(in vec2 uv) {
+    float f = 0.0;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    f = 0.5000*noise(uv); uv = m*uv;
+    f += 0.2500*noise(uv); uv = m*uv;
+    f += 0.1250*noise(uv); uv = m*uv;
+    f += 0.0625*noise(uv); uv = m*uv;
+    f += 0.03125*noise(uv); uv = m*uv;
+    f += 0.016625*noise(uv); uv = m*uv;
+    return f;
+}
 
 
 #include "lighting150.glsl"
@@ -331,43 +369,11 @@ CALC_FINAL_UNIVERSAL(colormap.a)
 #define decalUnderwater 5
 #define decalWatersplat 6
 #define decalEnvShadow 7
+#define decalWaterFroth 8
 
 
 vec4 GetWeightMap(sampler2D tex, vec2 coord){
     vec4 weight_map = texture(tex, coord);
     weight_map[3] = max(0.0, 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]));
     return weight_map;
-}
-
-// From iq on shadertoy
-float hash(vec2 p)
-{
-    float h = dot(p, vec2(127.1, 311.7));
-
-    return -1.0 + 2.0*fract(sin(h)*43758.5453123);
-}
-
-float noise(in vec2 p)
-{
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-
-    vec2 u = f*f*(3.0 - 2.0*f);
-
-    return mix(mix(hash(i + vec2(0.0, 0.0)),
-        hash(i + vec2(1.0, 0.0)), u.x),
-        mix(hash(i + vec2(0.0, 1.0)),
-            hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
-float fractal(in vec2 uv) {
-    float f = 0.0;
-    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
-    f = 0.5000*noise(uv); uv = m*uv;
-    f += 0.2500*noise(uv); uv = m*uv;
-    f += 0.1250*noise(uv); uv = m*uv;
-    f += 0.0625*noise(uv); uv = m*uv;
-    f += 0.03125*noise(uv); uv = m*uv;
-    f += 0.016625*noise(uv); uv = m*uv;
-    return f;
 }

@@ -327,6 +327,10 @@ class LedgeHeightInfo {
     float edge_height;
 };
 
+int ledge_obj = -1;
+int ledge_segment = -1;
+float ledge_progress = 0.0;
+
 LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
     LedgeHeightInfo ledge_height_info;
 
@@ -427,6 +431,63 @@ LedgeGrabInfo GetLedgeGrabInfo(vec3 &in pos, vec3 &in ledge_dir, float ledge_hei
         return ledge_grab_info;                                                 // Return if swept cylinder detects no ledge
     }
 
+    bool grabbable = false;
+    int obj_id = -1;
+    int tri_id;
+    for(int i=0, len=sphere_col.NumContacts(); i<len; ++i){
+        CollisionPoint contact = sphere_col.GetContact(i);
+        int val = int(contact.custom_normal.y);
+        if(val == 0 || val == 6){
+            grabbable = true;
+            obj_id = contact.id;
+            tri_id = contact.tri;
+        }
+    }
+
+    if(!grabbable){
+        ledge_grab_info.success = false;
+        return ledge_grab_info;           
+    }
+
+    const bool kUseLedgeLines = false;
+    if(kUseLedgeLines){
+        ledge_obj = -1;
+        if(obj_id != -1 && ObjectExists(obj_id) && ReadObjectFromID(obj_id).GetType() == _env_object){
+            EnvObject@ eo = ReadEnvObjectID(obj_id);
+            Object@ obj = ReadObjectFromID(obj_id);
+            int num_ledge_lines = eo.GetNumLedgeLines();
+            DebugText("num_ledge_lines", "num_ledge_lines: "+num_ledge_lines, 0.1);
+            float closest_dist = 0.0;
+            int closest = -1;
+            vec3 closest_point;
+            float closest_progress = 0.0;
+            for(int i=1; i<num_ledge_lines; i+=2){
+                vec3 a = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(i-1)/3);
+                vec3 b = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(i)/3);
+                DebugDrawLine(a+vec3(0,1,0)*0.1,
+                              b+vec3(0,1,0)*0.1, 
+                              vec4(1.0), vec4(1.0), _delete_on_draw);
+                vec3 point = ClosestPointOnSegment(this_mo.position, a, b);
+                float dist = distance_squared(point, this_mo.position);
+                if(closest == -1 || dist < closest_dist){
+                    closest_dist = dist;
+                    closest_point = point;
+                    closest_progress = distance(a,point) / distance(a,b);
+                    closest = i-1;
+                }
+            }
+            if(closest != -1){
+                ledge_obj = obj_id;
+                ledge_segment = closest;
+                ledge_progress = min(1.0, max(0.0, closest_progress));
+                if(closest_dist > 1.5 * 1.5){
+                    ledge_grab_info.success = false;
+                    return ledge_grab_info;                          
+                }
+            }
+        }
+    }
+
     float char_height = pos.y;                                                  // Start checking if the ledge is within vertical
     const float _base_grab_height = 1.0f;                                       // reach of the player. Vertical reach is extended
     float grab_height = _base_grab_height;                                      // to allow one-armed scramble grabs if velocity is
@@ -485,7 +546,8 @@ class LedgeInfo {
 
     void UpdateLedgeAnimation() {
         if(!playing_animation){     // If not playing a special animation, adopt ledge pose
-            this_mo.SetCharAnimation("ledge",5.0f);
+            //this_mo.SetCharAnimation("ledge",5.0f);
+            this_mo.SetAnimation("Data/Animations/r_ledge.xml",5.0f);
         }
     }
 
@@ -595,7 +657,7 @@ class LedgeInfo {
                     if(ledge_height_info.success == false) {
                         if(!pure_check){
                             if(on_ledge){
-                                Log(warning,"Letting go because of GetLedgeHeightInfo\n");
+                                //Log(warning,"Letting go because of GetLedgeHeightInfo\n");
                             }
                             on_ledge = false;
                         }
@@ -607,7 +669,7 @@ class LedgeInfo {
             } else {
                 if(!pure_check){
                     if(on_ledge){
-                        Log(warning,"Letting go because of GetLedgeHeightInfo\n");
+                        //Log(warning,"Letting go because of GetLedgeHeightInfo\n");
                     }
                     on_ledge = false;
                 }
@@ -619,7 +681,7 @@ class LedgeInfo {
         if(on_ledge && ledge_height_info.edge_height > ledge_height + 0.5f){
             if(!pure_check){
                 if(on_ledge){
-                    Log(warning, "Letting go because of edge_height\n");
+                    //Log(warning, "Letting go because of edge_height\n");
                 }
                 on_ledge = false;
             }
@@ -639,7 +701,7 @@ class LedgeInfo {
                                         _leg_sphere_size);
             if(sphere_col.NumContacts() > 0) {
                 if(!pure_check && on_ledge){
-                    Log(warning, "Letting go because nearest surface is downwards\n");
+                    //Log(warning, "Letting go because nearest surface is downwards\n");
                     on_ledge = false;
                 }
                 return false;
@@ -769,6 +831,131 @@ class LedgeInfo {
                 DropWeapon();
             }
         }*/
+        if(on_ledge && ledge_obj != -1){
+            EnvObject@ eo = ReadEnvObjectID(ledge_obj);
+            Object@ obj = ReadObjectFromID(ledge_obj);
+            int num_ledge_lines = eo.GetNumLedgeLines();
+            DebugText("num_ledge_lines", "num_ledge_lines: "+num_ledge_lines, 0.1);
+            
+            vec3 pos;
+            vec3 perp_vec;
+            
+            {
+                vec3 a = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(ledge_segment)/3);
+                vec3 b = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(ledge_segment+1)/3);
+                perp_vec = normalize(cross(vec3(0,1,0), b-a));
+                pos = mix(a,b,ledge_progress);
+                pos += this_mo.velocity * ts.step();
+            }
+
+            int obj_id = ledge_obj;
+            ledge_obj= -1;
+            if(obj_id != -1 && ObjectExists(obj_id) && ReadObjectFromID(obj_id).GetType() == _env_object){
+                DebugText("num_ledge_lines", "num_ledge_lines: "+num_ledge_lines, 0.1);
+                float closest_dist = 0.0;
+                int closest = -1;
+                vec3 closest_point;
+                float closest_progress = 0.0;
+                for(int i=1; i<num_ledge_lines; i+=2){
+                    vec3 a = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(i-1)/3);
+                    vec3 b = obj.GetTransform()*eo.GetCollisionVertex(eo.GetLedgeLine(i)/3);
+                    DebugDrawLine(a+vec3(0,1,0)*0.1,
+                                  b+vec3(0,1,0)*0.1, 
+                                  vec4(1.0), vec4(1.0), _delete_on_draw);
+                    vec3 point = ClosestPointOnSegment(pos, a, b);
+                    float dist = distance_squared(point, pos);
+                    if(closest == -1 || dist < closest_dist){
+                        closest_dist = dist;
+                        closest_point = point;
+                        closest_progress = distance(a,point) / distance(a,b);
+                        closest = i-1;
+                    }
+                }
+                if(closest != -1){
+                    ledge_obj = obj_id;
+                    ledge_segment = closest;
+                    ledge_progress = min(1.0, max(0.0, closest_progress));
+                }
+            }
+
+            float old_height = this_mo.position.y;
+            this_mo.position = pos + vec3(0,-1,0) + perp_vec * 0.5;
+            this_mo.position.y = old_height;
+            ledge_dir = perp_vec * -1.0;
+            ledge_height = pos[1];
+            
+            if(!WantsToGrabLedge()){
+                on_ledge = false;    // If let go or not in contact with wall, 
+                                     // not on ledge
+            }
+
+            //this_mo.velocity += ledge_dir * 0.1f * ts.frames();                      // Pull towards wall
+
+            float target_height = ledge_height - _height_under_ledge;
+            this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f * ts.frames();      // Move height towards ledge height
+            this_mo.velocity.y *= pow(0.92f, ts.frames());
+            
+            this_mo.position.y = min(this_mo.position.y, target_height + 0.5f);
+            this_mo.position.y = max(this_mo.position.y, target_height - 0.1f);
+            
+            if(!playing_animation){
+                pls.leg_ik_mult = min(1.0f, pls.leg_ik_mult + ts.step() * 5.0f);
+            }
+
+            vec3 target_velocity = GetTargetVelocity();
+            float ledge_dir_dot = dot(target_velocity, ledge_dir);
+            vec3 horz_vel = target_velocity - (ledge_dir * ledge_dir_dot);
+            vec3 real_velocity = horz_vel;
+            if(ledge_dir_dot > 0.0f){                                               // Climb up if moving towards ledge
+                real_velocity.y += ledge_dir_dot * time_step * _ledge_move_speed * 70.0f;
+            }    
+
+            if(playing_animation){
+                real_velocity.y = 0.0f;
+            }
+
+            this_mo.velocity += real_velocity * ts.step() * _ledge_move_speed; // Apply target velocity
+            this_mo.velocity.x *= pow(_ledge_move_damping, ts.frames());             // Damp horizontal movement
+            this_mo.velocity.z *= pow(_ledge_move_damping, ts.frames());
+
+            //vec3 new_ledge_grab_pos = CalculateGrabPos();         
+            vec3 new_ledge_grab_pos = vec3(this_mo.position.x, target_height, this_mo.position.z);
+            shimmy_anim.Update(new_ledge_grab_pos, ledge_dir, ts);                      // Update hand and foot animation
+
+            //DebugDrawWireSphere(this_mo.position, _leg_sphere_size, vec3(1.0f), _delete_on_update); 
+
+            /*if(dot(disp_ledge_dir, ledge_dir) > 0.90f){
+                disp_ledge_dir = ledge_dir;
+            }*/
+            float val = dot(ledge_dir, disp_ledge_dir)*0.5f+0.5f;
+            float inertia = mix(0.95f,0.8f,pow(val,4.0));
+            disp_ledge_dir= InterpDirections(ledge_dir,
+                             disp_ledge_dir,
+                             pow(inertia,ts.frames()));
+            this_mo.SetRotationFromFacing(disp_ledge_dir); 
+            if((this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f) || !this_mo.controlled){ // Climb up ledge if above threshold
+                this_mo.SetRotationFromFacing(ledge_dir); 
+                if(this_mo.velocity.y >= 3.0f + ts.frames() * 0.25f){
+                    on_ledge = false;    
+                    climbed_up = true;
+                    jump_info.hit_wall = false;
+                    this_mo.velocity = vec3(0.0f);
+                    this_mo.position.y = ledge_height + _leg_sphere_size * 0.7f;
+                    this_mo.position += ledge_dir * 0.7f;
+                } else {
+                    pls.height_offset = target_height - this_mo.position.y;
+                    //this_mo.position.y = target_height;
+                    playing_animation = true;
+                    allow_ik = false;
+                    int flags = _ANM_SUPER_MOBILE | _ANM_FROM_START;
+                    this_mo.SetAnimation("Data/Animations/r_ledge_climb_fast.anm",8.0f,flags);
+                    this_mo.rigged_object().anim_client().SetAnimationCallback("void EndClimbAnim()");
+                    ghost_movement = true;
+                }
+                HandleAIEvent(_climbed_up);
+            }
+            return;
+        }
 
         CheckLedges();
         if(on_ledge){

@@ -311,10 +311,12 @@ class JumpInfo {
         jump_launch = 1.0f;
         down_jetpack_fuel = _jump_fuel*0.5f;
         
-        if(character_getter.GetTag("species") == "cat"){
-            this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
-        } else {
-            this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+        if(water_depth < 0.25){
+            if(character_getter.GetTag("species") == "cat"){
+                this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
+            } else {
+                this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+            }
         }
         AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
         

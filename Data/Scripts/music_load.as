@@ -7,6 +7,7 @@ class MusicLoad
         p = path;
         music_loaded = AddMusic(p);
     }
+
     ~MusicLoad()
     {
         if(music_loaded)

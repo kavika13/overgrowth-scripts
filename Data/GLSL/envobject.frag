@@ -1,14 +1,16 @@
 #version 150
 
-#if defined(WATER)
+/*#if defined(WATER)
 #define NO_DECALS
 #endif
-
+*/
 #define FIRE_DECAL_ENABLED
 //#define RAINY
 
 uniform float time;
 
+
+//#define VOLCANO
 
 #include "object_frag150.glsl"
 #include "object_shared150.glsl"
@@ -241,10 +243,10 @@ float LinearizeDepth(float z) {
 #if !defined(DEPTH_ONLY)
 void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert, uint light_val) {
     // number of lights in current cluster
-    uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
+    uint light_count = (light_val >> 24u) & 0x000000FFu;
 
     // index into cluster_lights
-    uint first_light_index = light_val & INDEX_MASK;
+    uint first_light_index = light_val & 0x00FFFFFFu;
 
     // light list data is immediately after cluster lookup data
     uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -520,6 +522,16 @@ mat3 cotangent_frame( vec3 N, vec3 p, vec2 uv )
 //#define NO_DETAILMAPS
 
 void main() {
+    #ifdef WIREFRAME
+        out_color = vec4(0.0,0.0,0.0,1.0);
+        gl_FragDepth = gl_FragCoord.z - 0.001 * gl_FragCoord.w;
+        return;
+    #endif
+    #ifdef HALFTONE_STIPPLE
+        if(int(gl_FragCoord.x + gl_FragCoord.y)%2 == 0){
+            discard;
+        }
+    #endif
     vec3 ws_vertex = world_vert - cam_pos;
 
     vec4 ndcPos;
@@ -542,7 +554,7 @@ void main() {
 #if !(defined(NO_DECALS) || defined(DEPTH_ONLY))
     uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * grid_size.z + g.z);
     uint decal_val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
-    uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
+    uint decal_count = (decal_val >> 24u) & 0x000000FFu;
     /*out_color.xyz = vec3(decal_count * 0.1);
     out_color.a = 1.0;
     return;*/
@@ -669,6 +681,21 @@ void main() {
             }
             return;
         #else
+
+            float spec_amount = 0.0;
+            vec3 flame_final_color = vec3(0.0, 0.0, 0.0);;
+            float flame_final_contrib = 0.0;
+            vec3 ws_normal = vec3(1.0, 0.0, 0.0);
+            float roughness = 0.0;
+            float ambient_mult = 0.0;
+            float env_ambient_mult = 0.0;
+            #ifndef NO_DECALS
+            CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
+            if(ws_normal == vec3(-1.0)){
+                discard;
+            }
+            #endif
+
             vec4 shadow_coords[4];
 
             int num_samples = 2;
@@ -688,7 +715,7 @@ void main() {
             shadowed /= float(num_samples);
             shadowed = 1.0 - shadowed;
 
-            float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
+            float env_depth = LinearizeDepth(textureLod(tex5,gl_FragCoord.xy / viewport_dims, 0.0).r);
             float particle_depth = LinearizeDepth(gl_FragCoord.z);
             float depth = env_depth - particle_depth;
             float depth_blend = depth / size * 0.5;
@@ -698,7 +725,7 @@ void main() {
 
             #ifdef NORMAL_MAP_TRANSLUCENT
                 vec4 normalmap = texture(tex1, tex_coord);
-                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                ws_normal = vec3(tangent_to_world3 * normalmap.b +
                                       tangent_to_world1 * (normalmap.r*2.0-1.0) +
                                       tangent_to_world2 * (normalmap.g*2.0-1.0));
                 float surface_lighting = GetDirectContribSoft(ws_light, ws_normal, 1.0);
@@ -711,7 +738,7 @@ void main() {
             #elif defined(SPLAT)
                 vec4 normalmap = texture(tex1, tex_coord);
                 //normalmap.xyz = vec3(0.5, 0.5, 1.0);
-                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                ws_normal = vec3(tangent_to_world3 * normalmap.b +
                                       tangent_to_world1 * (normalmap.r*2.0-1.0) +
                                       tangent_to_world2 * (normalmap.g*2.0-1.0));
                 ws_normal = normalize(ws_normal);
@@ -720,13 +747,13 @@ void main() {
                 vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
             #elif defined(WATER)
                 vec4 normalmap = texture(tex1, tex_coord);
-                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                ws_normal = vec3(tangent_to_world3 * normalmap.b +
                                       tangent_to_world1 * (normalmap.r*2.0-1.0) +
                                       tangent_to_world2 * (normalmap.g*2.0-1.0));
 
-                vec3 diffuse_color;
-                //Prevent compile warning, this value might be used by water later.
-                vec3 ambient_color = vec3(0.0);
+                vec3 diffuse_color = GetDirectColor(GetDirectContribSoft(ws_light, ws_normal, 1.0 - shadowed)*0.5);
+
+                vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
             #else
                 float NdotL = GetDirectContribSimple((1.0-shadowed)*0.25);
                 vec3 diffuse_color = GetDirectColor(NdotL);
@@ -757,6 +784,7 @@ void main() {
                 //color = pow(max(0.0, dot(ws_light, mix(normalize(ws_vertex), -ws_normal, 0.2))), 5.0) * (1.0-shadowed) * 2.0 * primary_light_color.a * primary_light_color.xyz;
                 color = LookUpReflectionShapes(tex19, world_vert, normalize(mix(normalize(ws_vertex), -ws_normal, 0.5)), 0.0);
                 color = mix(color, (blood_spec + reflection_color), fresnel);
+                color = mix(color, diffuse_color, 0.3);
                 colormap.a *= 0.5;
             #endif
 
@@ -848,31 +876,6 @@ void main() {
         #endif
         return;
     #else
-    #ifdef MAGMA_FLOOR
-        vec2 temp_tex_coords = frag_tex_coords.xy * 3.0;
-        temp_tex_coords.x += sin(world_vert.x*4.0 + time * 2.0) * 0.004;
-        temp_tex_coords.y += sin(world_vert.z*4.0 + time * 2.6) * 0.004;
-        vec2 frag_tex_coordsB = temp_tex_coords;                            //copy the variable
-        frag_tex_coordsB.x += time * 0.05;     //makes texture move back and fourth
-        //frag_tex_coordsB.y += sin(frag_tex_coordsB.x + time * 1) * 0.02;
-
-        vec3 temp_color = texture(tex0, temp_tex_coords).xyz;
-
-        out_color.xyz = temp_color * 16.0 * mix(1.0, texture(tex1, frag_tex_coordsB).a, pow(temp_color.r,0.2));
-        out_color.a = 1.0;
-        return;
-    #endif
-    #ifdef MAGMA_FLOW
-        vec2 frag_tex_coordsB = frag_tex_coords;                            //copy the variable
-        vec2 frag_tex_coordsC = frag_tex_coords;                            //copy the variable
-        frag_tex_coordsB.y += time * 0.3;                                   //makes texture 'scroll' in the y axis
-        frag_tex_coordsC.y += time * 0.5;
-
-        vec3 temp_color = texture(tex0, frag_tex_coordsB).xyz * (pow(texture(tex1, frag_tex_coordsC).a, 2.2) + 0.1);
-        out_color.xyz = temp_color * 2.0;
-        out_color.a = 1.0;
-        return;
-    #endif
 
     #ifdef DETAILMAP4
         #ifdef TEXEL_DENSITY_VIZ
@@ -1130,7 +1133,7 @@ void main() {
 
         float blood_amount, wetblood;
         vec4 blood_texel = textureLod(blood_tex, tex_coord, 0.0);
-        ReadBloodTex(blood_tex, tex_coord, blood_amount, wetblood);
+        ReadBloodTex(blood_tex, vec2(tex_coord[0], 1.0-tex_coord[1]), blood_amount, wetblood);
 
         vec2 tex_offset = vec2(pow(blood_texel.g, 8.0)) * 0.001;
 
@@ -1180,7 +1183,7 @@ void main() {
                     proj_test_point /= proj_test_point.w;
                     proj_test_point.xy += vec2(1.0);
                     proj_test_point.xy *= 0.5;
-                    float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r);
+                    float old_depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r);
                     sample_height[0] = GetWaterHeight(water_uv, tint);
                     /*if(gl_FrontFacing){
                         water_depth += sample_height[0] * tint.x * 8.0 * (normalize(ws_vertex).y+1.0);
@@ -1239,6 +1242,50 @@ void main() {
 #endif
 
 #endif
+
+    #ifdef COLLISION
+    {
+        vec3 world_dx = dFdx(world_vert);
+        vec3 world_dy = dFdy(world_vert);
+        vec3 ws_normal = normalize(cross(world_dx, world_dy));
+        vec3 custom_normal = texelFetch(light_decal_data_buffer, gl_PrimitiveID).xyz;
+        int val = int(custom_normal[1]);
+        ws_normal = mix(ws_normal, custom_normal, 0.8);
+        out_color.xyz = ws_normal.xyz * 0.5 + vec3(0.5);
+        if(val == 0 || custom_normal[1] == 1.0){
+        } else if(val <= 3){
+            out_color.xyz = vec3(0,1,0);
+            if(val == 2){
+                out_color.xyz += vec3(0.5,0.0,0.0);
+            }
+            if(val == 3){
+                out_color.xyz += vec3(0.0,0.0,0.5);
+            }
+        }
+         else if(val <= 6){
+            out_color.xyz = vec3(1,0,0);
+            if(val == 5){
+                out_color.xyz += vec3(0.0,0.5,0.0);
+            }
+            if(val == 6){
+                out_color.xyz += vec3(0.0,0.0,0.5);
+            }
+        } else {
+            out_color.xyz = vec3(0,0,1);
+        }
+        //out_color.xyz *= color_tint;
+        float mult = 1.0;
+        if((int(world_vert.x)+int(world_vert.z))%2==0){
+            mult = 0.8;
+        }
+        if(int(world_vert.y)%2==0){
+            mult *= 0.8;
+        }
+        out_color.xyz *= mult;
+        out_color.a = 1.0;
+        return;
+    }
+    #endif
 
     #ifdef CHARACTER
         spec_amount = GammaCorrectFloat(spec_amount);
@@ -1301,6 +1348,10 @@ void main() {
     vec3 flame_final_color = vec3(0.0, 0.0, 0.0);
     float flame_final_contrib = 0.0;
 
+    #ifdef WATER
+    float extra_froth = 0.0;
+    #endif
+
 #if !defined(NO_DECALS)
 #ifdef PLANT
     float spec_amount = 0.0;
@@ -1308,9 +1359,15 @@ void main() {
     #ifdef INSTANCED_MESH
         if(color_tint[instance_id][3] != -1.0)
     #endif
+    #ifdef WATER
+    roughness = 0.0;
+    #endif
     { 
         CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
     }
+    #ifdef WATER
+    extra_froth = roughness;
+    #endif
 #endif
 
     #ifdef ALBEDO_ONLY
@@ -1395,6 +1452,135 @@ void main() {
         }
     }
 
+#ifdef VOLCANO
+{
+    float height = world_vert.y + 22;
+
+    vec3 center = vec3(-33, -32, 2.5);
+    vec3 offset = world_vert - center;
+    offset.y = 0.0;
+    float direct_light = max(0.0, dot(normalize(center - world_vert), ws_normal)); 
+    direct_light = mix(direct_light, 1.0, min(1.0, 1.0/pow(height, 0.7)));
+    //ambient_color = vec3(direct_light);
+
+    ambient_color += direct_light * vec3(1,0.1,0) / max(1.0, pow(height, 1.0)) * 10.0;
+}
+#endif
+
+// Screen space reflection test
+#define SCREEN_SPACE_REFLECTION
+#if defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY)
+   #if defined(WATER)
+    vec3 screen_space_reflect;
+    {
+    vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
+    //out_color.xyz = vec3(0.0);
+    bool done = false;
+    bool good = false;
+    int count = 0;
+    vec4 proj_test_point;
+    float step_size = 0.01;
+    vec3 march = world_vert;
+    float screen_step_mult = abs(dot(spec_map_vec, normalize(ws_vertex)));
+    float random = rand(gl_FragCoord.xy);
+
+    vec3 test_point = march;
+        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+    proj_test_point /= proj_test_point.w;
+    proj_test_point.xy += vec2(1.0);
+    proj_test_point.xy *= 0.5;
+    vec2 a = proj_test_point.xy;
+
+    test_point += spec_map_vec * 0.1;
+        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+    proj_test_point /= proj_test_point.w;
+    proj_test_point.xy += vec2(1.0);
+    proj_test_point.xy *= 0.5;
+    vec2 b = proj_test_point.xy;
+
+    screen_step_mult = length(a - b) * 10.0;
+    step_size /= screen_step_mult;
+    float buf_extend = 0.05;
+
+    while(!done){
+        march += spec_map_vec * step_size;
+        test_point = march + (spec_map_vec * step_size * random * 1.5);
+        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+        proj_test_point /= proj_test_point.w;
+        proj_test_point.xy += vec2(1.0);
+        proj_test_point.xy *= 0.5;
+        proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
+        proj_test_point.z = LinearizeDepth(proj_test_point.z);
+        float depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r);
+        ++count;
+        if(count > 20 || proj_test_point.x < -buf_extend || proj_test_point.y < 0.0 || proj_test_point.x > 1.0+buf_extend || proj_test_point.y > 1.0){
+            done = true;
+        }
+        if((count > 20 && depth > proj_test_point.z) || (depth < proj_test_point.z && abs(depth - proj_test_point.z) < step_size * 2.0)){
+            done = true;
+            good = true;
+            march -= spec_map_vec * step_size;
+        }
+        if(!done){
+            step_size *= 1.5;
+        }
+    }
+    if(good){
+        done = false;
+        count = 0;
+        while(!done){
+            march += spec_map_vec * step_size * 0.2;
+            test_point = march + (spec_map_vec * step_size * random * 1.5 * 0.2);
+            proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+            proj_test_point /= proj_test_point.w;
+            proj_test_point.xy += vec2(1.0);
+            proj_test_point.xy *= 0.5;
+            proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
+            proj_test_point.z = LinearizeDepth(proj_test_point.z);
+            float depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r);
+            ++count;
+            if(count > 10 || proj_test_point.x < -buf_extend || proj_test_point.y < 0.0 || proj_test_point.x > 1.0+buf_extend || proj_test_point.y > 1.0){
+                done = true;
+            }
+            if((count > 10 && depth > proj_test_point.z) || (depth < proj_test_point.z && abs(depth - proj_test_point.z) < step_size * 2.0)){
+                done = true;
+            }
+        }
+    }
+    //out_color.r = depth * 0.01;
+    //out_color.g = proj_test_point.z * 0.01;
+    //out_color.b = 0.0;
+    //out_color.xyz = texture(tex17, proj_test_point.xy).xyz;
+    //out_color.xyz = vec3(proj_test_point.x);
+    float reflect_amount = min(1.0, pow(-abs(dot(ws_normal, normalize(ws_vertex))) + 1.0, 2.0));
+    reflect_amount = 1.0;
+    float screen_space_amount = 0.0;
+    //good = false;
+    vec3 reflect_color = vec3(0.0);
+    if(good){
+        /*proj_test_point = (prev_projection_view_mat * vec4(test_point, 1.0));
+        proj_test_point /= proj_test_point.w;
+        proj_test_point.xy += vec2(1.0);
+        proj_test_point.xy *= 0.5;
+        proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
+        proj_test_point.z = LinearizeDepth(proj_test_point.z);*/
+
+        reflect_color = textureLod(tex17, proj_test_point.xy, 0.0).xyz;
+        screen_space_amount = 1.0;
+        //screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.x-0.5))*2.0, 1.0))*8.0);
+        screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.y-0.5))*2.0, 1.0))*8.0);
+    }
+    reflect_color = mix(reflect_color,
+                        LookUpReflectionShapes(tex19, world_vert, spec_map_vec, 0.0/*roughness * 3.0*/) * ambient_mult * env_ambient_mult,
+                        1.0 - screen_space_amount);
+
+    screen_space_reflect = reflect_color;
+    out_color.xyz = mix(out_color.xyz, reflect_color, reflect_amount);
+    //out_color.xyz = vec3(reflect_amount);
+    //out_color.xyz = vec3(abs(depth - proj_test_point.z) * 0.1);
+    }
+    #endif  // WATER
+    #endif  // defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY)
 
     diffuse_color += ambient_color * GetAmbientContrib(shadow_tex.g) * ambient_mult * env_ambient_mult;
     #if defined(PLANT)
@@ -1555,9 +1741,12 @@ void main() {
             spec_color = primary_light_color.xyz * vec3(spec);
             vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
 
-
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
-            spec_color += reflection_color * ambient_mult * env_ambient_mult;
+            #if defined(SCREEN_SPACE_REFLECTION) && defined(WATER)
+            vec3 reflection_color = screen_space_reflect;
+            #else
+            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0) * ambient_mult * env_ambient_mult;
+            #endif
+            spec_color += reflection_color;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
@@ -1566,7 +1755,7 @@ void main() {
                 if(!gl_FrontFacing){
                     fresnel = pow(glancing, 0.2);
                 } else {
-                    fresnel = pow(glancing, 3.0);
+                    fresnel = 0.8 * pow(max(0.0, 1.0 + dot(normalize(ws_vertex), ws_normal)), 5.0);
                 }
                 float spec_val = mix(base_reflectivity, 1.0, fresnel);
                 spec_amount = 1.0;
@@ -1628,29 +1817,29 @@ void main() {
     proj_test_point.xy += vec2(1.0);
     proj_test_point.xy *= 0.5;
     // proj_test_point is now world position in screen space
-    float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    float old_depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r) - water_depth;
     // old_depth is now the amount of water we are looking through
     const float refract_mult = 1.0;
-    vec2 distort = vec2(base_water_offset.xy);
+    vec2 distort = vec2(base_water_offset.xy) / max(0.1, color_tint[instance_id][1]);
     distort *= max(0.0, min(old_depth, 1.0) ); // Scale refraction based on depth
     distort /= (water_depth * 1.0 + 0.3); // Reduce refraction based on camera distance from water
     distort *= refract_mult; // Arbitrarily control refraction amount
     proj_test_point.xy += distort;
-    float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    float depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r) - water_depth;
     { // Prevent objects above the water from bleeding into the refraction
         if(depth < 0.25){
             proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+            depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r) - water_depth;
         }
         if(depth < 0.125){
             proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+            depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r) - water_depth;
         }
     }
-    vec3 under_water = texture(tex17, proj_test_point.xy).xyz; // color texture from opaque objects
+    vec3 under_water = textureLod(tex17, proj_test_point.xy, 0.0).xyz; // color texture from opaque objects
     if(gl_FrontFacing){ // Only add foam and fog if water is viewed from outside of water
         //#if !defined(NO_DECALS)
-            under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3, 0.2)))); // Add fog
+            under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3 * color_tint[instance_id][2], 0.2)))); // Add fog
         //#endif
         float min_depth = -0.3;
         float max_depth = 0.1;
@@ -1666,12 +1855,26 @@ void main() {
             }
         }
         color.xyz = mix(under_water, color.xyz, spec_val);
+
+        {
+            vec2 temp_tex_coords = world_vert.xz * 0.1;
+            temp_tex_coords.x += sin(world_vert.x*4.0 + time * 2.0) * 0.004;
+            temp_tex_coords.y += sin(world_vert.z*4.0 + time * 2.6) * 0.004;
+            temp_tex_coords.x += ws_normal.x * 0.02;
+            temp_tex_coords.y += ws_normal.z * 0.02;
+
+            vec3 temp_color = texture(tex1, temp_tex_coords).xyz;
+
+            color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+        }
+
         //out_color.xyz = vec3(old_depth);
         //out_color.xyz = vec3(max(0.0, min(1.0, pow(depth * 0.1,0.8))));
     } else {
         color.xyz *= 0.1;
         color.xyz = mix(under_water, color.xyz, spec_val);
     }
+
 #endif  // WATER
 
     #ifdef SNOWY
@@ -1699,7 +1902,7 @@ void main() {
         fog_color /= 10.0;
         #endif*/
     } else if(!use_amb_cube){
-        fog_color = textureLod(spec_cubemap,ws_vertex ,5.0).xyz;
+        fog_color = textureLod(spec_cubemap,ws_vertex ,5.0 / (length(ws_vertex)*0.01+1.0)).xyz;
     } else {
         fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex * -1.0);
     }
@@ -1710,6 +1913,34 @@ void main() {
         color.xyz = colormap.xyz * color_tint[instance_id].xyz;
     //}
     #endif
+    #endif
+
+
+    #ifdef MAGMA_FLOOR
+        vec2 temp_tex_coords = world_vert.xz * 0.2;
+        temp_tex_coords.x += sin(world_vert.x*4.0 + time * 2.0) * 0.004;
+        temp_tex_coords.y += sin(world_vert.z*4.0 + time * 2.6) * 0.004;
+        vec2 frag_tex_coordsB = temp_tex_coords;                            //copy the variable
+        frag_tex_coordsB.x += time * 0.05;     //makes texture move back and fourth
+        //frag_tex_coordsB.y += sin(frag_tex_coordsB.x + time * 1) * 0.02;
+
+        float offset = fractal(world_vert.xz * 0.2);
+        float vec = (fractal(world_vert.xz * 1)+0.7)*0.7;
+        vec = (vec*vec*(3-2*vec));
+        vec = (vec*vec*(3-2*vec));
+        vec = (vec*vec*(3-2*vec));
+        vec3 temp_color = mix(texture(tex0, temp_tex_coords + vec2(offset*0.2)).xyz, texture(tex0, temp_tex_coords.yx*0.8+vec2(0.5,0.5)-vec2(offset*0.2)).xyz, vec);
+        
+        color.xyz = temp_color * 16.0 * mix(1.0, texture(tex1, frag_tex_coordsB).a, pow(temp_color.r,0.2));
+    #endif
+    #ifdef MAGMA_FLOW
+        vec2 frag_tex_coordsB = frag_tex_coords;                            //copy the variable
+        vec2 frag_tex_coordsC = frag_tex_coords;                            //copy the variable
+        frag_tex_coordsB.y -= time * 0.3;                                   //makes texture 'scroll' in the y axis
+        frag_tex_coordsC.y -= time * 0.5;
+
+        vec3 temp_color = texture(tex0, frag_tex_coordsB).xyz * (pow(texture(tex1, frag_tex_coordsC).a, 2.2) + 0.1);
+        color.xyz = temp_color * 2.0;
     #endif
 
     color = mix(color, fog_color, haze_amount);
@@ -1737,93 +1968,6 @@ void main() {
 
    #endif  // NO_VELOCITY_BUF
 
-// Screen space reflection test
-//#define SCREEN_SPACE_REFLECTION
-#if defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY)
-   #if defined(WATER)
-    {
-
-    vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
-    //out_color.xyz = vec3(0.0);
-    bool done = false;
-    bool good = false;
-    int count = 0;
-    vec4 proj_test_point;
-    float step_size = 0.01;
-    vec3 march = world_vert;
-    float screen_step_mult = abs(dot(spec_map_vec, normalize(ws_vertex)));
-    float random = rand(gl_FragCoord.xy);
-
-    vec3 test_point = march;
-        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-    proj_test_point /= proj_test_point.w;
-    proj_test_point.xy += vec2(1.0);
-    proj_test_point.xy *= 0.5;
-    vec2 a = proj_test_point.xy;
-
-    test_point += spec_map_vec * 0.1;
-        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-    proj_test_point /= proj_test_point.w;
-    proj_test_point.xy += vec2(1.0);
-    proj_test_point.xy *= 0.5;
-    vec2 b = proj_test_point.xy;
-
-    screen_step_mult = length(a - b) * 10.0;
-    step_size /= screen_step_mult;
-
-    while(!done){
-        march += spec_map_vec * step_size;
-        test_point = march + (spec_map_vec * step_size * random * 1.5);
-            proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-        proj_test_point /= proj_test_point.w;
-        proj_test_point.xy += vec2(1.0);
-        proj_test_point.xy *= 0.5;
-        proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
-        proj_test_point.z = LinearizeDepth(proj_test_point.z);
-        float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r);
-        ++count;
-        if(count > 20 || proj_test_point.x < 0.0 || proj_test_point.y < 0.0 || proj_test_point.x > 1.0 || proj_test_point.y > 1.0){
-            done = true;
-        }
-        if( depth < proj_test_point.z && abs(depth - proj_test_point.z) < step_size * 2.0){
-            done = true;
-            good = true;
-        }
-        step_size *= 1.5;
-    }
-    //out_color.r = depth * 0.01;
-    //out_color.g = proj_test_point.z * 0.01;
-    //out_color.b = 0.0;
-    //out_color.xyz = texture(tex17, proj_test_point.xy).xyz;
-    //out_color.xyz = vec3(proj_test_point.x);
-    float reflect_amount = min(1.0, pow(-abs(dot(ws_normal, normalize(ws_vertex))) + 1.0, 2.0));
-    reflect_amount = 1.0;
-    float screen_space_amount = 0.0;
-    //good = false;
-    vec3 reflect_color;
-    if(good){
-        /*proj_test_point = (prev_projection_view_mat * vec4(test_point, 1.0));
-        proj_test_point /= proj_test_point.w;
-        proj_test_point.xy += vec2(1.0);
-        proj_test_point.xy *= 0.5;
-        proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
-        proj_test_point.z = LinearizeDepth(proj_test_point.z);*/
-
-        reflect_color = texture(tex17, proj_test_point.xy).xyz;
-        screen_space_amount = 1.0;
-        screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.x-0.5))*2.0, 1.0))*8.0);
-        screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.y-0.5))*2.0, 1.0))*8.0);
-    }
-    reflect_color = mix(reflect_color,
-                        LookUpReflectionShapes(tex19, world_vert, spec_map_vec, 0.0/*roughness * 3.0*/),
-                        1.0 - screen_space_amount);
-
-    out_color.xyz = mix(out_color.xyz, reflect_color, reflect_amount);
-    //out_color.xyz = vec3(reflect_amount);
-    //out_color.xyz = vec3(abs(depth - proj_test_point.z) * 0.1);
-    }
-    #endif  // WATER
-    #endif  // defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY)
 
  // volume light test
     /*{
@@ -1913,6 +2057,7 @@ void main() {
         out_color.a = alpha;
     #endif
 
+    //out_color.xyz = vec3(1.0)
     #endif // DEPTH_ONLY
     #endif // PARTICLE
 
