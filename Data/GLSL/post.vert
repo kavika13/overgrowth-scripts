@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 
 in vec2 vert_attrib;
 out vec2 tex;

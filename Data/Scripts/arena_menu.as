@@ -46,14 +46,12 @@ bool CanGoBack() {
 }
 
 void Update() {
-
-	UpdateController();
 	UpdateKeyboardMouse();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
 
-        Log( info, "Got processMessage " + message.name );
+        /*Log( info, "Got processMessage " + message.name );*/
 
         if( message.name == "Back" )
         {
@@ -69,6 +67,7 @@ void Update() {
     }
 	// Do the general GUI updating
 	imGUI.update();
+	UpdateController();
 }
 
 void Resize() {

@@ -982,10 +982,6 @@ bool StuckToNavMesh() {
 }
 
 void UpdateBrain(const Timestep &in ts){   
-    EnterTelemetryZone("UpdateDebugSettings"); 
-    UpdateDebugSettings();
-    LeaveTelemetryZone();
-
     if(knocked_out != _awake){
         return;
     }
@@ -1220,6 +1216,7 @@ void UpdateBrain(const Timestep &in ts){
             if(move_delay <= 0.1){
                 float closest_dist = 0.0f;
                 int closest_point_id = -1;
+                bool _debug_draw_investigate = GetConfigValueBool( "debug_show_ai_investigate" );
                 for(int i=0, len=investigate_points.size(); i<len; ++i){
                     if(_debug_draw_investigate){
                         DebugDrawWireSphere(investigate_points[i].pos, 1.0f, vec3(1.0f), _fade);
@@ -1400,7 +1397,7 @@ void UpdateBrain(const Timestep &in ts){
         MovementObject@ char = ReadCharacterID(ally_id);
         if(distance_squared(this_mo.position, char.position) < 5.0f){
             SetGoal(_attack);
-            char.ReceiveMessage("escort_me "+this_mo.getID());
+            char.ReceiveScriptMessage("escort_me "+this_mo.getID());
         }
         CheckForNearbyWeapons();
         break; }
@@ -1445,7 +1442,7 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-    if( _debug_mouse_path_test )
+    if( GetConfigValueBool( "debug_mouse_path_test" ) )
     {
         MouseControlPathTest();
     }
@@ -1539,7 +1536,7 @@ bool WantsToDropItem() {
 }
 
 bool WantsToThrowItem() {
-    if(species == _dog){
+    if(species == _dog && false){
         return true;
     } else {
         return false;
@@ -1894,6 +1891,11 @@ vec3 GetPatrolMovement(){
                     } else if(type == "Wounded"){
                         patrol_idle_override = "Data/Animations/r_sit_injuredneck.anm";           
                         asleep = true;             
+                    } else {
+                        if(FileExists(type)){
+                            patrol_idle_override = type;
+                            Print("Setting patrol_idle_override to \""+type+"\"\n");
+                        }
                     }
                 } else {
                     patrol_idle_override = "";
@@ -1966,6 +1968,7 @@ bool JumpToTarget(vec3 jump_target, vec3 &out vel, const float _success_threshol
         jump_info.jump_start_vel = low_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
+        bool _debug_draw_jump_path = GetConfigValueBool( "debug_show_ai_jump" );
         if(_debug_draw_jump_path){
             for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
                 DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 
@@ -2278,7 +2281,7 @@ vec3 GetAttackMovement() {
         MovementObject@ char = ReadCharacterID(chase_target_id);
         //If we are chasing someone and decide to jump to attack them, tell them we're-a coming 
         if( char.controlled == false && has_jump_target && jump_delay == 0.0f ) {
-            char.ReceiveMessage("jumping_to_attack_you "+this_mo.getID());
+            char.ReceiveScriptMessage("jumping_to_attack_you "+this_mo.getID());
         }
 
         return ret;
@@ -2399,7 +2402,7 @@ vec3 GetRepulsorForce(){
         }
         vec3 repulsion = (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
         if(length_squared(repulsion) > 0.0f && move_delay <= 0.0f){
-            char.ReceiveMessage("excuse_me "+this_mo.getID());
+            char.ReceiveScriptMessage("excuse_me "+this_mo.getID());
             repulsor_delay = 1.0f;
         }
         repulsor_total += repulsion;
@@ -2480,6 +2483,7 @@ void CheckJumpTarget(vec3 target) {
                   RangedRandomFloat(-max_horz,max_horz));
     JumpTestEq(this_mo.position, jump_vel, jump_info.jump_path); 
     vec3 end = jump_info.jump_path[jump_info.jump_path.size()-1];
+    bool _debug_draw_jump = GetConfigValueBool( "debug_show_ai_jump" );
     if(_debug_draw_jump){
         for(int i=0; i<int(jump_info.jump_path.size())-1; ++i){
             DebugDrawLine(jump_info.jump_path[i] - vec3(0.0f, _leg_sphere_size, 0.0f), 

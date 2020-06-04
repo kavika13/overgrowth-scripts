@@ -19,7 +19,16 @@ void Initialize() {
 
     // Actually setup the GUI -- must do this before we do anything
     imGUI.setup();
+    BuildUI();
+	if(GetInterlevelData("background") == ""){
+		SetInterlevelData("background", GetRandomBackground());
+	}
+	setBackGround();
+	AddVerticalBar();
+	controller_wraparound = true;
+}
 
+void BuildUI(){
     IMDivider mainDiv( "mainDiv", DOHorizontal );
     mainDiv.append(IMSpacer(DOHorizontal, 200));
     mainDiv.setAlignment(CARight, CATop);
@@ -47,18 +56,6 @@ void Initialize() {
     left_panel.append(horizontal_buttons_holder);
 
     AddButton("Play", buttons_holder, play_icon);
-
-    /*array<ModID>@ active_sids = GetActiveModSids();
-    for( uint i = 0; i < active_sids.length(); i++ ) {
-        array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]); 
-        for( uint k = 0; k < menu_items.length(); k++ ) {
-            if( menu_items[k].GetCategory() == "main" ) {
-                IMMessage@ imfmoc = IMMessage("run_file", menu_items[k].GetPath());
-                AddButton(menu_items[k].GetTitle(),buttons_holder,play_icon,button_background_diamond,true,default_button_width,text_trailing_space,move_button_background,imfmoc);
-            }
-        }
-    }*/
-
     AddButton("Settings", buttons_holder, settings_icon);
     AddButton("Mods",     buttons_holder, mods_icon);
     AddButton("Exit",     buttons_holder, exit_icon);
@@ -68,12 +65,6 @@ void Initialize() {
 
     // Add it to the main panel of the GUI
     imGUI.getMain().setElement( @mainDiv );
-	if(GetInterlevelData("background") == ""){
-		SetInterlevelData("background", GetRandomBackground());
-	}
-	setBackGround();
-	AddVerticalBar();
-	controller_wraparound = true;
 }
 
 void Dispose() {
@@ -85,7 +76,6 @@ bool CanGoBack() {
 }
 
 void Update() {
-	UpdateController();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
@@ -129,12 +119,7 @@ void Update() {
     }
 	// Do the general GUI updating
 	imGUI.update();
-    /* 
-    array<KeyboardPress> inputs = GetRawKeyboardInputs();
-    if( inputs.size() > 0 ) {
-        Log( info, "Hello: " + inputs[inputs.size()-1].s_id + " " + inputs[inputs.size()-1].keycode );
-    }
-    */
+	UpdateController();
 }
 
 

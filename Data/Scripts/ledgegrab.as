@@ -276,6 +276,8 @@ class LedgeDirInfo {
     bool downwards_surface;
 };
 
+vec3 closest_contact;
+
 LedgeDirInfo GetPossibleLedgeDir(vec3 &in pos) {
     LedgeDirInfo ledge_dir_info;
     col.GetSlidingSphereCollision(pos, _leg_sphere_size*1.5f);    
@@ -312,6 +314,7 @@ LedgeDirInfo GetPossibleLedgeDir(vec3 &in pos) {
     } else {
         ledge_dir_info.ledge_dir = sphere_col.GetContact(closest_horz_point).position - pos;
     }
+    closest_contact = sphere_col.GetContact(closest_point).position;
     ledge_dir_info.ledge_dir = normalize(ledge_dir_info.ledge_dir);
     bool _debug_draw_sphere_check = false;
     if(_debug_draw_sphere_check){
@@ -629,6 +632,10 @@ class LedgeInfo {
                 return false;
             }
         }
+
+        if(GetConfigValueBool("auto_ledge_grab") && this_mo.controlled && dot(possible_ledge_dir, GetTargetVelocity()) <= 0) {
+            return false;
+        }
     
         // Get the height of the candidate ledge        
         possible_ledge_dir.y = 0.0f;
@@ -760,11 +767,17 @@ class LedgeInfo {
             pls.height_offset = 0.0f;
             disp_ledge_dir = this_mo.GetFacing();
             climbed_up = false;
+
+            col.GetSlidingSphereCollision(ledge_grab_pos, _leg_sphere_size*1.2);
+            float impact = dot(this_mo.velocity, ledge_dir);
+            ImpactSound(impact, closest_contact);
+
             this_mo.velocity = vec3(0.0f);
             //ledge_grab_pos = CalculateGrabPos();            
             ledge_grab_pos = vec3(this_mo.position.x, ledge_height - _height_under_ledge, this_mo.position.z);
             shimmy_anim.Start(ledge_grab_pos, possible_ledge_dir, this_mo.velocity);
             ghost_movement = false;
+
 
             this_mo.MaterialEvent("edge_grab", this_mo.position + ledge_dir * _leg_sphere_size);
 			AchievementEvent("edge_grab");
@@ -780,7 +793,7 @@ class LedgeInfo {
             climbed_up = true;
 			AchievementEvent("climbed_up");
             jump_info.hit_wall = false;
-            this_mo.velocity = vec3(0.0f);
+            this_mo.position += ledge_dir*0.13;//vec3(0.0f);
         }
         playing_animation = false; 
         allow_ik = true;

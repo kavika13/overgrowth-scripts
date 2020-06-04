@@ -12,11 +12,11 @@ const float _wind_up_threshold = 0.1f;
 const float _wall_flip_protection_time = 0.2f;    
 
 class FlipInfo {
+    bool flipping;
     float flip_angle;
     vec3 target_flip_axis;
     vec3 flip_axis;
     float flip_progress;
-    bool flipping;
     bool flipped;
     float flip_vel;
     float target_flip_angle;

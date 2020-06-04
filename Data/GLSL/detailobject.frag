@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 #include "object_shared150.glsl"
 #include "object_frag150.glsl"
 #include "ambient_tet_mesh.glsl"

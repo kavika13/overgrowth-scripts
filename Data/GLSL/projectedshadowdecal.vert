@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 uniform sampler2DShadow tex0;
 uniform samplerCube tex3;
 uniform sampler2D tex4;

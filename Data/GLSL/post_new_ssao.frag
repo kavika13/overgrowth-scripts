@@ -1,6 +1,7 @@
 #version 150
 #extension GL_ARB_gpu_shader5 : enable
 #extension GL_ARB_texture_rectangle : enable
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform mat4 proj_mat;
 uniform mat4 view_mat;

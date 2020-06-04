@@ -42,6 +42,7 @@ bool StuckToNavMesh() {
 }
 
 void UpdateBrain(const Timestep &in ts){
+    EnterTelemetryZone("playercontrol.as UpdateBrain"); 
     startled = false;    
     if(GetInputDown(this_mo.controller_id, "grab")){
         grab_key_time += ts.step();
@@ -94,6 +95,7 @@ void UpdateBrain(const Timestep &in ts){
     if(delay_jump && !GetInputDown(this_mo.controller_id, "jump")){
         delay_jump = false;
     }
+    LeaveTelemetryZone();
 }
 
 void AIEndAttack(){
@@ -186,7 +188,12 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "grab");
+
+    if(GetConfigValueBool("auto_ledge_grab")){
+        return !GetInputDown(this_mo.controller_id, "crouch");
+    } else {
+        return GetInputDown(this_mo.controller_id, "grab");
+    }
 }
 
 bool WantsToThrowEnemy() {

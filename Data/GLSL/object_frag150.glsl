@@ -35,14 +35,9 @@ struct PointLightData {
 #define light_decal_data_buffer tex15
 #define cluster_buffer tex13
 
-// Using these defines causes problems on Intel HD 4000 cards, therefore they have been search/replaced in the shader directly.
-//#define COUNT_BITS 24u
-//#define COUNT_MASK ((1u << (32u - 24u)) - 1u)
-//#define INDEX_MASK ((1u << (24u)) - 1u)
-//#define COUNT_BITS (24u)
-//#define COUNT_MASK (0x000000FFu)
-//#define INDEX_MASK (0x00FFFFFFu)
-
+const uint COUNT_BITS = 24u;
+const uint COUNT_MASK = ((1u << (32u - COUNT_BITS)) - 1u);
+const uint INDEX_MASK = ((1u << (COUNT_BITS)) - 1u);
 
 #if !defined(DEPTH_ONLY)
 uniform samplerBuffer light_decal_data_buffer;
@@ -65,10 +60,10 @@ PointLightData FetchPointLight(uint light_index) {
 
 void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness, uint light_val, float ambient_mult) {
 	// number of lights in current cluster
-	uint light_count = (light_val >> 24u) & (0x000000FFu);
+	uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
 
 	// index into cluster_lights
-	uint first_light_index = light_val & (0x00FFFFFFu);
+	uint first_light_index = light_val & INDEX_MASK;
 
 	// light list data is immediately after cluster lookup data
 	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -99,11 +94,7 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
             float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
         #endif
 
-        // Shadow from fire light
-        if(n.y > 0.5){
-            d *= mix(pow(1.0 - (n.y-0.5)*2.0, 1.0), 1.0, 0.1);
-        }
-
+        falloff = min(1.0, falloff);
 		diffuse_color += falloff * d * l.color * ambient_mult;
 
 

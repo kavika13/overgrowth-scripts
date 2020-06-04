@@ -1,5 +1,6 @@
 #version 150
 #extension GL_ARB_texture_rectangle : enable
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform vec3 sphere_points[32];
 uniform sampler2D tex3;

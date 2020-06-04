@@ -15,6 +15,7 @@ const float _wall_run_friction = 0.1f; // used to let wall running pull the char
 class JumpInfo {
     bool left_foot_jump;
     bool to_jump_with_left;
+    bool no_rotate;
 
     array<vec3> jump_path;
     float jump_path_progress;
@@ -58,7 +59,8 @@ class JumpInfo {
     }
 
     void HitWall(vec3 dir) {
-        if(has_hit_wall || dot(dir, this_mo.velocity) < 0.0f){
+        float impact = dot(dir, this_mo.velocity);
+        if(has_hit_wall || impact < 0.0f){
             return;
         }
         if(!ledge_info.on_ledge){
@@ -87,7 +89,7 @@ class JumpInfo {
     float GetFlailingAmount() {
         //const float _flail_threshold = 0.5f;
         //return min(1.0f,max(0.0f,(-this_mo.velocity.y-_shock_damage_threshold*_flail_threshold)*_shock_damage_multiplier*(1.0f)));
-        return min(1.0f,max(0.0f,(length(this_mo.velocity)-10.0f)*0.05f));
+        return max(0.3f, min(1.0f,max(0.0f,(length(this_mo.velocity)-10.0f)*0.05f)));
     }
 
     void UpdateFreeAirAnimation() {
@@ -98,7 +100,7 @@ class JumpInfo {
         float flailing = GetFlailingAmount();
         flailing = min(0.6f+sin(time*2.0f)*0.2f,flailing);
         this_mo.rigged_object().anim_client().SetBlendCoord("up_coord",up_coord);
-        this_mo.rigged_object().anim_client().SetBlendCoord("tuck_coord",flip_info.GetTuck());
+        this_mo.rigged_object().anim_client().SetBlendCoord("tuck_coord",max(flip_info.GetTuck(), tuck_override));
         this_mo.rigged_object().anim_client().SetBlendCoord("flail_coord",flailing);
         int8 flags = 0;
         if(left_foot_jump){
@@ -227,6 +229,15 @@ class JumpInfo {
                     flip_info.StartFlip();
                 }
             }
+            if(!flip_info.IsFlipping() && !flip_info.HasFlipped() && !no_rotate && !has_hit_wall){
+                vec3 target_facing = this_mo.velocity;
+                target_facing.y = 0.0;
+                target_facing = normalize(target_facing);
+                vec3 facing = InterpDirections(target_facing,
+                                               this_mo.GetFacing(),
+                                               pow(0.85f,ts.frames()));
+                this_mo.SetRotationFromFacing(facing);
+            }
         }
 
         if(hit_wall){
@@ -321,7 +332,9 @@ class JumpInfo {
         AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
         
         if(length(target_velocity)>0.4f){
-            this_mo.SetRotationFromFacing(target_velocity);
+            no_rotate = false;
+        } else {
+            no_rotate = true;
         }
 
         left_foot_jump = to_jump_with_left;
@@ -335,6 +348,7 @@ class JumpInfo {
         has_hit_wall = false;
         flip_info.StartedJump();
         ledge_delay = 0.0f;
+        tuck_override = 0.0f;
     }
 
     // adjusts the velocity of jumps and wall jumps based on ground_normal

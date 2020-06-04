@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 #include "lighting150.glsl"
 
 in vec3 vertex_attrib;
@@ -17,23 +18,24 @@ in vec2 tex_coord_attrib;
     in vec2 detail_tex_coord;
 #elif defined(ITEM)
     in vec3 normal_attrib;
+#elif defined(SKY)
 #elif defined(CHARACTER)
     in vec2 morph_tex_offset_attrib;
     in vec2 fur_tex_coord_attrib;
 
-#if defined(GPU_SKINNING)
+    #if defined(GPU_SKINNING)
 
-    in vec4 bone_weights;
-    in vec4 bone_ids;
-    in vec3 morph_offsets;
+        in vec4 bone_weights;
+        in vec4 bone_ids;
+        in vec3 morph_offsets;
 
-#else  // GPU_SKINNING
+    #else  // GPU_SKINNING
 
-    in vec4 transform_mat_column_a;
-    in vec4 transform_mat_column_b;
-    in vec4 transform_mat_column_c;
+        in vec4 transform_mat_column_a;
+        in vec4 transform_mat_column_b;
+        in vec4 transform_mat_column_c;
 
-#endif  // GPU_SKINNING
+    #endif  // GPU_SKINNING
 
     in vec3 vel_attrib;
 #else // static object
@@ -47,7 +49,15 @@ in vec2 tex_coord_attrib;
     #endif
 #endif
 
-#ifdef PARTICLE
+#if defined(GPU_PARTICLE_FIELD)
+    uniform mat4 mvp;
+    uniform mat4 projection_matrix;
+    uniform mat4 view_matrix;
+    uniform vec3 cam_pos;
+    uniform float time;
+    uniform vec2 viewport_dims;
+    uniform vec3 cam_dir;
+#elif defined(PARTICLE)
     uniform mat4 mvp;
     const int kMaxInstances = 100;
 
@@ -91,40 +101,31 @@ in vec2 tex_coord_attrib;
     uniform mat4 shadow_matrix[4];
     #endif
     uniform mat4 mvp;
-
-#if defined(GPU_SKINNING)
-
-    const int kMaxBones = 200;
-
-    uniform mat4 bone_mats[kMaxBones];
-
-#endif  // GPU_SKINNING
-
+    #if defined(GPU_SKINNING)
+        const int kMaxBones = 200;
+        uniform mat4 bone_mats[kMaxBones];
+    #endif  // GPU_SKINNING
+#elif defined(SKY)
+    uniform mat4 projection_view_mat;
+    uniform vec3 cam_pos;
 #else // static object
     const int kMaxInstances = 100;
 
+    struct Instance {
+        mat4 model_mat;
+        mat3 model_rotation_mat;
+        vec4 color_tint;
+        vec4 detail_scale;
+    };
+
     uniform InstanceInfo {
-        mat4 model_mat[kMaxInstances];
-        mat3 model_rotation_mat[kMaxInstances];
-        vec4 color_tint[kMaxInstances];
-        vec4 detail_scale[kMaxInstances];
+        Instance instances[kMaxInstances];
     };
 
     uniform mat4 projection_view_mat;
     uniform vec3 cam_pos;
     uniform mat4 shadow_matrix[4];
-
-    #ifdef PLANT
     uniform float time;
-    #endif
-
-    #ifdef MEGASCAN_TEST
-        uniform sampler2D tex0;
-    #endif
-
-    #if defined(SCROLL_FAST) || defined(SCROLL_SLOW) || defined(SCROLL_VERY_SLOW) || defined(SCROLL_MEDIUM)
-    uniform float time;
-    #endif
 #endif
 
 
@@ -141,14 +142,17 @@ in vec2 tex_coord_attrib;
 
 out vec3 world_vert;
 
-
-#ifdef PARTICLE
+#if defined(PARTICLE)
     out vec2 tex_coord;
     #if defined(NORMAL_MAP_TRANSLUCENT) || defined(WATER) || defined(SPLAT)
         out vec3 tangent_to_world1;
         out vec3 tangent_to_world2;
         out vec3 tangent_to_world3;
     #endif
+    flat out int instance_id;
+#elif defined(GPU_PARTICLE_FIELD)
+    out vec2 tex_coord;
+    out float alpha;
     flat out int instance_id;
 #elif defined(DETAIL_OBJECT)
     out vec2 frag_tex_coords;
@@ -165,6 +169,7 @@ out vec3 world_vert;
     #endif
     #endif
     out vec2 frag_tex_coords;
+#elif defined(SKY)
 #elif defined(TERRAIN)
     #if defined(DETAILMAP4)
         out vec3 frag_tangent;
@@ -204,22 +209,164 @@ out vec3 world_vert;
 const float water_height = 26.0;
 const float refract_amount = 0.6;
 
-void ApplyWaterRefraction(inout vec3 vert){
-    /*if(vert.y < water_height){
-        vert.y = water_height + (vert.y - water_height) * refract_amount;
-    }*/
-/*
-    if(vert.y > water_height){
-        vert.y = water_height + (vert.y - water_height) / refract_amount;
-    }*/
-}
-
 void GenerateNormal() {
 
 }
 
+//#define GRASS_ESSENTIALS
+#ifdef GRASS_ESSENTIALS
+layout (std140) uniform ClusterInfo {
+    uvec3 grid_size;
+    uint num_decals;
+    uint num_lights;
+    uint light_cluster_data_offset;
+    uint light_data_offset;
+    uint cluster_width;
+    mat4 inv_proj_mat;
+    vec4 viewport;
+    float z_near;
+    float z_mult;
+    float pad3;
+    float pad4;
+};
+
+    
+#define NUM_GRID_COMPONENTS 2u
+#define ZCLUSTERFUNC(val) (log(-1.0 * (val) - z_near + 1.0) * z_mult)
+
+#define light_decal_data_buffer tex15
+#define cluster_buffer tex13
+
+const uint COUNT_BITS = 24u;
+const uint COUNT_MASK = ((1u << (32u - COUNT_BITS)) - 1u);
+const uint INDEX_MASK = ((1u << (COUNT_BITS)) - 1u);
+
+uniform samplerBuffer light_decal_data_buffer;
+uniform usamplerBuffer cluster_buffer;
+
+// this MUST match the one in source or bad things happen
+struct DecalData {
+    vec3 scale;
+    float spawn_time;
+    vec4 rotation;  // quaternion
+    vec3 position;
+    float pad1;
+
+    vec4 tint;
+    vec4 uv;
+    vec4 normal;
+};
+
+#define DECAL_SIZE_VEC4 6u
+
+DecalData FetchDecal(uint decal_index) {
+    DecalData decal;
+
+    vec4 temp        = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 0u));
+    decal.scale      = temp.xyz;
+    decal.spawn_time = temp.w;
+    decal.rotation   = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 1u));
+    decal.position   = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 2u)).xyz;
+    decal.pad1       = 0.0f;
+
+    decal.tint = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 3u));
+
+    decal.uv = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 4u));
+
+    decal.normal = texelFetch(light_decal_data_buffer, int(DECAL_SIZE_VEC4 * decal_index + 5u));
+
+    return decal;
+}
+
+mat3 mat_from_quat(vec4 q) {
+    float qxx = q.x * q.x;
+    float qyy = q.y * q.y;
+    float qzz = q.z * q.z;
+    float qxz = q.x * q.z;
+    float qxy = q.x * q.y;
+    float qyz = q.y * q.z;
+    float qwx = q.w * q.x;
+    float qwy = q.w * q.y;
+    float qwz = q.w * q.z;
+
+    mat3 m;
+    m[0][0] = 1.0f - 2.0f * (qyy +  qzz);
+    m[0][1] = 2.0f * (qxy + qwz);
+    m[0][2] = 2.0f * (qxz - qwy);
+
+    m[1][0] = 2.0f * (qxy - qwz);
+    m[1][1] = 1.0f - 2.0f * (qxx +  qzz);
+    m[1][2] = 2.0f * (qyz + qwx);
+
+    m[2][0] = 2.0f * (qxz + qwy);
+    m[2][1] = 2.0f * (qyz - qwx);
+    m[2][2] = 1.0f - 2.0f * (qxx +  qyy);
+
+    return m;
+}
+
+#define decalShadow 1
+
+void CalculateDecals(uint decal_val, inout vec3 vert) {
+    // number of decals in current cluster
+    uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
+
+    //colormap.xyz = vec3(decal_count) / 16.0;
+    //return;
+
+    // debug option, uncomment to visualize clusters
+    //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
+    //colormap.xyz = vec3(g.z / grid_size.z);
+
+    // index into cluster_decals
+    uint first_decal_index = decal_val & INDEX_MASK;
+
+    // decal list data is immediately after cluster lookup data
+    uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
+    first_decal_index = first_decal_index + 2u * num_clusters;
+
+    vec3 orig_vert = vert;
+    for (uint i = 0u; i < decal_count; ++i) {
+        // texelFetch takes int
+        uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
+
+        DecalData decal = FetchDecal(decal_index);
+        float spawn_time = decal.spawn_time;
+
+        vec2 start_uv = decal.uv.xy;
+        vec2 size_uv = decal.uv.zw;
+
+        vec2 start_normal = decal.normal.xy;
+        vec2 size_normal = decal.normal.zw;
+
+        // We omit scale component because we want to keep normal unit length
+        // We omit translation component because normal
+        mat3 rotation_mat = mat_from_quat(decal.rotation);
+        vec3 decal_ws_normal = rotation_mat * vec3(0.0, 1.0, 0.0);
+
+        vec3 inv_scale = vec3(1.0f) / decal.scale;
+        mat3 inv_rotation_mat = transpose(rotation_mat);
+        vec3 temp = (inv_rotation_mat * (orig_vert - decal.position)) * inv_scale;
+        if(abs(temp[0]) < 0.5 && abs(temp[1]) < 0.5 && abs(temp[2]) < 0.5){
+            bool ambient_shadow = false;
+            int type = int(decal.tint[3]);
+            bool skip = false;
+            vec3 dir;
+            switch (type) {
+                case decalShadow: 
+                    dir = normalize(orig_vert - decal.position);
+                    dir.y = -1.0;
+                    dir = normalize(dir);
+                    vert += dir * max(0.0, (0.8 - length(temp)*2.0))*0.2;
+                    break;
+            }
+        }
+    }
+}
+#endif
+
 void main() {    
-    #ifdef PARTICLE
+    #if defined(PARTICLE)
         #ifdef INSTANCED
             vec3 transformed_vertex = (instance_transform[gl_InstanceID] * vec4(vertex_attrib, 1.0)).xyz;
             #if defined(NORMAL_MAP_TRANSLUCENT) || defined(WATER) || defined(SPLAT)
@@ -235,13 +382,169 @@ void main() {
                 tangent_to_world2 = normalize(cross(tangent_to_world1,tangent_to_world3));
             #endif
         #endif
-        ApplyWaterRefraction(transformed_vertex);
         mat4 projection_view_mat = mvp;
         tex_coord = tex_coord_attrib;    
         tex_coord[1] = 1.0 - tex_coord[1];
         #ifdef INSTANCED
             instance_id = gl_InstanceID;
         #endif
+    #elif defined(GPU_PARTICLE_FIELD)
+        instance_id = gl_InstanceID*1000 + (gl_VertexID/4);
+        float speed = 0.0;
+        float fall_speed = 0.0;
+        float size = 0.005 * (sin(instance_id*1.327)*0.5+1.0);
+        float max_dist = 16.13;
+
+        //#define RAIN
+        //#define ASH  
+        #ifdef ASH
+            int type = instance_id % 83;
+            if(type == 0){
+                max_dist *= 2.0;
+                size *= 4.0;
+                fall_speed = -2.0;
+                speed = 0.3;
+            } else if(type >= 1 && type < 3){
+                max_dist *= 2.0;
+                size *= 4.0;
+                fall_speed = 1.0;
+                speed = 0.2;
+            } else {
+                fall_speed = -0.5;
+                speed = 0.1;
+                size *= 80.0;
+            }
+        #elif defined(RAIN)
+            speed = 0.0;
+            fall_speed = 9.0;
+            //max_dist *= 0.25;
+            int type = instance_id % 83;
+        #elif defined(SNOW)
+            speed = 0.1;
+            fall_speed = 1.0;
+            #ifdef MED
+            int type = instance_id % 83;
+            if(type == 10){
+                size *= 80.0;
+            }
+            if(type > 10){
+                size = 0.0;
+            }
+            fall_speed *= 0.5;
+            #endif
+        #elif defined(BUGS)
+            speed = 0.2;
+            fall_speed = 0.0;
+            size *= 0.5;
+            max_dist *= 1.0;
+            #ifdef FIREFLY
+                max_dist *= 4.0;
+                speed *= 0.5;
+                if(instance_id % 8 != 0){
+                    size = 0.0;
+                }
+            #elif defined(MOREBUGS)
+                if(instance_id % 4 != 0){
+                    size = 0.0;
+                }
+            #else
+                if(instance_id % 10 != 0){
+                    size = 0.0;
+                }
+            #endif
+        #endif
+        mat4 projection_view_mat = mvp;
+        vec3 pos = vec3(instance_id%100, (instance_id/100)%100, instance_id/100/100);
+        pos += vec3(-50, 0, -50);
+        pos *= (8,4,8);
+        vec3 offset = vec3(sin(instance_id*1.1), sin(instance_id*1.3), sin(instance_id*1.7)) * 5.0;
+        pos += offset;
+        float dist = distance(pos, cam_pos);
+        pos.y -= time*speed*3.0;
+        #ifdef BUGS
+        pos *= 3.0;
+        #endif
+        pos.x += sin(time*1.7*speed+pos.x)+sin(time*speed*1.3+pos.z)+sin(time*speed*2.1+pos.y);
+        pos.y += sin(time*1.1*speed+pos.x)+sin(time*speed*1.9+pos.z)+sin(time*speed*1.4+pos.y);
+        pos.z += sin(time*0.7*speed+pos.x)+sin(time*speed*2.3+pos.z)+sin(time*speed*1.2+pos.y);
+        #ifdef BUGS
+        pos /= 3.0;
+        #endif
+        pos.y += time*speed*3.0;
+        pos.y -= time*fall_speed;
+        pos.x += sin(instance_id);
+        pos += vec3(1000);
+        for(int i=0; i<3; ++i){
+            if(abs(pos[i] - cam_pos[i]) > max_dist){
+                pos[i] -= cam_pos[i];
+                pos[i] /= max_dist * 2.0;
+                pos[i] = fract(pos[i]);
+                pos[i] *= max_dist * 2.0;
+                pos[i] -= max_dist;
+                pos[i] += cam_pos[i];
+            }
+        }
+        #if defined(SNOW) && !defined(MED)
+            if(pos.y < -4.1){
+                size = max(0.0, size*(1.0 + (pos.y+4.1)*3.0));
+                pos.y = -4.1;
+            }
+        #endif
+        #if defined(FIREFLY) && defined(WATER_DELETE)
+            if(pos.y < 82.7){
+                size = 0.0;
+            }
+        #endif
+        dist = distance(pos, cam_pos);
+        #ifdef ASH
+            if(type == 0){
+                float max_spark_dist = 16.0;
+                if(dist > max_spark_dist){
+                    size = 0.0;
+                }
+                alpha = (1.0 - dist/max_spark_dist)*4.0;
+            } else if(type >= 1 && type < 3){
+                alpha = 4.0;
+            } else {
+                alpha = 0.04;
+                if(dist > 16){
+                    size = 0.0;
+                }
+            }
+            if(type > 15){
+                size = 0.0;
+            }
+        #elif defined(RAIN)
+            float size_mult = max(1.0, dist*0.5 - 1.0);
+            size *= size_mult;
+            alpha = 0.07/pow(size_mult,1.6);
+        #elif defined(FIREFLY)
+            float size_mult = max(1.0, dist*0.7 - 1.0);
+            size *= size_mult;
+            alpha = 1.0/pow(size_mult, 1.5);
+        #elif defined(BUGS)
+            float size_mult = max(1.0, dist*0.7 - 1.0);
+            size *= size_mult;
+            alpha = 1.0/size_mult/size_mult;
+        #else
+            float size_mult = max(1.0, dist*0.5 - 1.0);
+            size *= size_mult;
+            alpha = 1.0/size_mult/size_mult;
+            #if defined(SNOW) && defined(MED)
+            //alpha *= 0.2;
+            if(type == 10){
+                alpha = 0.001;
+            }
+            #endif
+        #endif
+        tex_coord = tex_coord_attrib;   
+        #ifdef RAIN
+        vec3 transformed_vertex = size*(inverse(view_matrix) * vec4(vertex_attrib, 0.0)).xyz * vec3(1,20,1) + pos;
+        #else
+        vec3 transformed_vertex = size*(inverse(view_matrix) * vec4(vertex_attrib, 0.0)).xyz + pos;
+        #endif
+    #elif defined(SKY)
+        vec3 transformed_vertex = cam_pos + vertex_attrib * 10000;
     #elif defined(DETAIL_OBJECT)
         mat4 obj2world = transforms[gl_InstanceID];
         vec3 transformed_vertex = (obj2world*vec4(vertex_attrib, 1.0)).xyz;
@@ -267,7 +570,6 @@ void main() {
             transformed_vertex += (obj2world * vec4(vertex_offset,0.0)).xyz;
         #endif
         vec3 temp = transformed_vertex.xyz;
-        ApplyWaterRefraction(temp);
         transformed_vertex.xyz = temp;
 
         frag_tex_coords = tex_coord_attrib;
@@ -293,7 +595,6 @@ void main() {
         #endif
     #elif defined(TERRAIN)
         vec3 transformed_vertex = vertex_attrib;
-        ApplyWaterRefraction(transformed_vertex);
 
         #if defined(DETAILMAP4)
             frag_tangent = tangent_attrib;    
@@ -334,7 +635,6 @@ void main() {
 #endif  // GPU_SKINNING
 
         vec3 transformed_vertex = (concat_bone * vec4(vertex_attrib, 1.0)).xyz;
-        ApplyWaterRefraction(transformed_vertex);
 
         mat4 projection_view_mat = mvp;
 
@@ -359,50 +659,47 @@ void main() {
             int instance_id;
         #endif
         instance_id = gl_InstanceID;
-        #if defined(TANGENT) && !defined(DEPTH_ONLY)
+        #if defined(TANGENT)
             tan_to_obj = mat3(tangent_attrib, bitangent_attrib, normal_attrib);
         #endif
-        vec3 transformed_vertex = (model_mat[instance_id] * vec4(vertex_attrib, 1.0)).xyz;
+        vec3 transformed_vertex = (instances[instance_id].model_mat * vec4(vertex_attrib, 1.0)).xyz;
         #ifdef PLANT
-            float plant_shake = max(0.0, color_tint[instance_id][3]);
-            vec3 vertex_offset = CalcVertexOffset(transformed_vertex, plant_stability_attrib.r, time, plant_shake);
-            transformed_vertex.xyz += model_rotation_mat[instance_id] * vertex_offset;
+            float plant_shake = max(0.0, instances[instance_id].color_tint[3]);
+            float stability = plant_stability_attrib.r;
+            #ifdef GRASS_ESSENTIALS
+            stability = -0.4 - vertex_attrib.y * 5.0;
+
+
+            vec4 temp_vec = projection_view_mat * vec4(transformed_vertex, 1.0);
+            vec4 eyePos = inv_proj_mat * temp_vec;
+
+            float zVal = ZCLUSTERFUNC(eyePos.z);
+
+            zVal = max(0u, min(zVal, grid_size.z - 1u));
+
+            uvec3 g = uvec3(uvec2((temp_vec.xy / temp_vec.w * 0.5 + vec2(0.5)) * (viewport.zw - viewport.xy)) / cluster_width, zVal);
+
+            uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * grid_size.z + g.z);
+            uint decal_val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
+            uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
+            if(decal_count > 0){
+                CalculateDecals(decal_val, transformed_vertex);
+            }
+            #endif
+            vec3 vertex_offset = CalcVertexOffset(transformed_vertex, stability, time, plant_shake);
+            transformed_vertex.xyz += instances[instance_id].model_rotation_mat* vertex_offset;
         #endif
         #ifdef WATERFALL
             transformed_vertex.xyz += CalcVertexOffset(transformed_vertex, 0.1, time, 1.0);
         #endif
 
-
-        #ifdef MEGASCAN_TEST
-            vec3 temp_scale;
-            {
-                mat3 temp_mat = mat3(model_mat[instance_id][0].xyz, model_mat[instance_id][1].xyz, model_mat[instance_id][2].xyz);
-                temp_mat = inverse(model_rotation_mat[instance_id]) * temp_mat;
-                temp_scale = vec3(temp_mat[0][0], temp_mat[1][1], temp_mat[2][2]);
-            }
-            float tile_scale = 2.0;
-            float displacement_scale = 0.25;
-            vec2 temp_uv;
-            #ifdef AXIS_UV
-                temp_uv = tex_coord_attrib * tile_scale;
-                temp_uv.x *= abs(dot(temp_scale, tangent_attrib));
-                temp_uv.y *= abs(dot(temp_scale, bitangent_attrib));
-            #else
-                temp_uv = tex_coord_attrib;
-            #endif
-            #ifdef DISPLACE
-                transformed_vertex.xyz += model_rotation_mat[instance_id] * normal_attrib * (texture(tex0, temp_uv).a - 0.5) * displacement_scale;//CalcVertexOffset(transformed_vertex, 0.1, 0.0, 1.0);
-            #endif
+        #if defined(WATER) && defined(BEACH)
+            transformed_vertex.y += sin(time*0.5)*0.1;
         #endif
 
         vec3 temp = transformed_vertex.xyz;
-        ApplyWaterRefraction(temp);
         transformed_vertex.xyz = temp;
-        #ifdef MEGASCAN_TEST
-            frag_tex_coords = temp_uv;
-        #else
-            frag_tex_coords = tex_coord_attrib;
-        #endif
+        frag_tex_coords = tex_coord_attrib;
         #ifdef SCROLL_MEDIUM
         frag_tex_coords.y -= time;
         #endif

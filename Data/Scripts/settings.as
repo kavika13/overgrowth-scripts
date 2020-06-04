@@ -1,12 +1,9 @@
 IMDivider@ settings_content;
 string current_screen;
-int active_slider = -1;
 int active_rebind = -1;
 int initial_sequence_id;
-bool checking_slider_movement = false;
-vec2 old_mouse_pos;
 
-void AddSettingsMenu(){
+void BuildUI(){
 	float background_height = 1300;
 	float background_width = 1600;
 	float header_width = 550;
@@ -46,7 +43,7 @@ void AddSettingsMenu(){
 	buttons_holder.setSize(vec2(600, mainDiv.getSizeY()));
 	buttons_holder.setBorderColor(vec4(1,0,0,1));
 
-    IMImage header_background( title_background );
+    IMImage header_background( brushstroke_background );
     if(kAnimate){
 		header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
 	}
@@ -202,7 +199,7 @@ void AddGameScreen(){
 	array<string> blood_color_values = {"0.4 0 0", "0 0.4 0", "0 0.4 0.4", "0.1 0.1 0.1"};
 	array<string> blood_color_options = {"Red", "Green", "Cyan", "Black"};
 	AddDropDown("Blood Color", settings_content, DropdownConfiguration( blood_color_values, blood_color_options, "blood_color" ));
-	AddCheckBox("Splitscreen", settings_content, "splitscreen");
+	AddCheckBox("Splitscreen", settings_content, "split_screen");
 }
 
 void AddInputScreen(){
@@ -213,6 +210,7 @@ void AddInputScreen(){
 	AddCheckBox("Raw mouse input", settings_content, "use_raw_input");
 	AddCheckBox("Invert gamepad Y", settings_content, "invert_y_gamepad_look");
 	AddCheckBox("Automatic camera", settings_content, "auto_camera");
+	AddCheckBox("Automatic Ledge Grab", settings_content, "auto_ledge_grab");
 	
 	AddKeyRebind("Forward", settings_content, "key", "up");
 	AddKeyRebind("Backwards", settings_content, "key", "down");
@@ -308,26 +306,6 @@ void UpdateKeyRebinding(){
 					gui_elements[active_rebind].SwitchOption(last_pressed.keycode);
 				}
 				active_rebind = -1;
-			}
-		}
-	}
-}
-
-void UpdateMovingSlider(){
-	if(active_slider != -1){
-		if(imGUI.guistate.leftMouseState == kMouseStillDown){
-			vec2 current_mouse_pos = imGUI.guistate.mousePosition;
-			checking_slider_movement = true;
-			if(current_mouse_pos.x != old_mouse_pos.x){
-				gui_elements[active_slider].SwitchOption("" + int(current_mouse_pos.x - old_mouse_pos.x));	
-				
-				old_mouse_pos = current_mouse_pos;
-			}
-		}else{
-			if(checking_slider_movement){
-				active_slider = -1;
-				checking_slider_movement = false;
-				imGUI.receiveMessage(IMMessage("refresh_options"));
 			}
 		}
 	}

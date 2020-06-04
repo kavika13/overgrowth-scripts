@@ -18,7 +18,7 @@ FontSetup title_font("edosz", 125, HexColor("#CCCCCC"), true);
 FontSetup button_font_small("edosz", 50 , HexColor("#CCCCCC"), true);
 FontSetup button_font_extra_small("edosz", 35 , HexColor("#CCCCCC"), true);
 FontSetup button_font_small_last_played("edosz", 50 , HexColor("#000000"), true);
-FontSetup button_font_large("edosz", 100 , HexColor("#CCCCCC"), true);
+FontSetup button_font_large("edosz", 60 , HexColor("#CCCCCC"), true);
 FontSetup noteFont("OpenSans-Regular", 40, mediumYellow, false);
 FontSetup extra_small_font("OptimusPrinceps", 35, HexColor("#CCCCCC"), true);
 FontSetup small_font("arial", 45, HexColor("#CCCCCC"), true);
@@ -46,6 +46,9 @@ bool menu_numbered = true;
 
 float checkbox_size = 35.0f;
 float checkmark_size = 40.0f;
+vec2 old_mouse_pos;
+int active_slider = -1;
+bool checking_slider_movement = false;
 
 const bool kAnimateMenu = false;
 
@@ -57,15 +60,19 @@ string button_background_diamond = "Textures/ui/menus/main/button-diamond.png";
 string button_background_diamond_light = "Textures/ui/menus/main/button-diamond-light.png";
 string button_background_diamond_thin = "Textures/ui/menus/main/button-diamond-thin.png";
 string button_background_flag = "Textures/ui/menus/main/button-flag.png";
+string button_background_flag_extended = "Textures/ui/menus/main/button-flag-extended.png";
 string button_back = "Textures/ui/menus/main/button-back.png";
-string title_background = "Textures/ui/menus/main/brushStroke.png";
+string brushstroke_background = "Textures/ui/menus/main/brushStroke.png";
 string white_background = "Textures/ui/menus/main/white_square.png";
 string button_back_square = "Textures/ui/menus/main/button_square.png";
+string button_background_rectangle = "Textures/ui/menus/main/button-back-rect.png";
 string checkmark = "Textures/ui/menus/main/checkmark.png";
 string checkbox = "Textures/ui/menus/main/checkbox.png";
 string settings_sidebar = "Textures/ui/menus/main/settings_sidebar.png";
 string slider_button = "Textures/ui/menus/main/slider_button.png";
 string slider_bar = "Textures/ui/menus/main/slider_bar.png";
+string slider_bar_vertical = "Textures/ui/menus/main/slider_bar_vertical.png";
+string slider_button_vert = "Textures/ui/menus/main/button-diamond-light-vertical.png";
 
 string play_icon = "Textures/ui/menus/main/icon-rabbit.png";
 string close_icon = "Textures/ui/menus/main/icon-x.png";
@@ -78,6 +85,7 @@ string steam_icon = "Textures/ui/menus/main/icon-steam.png";
 string spinner_icon = "Textures/ui/menus/main/icon-steam.png";
 string navigation_arrow = "Textures/ui/menus/main/navigation_large.png";
 string navigation_arrow_slim = "Textures/ui/menus/main/navigation_large_slim.png";
+string no_results = "Textures/ui/arena_mode/10_kills.png";
 
 string level_preview_image = "Textures/lugarumenu/Wonderer.jpg";
 
@@ -135,6 +143,8 @@ class GUIElement{
 	void ResetKeyBinding(){};
 	void AddTooltip(){};
 	void RemoveTooltip(){};
+	void SlideX(int value){};
+	void SlideY(int value){};
 }
 
 class CategoryButton : GUIElement{
@@ -256,10 +266,10 @@ class ModItem : GUIElement{
 	}
 	void AddTooltip(){
 		
-		@tooltip_container = IMContainer(50, 50);
+		@tooltip_container = IMContainer(200, 100);
 		tooltip_container.setClip(false);
 		IMDivider tooltip_divider("tooltip_divider", DOVertical);
-		tooltip_divider.setZOrdering(7);
+		tooltip_divider.setZOrdering(9);
 		tooltip_container.setElement(tooltip_divider);
 		
 		IMText@ current_line = IMText("", button_font_extra_small);
@@ -285,11 +295,12 @@ class ModItem : GUIElement{
 			}
 		}
 		IMImage background(white_background);
-		background.setColor(button_background_color);
+		background.setColor(vec4(0.1,0.1,0.1,0.95));
 		background.setSize(vec2(500, 500));
-		background.setZOrdering(6);
-		tooltip_container.addFloatingElement(background, "background", vec2(0));
-		parent.addFloatingElement(tooltip_container, "tooltip", vec2(0));
+		background.setZOrdering(8);
+		tooltip_container.setPadding(5,5,5,5);
+		tooltip_container.addFloatingElement(background, "background", vec2(0.0f));
+		parent.addFloatingElement(tooltip_container, "tooltip", vec2(parent.getSizeX(), parent.getSizeY() / 2.0f - (error_num_lines * 20.0f)));
 	}
 	void RemoveTooltip(){
 		tooltip_container.clear();
@@ -393,6 +404,22 @@ class Slider : GUIElement{
 		float new_slider_displacement = max_x_slide * config_value / max_value;
 		slider_image.setDisplacementX( new_slider_displacement );
 	}
+	void SlideX(int value){
+		float new_value = config_value;
+		float current_x_displacement = slider_image.getDisplacementX();
+		float multiplier = 5.0f;
+		float new_slider_displacement;
+		new_slider_displacement = min(max_x_slide,max(value + current_x_displacement, min_x_slide));
+		new_value = max_value * new_slider_displacement / max_x_slide;
+		new_value = max(min_value, min(new_value, max_value));
+		float new_label_value = 100.0f * new_value / max_value;
+		value_label.setText(ceil(new_label_value) + "%");
+		
+		slider_image.setDisplacementX( new_slider_displacement );
+		SetConfigValueFloat(config_name, new_value);
+		config_value = new_value;
+		RefreshAllOptions();
+	}
 	void SwitchOption(string value){
 		float new_value = config_value;
 		float current_x_displacement = slider_image.getDisplacementX();
@@ -413,9 +440,6 @@ class Slider : GUIElement{
 			float difference = (mouse_pos - zero_pos) * (1.0f + scaling_x);
 			new_value = max_value * difference / max_x_slide;
 			new_slider_displacement = max_x_slide * new_value / max_value;
-		}else{
-			new_slider_displacement = min(max_x_slide,max(atoi(value) + current_x_displacement, min_x_slide));
-			new_value = max_value * new_slider_displacement / max_x_slide;
 		}
 		new_value = max(min_value, min(new_value, max_value));
 		float new_label_value = 100.0f * new_value / max_value;
@@ -425,6 +449,39 @@ class Slider : GUIElement{
 		SetConfigValueFloat(config_name, new_value);
 		config_value = new_value;
 		RefreshAllOptions();
+	}
+}
+
+class ScrollBar : GUIElement{
+	IMImage@ slider_image;
+	int current_pos = 0;
+	int threshold = 25;
+	ScrollBar(IMContainer@ _parent, IMImage@ _slider_image){
+		@slider_image = @_slider_image;
+		@parent = @_parent;
+	}
+	void PutCurrentValue(){
+	}
+	void SwitchOption(string value){
+		if(value == "+"){
+			
+		}
+		else if(value == "-"){
+			
+		}
+		else if(value == "click_jump_value"){
+			
+		}
+	}
+	void SlideY(int value){
+		current_pos += value;
+		if(current_pos > threshold){
+			imGUI.receiveMessage( IMMessage("shift_menu", 1) );
+			current_pos -= threshold;
+		}else if(current_pos < 0 - threshold){
+			imGUI.receiveMessage( IMMessage("shift_menu", -1) );
+			current_pos += threshold;
+		}
 	}
 }
 
@@ -729,7 +786,6 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
 			is_last_played = true;
 		}
         CreateMenuItem(current_row, levels[i + start_at], unlocked, is_last_played, (i + start_at + 1), item_width, item_height);
-		//Print("Adding " + levels[i + start_at].name + "\n");
     }
 
 	//The left arrow in the level select menu.
@@ -745,7 +801,6 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
 	    left_arrow.setColor(button_font.color);
 	    left_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
 		left_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", -1), "");
-		AddControllerItem(left_arrow, IMMessage("shift_menu", -1), true);
 	}
 	menu_holder.append(left_arrow_container);
 
@@ -765,7 +820,6 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
 	    right_arrow.setColor(button_font.color);
 	    right_arrow.addMouseOverBehavior(mouseover_scale_arrow, "");
 		right_arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", 1), "");
-		AddControllerItem(right_arrow, IMMessage("shift_menu", 1), true);
 		//To make the right arrow point in the opposite direction, just rotate it 180 degrees.
 	    right_arrow.setRotation(180);
 	}
@@ -889,7 +943,19 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
 			level_container.addFloatingElement(level_number_container, "level_number", vec2(middle_x - (level_preview.getSizeX() / 2.0f) - (level_number_container.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f) - (level_number_container.getSizeY() / 2.0f)) , 4);
 		}
 	}
-	AddControllerItem(level_container, on_click);
+	
+	ControllerItem new_controller_item();
+	if(number % max_items == 0){
+		IMMessage press_right("shift_menu", 1);
+		@new_controller_item.message_right = press_right;
+	}else if((number + (max_items - 1))  % max_items == 0){
+		IMMessage press_left("shift_menu", -1);
+		@new_controller_item.message_left = press_left;
+	}
+	@new_controller_item.message = on_click;
+    level_container.setName("menu_item" + (number - 1));
+	@new_controller_item.element = level_container;
+	AddControllerItem(@new_controller_item);
 	row.append(level_divider);
 }
 
@@ -903,22 +969,9 @@ bool MenuCanShift(int direction){
 }
 
 int ShiftMenu(int direction){
-	//Check if the amount of levels is enough to shift left or right.
-	if(MenuCanShift(direction)){
-		//Create a new divider and add the menu again, just like in init, but start at some other level.
-		int index = GetCurrentControllerItemIndex();
-		int put_on_row = (index / max_items);
-		if(direction == 1){
-			index = max_items * put_on_row;
-		}else{
-			index = max_items * put_on_row + (max_items - 1);
-		}
-		ClearControllerItems();
-		IMDivider mainDiv( "mainDiv", DOHorizontal );
-	    CreateMenu(mainDiv, levels, campaign_name, current_start_item + (max_rows * max_items * direction));
-	    imGUI.getMain().setElement( mainDiv );
-		SetCurrentControllerItem(index);
-	}
+	if(!MenuCanShift(direction))return current_start_item;
+	//Create a new divider and add the menu again, just like in init, but start at some other level.
+    current_start_item += (max_rows * max_items * direction);
     return current_start_item;
 }
 
@@ -947,7 +1000,6 @@ int GetHighestUnlockedLevel( ) {
         id_current_highest_level = atoi(current_highest_level);
     }else{
 		//Write the first level unlocked for new users.
-		//id_current_highest_level = levels.size();
 		id_current_highest_level = 0;
 		level.SetValue("highest_level", "" + id_current_highest_level);
         save_file.WriteInPlace();
@@ -1071,7 +1123,7 @@ void AddTitleHeader(string title, IMDivider@ parent){
     float header_height = title_font.size;
 
     IMContainer header_container(header_width, header_height);
-    IMImage header_background( title_background );
+    IMImage header_background( brushstroke_background );
     if(kAnimateMenu){
 		header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
     }
@@ -1211,7 +1263,6 @@ void AddLabel(string text, IMDivider@ parent){
 	
 	IMContainer main_container("main_container" + text, DOHorizontal);
 	IMDivider main_divider("main_divider" + text, DOHorizontal);
-	//main_container.showBorder();
 	
 	main_container.setAlignment(CARight, CACenter);
 	IMText asterisk("*", small_font);
@@ -1462,15 +1513,12 @@ void AddSlider(string text, IMDivider@ parent, string config_name, float max_val
 	slider_image.scaleToSizeX(slider_width);
 	slider_holder.setElement(slider_image);
 
-	IMDivider slider_button_divider("slider_button", DOHorizontal);
-
 	IMMessage on_enter("slider_activate");
 	IMMessage on_over("slider_move_check");
 	//Use the index as to find the correct ui element. So it doesn't have to search for it based on Text.
 	on_over.addInt(gui_elements.size());
 	on_enter.addInt(gui_elements.size());
 	IMMessage on_exit("slider_deactivate");
-	slider_button_divider.addMouseOverBehavior(IMFixedMessageOnMouseOver( on_enter, on_over, on_exit ), "");
 
 	IMImage slider_button_image(slider_button);
 	slider_button_image.setColor(button_font.color);
@@ -1511,9 +1559,73 @@ void AddSlider(string text, IMDivider@ parent, string config_name, float max_val
 	message_right.addString(text);
 	message_right.addString("+");
 	
-	AddControllerItem(slider_parent, message_left, message_right);
+	AddControllerItem(slider_parent, null, message_left, message_right, null, null);
 	gui_elements.insertLast(Slider(text, slider_holder, slider_button_image, percentage, config_name, max_value));
 	
+	main_container.setElement(main_divider);
+	parent.append(main_container);
+}
+
+void AddScrollBar(IMDivider@ parent, float bar_width, float bar_height, int num_items, int max_items, int current_item){
+	float slider_button_size = 35.0f;
+	float vertical_trailing_space = 10.0f;
+	float leading_trailing_space = 200.0f;
+	bar_height -= (2.0f * 50.0f);
+	float button_height = bar_height / num_items * max_items;
+	
+	//Don't show the scrollbar if there is enough roof for every item.
+	if(num_items <= max_items){
+		parent.appendSpacer(bar_width);
+		return;
+	}
+	
+	IMDivider main_divider("main_divider", DOVertical);
+	IMContainer main_container(bar_width, bar_height);
+	AddNextPageArrow(main_divider, -1);
+	
+	main_container.setAlignment(CACenter, CACenter);
+	
+	IMContainer slider_holder(bar_width, bar_height);
+	slider_holder.setAlignment(CACenter, CACenter);
+
+	IMImage slider_image(slider_bar_vertical);
+	slider_image.setZOrdering(2);
+	slider_image.scaleToSizeY(bar_height);
+	slider_image.setClip(false);
+	slider_holder.setElement(slider_image);
+
+	IMMessage on_enter("slider_activate");
+	IMMessage on_over("slider_move_check");
+	//Use the index as to find the correct ui element. So it doesn't have to search for it based on Text.
+	on_over.addInt(gui_elements.size());
+	on_enter.addInt(gui_elements.size());
+	IMMessage on_exit("slider_deactivate");
+
+	IMImage slider_button_image( slider_button_vert );
+	slider_button_image.setColor(button_font.color);
+	slider_button_image.addMouseOverBehavior(text_color_mouse_over, "");
+	slider_button_image.setClip(false);
+	slider_button_image.setZOrdering(3);
+	slider_button_image.setSize(vec2(slider_button_size, button_height));
+
+	slider_button_image.addMouseOverBehavior(IMFixedMessageOnMouseOver( on_enter, on_over, on_exit ), "");
+	float slider_pos_y = bar_height / num_items * current_item;
+	slider_holder.addFloatingElement(slider_button_image, "slider_button", vec2(bar_width / 2.0f - slider_button_size / 2.0f, slider_pos_y));
+	slider_holder.setName("slider_container");
+
+	main_divider.append(slider_holder);
+	
+	IMMessage message_left("option_changed");
+	message_left.addString("scroll_bar");
+	message_left.addString("-");
+	
+	IMMessage message_right("option_changed");
+	message_right.addString("scroll_bar");
+	message_right.addString("+");
+	
+	//AddControllerItem(slider_parent, message_left, message_right);
+	gui_elements.insertLast(ScrollBar(main_container, slider_button_image));
+	AddNextPageArrow(main_divider, 1);
 	main_container.setElement(main_divider);
 	parent.append(main_container);
 }
@@ -1524,6 +1636,33 @@ void ToggleUIElement(string name){
 			gui_elements[i].ToggleElement();
 		}
 	}
+}
+
+void AddNextPageArrow(IMDivider@ parent, int direction){
+	float arrow_width = 50.0f;
+	float arrow_height = 50.0f;
+	//The extra space is needed for the arrow scaleonmouseover animation, or else they push the other elements.
+	float extra = 50.0f;
+
+	IMImage arrow( arrow_icon );
+	arrow.addMouseOverBehavior( text_color_mouse_over, "" );
+	IMContainer arrow_container("arrow_container" + direction, DOHorizontal);
+	arrow_container.setSize(vec2(arrow_width + extra, arrow_height + extra));
+	if(kAnimateMenu){
+		arrow.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(move_in_distance * -1, 0), inQuartTween ), "");
+	}
+	arrow.setClip(false);
+	if(direction == -1){
+		arrow.setRotation(-90);
+	}else{
+		arrow.setRotation(90);
+	}
+	arrow.scaleToSizeX(arrow_width);
+	arrow_container.setSize(vec2(arrow.getSizeX(), arrow.getSizeY()));
+	arrow_container.addFloatingElement(arrow, "arrow" + direction, vec2( 0.0f ));
+	arrow.setColor(button_font.color);
+	arrow.addLeftMouseClickBehavior( IMFixedMessageOnClick("shift_menu", direction), "");
+	parent.append(arrow_container);
 }
 
 // Draw the fancy scrolling ribbon background/foreground
@@ -1579,10 +1718,6 @@ class RibbonEffect {
 
     // Make this a separate function so we can call it on resize
     void reset() {
-
-        Print("GUIspace: " + screenMetrics.GUISpace.x + ", " + screenMetrics.GUISpace.y + "\n" );
-
-        Log(info, "Ribbon reset");
 
         resetPositions();
 
@@ -1807,14 +1942,6 @@ void setBackGround() {
     }
 }
 
-void KeyPressed( string command, bool repeated ) {
-    Print("Pressing " + command + "\n");
-}
-
-void KeyReleased( string command ) {
-	Print("Releasing " + command + "\n");
-}
-
 string ToLowerCase(string input){
 	string output;
 	for(uint i = 0; i < input.length(); i++){
@@ -1841,6 +1968,11 @@ class Search {
 	string query = "";
 	int current_index = 0;
 	int cursor_offset = 0;
+	float long_press_input_timer = 0.0f;
+	float long_press_timer = 0.0f;
+	float long_press_threshold = 0.5f;
+	float long_press_interval = 0.1f;
+	uint max_query_length = 20;
 	Search(){
 		
 	}
@@ -1891,22 +2023,11 @@ class Search {
 					SetCurrentSearchQuery();
 				}
 			}
-			array<KeyboardPress> inputs = GetRawKeyboardInputs();
-			if(inputs.size() > 0){
-				uint16 possible_new_input = inputs[inputs.size()-1].s_id;
-				if(possible_new_input != uint16(initial_sequence_id)){
-					uint32 keycode = inputs[inputs.size()-1].keycode;
-					initial_sequence_id = inputs[inputs.size()-1].s_id;
-					uint max_query_length = 20;
-					//Print("new input = "+ keycode + "\n");
-					
-					array<int> ignore_keycodes = {27};
-					if(ignore_keycodes.find(keycode) != -1 || keycode > 500){
-						return;
-					}
-					
-					//Backspace
-					if(keycode == 8){
+			if(long_press_timer > long_press_threshold){
+				if(GetInputDown(0, "backspace")){
+					long_press_input_timer += time_step;
+					if(long_press_input_timer > long_press_interval){
+						long_press_input_timer = 0.0f;
 						//Check if there are enough chars to delete the last one.
 						if(query.length() - cursor_offset > 0){
 							uint new_length = query.length() - 1;
@@ -1919,21 +2040,96 @@ class Search {
 							return;
 						}
 					}
+				}else if(GetInputDown(0, "delete")){
+					long_press_input_timer += time_step;
+					if(long_press_input_timer > long_press_interval){
+						long_press_input_timer = 0.0f;
+						//Check if there are enough chars to delete the next one.
+						if(cursor_offset > 0){
+							query.erase(query.length() - cursor_offset, 1);
+							cursor_offset--;
+							SetCurrentSearchQuery();
+						}
+						return;
+					}
+				}else if(GetInputDown(0, "left")){
+					long_press_input_timer += time_step;
+					if(long_press_input_timer > long_press_interval){
+						long_press_input_timer = 0.0f;
+						if((cursor_offset) < int(query.length())){
+							cursor_offset++;
+							SetCurrentSearchQuery();
+						}
+					}
+					return;
+				}else if(GetInputDown(0, "right")){
+					long_press_input_timer += time_step;
+					if(long_press_input_timer > long_press_interval){
+						long_press_input_timer = 0.0f;
+						if(cursor_offset > 0){
+							cursor_offset--;
+							imGUI.receiveMessage( IMMessage("refresh_menu_by_name") );
+						}
+					}
+					return;
+				}else{
+					long_press_input_timer = 0.0f;
+				}
+				if(!GetInputDown(0, "delete") && !GetInputDown(0, "backspace") && !GetInputDown(0, "left") && !GetInputDown(0, "right")){
+					long_press_timer = 0.0f;
+				}
+			}else{
+				if(GetInputDown(0, "delete") || GetInputDown(0, "backspace") || GetInputDown(0, "left") || GetInputDown(0, "right")){
+					long_press_timer += time_step;
+				}else{
+					long_press_timer = 0.0f;
+				}
+			}
+			
+			array<KeyboardPress> inputs = GetRawKeyboardInputs();
+			if(inputs.size() > 0){
+				uint16 possible_new_input = inputs[inputs.size()-1].s_id;
+				if(possible_new_input != uint16(initial_sequence_id)){
+					uint32 keycode = inputs[inputs.size()-1].keycode;
+					initial_sequence_id = inputs[inputs.size()-1].s_id;
+					//Print("new input = "+ keycode + "\n");
+					
+					array<int> ignore_keycodes = {27};
+					if(ignore_keycodes.find(keycode) != -1 || keycode > 500){
+						return;
+					}
 					//Enter/return pressed
-					else if(keycode == 13){
-						GetSearchResults(query);
+					if(keycode == 13){
 						current_index = 0;
 						cursor_offset = 0;
-						imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
+						active = false;
 						pressed_return = true;
+						imGUI.receiveMessage( IMMessage("refresh_menu_by_name") );
+						return;
+					}
+					//Backspace
+					else if(keycode == 8){
+						//Check if there are enough chars to delete the last one.
+						if(query.length() - cursor_offset > 0){
+							uint new_length = query.length() - 1;
+							if(new_length >= 0 && new_length <= max_query_length){
+								query.erase(query.length() - cursor_offset - 1, 1);
+								active = true;
+								SetCurrentSearchQuery();
+								return;
+							}
+						}else{
+							return;
+						}
 					}
 					//Delete pressed
 					else if(keycode == 127){
 						if(cursor_offset > 0){
 							query.erase(query.length() - cursor_offset, 1);
 							cursor_offset--;
-							SetCurrentSearchQuery();
+							active = true;
 						}
+						SetCurrentSearchQuery();
 						return;
 					}
 					if(query.length() == 20){
@@ -1942,36 +2138,39 @@ class Search {
 					string new_character('0');
 					new_character[0] = keycode;
 					query.insert(query.length() - cursor_offset, new_character);
+					
+					active = true;
 					SetCurrentSearchQuery();
 				}
 			}
 		}
 	}
 	void SetCurrentSearchQuery(){
-		parent.clear();
-		@search_field = IMText("", button_font_small);
-		parent.append(search_field);
-		IMText cursor("_", button_font_small);
-		cursor.addUpdateBehavior(pulse, "");
-		if(cursor_offset > 0){
-			string first_part = query.substr(0, query.length() - cursor_offset);
-			search_field.setText(first_part);
-			parent.append(cursor);
-			string second_part = query.substr(query.length() - cursor_offset, query.length());
-			IMText second_search_field(second_part, button_font_small);
-			parent.append(second_search_field);
-		}else{
-			search_field.setText(query);
-			parent.append(cursor);
-		}
-	}
-	void GetSearchResults(string query){
-		
+		GetSearchResults(query);
+        current_index = 0;
+		imGUI.receiveMessage( IMMessage("refresh_menu_by_name") );
 	}
 	void ShowSearchResults(){
+		if(active && !pressed_return){
+			parent.clear();
+			@search_field = IMText("", button_font_small);
+			parent.append(search_field);
+			IMText cursor("_", button_font_small);
+			cursor.addUpdateBehavior(pulse, "");
+			if(cursor_offset > 0){
+				string first_part = query.substr(0, query.length() - cursor_offset);
+				search_field.setText(first_part);
+				parent.append(cursor);
+				string second_part = query.substr(query.length() - cursor_offset, query.length());
+				IMText second_search_field(second_part, button_font_small);
+				parent.append(second_search_field);
+			}else{
+				search_field.setText(query);
+				parent.append(cursor);
+			}
+		}
 		//The search field is active but if the clear text button was pressed do nothing.
-		if(active && pressed_return || query != ""){
-			active = false;
+		else if(!active && pressed_return && query != ""){
 			pressed_return = false;
 			search_field.setText(query);
 			IMImage clear_button(close_icon);
@@ -1983,8 +2182,55 @@ class Search {
 			clear_button.addMouseOverBehavior(text_color_mouse_over, "");
 			clear_button.addLeftMouseClickBehavior(IMFixedMessageOnClick("clear_search_results"), "");
 			AddControllerItem(clear_search, IMMessage("clear_search_results"));
+		}else if(query != "" && !pressed_return){
+            search_field.setText(query);
+			IMImage clear_button(close_icon);
+			clear_button.setColor(button_font.color);
+			clear_button.setZOrdering(3);
+			clear_search.setElement(clear_button);
+			clear_button.scaleToSizeX(50.0f);
+			parent.clearLeftMouseClickBehaviors();
+			clear_button.addMouseOverBehavior(text_color_mouse_over, "");
+			clear_button.addLeftMouseClickBehavior(IMFixedMessageOnClick("clear_search_results"), "");
+			AddControllerItem(clear_search, IMMessage("clear_search_results"));
+		}else if(query == "" && pressed_return){
+			pressed_return = false;
+			imGUI.receiveMessage( IMMessage("clear_search_results") );
 		}
 	}
+	void GetSearchResults(string query){
+		
+	}
+}
+
+void AddNoResults(IMDivider@ parent, bool fadein){
+	int fadein_time = 250;
+	vec4 background_color = vec4(0.10f,0.10f,0.10f,0.90f);
+	vec2 inspector_size = vec2(1400, 700);
+	float background_size_offset = 250.0f;
+	
+	IMContainer inspector_container(inspector_size.x, inspector_size.y);
+	IMDivider inspector_divider("inspector_divider", DOVertical);
+	inspector_container.setElement(inspector_divider);
+	inspector_divider.setZOrdering(3);
+	parent.append(inspector_container);
+	
+	//The main background
+	IMImage main_background( white_background );
+	if(fadein){
+		main_background.addUpdateBehavior(IMFadeIn( fadein_time, inSineTween ), "");
+	}
+	main_background.setZOrdering(0);
+	main_background.setSize(vec2(inspector_size.x - background_size_offset, inspector_size.y));
+	inspector_container.addFloatingElement(main_background, "main_background", vec2(background_size_offset / 2.0f, 0.0f));
+	main_background.setColor(background_color);
+	
+	IMText no_results_text("Nothing found.", button_font_large);
+	inspector_divider.append(no_results_text);
+	
+	IMImage no_results_image(no_results);
+	no_results_image.scaleToSizeX(100);
+	inspector_divider.append(no_results_image);
 }
 
 void UpdateKeyboardMouse(){
@@ -1998,7 +2244,7 @@ void UpdateKeyboardMouse(){
 void AddSearchbar(IMDivider@ parent, Search@ search){
 	//Searchbar
 	float searchbar_width = 500;
-	float searchbar_height = 64;
+	float searchbar_height = 75;
 	IMContainer searchbar_container(searchbar_width, searchbar_height);
 	IMContainer clear_searchbar_container(0, searchbar_height);
 
@@ -2006,6 +2252,7 @@ void AddSearchbar(IMDivider@ parent, Search@ search){
 	searchbar_divider.setSize(vec2(searchbar_width, searchbar_height));
 	searchbar_divider.setZOrdering(3);
 	IMText search_text( "Search...", button_font_small );
+	search_text.setAlpha(0.5f);
 	
 	IMContainer search_text_container(searchbar_width - searchbar_height, searchbar_height);
 	search_text_container.addLeftMouseClickBehavior(IMFixedMessageOnClick("activate_search"), "");
@@ -2023,12 +2270,33 @@ void AddSearchbar(IMDivider@ parent, Search@ search){
 	//Search object configuration
 	search.SetSearchField(@search_text, @search_text_divider, @clear_searchbar_container);
 	
-	IMImage searchbar_background( white_background );
+	//Searchbar background
+	IMImage searchbar_background( button_background_rectangle );
+	searchbar_background.setAlpha(0.5f);
 	searchbar_background.setSize(vec2(searchbar_width, searchbar_height));
-	searchbar_background.setColor(button_background_color);
 	searchbar_container.setElement(searchbar_divider);
 	searchbar_container.addFloatingElement(searchbar_background, "background", vec2(0,0));
 	parent.append(searchbar_container);
-	
-	parent.appendSpacer(50);
+}
+void UpdateMovingSlider(){
+	if(active_slider != -1){
+		if(imGUI.guistate.leftMouseState == kMouseStillDown){
+			vec2 current_mouse_pos = imGUI.guistate.mousePosition;
+			checking_slider_movement = true;
+			if(current_mouse_pos.x != old_mouse_pos.x){
+				gui_elements[active_slider].SlideX(int(current_mouse_pos.x - old_mouse_pos.x));
+				old_mouse_pos.x = current_mouse_pos.x;
+			}
+			if(current_mouse_pos.y != old_mouse_pos.y){
+				gui_elements[active_slider].SlideY(int(current_mouse_pos.y - old_mouse_pos.y));
+				old_mouse_pos.y = current_mouse_pos.y;
+			}
+		}else{
+			if(checking_slider_movement){
+				active_slider = -1;
+				checking_slider_movement = false;
+				imGUI.receiveMessage(IMMessage("refresh_options"));
+			}
+		}
+	}
 }

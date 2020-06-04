@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 #include "ambient_tet_mesh.glsl"
 
 const int kMaxInstances = 128;

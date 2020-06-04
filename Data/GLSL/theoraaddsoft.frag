@@ -1,6 +1,7 @@
 #version 150
 #pragma blendmode_add
 #extension GL_ARB_texture_rectangle : enable
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform sampler2D tex0;
 uniform sampler2DRect tex5;
