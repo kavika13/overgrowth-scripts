@@ -3,6 +3,7 @@
 #include "enemycontroldebug.as"
 
 Situation situation;
+int got_hit_by_leg_cannon_count = 0;
 
 float startle_time;
 float suspicious_amount;
@@ -38,6 +39,10 @@ int notice_target_aggression_id = 0.0f;
 
 float target_attack_range = 0.0f;
 float strafe_vel = 0.0f;
+bool might_avoid_jump_kick = false;
+bool will_avoid_jump_kick = false;
+bool will_counter_jump_kick = false;
+bool wants_to_roll = false;
 const float _block_reflex_delay_min = 0.1f;
 const float _block_reflex_delay_max = 0.2f;
 float block_delay;
@@ -223,6 +228,7 @@ bool WantsToDragBody(){
 void ResetMind() {
     goal = _patrol;
     situation.clear();
+    got_hit_by_leg_cannon_count = 0;
     path_find_type = _pft_nav_mesh;
     float awake_time = 0.0f;
 }
@@ -690,6 +696,7 @@ string GoalString(AIGoal goal) {
         case _navigate:    return "_navigate";
         case _struggle:    return "_struggle";
         case _hold_still:  return "_hold_still";
+        case _flee:        return "_flee";
     }
     return "unknown goal";
 }
@@ -811,8 +818,19 @@ void MindReceiveMessage(string msg){
 float target_on_ground_time = 0.0;
 
 AISubGoal PickAttackSubGoal() {
-    AISubGoal target_goal = _rush_and_attack;
-    if(species != _wolf){
+    AISubGoal target_goal = _defend;
+    bool is_currently_agressive = false;
+
+    if(game_difficulty < 0.25 || species == _wolf) {
+        target_goal = _rush_and_attack;
+    } else {
+        is_currently_agressive = RangedRandomFloat(0.0f, 1.0f) < p_aggression;
+    }
+
+    if(is_currently_agressive) {
+        bool is_currently_patient = RangedRandomFloat(0.0f, 1.0f) > 0.5f;
+        target_goal = is_currently_patient ? _wait_and_attack : _rush_and_attack;
+
         string weap_label;
         if(weapon_slots[primary_weapon_slot] != -1){
             ItemObject @item_obj = ReadItemID(weapon_slots[primary_weapon_slot]);
@@ -833,14 +851,17 @@ AISubGoal PickAttackSubGoal() {
                         }
                     }
 
+                    // If the target is a player and they're aggressive, close in, but start defending...
                     if(char.GetFloatVar("threat_amount") > 0.5 && char.controlled && !char.GetBoolVar("feinting")){
                         target_goal = _provoke_attack;
                     }
 
+                    // ...Except, if they're armed and we aren't, try to push them into a dodge/throw
                     if(weapon_slots[primary_weapon_slot] == -1 && enemy_primary_weapon_id != -1 && (last_throw_attempt_time > time - kThrowDelay || last_dodge_time > time - kDodgeDelay)){
                         target_goal = _rush_and_attack;
                     }
 
+                    // ...Except, if they have a knife, screw it - just attack!
                     if(enemy_using_knife){
                         target_goal = _rush_and_attack;
                     }
@@ -848,7 +869,9 @@ AISubGoal PickAttackSubGoal() {
             }
         }
     }
+
     if(chase_target_id != -1 && ObjectExists(chase_target_id)){
+        // If target is ragdolled, decide whether to ground punish
         MovementObject @target = ReadCharacterID(chase_target_id);
         if(target.GetIntVar("state") == _ragdoll_state){
             target_on_ground_time = the_time;
@@ -864,20 +887,30 @@ AISubGoal PickAttackSubGoal() {
                 ground_punish_decision = -1;
             }
         }
+
+        // If target is far away, rush in (but don't immediately attack)
         if(distance_squared(target.position, this_mo.position) > 16){
             target_goal = _provoke_attack;            
         }
+
+        // If specifically choosing not to ground punish, and already rushing in, don't attack
         if(ground_punish_decision == 0 && target_goal == _rush_and_attack){
             target_goal = _provoke_attack;
         }
     }
-    if(state == _ragdoll_state || state == _hit_reaction_state){
+
+    // If currently ragdolled or reacting to a hit, just defend
+    if(state == _ragdoll_state || state == _hit_reaction_state) {
         target_goal = _defend;
     }
-    if(target_goal == _rush_and_attack && group_leader != -1){
+
+    // If following a group leader, and already rushing in, don't attack
+    if(group_leader != -1 && (target_goal == _rush_and_attack || target_goal == _wait_and_attack)) {
         target_goal = _provoke_attack;
     }
-    if(dont_attack_before > time && target_goal == _rush_and_attack){
+
+    // If recently failed an attack, and already rushing in, don't attack
+    if(dont_attack_before > time && (target_goal == _rush_and_attack || target_goal == _wait_and_attack)) {
         target_goal = _provoke_attack;
     }
 
@@ -888,10 +921,15 @@ bool instant_range_change = true;
 
 void SetSubGoal(AISubGoal sub_goal_) {
     if(sub_goal != sub_goal_){
-        sub_goal_pick_time = time;
+        sub_goal_pick_time = time + (game_difficulty >= 0.25f ? RangedRandomFloat(0.35, 1.25) : 0.0f);
         instant_range_change = true;
         if(sub_goal_ == _investigate_around){
             investigate_points.resize(0);
+        }
+        if(sub_goal_ == _avoid_jump_kick) {
+            might_avoid_jump_kick = true;
+            will_avoid_jump_kick = false;
+            will_counter_jump_kick = false;
         }
     }
     sub_goal = sub_goal_;
@@ -1485,6 +1523,7 @@ void UpdateBrain(const Timestep &in ts){
                 case _defend:
                 case _provoke_attack:
                     target_goal = PickAttackSubGoal();
+                    sub_goal_pick_time = time + (game_difficulty >= 0.25f ? RangedRandomFloat(0.35, 1.25) : 0.0f);
                     break;
             }
          }
@@ -1499,7 +1538,7 @@ void UpdateBrain(const Timestep &in ts){
         if(!target.GetBoolVar("on_ground") && species != _wolf && target.GetIntVar("state") != _ragdoll_state){
             if(target.QueryIntFunction("int IsOnLedge()") == 1){
                 target_goal = _knock_off_ledge;
-            } else if(group_leader == -1 && followers.size() == 0){                
+            } else if((group_leader == -1 && followers.size() == 0) || game_difficulty > 0.25f) {
                 target_goal = _avoid_jump_kick;
             }
         } else if(sub_goal == _avoid_jump_kick || sub_goal == _knock_off_ledge){
@@ -1549,10 +1588,37 @@ void UpdateBrain(const Timestep &in ts){
             ai_attacking = false;
             break;
         case _avoid_jump_kick:
-            if(CheckRangeChange(ts)){
-                target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+            if(might_avoid_jump_kick) {
+                float cureved_game_difficulty = mix(0.1, 1.0, 1.0f - (game_difficulty - 1.0f) * (game_difficulty - 1.0f));
+
+                float temp_block_skill = p_block_skill * cureved_game_difficulty;
+                will_avoid_jump_kick = RangedRandomFloat(0.0f, 1.0f) < (temp_block_skill + got_hit_by_leg_cannon_count * 0.25);
+
+                float temp_aggression = p_aggression * cureved_game_difficulty;
+                will_counter_jump_kick = !will_avoid_jump_kick && RangedRandomFloat(0.0f, 1.0f) < temp_aggression;
+
+                might_avoid_jump_kick = false;
             }
-            ai_attacking = false;
+
+            if(will_avoid_jump_kick) {
+                if(!wants_to_roll) {
+                    if(distance_squared(this_mo.position, target.position) < 8.0f) {
+                        strafe_vel = strafe_vel > 0.0f ? 5.0f : -5.0f;
+                        wants_to_roll = true;
+                    }
+                }
+
+                if(CheckRangeChange(ts)){
+                    target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+                }
+            }
+
+            if(will_counter_jump_kick) {
+                ai_attacking = true;
+                target_attack_range = 0.0f;
+            } else if(will_avoid_jump_kick) {
+                ai_attacking = false;
+            }
             break;
         case _knock_off_ledge:
             if(CheckRangeChange(ts)){
@@ -1759,9 +1825,36 @@ void BrainSpeciesUpdate() {
 }
 
 bool WantsToThrowItem() {
-    if(species == _cat && (weapon_slots[secondary_weapon_slot] != -1 || (weapon_slots[primary_weapon_slot] != -1 && ReadItemID(weapon_slots[primary_weapon_slot]).GetLabel() == "knife")) && chase_target_id != -1 && distance(this_mo.position, ReadCharacterID(chase_target_id).position) > 3 && int(the_time)%5==0){
-        return true;
+    int primary_weapon_id = weapon_slots[primary_weapon_slot];
+    int secondary_weapon_id = weapon_slots[secondary_weapon_slot];
+
+    if(species == _cat && chase_target_id != -1 &&
+            (secondary_weapon_id != -1 || (primary_weapon_id != -1 && ReadItemID(primary_weapon_id).GetLabel() == "knife"))) {
+        if(RangedRandomFloat(0.0f, 1.0f) > p_aggression * game_difficulty * 0.04) {
+            return false;
+        }
+
+        MovementObject@ target_char = ReadCharacterID(chase_target_id);
+        bool target_in_air = !target_char.GetBoolVar("on_ground") && target_char.GetIntVar("state") != _ragdoll_state;
+        float distance_sq_to_target = distance_squared(this_mo.position, target_char.position);
+
+        if(target_in_air && distance_sq_to_target > 2.5 * 2.5) {
+            return true;
+        }
+
+        if(distance_sq_to_target > 12.5 * 12.5) {
+            return true;
+        }
+
+        if(distance_sq_to_target > 5.5 * 5.5) {
+            return dot(target_char.GetFacing(), this_mo.GetFacing()) >= 0.0 &&
+                dot(target_char.position - this_mo.position, target_char.velocity) >= 0.0 &&
+                dot(target_char.velocity, target_char.velocity) >= 30.0;
+        }
+
+        return false;
     }
+
     if(species == _dog && chase_target_id != -1 && distance(this_mo.position, ReadCharacterID(chase_target_id).position) > 10){
         return true;
     } else {
@@ -1782,7 +1875,9 @@ bool WantsToCounterThrow(){
 }
 
 bool WantsToRoll() {
-    return false;
+    bool result = wants_to_roll;
+    wants_to_roll = false;
+    return result;
 }
 
 bool WantsToFeint(){
@@ -2716,6 +2811,9 @@ void ChooseAttack(bool front, string& out attack_str) {
         int choice = rand()%3;
         if(sub_goal == _knock_off_ledge){
             choice = 0;
+        }
+        if(will_counter_jump_kick) {
+            choice = 1;
         }
         if(choice==0){
             attack_str = "stationary";            

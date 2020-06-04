@@ -245,7 +245,7 @@ class JumpInfo {
             UpdateWallRun(ts);
         }
 
-        if(WantsToGrabLedge() && !fall_death && (ledge_info.on_ledge || ledge_delay <= 0.0f) && !flip_info.IsFlipping() && this_mo.velocity.y > -15.0){
+        if(this_mo.no_grab == 0 && WantsToGrabLedge() && !fall_death && (ledge_info.on_ledge || ledge_delay <= 0.0f) && !flip_info.IsFlipping() && this_mo.velocity.y > -15.0){
             ledge_info.CheckLedges();
             if(ledge_info.on_ledge){
                 has_hit_wall = false;

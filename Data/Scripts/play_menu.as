@@ -18,6 +18,7 @@ void Initialize() {
     @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("overgrowth_main");
+    play_menu.resize(0);
 
     // We're going to want a 100 'gui space' pixel header/footer
 	imGUI.setHeaderHeight(200);

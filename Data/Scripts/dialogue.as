@@ -179,15 +179,23 @@ class Dialogue {
         start_time = the_time;
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
+        int dialogue_id = -1;
         for(int i=0; i<num_objects; ++i){
             Object @obj = ReadObjectFromID(object_ids[i]);
             ScriptParams@ params = obj.GetScriptParams();
             if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("DisplayName") && params.GetString("DisplayName") == name){
-                camera.SetDOF(0,0,0, 0,0,0);
-                SetDialogueObjID(object_ids[i]);
-                Play();
-                clear_on_complete = true;
+                if(dialogue_id == -1) {
+                    dialogue_id = object_ids[i];
+                } else {
+                    Log(warning, "Found more than one dialogue with the DisplayName: '" + name + "' - playing dialogue id: " + dialogue_id + " - skipping dialogue id: " + object_ids[i]);
+                }
             }
+        }
+        if(dialogue_id != -1) {
+            camera.SetDOF(0,0,0, 0,0,0);
+            SetDialogueObjID(dialogue_id);
+            Play();
+            clear_on_complete = true;
         }
         speak_sound_time = 0.0;
     }
@@ -1168,16 +1176,19 @@ class Dialogue {
                             obj.SetScale(vec3(0.1f));
                         }
 
-                        if(strings[i].params.size() == 5){
+                        if(obj.IsSelected()) {
+                            if(strings[i].params.size() != 5){
+                                strings[i].params.resize(5);
+                            }
                             float blink_mult = (obj.GetScale().x-0.05f)/0.05f;
 
                             strings[i].params[1] = pos.x;
                             strings[i].params[2] = pos.y;
                             strings[i].params[3] = pos.z;
                             strings[i].params[4] = blink_mult;
-                            
+
                             string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                            
+
                             RecordInput(new_string, i, last_wait);
                         }
 
@@ -1213,8 +1224,8 @@ class Dialogue {
                 }
             }
             SaveScriptToParams();
+            LeaveTelemetryZone(); // editor object transforms
         }
-        LeaveTelemetryZone(); // editor object transforms
         LeaveTelemetryZone(); // dialogue update
     }
 
@@ -1527,7 +1538,11 @@ class Dialogue {
             if(se.params.size() == 5){
                 pos = vec3(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
                 blink_mult = atof(se.params[4]);   
-            } 
+            } else {
+                MovementObject @char = ReadCharacterID(GetDialogueCharID(id));
+                mat4 head_mat = char.rigged_object().GetAvgIKChainTransform("head");
+                pos = head_mat * vec4(0,0,0,1) - head_mat * vec4(0,1,0,0);
+            }
             Object@ obj = ReadObjectFromID(se.spawned_id);        
             obj.SetTranslation(pos);
             obj.SetScale(0.05f+0.05f*blink_mult);
@@ -2137,6 +2152,7 @@ class Dialogue {
 
         // Draw editor text
         if(dialogue_obj_id != -1 && show_editor_info && !has_cam_control && EditorModeActive()){
+            ImGui_SetNextWindowSize(vec2(600.0f, 300.0f), ImGuiSetCond_FirstUseEver);
             ImGui_Begin("Dialogue Editor", show_editor_info, ImGuiWindowFlags_MenuBar);
             if(ImGui_BeginMenuBar()){
                 if(ImGui_BeginMenu("File")){
@@ -2179,7 +2195,7 @@ class Dialogue {
                 if(ImGui_InputTextMultiline("##TEST", vec2(-1.0, -1.0))){
                     ClearSpawnedObjects();
                     UpdateStringsFromScript(ImGui_GetTextBuf());
-                    Log(info,"Test");
+                    //Log(info,"Test");
                     AddInvisibleStrings();
                     SaveScriptToParams();
                 }

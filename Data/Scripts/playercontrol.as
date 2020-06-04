@@ -10,6 +10,7 @@ bool crouch_pressed_on_ledge = false;
 bool crouch_pressable_on_ledge = false;
 
 Situation situation;
+int got_hit_by_leg_cannon_count = 0;
 
 int IsUnaware() {
     return 0;
@@ -138,6 +139,7 @@ bool IsAware(){
 
 void ResetMind() {
     situation.clear();
+    got_hit_by_leg_cannon_count = 0;
 }
 
 int IsIdle() {

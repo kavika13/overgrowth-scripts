@@ -215,6 +215,7 @@ string GetAIGoalString( AIGoal g )
         case _navigate: return "_navigate";
         case _struggle: return "_struggle";
         case _hold_still: return "_hold_still";
+        case _flee: return "_flee";
         default: return "unknown";
     }
     return "unknown";
