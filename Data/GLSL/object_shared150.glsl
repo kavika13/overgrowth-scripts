@@ -1,14 +1,14 @@
 void object_shared(){} // This is just here to make sure it gets added to include paths
 #include "lighting150.glsl"
 
-#ifndef BAKED_SHADOWS
+#if !defined(BAKED_SHADOWS)
     #define VARYING_SHADOW \
         varying vec4 shadow_coords[4];
     #define CALC_CASCADE_TEX_COORDS SetCascadeShadowCoords(transformed_vertex, shadow_coords);
 #else
     #define VARYING_SHADOW
     #define CALC_CASCADE_TEX_COORDS
-#endif 
+#endif
 
 #define VARYING_REL_POS \
 varying vec3 ws_vertex;

@@ -33,20 +33,31 @@ void Initialize() {
 	AddVerticalBar();
 }
 
-array<string> hard_order = {"com-wolfire-overgrowth-campaign","com-wolfire-lugaru-campaign","com-wolfire-timbles-therium"};
+array<string> hard_order = {"com-wolfire-overgrowth-campaign","com-wolfire-lugaru-campaign","com-wolfire-timbles-therium","com-wolfire-drika"};
 
 void SetPlayMenuList() {
     for( uint i = 0; i < hard_order.length(); i++ ) {
         Campaign camp = GetCampaign(hard_order[i]);
-        string camp_thumbnail_path = camp.GetThumbnail();
-        int completed_levels = 0;
         array<ModLevel>@ campaign_levels = camp.GetLevels();
+
+        int completed_levels = 0;
+
         for(uint j = 0; j < campaign_levels.size(); ++j) {
-            if(GetHighestDifficultyFinished(camp.GetID(), campaign_levels[j].GetID()) != 0) {
+            if(!campaign_levels[j].CompletionOptional() && GetHighestDifficultyFinished(camp.GetID(), campaign_levels[j].GetID()) != 0) {
                 completed_levels++;
             }
         }
-        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetHighestDifficultyFinishedCampaign(camp.GetID()), GetLastLevelPlayed(camp.GetID()).length() > 0, true, IsLastCampaignPlayed(camp), completed_levels, campaign_levels.size()));
+
+        int total_levels = 0;
+
+        for(uint j = 0; j < campaign_levels.size(); ++j) {
+            if(!campaign_levels[j].CompletionOptional()) {
+                total_levels++;
+            }
+        }
+
+        string camp_thumbnail_path = camp.GetThumbnail();
+        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetHighestDifficultyFinishedCampaign(camp.GetID()), GetLastLevelPlayed(camp.GetID()).length() > 0, true, IsLastCampaignPlayed(camp), completed_levels, total_levels));
     }
 
     array<Campaign>@ campaigns = GetCampaigns();
@@ -63,13 +74,13 @@ void SetPlayMenuList() {
             string camp_thumbnail_path = camp.GetThumbnail();
 
             play_menu.insertLast(
-                LevelInfo(  camp.GetMenuScript(), 
-                            camp.GetTitle(), 
-                            camp_thumbnail_path, 
+                LevelInfo(  camp.GetMenuScript(),
+                            camp.GetTitle(),
+                            camp_thumbnail_path,
                             camp.GetID(),
                             0,
                             GetLastLevelPlayed(camp.GetID()).length() > 0,
-                            true, 
+                            true,
                             IsLastCampaignPlayed(camp),
                             -1,
                             -1
@@ -82,7 +93,7 @@ void SetPlayMenuList() {
 
     array<ModID>@ active_sids = GetActiveModSids();
     for( uint i = 0; i < active_sids.length(); i++ ) {
-        array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]); 
+        array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]);
         for( uint k = 0; k < menu_items.length(); k++ ) {
             if( menu_items[k].GetCategory() == "play" ) {
                 string thumbnail_path = menu_items[k].GetThumbnail();
@@ -143,7 +154,7 @@ void Update() {
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
 
-        if( message.name == "run_file" ) 
+        if( message.name == "run_file" )
         {
 			string campaign_id = play_menu[message.getInt(0)].campaign_id;
 			if(campaign_id != "") {
@@ -151,15 +162,15 @@ void Update() {
 			}
             this_ui.SendCallback(message.getString(0));
         }
-        else if( message.name == "Tutorial" ) 
-        { 
+        else if( message.name == "Tutorial" )
+        {
             this_ui.SendCallback("tutorial.xml");
-        } 
-        else if( message.name == "Main Campaign" ) 
+        }
+        else if( message.name == "Main Campaign" )
         {
             this_ui.SendCallback("campaign_menu.as");
-        } 
-        else if( message.name == "Lugaru" ) 
+        }
+        else if( message.name == "Lugaru" )
         {
             this_ui.SendCallback("lugaru_menu.as");
         }

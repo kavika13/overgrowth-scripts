@@ -6,7 +6,7 @@
 
 
 //Disabled because we've run out of texture sampler.
-#ifdef DECAL_NORMALS
+#if defined(DECAL_NORMALS)
 uniform sampler2D decal_normal_tex; // decal normal texture
 #endif  // DECAL_NORMALS
 uniform sampler2D decal_color_tex; // decal color texture
@@ -139,7 +139,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                     skip = true;
                     break;}
                 case decalUnderwater:{
-                    #ifdef PARTICLE
+                    #if defined(PARTICLE)
                         ws_normal = vec3(-1.0);
                     #endif
                     skip = true;
@@ -153,16 +153,16 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                     preserve_wetness *= mult;
                     skip = true;
                     break;}
-            #ifdef WATER
+            #if defined(WATER)
                 case decalWaterFroth: {
-                    #ifdef DIRECTED_WATER_DECALS
+                    #if defined(DIRECTED_WATER_DECALS)
                         float mult = 1.0 - (max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0;
                         mult *= decal.tint[0];
 
                         vec2 color_tex_coord = vec2(temp.x * decal.scale.x * 0.1 + time * decal.tint[1], temp.z * decal.scale.z * 0.1);
                         vec4 decal_color = texture(tex1, color_tex_coord);
                         colormap.xyz = mix(colormap.xyz, decal_color.xyz * 0.1, mult);
-                    #else                    
+                    #else
                         const float fade_time = 2.0;
                         float opac = max(decal.tint[0], min(1.0, (time - spawn_time)*3.0) * max(0.0, (spawn_time - time + fade_time)/fade_time));
                         float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, 1.0-opac);
@@ -193,7 +193,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                 vec2 color_tex_coord = start_uv + size_uv * vec2(temp.x + 0.5, 1.0 - (temp.z + 0.5));
                 vec4 decal_color = textureGrad(decal_color_tex, color_tex_coord, color_tex_dx, color_tex_dy);
 
-        #ifdef DECAL_NORMALS
+        #if defined(DECAL_NORMALS)
 
                 vec2 normal_tex_coord = start_normal + size_normal * (temp.xz + vec2(0.5));
 
@@ -206,7 +206,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                 float decal_normal_dot = dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0)/1.0);
                 if( decal_normal_dot > 0.80 )
                 {
-                    float submix = 1.0; 
+                    float submix = 1.0;
 
                     if( decal_normal_dot < 0.85 )
                     {
@@ -243,7 +243,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                     }
                     if (type != decalFire) {
                         colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a * submix);
-    #ifdef DECAL_NORMALS
+    #if defined(DECAL_NORMALS)
                         vec3 decal_tan = cross(ws_normal, inv_rotation_mat * vec3(0.0, 0.0, 1.0));
                         vec3 decal_bitan = cross(ws_normal, decal_tan);
                         vec3 new_normal = vec3(0);
