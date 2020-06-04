@@ -217,7 +217,7 @@ int IsPassive() {
 }
 
 bool WantsToDragBody(){
-    return false;
+    return (goal == _investigate && (investigate_body_time > time - 2.0));
 }
 
 void ResetMind() {
@@ -468,7 +468,7 @@ void Startle() {
 
 void Notice(int character_id){
     MovementObject@ char = ReadCharacterID(character_id);
-    if(char.GetBoolVar("static_char")){
+    if(char.static_char){
         return;
     }
     if(!this_mo.OnSameTeam(char) && (goal != _attack || chase_target_id == -1)){
@@ -503,7 +503,7 @@ void Notice(int character_id){
 
 void NotifySound(int created_by_id, vec3 pos, SoundType type) {
     if(created_by_id == -1 ||
-       !listening || static_char || 
+       !listening || this_mo.static_char || 
        awake_time < AWAKE_NOTICE_THRESHOLD || knocked_out != _awake || 
        created_by_id == this_mo.GetID())
     {
@@ -910,7 +910,7 @@ void SetHostile(bool val){
     if(hostile){
         ai_attacking = true;
         listening = true;
-        static_char = false;
+        this_mo.static_char = false;
     } else {
         SetGoal(_patrol);
         ResetWaypointTarget();
@@ -1102,7 +1102,7 @@ void UpdateBrain(const Timestep &in ts){
     }
     awake_time += ts.step();
 
-    if(static_char){
+    if(this_mo.static_char){
         return;
     }
 
@@ -1284,8 +1284,9 @@ void UpdateBrain(const Timestep &in ts){
                 if(sub_goal == _investigate_slow){
                     SetGoal(_patrol);
                 } else if(sub_goal == _investigate_urgent){
+                    this_mo.SetRotationFromFacing(normalize(path_end-this_mo.position));
                     SetSubGoal(_investigate_body);
-                    investigate_body_time = time + RangedRandomFloat(2.0f, 4.0f);
+                    investigate_body_time = time + RangedRandomFloat(mix(2.0,1.0,game_difficulty), mix(4.0,2.0,game_difficulty));
                 } else if(sub_goal == _investigate_attack){
                     sub_goal = _investigate_around;
                     investigate_target_id = -1;
@@ -2697,7 +2698,7 @@ vec3 GetTargetVelocity(){
     vec3 base_target_velocity = GetBaseTargetVelocity();
     vec3 target_vel = base_target_velocity;
 
-    if(static_char){
+    if(this_mo.static_char){
         target_vel = vec3(0.0);
     }
     return target_vel;

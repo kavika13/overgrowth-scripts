@@ -3,6 +3,9 @@ string current_screen;
 int active_rebind = -1;
 int initial_sequence_id;
 
+Textbox widthTextbox("screenwidth", 640, 9999);
+Textbox heightTextbox("screenheight", 400, 9999);
+
 void BuildUI(){
 	float background_height = 1300;
 	float background_width = 1600;
@@ -112,10 +115,6 @@ void SetActiveCategory(string name){
 }
 
 void SwitchSettingsScreen(string screen_name){
-	if(current_screen == screen_name){
-		return;
-	}
-	//Clear the previous screen.
 	settings_content.clear();
 	gui_elements.resize(0);
 
@@ -151,11 +150,17 @@ void AddGraphicsScreen(){
 	for(uint i = 0; i < possible_resolutions.size(); i++){
 		resolutions.insertLast(possible_resolutions[i].x + "x" + possible_resolutions[i].y);
 	}
+    
+    resolutions.insertLast("Custom");
+    
 	array<string> config_names = {"screenwidth", "screenheight"};
-	AddDropDown("Resolution", settings_content, DropdownConfiguration(possible_resolutions, resolutions, config_names ));
+	AddResolutionDropDown("Resolution", settings_content, DropdownConfiguration(possible_resolutions, resolutions, config_names ));
 	
-	array<int> window_type_values = { 0, 1, 2 };
-	array<string> window_type_options = { "Windowed", "Fullscreen", "Borderless"};
+    if(GetConfigValueBool("custom_resolution"))
+        AddCustomResolutionInput(settings_content, widthTextbox, heightTextbox);
+    
+	array<int> window_type_values = { 0, 1, 2, 3 };
+	array<string> window_type_options = { "Windowed", "Fullscreen", "Windowed borderless", "Fullscreen borderless"};
 	AddDropDown("Window mode", settings_content, DropdownConfiguration(window_type_values, window_type_options, "fullscreen"));
 
 	array<int> aa_values = { 1, 2, 4, 8 };
@@ -189,8 +194,8 @@ void AddGraphicsScreen(){
 void AddAudioScreen(){
 	current_screen = "Audio";
 	
-	AddSlider("Music volume", settings_content, "music_volume", 1.0f);
-	AddSlider("Master volume", settings_content, "master_volume", 1.0f);
+	AddSlider("Music volume", settings_content, "music_volume", 1.0f, 100.0f, 0.0f, 0.0f, true);
+	AddSlider("Master volume", settings_content, "master_volume", 1.0f, 100.0f, 0.0f, 0.0f, true);
 }
 
 void AddGameScreen(){
@@ -199,7 +204,7 @@ void AddGameScreen(){
     array<string> difficulty_options = GetConfigValueOptions("difficulty_preset");
 	AddDropDown("Difficulty Preset", settings_content, DropdownConfiguration( difficulty_options, difficulty_options, "difficulty_preset" ));
 
-	AddSlider("Game Speed", settings_content, "global_time_scale_mult", 1.0f, 100.0f, 0.5f);
+	AddSlider("Game Speed", settings_content, "global_time_scale_mult", 1.0f, 100.0f, 0.5f, 50.0f);
 	AddSlider("Game Difficulty", settings_content, "game_difficulty", 1.0f);
 	AddCheckBox("Tutorials", settings_content, "tutorials");
 	
@@ -215,14 +220,22 @@ void AddGameScreen(){
 
 void AddInputScreen(){
 	current_screen = "Input";
-	
-	AddSlider("Mouse sensitivity", settings_content, "mouse_sensitivity", 2.5f);
-	AddCheckBox("Invert mouse Y", settings_content, "invert_y_mouse_look");
+
+	DualColumns dualColumns("input_columns", 800);
+
+	AddCheckBox("Invert mouse X", dualColumns.left, "invert_x_mouse_look", 0.0f);
+	AddCheckBox("Invert mouse Y", dualColumns.left, "invert_y_mouse_look", 0.0f);
+	AddCheckBox("Invert gamepad X", dualColumns.right, "invert_x_gamepad_look", 0.0f);
+	AddCheckBox("Invert gamepad Y", dualColumns.right, "invert_y_gamepad_look", 0.0f);
+
+	AddSlider("Mouse sensitivity", settings_content, "mouse_sensitivity", 2.5f, 200.0f, 0.01f, 1.0f, true);
+
+	settings_content.append(dualColumns.main);
+
 	AddCheckBox("Raw mouse input", settings_content, "use_raw_input");
-	AddCheckBox("Invert gamepad Y", settings_content, "invert_y_gamepad_look");
 	AddCheckBox("Automatic camera", settings_content, "auto_camera");
 	AddCheckBox("Automatic Ledge Grab", settings_content, "auto_ledge_grab");
-	
+
 	AddKeyRebind("Forward", settings_content, "key", "up");
 	AddKeyRebind("Backwards", settings_content, "key", "down");
 	AddKeyRebind("Left", settings_content, "key", "left");
@@ -271,7 +284,7 @@ void ProcessSettingsMessage(IMMessage@ message){
 		/*continues_updating_element = message.getInt(0);*/
 	}
 	else if( message.name == "switch_category" ){
-		SwitchSettingsScreen(message.getString(0));
+        SwitchSettingsScreen(message.getString(0));
 	}
 	else if( message.name == "rebind_activate" ){
 		gui_elements[message.getInt(0)].ToggleElement();
@@ -295,6 +308,20 @@ void ProcessSettingsMessage(IMMessage@ message){
 			imGUI.receiveMessage(IMMessage("Back"));
 		}
 	}
+    else if(message.name == "activate_textbox"){
+        if(message.getString(0) == "width"){
+            heightTextbox.Deactivate();            
+            widthTextbox.Activate();
+        }
+        else if(message.getString(0) == "height"){
+            widthTextbox.Deactivate();
+            heightTextbox.Activate();
+        }
+        else {
+            widthTextbox.Deactivate();
+            heightTextbox.Deactivate();
+        }
+    }
 	else{
 		Log( info, "Unknown processMessage " + message.getString(0) );
 	}
@@ -303,6 +330,9 @@ void ProcessSettingsMessage(IMMessage@ message){
 void UpdateSettings(){
 	UpdateMovingSlider();
 	UpdateKeyRebinding();
+
+    widthTextbox.Update();
+    heightTextbox.Update();
 }
 
 void UpdateKeyRebinding(){

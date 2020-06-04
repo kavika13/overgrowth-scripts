@@ -227,6 +227,7 @@ class JumpInfo {
             if(WantsToFlip()){
                 if(!flip_info.IsFlipping()){
                     flip_info.StartFlip();
+                    ++roll_count;
                 }
             }
             if(!flip_info.IsFlipping() && !flip_info.HasFlipped() && !no_rotate && !has_hit_wall){

@@ -2959,7 +2959,7 @@ void main() {
         if(depth < length(ws_vertex) * 0.05){
             float a = dFdx(depth);
             float b = dFdy(depth);
-            float meniscus = max(0.0, 1.0 - depth / length(vec3(a,b,0)) * 0.5);
+            float meniscus = min(1.0, max(0.0, 1.0 - depth / length(vec3(a,b,0)) * 0.5));
             //meniscus *= max(0.0, 1.0 - abs(a) * 1000);
             #ifdef CAVE_ARENA
             color.xyz *= 1.0 + meniscus * 0.75;

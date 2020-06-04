@@ -11,15 +11,16 @@ JumpInfo jump_info;
 LedgeInfo ledge_info;
 
 bool omniscient = false;
-bool static_char = false;
 bool left_handed = true;
 bool dialogue_control = false;
 vec3 dialogue_position;
 float dialogue_rotation;
 string tutorial = "";
 bool fall_death = false;
+int roll_count = 0;
 
 int num_hit_on_ground = 0;
+int num_strikes = 0;
 
 float throw_weapon_time = -10.0f;
 
@@ -74,6 +75,8 @@ float block_stunned = 0.0f;
 int block_stunned_by_id = -1;
 
 float last_collide_time;
+
+const float POW_SANITY_LIMIT = 1.0e-14;
 
 // For sliding on ice
 vec3 old_slide_vel;
@@ -656,7 +659,7 @@ class Ribbon: C_ACCEL
                 particles[particles.size()-1].pos = pos;
             }
             for(int i=0, len=particles.size(); i<len; ++i){
-                particles[i].vel *= pow(0.2f, delta_time);
+                particles[i].vel *= max(POW_SANITY_LIMIT,pow(0.2f, delta_time));
                 particles[i].pos += particles[i].vel * delta_time;
                 particles[i].vel += GetWind(particles[i].pos * 5.0f, curr_game_time, 10.0f) * delta_time * 1.0f;
                 particles[i].vel += GetWind(particles[i].pos * 30.0f, curr_game_time, 10.0f) * delta_time * 2.0f;
@@ -1360,7 +1363,7 @@ float choked_time = 0.0;
 float choke_start_time = 0.0;
 
 void CheckForStartBodyDrag(){
-    if(tethered == _TETHERED_FREE && this_mo.controlled && WantsToDragBody() && knife_layer_id == -1){
+    if(tethered == _TETHERED_FREE && WantsToDragBody() && knife_layer_id == -1){
         int closest_threat_id = GetClosestCharacterID(10.0, _TC_ENEMY | _TC_CONSCIOUS);
         int closest_id = GetClosestCharacterID(2.0f, _TC_RAGDOLL | _TC_UNCONSCIOUS);
         if((closest_threat_id == -1 || choked_time > time - 0.5f) && closest_id != -1){
@@ -2115,6 +2118,7 @@ void UpdateMouth(const Timestep &in ts) {
 }
 
 bool was_controlled = false;
+bool was_editor_mode = false;
 void Update(int num_frames) {
     //DebugText("pos"+this_mo.GetID(), "Pos"+this_mo.GetID()+": "+this_mo.position, 0.5);
     //DebugText("num_hit_on_ground"+this_mo.GetID(), "num_hit_on_ground"+this_mo.GetID()+": "+num_hit_on_ground, 0.5);
@@ -2125,13 +2129,14 @@ void Update(int num_frames) {
         Ragdoll(_RGDL_FALL);
     }
 
-    if(this_mo.controlled != was_controlled ) {
+    if(this_mo.controlled != was_controlled || was_editor_mode != EditorModeActive()) {
         was_controlled = this_mo.controlled;
+        was_editor_mode = EditorModeActive();
         if( this_mo.controlled ) {
             invincible = GetConfigValueBool("player_invincible");
         }
     }
-
+    
     if(this_mo.controlled){
         bool use_keyboard = (max(last_mouse_event_time, last_keyboard_event_time) > last_controller_event_time);
         if(knocked_out != _awake){
@@ -2188,7 +2193,11 @@ void Update(int num_frames) {
                 level.SendMessage("tutorial "+"Rabbits can jump very far");    
             } else if(tutorial == "combat"){
                 if(situation.PlayCombatSong()){
-                    level.SendMessage("tutorial "+"HOLD down "+(use_keyboard?"left mouse button":GetStringDescriptionForBinding("xbox", "attack"))+" to attack");
+                    if(num_strikes < 3){
+                        level.SendMessage("tutorial "+"HOLD down "+(use_keyboard?"left mouse button":GetStringDescriptionForBinding("xbox", "attack"))+" to attack");
+                    } else {
+                        level.SendMessage("tutorial "+"Choose your strike by varying your height, distance, and movement direction.");
+                    }
                 } else {
                     level.SendMessage("tutorial");
                 }            
@@ -2249,7 +2258,7 @@ void Update(int num_frames) {
                     level.SendMessage("tutorial");
                 }            
             } else if(tutorial == "flip_roll"){
-                if(situation.PlayCombatSong()){
+                if(situation.PlayCombatSong() || roll_count > 6){
                     level.SendMessage("tutorial");
                 } else {
                     level.SendMessage("tutorial "+"Press "+GetStringDescriptionForBinding(use_keyboard?"key":"xbox", "crouch")+" while running or jumping to roll");
@@ -2293,7 +2302,7 @@ void Update(int num_frames) {
         }
     }
 
-    if(static_char && updated > 0 && !dialogue_control){
+    if(this_mo.static_char && updated > 0 && !dialogue_control){
         Timestep ts(time_step, num_frames);
         time += ts.step();
         this_mo.velocity = 0.0f;
@@ -2347,7 +2356,7 @@ void Update(int num_frames) {
     }
 
     // Handle getting hit by nearby bodies
-    if(state != _ragdoll_state && on_ground && !static_char && !dialogue_control){
+    if(state != _ragdoll_state && on_ground && !this_mo.static_char && !dialogue_control){
         array<int> nearby_characters;
         GetCharactersInSphere(this_mo.position, 1.0, nearby_characters);
         for(int i=0, len=nearby_characters.size(); i<len; ++i){
@@ -2577,6 +2586,11 @@ void Update(int num_frames) {
     }
     CheckForNANPosAndVel(3);
 
+    const bool kSuperHotMode = false;
+    if(kSuperHotMode && this_mo.controlled && GetTargetVelocity() == vec3(0.0) && !GetInputDown(this_mo.controller_id, "crouch") && !GetInputDown(this_mo.controller_id, "attack") && !GetInputDown(this_mo.controller_id, "grab") && !GetInputDown(this_mo.controller_id, "jump")){
+        TimedSlowMotion(0.1f,0.01f, 0.0f);
+    }
+
     bool display_player_state = false;
     if(this_mo.controlled && display_player_state){
         DebugText("player_state","State: "+StateStr(state),0.5f);
@@ -2696,7 +2710,7 @@ void Update(int num_frames) {
     CheckForNANPosAndVel(8);
 
     if(on_ground){
-        push_velocity *= pow(0.9f, ts.frames());
+        push_velocity *= max(POW_SANITY_LIMIT,pow(0.9f, ts.frames()));
         vec3 offset = this_mo.velocity - old_slide_vel;
         old_slide_vel = this_mo.velocity;
         this_mo.velocity = new_slide_vel + offset;
@@ -2780,8 +2794,14 @@ void JumpTestEq(const vec3&in initial_pos,
     jump_path.resize(0);
     vec3 start = initial_pos;
     vec3 end = start;
+
+    float length_xy_2 = initial_vel.x*initial_vel.x + initial_vel.z+initial_vel.z;
+    float length_xy = 0.0f;
+    if( length_xy_2 > 0.0f ) {
+        length_xy = sqrt(length_xy_2); 
+    }
     vec3 flat_vel = vec3(
-        sqrt(initial_vel.x*initial_vel.x + initial_vel.z+initial_vel.z),
+        length_xy,
         initial_vel.y,
         0.0f);
     vec3 flat_dir = vec3(initial_vel.x, 0.0f, initial_vel.z);
@@ -3790,7 +3810,7 @@ void UpdateHeadLook(const Timestep &in ts) {
 
     // Reduce head look when blocking
     if(block_flinch_spring.value > 0.1f){
-        head_look_opac *= min(1.0f, 1.0f - block_flinch_spring.value*0.5f);
+        head_look_opac *= max(0.0f,min(1.0f, 1.0f - block_flinch_spring.value*0.5f));
     }
 
     // Calculate actual head look direction
@@ -4099,6 +4119,18 @@ class Spring {
     }
     void Update(const Timestep &in ts) {
         velocity += (target_value - value) * ts.step() * stiffness;
+
+        if( velocity > 1.0e+16 ) {
+            velocity = 1.0e+16;
+        } else if( velocity < -1.0e+16 ) {
+            velocity = -1.0e+16;
+        }
+
+        if( velocity < 1.0e-14 && velocity > -1.0e-14 ) {
+            value = target_value;
+            velocity = 0.0f;
+        }
+
         value += velocity * ts.step();
         velocity *= pow(damping, ts.frames());
     }
@@ -5587,7 +5619,7 @@ void ReceiveMessage(string msg){
     } else if(token == "ignite"){
         SetOnFire(true);
     } else if(token == "activate"){
-        static_char = false;
+        this_mo.static_char = false;
     } else if(token == "entered_fire"){
         if(this_mo.controlled || state != _movement_state){
             SetOnFire(true);
@@ -5796,7 +5828,7 @@ void CharacterDefeated() {
             MovementObject@ char = ReadCharacter(i);
             if(ReadObjectFromID(char.GetID()).GetEnabled() &&
                 !char.controlled &&
-                !char.GetBoolVar("static_char") &&
+                !char.static_char &&
                char.GetIntVar("knocked_out") == _awake && 
                !player_char.OnSameTeam(char) && 
                char.QueryIntFunction("int IsAggro()") == 1)
@@ -6137,6 +6169,7 @@ void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos
         return;
     }
     if(water_depth > 0.0){
+        AISound(world_pos, LOUD_SOUND_RADIUS, _sound_type_foley);
         if(water_depth < 0.4){
             if(event == "leftrunstep" || event == "rightrunstep"){
                 this_mo.PlaySoundGroupAttached("Data/Sounds/water_foley/mud_fs_run.xml", this_mo.position);
@@ -6147,7 +6180,6 @@ void HandleAnimationMaterialEvent(const string&in event, const vec3&in world_pos
             }
             if(event == "leftwalkstep" || event == "leftcrouchwalkstep" ||
                event == "rightwalkstep" || event == "rightcrouchwalkstep"){
-                AISound(world_pos, LOUD_SOUND_RADIUS, _sound_type_foley);
                 this_mo.PlaySoundGroupAttached("Data/Sounds/water_foley/mud_fs_walk.xml", this_mo.position);
                 if(water_depth > 0.1){
                     return;
@@ -6444,6 +6476,7 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
             if(!flip_info.IsFlipping()){
                 flip_info.StartRoll(target_velocity);
                 breath_speed += 1.0f;
+                ++roll_count;
             }
         }
 
@@ -6717,6 +6750,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
         }else{
             AchievementEvent("ai_attacked");
         }
+        ++num_strikes;
         HandleAIEvent(_attacking);
         breath_speed += 2.0f;
         LoadAppropriateAttack(false, attack_getter);
@@ -6999,7 +7033,7 @@ void GetMatchingCharactersInArray(array<int> &in characters, array<int> &out mat
             continue;
         }
         character_getter.Load(this_mo.char_path);
-        if(flags & _TC_ENEMY != 0 && (this_mo.OnSameTeam(char) || char.GetBoolVar("static_char"))) {
+        if(flags & _TC_ENEMY != 0 && (this_mo.OnSameTeam(char) || char.static_char)) {
             continue;
         }
         if(flags & _TC_ALLY != 0 && !this_mo.OnSameTeam(char)) {
@@ -7199,7 +7233,7 @@ void GetVisibleCharacters(uint16 flags, array<int> &visible_characters){
     vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos(head_string);
     for(uint i=0; i<nearby_characters.size(); ++i){
         if(this_mo.getID() != nearby_characters[i] &&
-           !ReadCharacterID(nearby_characters[i]).GetBoolVar("static_char") &&
+           !ReadCharacterID(nearby_characters[i]).static_char &&
            VisibilityCheck(head_pos, ReadCharacterID(nearby_characters[i])))
         {
             visible_characters.push_back(nearby_characters[i]);
@@ -8700,13 +8734,13 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
             dir /= dist;
             dir *= distance_threshold - dist;
             vec3 other_push = dir * 0.5f / (time_step) * 0.15f;
-            if(!static_char){
+            if(!this_mo.static_char){
                 MindReceiveMessage("collided "+other.GetID());
                 this_mo.position -= dir * 0.5f;
                 push_velocity -= other_push;
             }
             other.Execute("
-            if(!static_char){
+            if(!this_mo.static_char){
                 this_mo.position += vec3("+dir.x+","+dir.y+","+dir.z+") * 0.5f;
                 push_velocity += vec3("+other_push.x+","+other_push.y+","+other_push.z+");
                 MindReceiveMessage(\"collided "+this_mo.GetID()+"\");
@@ -9288,7 +9322,7 @@ void ApplyCameraControls(const Timestep &in ts) {
     if(!level.HasFocus()){
         SetGrabMouse(true);
     }
-    if(dialogue_control){
+    if(dialogue_control || level.DialogueCameraControl() ){
         level_cam_weight = 1.0;
         level_cam_rotation.x = camera.GetXRotation();
         level_cam_rotation.y = camera.GetYRotation();
@@ -9599,7 +9633,7 @@ void ApplyCameraControls(const Timestep &in ts) {
     float camera_vibration_mult = 2.0f;
     float camera_vibration = camera_shake * camera_vibration_mult;
 
-level_cam_weight = 0.0;
+    level_cam_weight = 0.0;
     level_cam_weight = mix(0.0, level_cam_weight, pow(0.95, ts.frames()));
 
     //level_weight = sin(time) * 0.5 + 0.5;
@@ -9888,7 +9922,7 @@ void Reset() {
     this_mo.rigged_object().ClearBoneConstraints();
     fixed_bone_ids.resize(0);
     fixed_bone_pos.resize(0);
-    static_char = (params.GetInt("Static") != 0);
+    this_mo.static_char = (params.GetInt("Static") != 0);
 }
 
 void SetCameraFromFacing() {
@@ -9993,7 +10027,7 @@ void WaterIntersect(int id) {
     /*if(length(this_mo.velocity) > max_water_speed){
         this_mo.velocity = normalize(this_mo.velocity)*max_water_speed;
     }*/
-    if(water_depth < 2.0 && abs(this_mo.velocity.y) > 4.0 && (!on_ground || state == _ragdoll_state)) {
+    if(water_depth < 2.0 && length(this_mo.velocity) > 4.0 && (!on_ground || state == _ragdoll_state || flip_info.IsRolling())) {
         {
             float ring_size = 0.3;
             vec3 offset = vec3(1,0,0) * ring_size;
@@ -11667,7 +11701,11 @@ void PreDrawCameraNoCull(float curr_game_time) {
         if(!dialogue_control){
             //camera.SetDOF(0.0f, distance(camera.GetPos(), this_mo.position)-1.0f, 1.0f, 0.0f, distance(camera.GetPos(), this_mo.position)+1.0f, 2.0f);
             camera.SetDOF(0.0f, 1.5f, 1.0f, 1.0-min(black_tint,red_tint), 5.0f, 2.0f);    
+            if(GetMenuPaused()){
+                camera.SetDOF(0,0,0, 0.3, 0, 2);
+            }
         }
+
         //camera.SetDOF(0.3f, 6, 1, 0, 0, 0);
         //camera.SetDOF(0,0,0, 0.3, 4, 0.1);
 
@@ -12349,9 +12387,10 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         }
         float head_up_val = dot(torso_look, head_up);
         float angle2 = 0.0f;
-        angle2 = asin(dot(torso_look, head_up)+chest_tilt_offset);
-        if(angle2 != angle2){
-            angle2 = 0.0f;
+        float preangle_dot = dot(torso_look, head_up)+chest_tilt_offset;
+        
+        if( preangle_dot >= -1.0f && preangle_dot <= 1.0f ) { 
+            angle2 = asin(preangle_dot);
         }
 
         // Avoid head flip-flopping when trying to look straight back
@@ -12439,8 +12478,10 @@ void FinalAnimationMatrixUpdate(int num_frames) {
             }
             float head_up_val = dot(old_head_facing, head_up);
             old_angle.y = 0.0f;
-            old_angle.y = asin(dot(old_head_facing, head_up));
-            if(old_angle.y != old_angle.y){
+            float dotp_head = dot(old_head_facing, head_up);
+            if( dotp_head >= -1.0f && dotp_head <= 1.0f ) {
+                old_angle.y = asin(dotp_head);
+            } else {
                 old_angle.y = 0.0f;
             }
 
@@ -12460,10 +12501,10 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         }
         float head_up_val = dot(head_look, head_up);
         float angle2 = 0.0f;
-        angle2 = (asin(dot(head_look, head_up)) + head_tilt_offset);
-        if(angle2 != angle2){
-            angle2 = 0.0f;
-        }
+
+        if( head_up_val >= -1.0f && head_up_val <= 1.0f ) {
+            angle2 = (asin(head_up_val) + head_tilt_offset);
+        } 
 
         // Avoid head flip-flopping when trying to look straight back
         float head_range = 1.3f;
@@ -12726,7 +12767,7 @@ void FinalAnimationMatrixUpdate(int num_frames) {
         if(sphere_col.NumContacts() == 0){
             col.GetSweptSphereCollision(test_pos_start, test_pos, _leg_sphere_size);
             float dist = distance(sphere_col.position, test_pos);
-            if(dist > -1 && dist < 1){
+            if(dist > -1.0f && dist < 1.0f) {
                 float angle = asin(dist);
                 if(angle > 0.0){
                     hang_angle = angle;
@@ -13372,7 +13413,7 @@ void SetParameters() {
     left_handed = (params.GetInt("Left handed") != 0);
 
     params.AddIntCheckbox("Static",false);
-    static_char = (params.GetInt("Static") != 0);
+    this_mo.static_char = (params.GetInt("Static") != 0);
 
     if(params.HasParam("Invisible When Stationary") && params.GetInt("Invisible When Stationary") != 0){
         invisible_when_stationary = 1;
