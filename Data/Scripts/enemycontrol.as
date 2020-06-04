@@ -7,7 +7,7 @@ Situation situation;
 float startle_time;
 float suspicious_amount;
 float sound_time;
-const float kSuspicionFadeSpeed = 0.2f;
+const float kSuspicionFadeSpeed = 0.1f;
 const float kEnemySeenFadeSpeed = 0.2f;
 
 bool has_jump_target = false;
@@ -18,6 +18,7 @@ const float AWAKE_NOTICE_THRESHOLD = 1.0f;
 
 float enemy_seen = 0.0f;
 float last_dodge_time = 0.0f;
+float dont_attack_before = 0.0f;
 
 bool hostile = true;
 bool listening = true;
@@ -25,7 +26,7 @@ bool ai_attacking = false;
 bool hostile_switchable = true;
 int waypoint_target_id = -1;
 int old_waypoint_target_id = -1;
-const float _throw_counter_probability = 0.2f;
+const float _throw_counter_probability = 0.4f;
 bool will_throw_counter;
 int ground_punish_decision = -1;
 
@@ -41,6 +42,9 @@ bool going_to_block = false;
 float dodge_delay;
 bool going_to_dodge = false;
 float roll_after_ragdoll_delay;
+float last_throw_attempt_time = 0.0;
+const float kThrowDelay = 5.0;
+const float kDodgeDelay = 3.0;
 bool throw_after_active_block;
 bool allow_active_block = true;
 bool allow_throw = true;
@@ -94,6 +98,8 @@ enum ClimbStage {_nothing, _jump, _wallrun, _grab, _climb_up};
 ClimbStage trying_to_climb = _nothing;
 vec3 climb_dir;
 
+float last_dodged_time = 0.0;
+
 void SetChaseTarget(int target){
     if(chase_target_id != target){
         chase_target_id = target;
@@ -107,7 +113,7 @@ void SetChaseTarget(int target){
 }
 
 bool ActiveDodging(int attacker_id) { 
-    if(startled){
+    if(startled || last_dodged_time > time - kDodgeDelay){
         return false;
     }
     bool dodging = false;
@@ -177,10 +183,7 @@ void AIMovementObjectDeleted(int id) {
 }
 
 int IsUnaware() {
-    if(species == _wolf || species == _dog){
-        return 0; // Cannot choke out wolves
-    }
-    return (goal == _patrol || startled || always_unaware)?1:0;
+    return (goal == _patrol || goal == _investigate || startled || always_unaware)?1:0;
 }
 
 int IsAggro() {
@@ -211,7 +214,18 @@ int IsIdle() {
 }
 
 int IsAggressive() {
-    return (knocked_out == _awake && (goal == _attack || goal == _get_help))?1:0;
+    if (knocked_out == _awake && 
+            (goal == _attack || goal == _get_help || 
+                (goal == _get_weapon && 
+                    (old_goal == _attack || old_goal == _get_help )
+                )
+            )
+        )
+    {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 class TargetHistoryElement {
@@ -431,6 +445,9 @@ void Startle() {
 
 void Notice(int character_id){
     MovementObject@ char = ReadCharacterID(character_id);
+    if(char.GetBoolVar("static_char")){
+        return;
+    }
     if(!this_mo.OnSameTeam(char) && (goal != _attack || chase_target_id == -1)){
         switch(goal){
             case _patrol:
@@ -546,6 +563,9 @@ void HandleAIEvent(AIEvent event){
         break;
     case _thrown: {
         float temp_throw_counter_probability = _throw_counter_probability * mix(0.25, 1.0, game_difficulty);
+        if(params.HasParam("Throw Counter Probability")){
+            temp_throw_counter_probability = params.GetFloat("Throw Counter Probability") * mix(0.25, 1.0, game_difficulty);
+        }
         will_throw_counter = RangedRandomFloat(0.0f,1.0f)<temp_throw_counter_probability;   
         } break;
     case _can_climb:
@@ -553,6 +573,13 @@ void HandleAIEvent(AIEvent event){
         break;
     case _dodged: 
         throw_after_active_block = true;
+        last_dodged_time = time;
+        break;
+    case _attempted_throw:
+        last_throw_attempt_time = time;
+        break;
+    case _attack_failed:
+        dont_attack_before = time + RangedRandomFloat(0.0, 1.4);
         break;
     case _activeblocked: {
         float temp_block_followup = p_block_followup;
@@ -712,7 +739,15 @@ void MindReceiveMessage(string msg){
             case 5: type = SoundType(atoi(token_iter.GetToken(msg))); break;
             }
         }
-        NotifySound(id, pos, type);
+        if(species == _rabbit){
+            max_range *= 2.0f;
+        }
+        if(params.HasParam("Hearing Modifier")){
+            max_range *= params.GetFloat("Hearing Modifier");
+        }
+        if(distance(this_mo.position, pos) < max_range){
+            NotifySound(id, pos, type);
+        }
     }
 }
 
@@ -744,6 +779,10 @@ AISubGoal PickAttackSubGoal() {
                     if(char.GetFloatVar("threat_amount") > 0.5 && char.controlled && !char.GetBoolVar("feinting")){
                         target_goal = _provoke_attack;
                     }
+
+                    if(weapon_slots[primary_weapon_slot] == -1 && enemy_primary_weapon_id != -1 && (last_throw_attempt_time > time - kThrowDelay || last_dodge_time > time - kDodgeDelay)){
+                        target_goal = _rush_and_attack;
+                    }
                 }
             }
         }
@@ -772,6 +811,9 @@ AISubGoal PickAttackSubGoal() {
         target_goal = _defend;
     }
     if(target_goal == _rush_and_attack && group_leader != -1){
+        target_goal = _provoke_attack;
+    }
+    if(dont_attack_before > time && target_goal == _rush_and_attack){
         target_goal = _provoke_attack;
     }
 
@@ -925,6 +967,13 @@ void AIEndAttack(){
 }
 
 void AllyInfo() {
+    if(goal == _escort && ReadCharacterID(escort_id).GetIntVar("knocked_out") != _awake){
+        random_look_delay = 1.0f;
+        random_look_dir = ReadCharacterID(escort_id).position - this_mo.position;
+        SetGoal(_investigate);
+        SetSubGoal(_investigate_urgent);
+        investigate_target_id = escort_id;
+    }
     if(goal == _attack && knocked_out == _awake){
         if(group_leader == -1 && followers.size() == 0){
             for(int i=0, len=GetNumCharacters(); i<len; ++i){
@@ -1442,7 +1491,7 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-    if( GetConfigValueBool( "debug_mouse_path_test" ) )
+    if( ReadObjectFromID(this_mo.GetID()).IsSelected() && GetConfigValueBool( "debug_mouse_path_test" ) )
     {
         MouseControlPathTest();
     }
@@ -1536,7 +1585,7 @@ bool WantsToDropItem() {
 }
 
 bool WantsToThrowItem() {
-    if(species == _dog && false){
+    if(species == _dog && chase_target_id != -1 && distance(this_mo.position, ReadCharacterID(chase_target_id).position) > 10){
         return true;
     } else {
         return false;
@@ -1544,7 +1593,11 @@ bool WantsToThrowItem() {
 }
 
 bool WantsToThrowEnemy() {
-    return throw_after_active_block;
+    if(last_throw_attempt_time > time - kThrowDelay){
+        return false;
+     } else {
+        return throw_after_active_block;
+    }
 }
 
 bool WantsToCounterThrow(){
@@ -1630,6 +1683,9 @@ bool DeflectWeapon() {
         // Much less likely to catch weapons if in a group
         if(followers.size() != 0 || group_leader != -1){
             knife_catch_probability *= 0.4;
+        }
+        if(params.HasParam("Weapon Catch Skill")){
+            knife_catch_probability *= params.GetFloat("Weapon Catch Skill");
         }
         knife_catch_probability *= mix(0.5, 1.0, game_difficulty);
         if(RangedRandomFloat(0.0f,1.0f) > knife_catch_probability){
@@ -1830,7 +1886,14 @@ WaypointInfo GetWaypointInfo(int id){
 string patrol_idle_override;
    
 string GetIdleOverride(){
-    if(goal == _patrol && time < patrol_wait_until){
+    if(!on_ground || goal != _patrol){
+        return "";
+    }
+    if(suspicious_amount > 0.0f && suspicious_amount > enemy_seen){
+        return "Data/Animations/r_actionidle_listen_b.anm";
+    } else if(enemy_seen > 0.0f){
+        return "Data/Animations/r_dialogue_shade.anm";
+    } else if(time < patrol_wait_until){
         return patrol_idle_override;
     } else {
         return "";
@@ -1848,7 +1911,7 @@ vec3 GetCheckedRepulsorForce() {
 }
 
 vec3 GetPatrolMovement(){
-    if(time < patrol_wait_until){
+    if(time < patrol_wait_until || suspicious_amount > 0.1f || enemy_seen > 0.1f){
         return vec3(0.0f);
     }
 
@@ -2108,6 +2171,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
             target_point =  np.GetPoint();
         }
     }
+
     //Pathfind to the target point on the navmesh.
     GetPath(target_point);
     
@@ -2131,6 +2195,8 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
         vec3 next_path_point = GetNextPathPoint();
         if(next_path_point != vec3(0.0f)){
             target_point = next_path_point;
+        } else if(params.HasParam("Stick To Nav Mesh")) {
+            return vec3(0.0);
         }
     }
     //for(int i=0; i<path.NumPoints()-1; ++i){
@@ -2139,7 +2205,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
 
     if(path.NumPoints() > 0 && on_ground){
        // If path cannot reach target point, check if we can climb or drop to it 
-       if(distance_squared(path.GetPoint(path.NumPoints()-1), GetNavPointPos(point)) > 1.0f){
+       if(!params.HasParam("Stick To Nav Mesh") && distance_squared(path.GetPoint(path.NumPoints()-1), GetNavPointPos(point)) > 1.0f){
            PredictPathOutput predict_path_output = PredictPath(this_mo.position, point);
            if(predict_path_output.type == _ppt_climb){
                path_find_type = _pft_climb;

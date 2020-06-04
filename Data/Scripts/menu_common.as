@@ -241,7 +241,7 @@ class KeyRebind : GUIElement{
 		PutCurrentValue();
 	}
 	void PutCurrentValue(){
-		current_value.setText(GetBindingValue(binding_category, binding));
+		current_value.setText(GetLocaleStringForScancode(GetCodeForKey(GetBindingValue(binding_category,binding))));
 	}
 	void DisableElement(){
 		vec2 orig_size = parent.getSize();

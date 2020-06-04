@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 bool HasFocus() {
     return false;
@@ -62,7 +62,7 @@ bool GetModIsLinear() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     LoadModCampaign();
 
     // Start playing some music

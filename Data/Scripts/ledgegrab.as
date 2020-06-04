@@ -633,7 +633,7 @@ class LedgeInfo {
             }
         }
 
-        if(GetConfigValueBool("auto_ledge_grab") && this_mo.controlled && dot(possible_ledge_dir, GetTargetVelocity()) <= 0) {
+        if(GetConfigValueBool("auto_ledge_grab") && this_mo.velocity.y <= 0.0 && this_mo.controlled && dot(possible_ledge_dir, GetTargetVelocity()) <= 0) {
             return false;
         }
     
@@ -1005,6 +1005,9 @@ class LedgeInfo {
         }
 
         vec3 target_velocity = GetTargetVelocity();
+        if(WantsToJump()){
+            target_velocity = ledge_dir;
+        }
         float ledge_dir_dot = dot(target_velocity, ledge_dir);
         vec3 horz_vel = target_velocity - (ledge_dir * ledge_dir_dot);
         vec3 real_velocity = horz_vel;

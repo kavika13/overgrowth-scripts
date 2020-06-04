@@ -90,6 +90,10 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
         float bias = max(0.0, (light_size - length(to_light)) / light_size * 2.0);
         #ifdef PLANT
             float d = abs(dot(n, ws_normal)+bias)/(1.0 + bias);
+        #elif defined(WATERFALL)
+            float d = 0.5;
+        #elif defined(LIGHT_AMB)
+            float d = 0.5;
         #else
             float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
         #endif
@@ -97,13 +101,15 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
         falloff = min(1.0, falloff);
 		diffuse_color += falloff * d * l.color * ambient_mult;
 
-
+        #ifndef SWAMP2
+        roughness = max(roughness, 0.05);
         vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
         float spec_pow = 2/pow(roughness, 4.0) - 2.0;
         float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
         spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
 
 		spec_color += falloff * spec * l.color * ambient_mult;
+        #endif
 	}
 }
 #endif

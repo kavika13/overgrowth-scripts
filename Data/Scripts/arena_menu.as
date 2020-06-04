@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 array<LevelInfo@> arena_levels = {	LevelInfo("waterfall_arena.xml",			"Waterfall Cave",		"UI/mainmenu/images/waterfall_arena.png"),
 									LevelInfo("Magma_Arena.xml",				"Magma Arena",			"UI/mainmenu/images/magma_arena.png"),
@@ -16,6 +16,7 @@ bool HasFocus() {
 
 void Initialize() {
 
+    @imGUI = CreateIMGUI();
     // Start playing some music
 	PlaySong("overgrowth_main");
 
