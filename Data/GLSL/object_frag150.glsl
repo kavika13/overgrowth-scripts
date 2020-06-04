@@ -98,8 +98,24 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
             float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
         #endif
 
+        float temp_ambient_mult = ambient_mult;
+        #ifdef LANTERN
+        if(l.color.r > 1.635 && l.color.r < 1.636){
+            temp_ambient_mult = 1.0;
+            if(n.y > 0.0){
+                temp_ambient_mult = max(0.0, temp_ambient_mult-pow(n.y,0.9));
+            }
+            if(n.y < 0.0){
+                temp_ambient_mult = max(0.0, temp_ambient_mult+n.y*0.99);
+            }
+            temp_ambient_mult *= 2.0;
+            bias = 0.05;
+            d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+        }
+        #endif
+
         falloff = min(1.0, falloff);
-		diffuse_color += falloff * d * l.color * ambient_mult;
+		diffuse_color += falloff * d * l.color * temp_ambient_mult;
 
         #ifndef SWAMP2
         roughness = max(roughness, 0.05);
@@ -108,7 +124,7 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
         float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
         spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
 
-		spec_color += falloff * spec * l.color * ambient_mult;
+		spec_color += falloff * spec * l.color * temp_ambient_mult;
         #endif
 	}
 }

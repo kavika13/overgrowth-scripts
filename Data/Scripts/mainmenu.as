@@ -58,7 +58,7 @@ void BuildUI(){
 
     string last_campaign_id = GetGlobalSave().GetValue("last_campaign_played");
     Campaign camp = GetCampaign(last_campaign_id);  
-    if(camp.GetLevels().size() > 0 ) {
+    if(camp.GetLevels().size() > 0 && GetConfigValueInt("difficulty_preset_value") != 0) {
         AddButton("Continue", buttons_holder, forward_chevron);
     }
 
@@ -105,7 +105,13 @@ void Update() {
         }
         else if( message.name == "Play" ) 
         {
-            this_ui.SendCallback( "play_menu.as" );
+            // Ugly way to make "back" work
+            // When the continue button is pressed in the difficulty menu, "back" is called
+            if(GetConfigValueInt("difficulty_preset_value") == 0){
+                this_ui.SendCallback( "play_menu.as" );
+                this_ui.SendCallback( "difficulty_menu.as" );
+            } else
+                this_ui.SendCallback( "play_menu.as" );
         }
         else if( message.name == "Continue" )
         {

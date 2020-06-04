@@ -131,11 +131,11 @@ in vec2 tex_coord_attrib;
 
 
 #ifdef SHADOW_CASCADE
-#define frag_tex_coords geom_tex_coords
-#define world_vert      geom_world_vert
+//#define frag_tex_coords geom_tex_coords
+//#define world_vert      geom_world_vert
 
 #ifdef CHARACTER
-#define fur_tex_coord   geom_fur_tex_coord
+//#define fur_tex_coord   geom_fur_tex_coord
 #endif  // CHARACTER
 
 #endif  // SHADOW_CASCADE
@@ -202,6 +202,12 @@ out vec3 world_vert;
     out mat3 tan_to_obj;
     #endif
     out vec2 frag_tex_coords;
+    #ifdef DETAILMAP4
+        out mat3 model_rotation_mat_inv;
+        #ifdef AXIS_UV
+            out mat4 model_mat_inv;
+        #endif
+    #endif
     #ifndef NO_INSTANCE_ID
     flat out int instance_id;
     #endif
@@ -666,6 +672,12 @@ void main() {
         instance_id = gl_InstanceID;
         #if defined(TANGENT)
             tan_to_obj = mat3(tangent_attrib, bitangent_attrib, normal_attrib);
+        #endif
+        #ifdef DETAILMAP4
+            model_rotation_mat_inv = inverse(instances[instance_id].model_rotation_mat);
+            #ifdef AXIS_UV
+                model_mat_inv = inverse(instances[instance_id].model_mat);
+            #endif
         #endif
         vec3 transformed_vertex = (instances[instance_id].model_mat * vec4(vertex_attrib, 1.0)).xyz;
         #ifdef PLANT

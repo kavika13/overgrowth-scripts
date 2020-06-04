@@ -27,7 +27,7 @@ void LoadModCampaign() {
 
     Log( info, "size: " + campaign_levels.length());
     for( uint k = 0; k < campaign_levels.length(); k++ ) {
-        level_list.insertLast(LevelInfo(campaign_levels[k]));
+        level_list.insertLast(LevelInfo(campaign_levels[k],GetHighestDifficultyFinishedCampaign(campaign_id),GetLevelPlayed(campaign_levels[k].GetID()),true,false));
     }
 }
 

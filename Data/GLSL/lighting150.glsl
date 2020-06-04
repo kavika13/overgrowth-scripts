@@ -363,6 +363,7 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
     float fog_opac = min(1.0,length(relative_position)/far);
     return fog_opac;*/
     float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
+    #ifndef SIMPLE_FOG
     #if defined(MISTY) || defined(MISTY2) || defined(DAMP_FOG) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
     #ifdef MISTY
         float fog_height = 95.0;
@@ -470,6 +471,7 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
         
     }
     #endif
+    #endif
     /*#ifdef VOLCANO
     {
         float dist = length(relative_position);
@@ -496,6 +498,8 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
     #if defined(WATER) && defined(WATER_HORIZON)
     #ifdef ALT
     fog_opac = min(1.0, max(fog_opac, length((cam_pos+relative_position).xz-vec2(94,144))/1000.0));
+    #elif defined(ALT2)
+    fog_opac = min(1.0, max(fog_opac, length((cam_pos+relative_position).xz)/600.0));
     #else
     fog_opac = min(1.0, max(fog_opac, length((cam_pos+relative_position).xz)/200.0));
     #endif

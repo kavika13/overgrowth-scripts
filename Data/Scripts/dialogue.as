@@ -121,6 +121,7 @@ class Dialogue {
     array<int> connected_char_ids;
     array<vec3> dialogue_colors;
     array<int> dialogue_voices;
+    array<float> dof_params;
 
     int index; // which dialogue element is being executed
     int sub_index;
@@ -314,6 +315,7 @@ class Dialogue {
         connected_char_ids.resize(0);
         dialogue_colors.resize(0);
         dialogue_voices.resize(0);
+        dof_params.resize(0);
         active_char = 0;
         queue_skip = false;
         ready_to_skip = false;
@@ -353,8 +355,10 @@ class Dialogue {
         int voice = 0;
         if(NameInfoExists(dialogue_name)){
             voice = GetNameInfo(dialogue_name).voice;
-        } else if(int(dialogue_voices.size()) > active_char){
+        } else if(active_char >= 0 && int(dialogue_voices.size()) > active_char){
             voice = dialogue_voices[active_char];
+        } else {
+            voice = 0;
         }
         if(voice_preview_time > the_time){
             voice = voice_preview;
@@ -907,9 +911,11 @@ class Dialogue {
 
     int GetLastWait(int line) {
         int last_wait = -1;
-        for(int j=0; j<line; ++j){
-            if(strings[j].obj_command == kWaitForClick || strings[j].obj_command == kSay){
-                last_wait = j;
+        if( line >= 0 && line < int(strings.size())){
+            for(int j=0; j<line; ++j){
+                if(strings[j].obj_command == kWaitForClick || strings[j].obj_command == kSay){
+                    last_wait = j;
+                }
             }
         }
         return last_wait;
@@ -1377,11 +1383,14 @@ class Dialogue {
                 cast<PlaceholderObject@>(obj).SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\"");
             }
         } else if(token == "#participants"){
-            if(token_iter.FindNextToken(msg)){
-                Object @obj = ReadObjectFromID(dialogue_obj_id);
-                ScriptParams@ params = obj.GetScriptParams();
-                params.SetInt("NumParticipants", atoi(token_iter.GetToken(msg)));
-                UpdateDialogueObjectConnectors(dialogue_obj_id);
+            if(token_iter.FindNextToken(msg)) {
+                int participant_count = atoi(token_iter.GetToken(msg));
+                if(token_iter.GetToken(msg) == "0" || (participant_count > 0 && participant_count < 32)) {
+                    Object @obj = ReadObjectFromID(dialogue_obj_id);
+                    ScriptParams@ params = obj.GetScriptParams();
+                    params.SetInt("NumParticipants", participant_count);
+                    UpdateDialogueObjectConnectors(dialogue_obj_id);
+                } 
             }
         }
     }
@@ -1403,7 +1412,7 @@ class Dialogue {
         int connect_id = placeholder_object.GetConnectID();
        
         if( connect_id == -1 ) {
-            Log(warning, "Connection id is -1 for placeholder object" );
+            //Log(warning, "Connection id is -1 for placeholder object " + connector_id);
             return -1;
         }
 
@@ -1806,6 +1815,23 @@ class Dialogue {
                     token = token_iter.GetToken(script_element.str);
                     SendGlobalMessage(token);
                 }
+            } else {
+                if(token == "send_level_message"){
+                    token_iter.FindNextToken(script_element.str);
+                    token = token_iter.GetToken(script_element.str);
+
+                    TokenIterator level_token_iter;
+                    level_token_iter.Init();
+                    if(level_token_iter.FindNextToken(token)){
+                        string sub_msg = level_token_iter.GetToken(token);
+                        if(sub_msg == "set_camera_dof"){
+                            dof_params.resize(0);
+                            while(level_token_iter.FindNextToken(token)){
+                                dof_params.push_back(atof(level_token_iter.GetToken(token)));
+                            }
+                        }
+                    }
+                }
             }
             if(token == "make_participants_aware"){
                 Object @obj = ReadObjectFromID(dialogue_obj_id);
@@ -1863,7 +1889,11 @@ class Dialogue {
                 new_obj.SetDeletable(false);
 
                 PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(new_obj);
-                placeholder_object.SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\" Connector "+j);
+                if( placeholder_object !is null ) {
+                    placeholder_object.SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\" Connector "+j);
+                } else {
+                    Log(error, "dialogue place holder object  id " + obj_id + " isn't a placeholder object");
+                }
             } else {
                 params.Remove("obj_"+j);
             }
@@ -1968,6 +1998,7 @@ class Dialogue {
                 ScriptParams@ params = obj.GetScriptParams();
                 if(obj.IsSelected() && obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
                     dialogue.SetDialogueObjID(object_ids[i]);
+                    params.SetString("Dialogue", "empty");
                     show_editor_info = true;
                 }
             }
@@ -1977,6 +2008,12 @@ class Dialogue {
                 //camera.SetFlags(kPreviewCamera);
                 //SetGUIEnabled(false);
                 Play();
+            }
+        } else if(token == "request_preview_dof"){
+            if(dof_params.size() == 6){
+                camera.SetDOF(dof_params[0], dof_params[1], dof_params[2], dof_params[3], dof_params[4], dof_params[5]);
+            } else {
+                camera.SetDOF(0,0,0,0,0,0);
             }
         }  else if(token == "load_dialogue_pose"){
 		    token_iter.FindNextToken(msg);
@@ -2034,8 +2071,10 @@ class Dialogue {
             vec3 color = vec3(1.0);
             if(NameInfoExists(dialogue_name)){
                 color = GetNameInfo(dialogue_name).color;
-            } else if(int(dialogue_colors.size()) > active_char){
+            } else if(active_char >= 0 && int(dialogue_colors.size()) > active_char){
                 color = dialogue_colors[active_char];
+            } else {
+                color = vec3(1.0f);
             }
             if(fade_end != -1.0){        
                 float blackout_amount = 1.0 - ((fade_end - the_time) / (fade_end - fade_start));
@@ -2203,8 +2242,10 @@ class Dialogue {
             vec3 color = vec3(1.0);
             if(NameInfoExists(dialogue_name)){
                 color = GetNameInfo(dialogue_name).color;
-            } else if(int(dialogue_colors.size()) > active_char){
+            } else if(active_char >= 0 && int(dialogue_colors.size()) > active_char){
                 color = dialogue_colors[active_char];
+            } else {
+                color = vec3(1.0f);
             }
             DrawTextAtlas(name_font_path, int(font_size*1.8), kSmallLowercase, dialogue_name, 
                           int(pos.x), int(pos.y)-int(font_size*0.8), vec4(color, 1.0f));

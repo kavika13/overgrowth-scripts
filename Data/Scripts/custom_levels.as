@@ -69,7 +69,7 @@ void ResetLevelList(){
     for( uint i = 0; i < active_sids.length(); i++ ) {
         array<ModLevel>@ menu_items = ModGetSingleLevels(active_sids[i]); 
         for( uint k = 0; k < menu_items.length(); k++ ) {
-			custom_levels.insertLast(LevelInfo(menu_items[k]));
+			custom_levels.insertLast(LevelInfo(menu_items[k],0,false,true,false));
         }
     }
 }
@@ -183,7 +183,7 @@ class LevelSearch : Search{
 	        array<ModLevel>@ menu_items = ModGetSingleLevels(active_sids[i]); 
 	        for( uint k = 0; k < menu_items.length(); k++ ) {
 				if(ToLowerCase(menu_items[k].GetTitle()).findFirst(query) != -1){
-					results.insertLast(LevelInfo(menu_items[k].GetPath(), menu_items[k].GetTitle(), menu_items[k].GetThumbnail()));
+					results.insertLast(LevelInfo(menu_items[k].GetPath(), menu_items[k].GetTitle(), menu_items[k].GetThumbnail(),false,true,false));
 					continue;
 				}
 	        }

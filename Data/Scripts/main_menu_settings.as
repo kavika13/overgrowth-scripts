@@ -19,12 +19,13 @@ void Initialize() {
 
     // Actually setup the GUI -- must do this before we do anything
     imGUI.setup();
-    BuildUI();
-	setBackGround();
+    BuildUI("Graphics");
+    setBackGround();
 }
 
 void Dispose() {
     imGUI.clear();
+    SaveConfig();
 }
 
 bool CanGoBack() {
@@ -32,43 +33,28 @@ bool CanGoBack() {
 }
 
 void Update() {
-	UpdateSettings();
+    UpdateSettings();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
-		//Log( info, "Got processMessage " + message.name );
-		if( message.name == "Back" ){
-			this_ui.SendCallback( "back" );
+        //Log( info, "Got processMessage " + message.name );
+        if( message.name == "Back" ){
+            this_ui.SendCallback( "back" );
         }else{
-			ProcessSettingsMessage(message);
-		}
+            ProcessSettingsMessage(message);
+        }
     }
-	// Do the general GUI updating
-	imGUI.update();
-	UpdateController();
+    // Do the general GUI updating
+    imGUI.update();
+    UpdateController();
 }
 
 
 void Resize() {
     imGUI.doScreenResize(); // This must be called first
-	setBackGround();
-
-    vec2 currentResolution = vec2(GetConfigValueInt("screenwidth"), GetConfigValueInt("screenheight"));
-    array<vec2> possibleResolutions = GetPossibleResolutions();
-
-    bool found = false;
-    for(uint i = 0; i < possibleResolutions.size(); ++i) {
-        if(possibleResolutions[i] == currentResolution) {
-            found = true;
-            break;
-        }
-    }
-
-    // Don't set custom_resolution to true automatically;
-    // the user may have entered a possible resolution manually
-    if(!found)
-        SetConfigValueBool("custom_resolution", true);
-
+    setBackGround();
+    
+    checkCustomResolution();
     SwitchSettingsScreen(current_screen);
 }
 

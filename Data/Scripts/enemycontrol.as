@@ -503,6 +503,7 @@ void Notice(int character_id){
 
 void NotifySound(int created_by_id, vec3 pos, SoundType type) {
     if(created_by_id == -1 ||
+       ObjectExists(created_by_id) == false || 
        !listening || this_mo.static_char || 
        awake_time < AWAKE_NOTICE_THRESHOLD || knocked_out != _awake || 
        created_by_id == this_mo.GetID())

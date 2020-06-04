@@ -246,7 +246,8 @@ void UpdateController(){
 			return;
 		}
 		if(GetInputPressed(0, "return")){
-			current_item.element.sendMessage(current_item.message);
+			if(current_item.message !is null)
+				current_item.element.sendMessage(current_item.message);
 		}
 		
 		//Direction input up/down/left/right

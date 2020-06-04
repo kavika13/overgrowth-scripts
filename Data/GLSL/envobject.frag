@@ -281,6 +281,12 @@ in vec3 world_vert;
             in mat3 tan_to_obj;
         #endif
     #endif
+    #ifdef DETAILMAP4
+        in mat3 model_rotation_mat_inv;
+        #ifdef AXIS_UV
+            in mat4 model_mat_inv;
+        #endif
+    #endif
     #ifdef USE_GEOM_SHADER
         in vec2 frag_tex_coords_fs;
         #define frag_tex_coords frag_tex_coords_fs
@@ -380,7 +386,12 @@ const float cloudscale = 1.1;
 const float speed = cloud_speed*0.1;
 const float clouddark = 0.5;
 const float cloudlight = 0.3;
+const vec3 cloudtint = vec3(1.1, 1.1, 0.9);
+#ifdef MORECLOUDS
+const float cloudcover = 0.8;
+#else
 const float cloudcover = 0.2;
+#endif
 const float cloudalpha = 8.0;
 const float skytint = 0.5;
 const vec3 skycolour1 = vec3(0.2, 0.4, 0.6);
@@ -746,7 +757,7 @@ bool sphere_collision(vec3 s, vec3 c, vec3 d, float r, out vec3 intersection, ou
 
 #if !defined(GPU_PARTICLE_FIELD)
 vec3 GetFogColorMult(){
-    #ifdef RAINY
+    #if defined(RAINY) || defined(WET)
     #ifdef NO_SKY_HIGHLIGHT
     return vec3(1.0);
     #else
@@ -919,7 +930,7 @@ float SSAO(vec3 ws_vertex) {
 #endif
 
 float CloudShadow(vec3 pos){
-    #if defined(TEST_CLOUDS_2) && !defined(DEPTH_ONLY)
+    #if defined(TEST_CLOUDS_2) && !defined(DEPTH_ONLY) && !defined(CLOUDS_DO_NOT_CAST_SHADOWS)
     return max(0.0, fractal(pos.zx*0.05+vec2(0.0,time*cloud_speed))*2.0+1.0);
     #else
     return 1.0;
@@ -1085,7 +1096,7 @@ void main() {
                 out_color.xyz = mix(out_color.xyz, textureLod(tex2, normal, 0.0).xyz * vec3(1.2,1.1,1.0), val);
             }
         #endif
-        #if defined(RAINY)
+        #if defined(RAINY) || defined(WET)
             float haze_amount = GetHazeAmount(normal * 1000.0, haze_mult);
             vec3 fog_color;
             fog_color = textureLod(tex2, normal, 3.0).xyz * GetFogColorMult();
@@ -1097,6 +1108,9 @@ void main() {
             vec3 fog_color;
             float opac = min(1.0, pow(max(0.0,1.0-normal.y), 8.0));
             fog_color = textureLod(tex2, normal, 3.0).xyz * GetFogColorMult();
+            #ifdef ALT2
+            fog_color = vec3(1.0);
+            #endif
             out_color.xyz = mix(out_color.xyz, fog_color, opac);
         #endif
 
@@ -1111,10 +1125,30 @@ void main() {
         #ifdef TEST_CLOUDS_2
             vec3 temp = normalize(normal);
             vec3 normalized = temp;//vec3(temp[2], temp[1], -temp[0]);
-            vec3 plane_intersect = normalized / (normalized.y+0.2);
+            #ifdef CLOUDS_BELOW_HORIZON
+                vec3 plane_intersect = normalized / -(normalized.y-0.2);
+            #else
+                vec3 plane_intersect = normalized / (normalized.y+0.2);
+            #endif
             vec2 old_uv = plane_intersect.xz;
             vec2 uv = old_uv; 
             float temp_time = time * speed;
+
+            #ifdef CLOUDS_VORTEX
+                float swirl_radius = 128.0 / 32.0;
+                float swirl_angle = 32.0 / 32.0;
+                float swirl_distance = length(uv);
+                float swirl_time_scale = 2.0;
+
+                if(swirl_distance < swirl_radius) {
+                    float swirl_ratio = (swirl_radius - swirl_distance) / swirl_radius;
+                    temp_time *= swirl_ratio * swirl_time_scale;
+                    float swirl_theta = pow(swirl_ratio, 16.0) * swirl_angle * 8.0;
+                    float swirl_sin_theta = sin(swirl_theta);
+                    float swirl_cos_theta = cos(swirl_theta);
+                    uv = old_uv = vec2(dot(uv, vec2(swirl_cos_theta, -swirl_sin_theta)), dot(uv, vec2(swirl_sin_theta, swirl_cos_theta)));
+                }
+            #endif
 
             float q = clouds_fbm(uv * cloudscale * 0.5);
             
@@ -1146,6 +1180,12 @@ void main() {
             //noise colour
             float c = 0.0;
             temp_time = time * speed * 2.0;
+            #ifdef CLOUDS_VORTEX
+                if(swirl_distance < swirl_radius) {
+                    float swirl_ratio = (swirl_radius - swirl_distance) / swirl_radius;
+                    temp_time *= swirl_ratio * swirl_time_scale;
+                }
+            #endif
             uv = old_uv;
             uv *= cloudscale*2.0;
             uv -= q - temp_time;
@@ -1159,6 +1199,12 @@ void main() {
             //noise ridge colour
             float c1 = 0.0;
             temp_time = time * speed * 3.0;
+            #ifdef CLOUDS_VORTEX
+                if(swirl_distance < swirl_radius) {
+                    float swirl_ratio = (swirl_radius - swirl_distance) / swirl_radius;
+                    temp_time *= swirl_ratio * swirl_time_scale;
+                }
+            #endif
             uv = old_uv;
             uv *= cloudscale*3.0;
             uv -= q - temp_time;
@@ -1170,16 +1216,30 @@ void main() {
             }
             
             c += c1;
-            
-            vec3 skycolour = mix(skycolour2, skycolour1, normalized.y);
-            vec3 cloudcolour = vec3(1.1, 1.1, 0.9) * clamp((clouddark + cloudlight*c), 0.0, 1.0);
+
+            #ifdef CLOUDS_DO_NOT_TINT_SKY
+                vec3 skycolour = color;
+            #else
+                vec3 skycolour = mix(skycolour2, skycolour1, normalized.y);
+            #endif
+            vec3 cloudcolour = cloudtint * clamp((clouddark + cloudlight*c), 0.0, 1.0);
            
             f = cloudcover + cloudalpha*f*r;
             
-            vec3 result = mix(skycolour, clamp(skytint * skycolour + cloudcolour, 0.0, 1.0), clamp(f + c, 0.0, 1.0));
-            
-            float mix_amount = max(normalized.y, 0.0);
-            out_color = mix(out_color, vec4( result * 0.5, 1.0 ), mix_amount);
+            #ifdef CLOUDS_ALPHA
+                vec3 result = mix(skycolour, mix(skycolour, cloudcolour, 0.5), clamp(f + c, 0.0, 1.0));
+            #else
+                vec3 result = mix(skycolour, clamp(skytint * skycolour + cloudcolour, 0.0, 1.0), clamp(f + c, 0.0, 1.0));
+            #endif
+
+            #ifdef CLOUDS_BELOW_HORIZON
+                float mix_amount = max(-normalized.y, 0.0);
+            #else
+                float mix_amount = max(normalized.y, 0.0);
+            #endif
+            out_color = mix(out_color, vec4( result * 0.5, 1.0 ), mix_amount);  // Clouds
+            // out_color = vec4(vec3((old_uv.x > 0.0) == (old_uv.y > 0.0)), 1.0);  // Quadrants black/white
+            // out_color = vec4(vec3((int(floor(old_uv.x)) % 2 == 0) == (int(floor(old_uv.y)) % 2 == 0)), 1.0);  // Checkerboard
         #endif
 
         #if defined(WATERFALL_ARENA) && !defined(CAVE)
@@ -1300,6 +1360,7 @@ void main() {
         #endif
 
         #define shadow_tex_coords tc1
+        #ifndef NO_DETAIL_OBJECT_SHADOWS
             vec4 shadow_coords[4];
             shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
             shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
@@ -1310,6 +1371,9 @@ void main() {
                 shadow_tex.r *= ambient_mult;
             #endif
             shadow_tex.r *= CloudShadow(world_vert);
+        #else
+            vec3 shadow_tex = vec3(0.5f);
+        #endif
 
             vec3 ambient_cube_color[6];
             for(int i=0; i<6; ++i){
@@ -1329,7 +1393,7 @@ void main() {
 
             vec3 spec_color = vec3(0.0);
             
-            #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK)
+            #if defined(DAMP_FOG) || defined(RAINY) || defined(WET) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK) || defined(SHADOW_POINT_LIGHTS)
                 ambient_mult *= env_ambient_mult;
             #endif
 
@@ -1367,7 +1431,7 @@ void main() {
         #endif
 
             float haze_amount = GetHazeAmount(ws_vertex, haze_mult);
-            #if !defined(MISTY) && !defined(RAINY) && !defined(MISTY2) && !defined(WATER_HORIZON) && !defined(SKY_ARK) && !defined(WATERFALL_ARENA)
+            #if !defined(MISTY) && !defined(RAINY) && !defined(WET) && !defined(MISTY2) && !defined(WATER_HORIZON) && !defined(SKY_ARK) && !defined(WATERFALL_ARENA)
                 vec3 fog_color = textureLod(spec_cubemap,ws_vertex ,5.0).xyz;
             #else
                 vec3 fog_color = textureLod(spec_cubemap,ws_vertex ,3.0).xyz;
@@ -1638,7 +1702,7 @@ void main() {
             vec3 temp_scale;
             {
                 mat3 temp_mat = mat3(instances[instance_id].model_mat[0].xyz, instances[instance_id].model_mat[1].xyz, instances[instance_id].model_mat[2].xyz);
-                temp_mat = inverse(instances[instance_id].model_rotation_mat) * temp_mat;
+                temp_mat = model_rotation_mat_inv * temp_mat;
                 temp_scale = vec3(temp_mat[0][0], temp_mat[1][1], temp_mat[2][2]);
             }
         #endif
@@ -1729,7 +1793,7 @@ void main() {
             #elif defined(AXIS_UV)
                 normalmap = vec4(0.0);
                 if(detail_fade < 1.0){
-                    vec3 temp_pos = (inverse(instances[instance_id].model_mat) * vec4(world_vert, 1.0)).xyz;
+                    vec3 temp_pos = (model_mat_inv * vec4(world_vert, 1.0)).xyz;
                     temp_pos *= temp_scale;
 
                     vec2 temp_uv;
@@ -1820,7 +1884,7 @@ void main() {
         #elif defined(AXIS_UV)
             colormap = vec4(0.0);
             if(detail_fade < 1.0){
-                vec3 temp_pos = (inverse(instances[instance_id].model_mat) * vec4(world_vert, 1.0)).xyz;
+                vec3 temp_pos = (model_mat_inv * vec4(world_vert, 1.0)).xyz;
                 temp_pos *= temp_scale;
 
                 vec2 temp_uv;
@@ -2146,7 +2210,7 @@ void main() {
     float wet = 0.0;
     if(blood_texel.g < 1.0){
         wet = blood_texel.g;//pow(max(blood_texel.g-0.2, 0.0)/0.8, 0.5);
-        #ifdef RAINY
+        #if defined(RAINY) || defined(WET)
             wet = 1.0;
         #else
             colormap.xyz *= mix(1.0, 0.5, wet);
@@ -2637,16 +2701,18 @@ void main() {
             float fresnel = pow(glancing, 6.0) * mix(0.7, 1.0, blood_amount);
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;*/
-        #elif defined(METALNESS_PBR) || defined(ITEM) || defined(KEEP_SPEC) || defined(TERRAIN) || ((defined(RAINY) || defined(SWAMP) || defined(BEACH) || defined(WATER_HORIZON) || defined(WATERFALL_ARENA) || defined(VOLCANO) || defined(SKY_ARK) || defined(SNOW_EVERYWHERE) || defined(SNOW_EVERYWHERE2) || defined(SNOW_EVERYWHERE3) || defined(DAMP_FOG) || defined(SWAMP2)) && !defined(WATER))
-            #if defined(RAINY)
+        #elif defined(METALNESS_PBR) || defined(ITEM) || defined(KEEP_SPEC) || defined(TERRAIN) || ((defined(RAINY) || defined(WET) || defined(SWAMP) || defined(BEACH) || defined(WATER_HORIZON) || defined(WATERFALL_ARENA) || defined(VOLCANO) || defined(SKY_ARK) || defined(SNOW_EVERYWHERE) || defined(SNOW_EVERYWHERE2) || defined(SNOW_EVERYWHERE3) || defined(DAMP_FOG) || defined(SWAMP2)) && !defined(WATER))
+            #if defined(RAINY) || defined(WET)
                 #ifndef TERRAIN
                     roughness *= 0.3;
                 #else 
                     roughness *= mix(0.3, 1.0, min(1.0, length(ws_vertex)*0.1));
                 #endif
-                ws_normal.y *= 1.0+noise(world_vert.xz*33.0+vec2(time*10.0,0.0))*0.25;
-                ws_normal.y *= 1.0+noise(world_vert.xz*17.0+vec2(time*-10.0,time * 4.0))*0.2;
-                ws_normal = normalize(ws_normal);
+                #if defined(RAINY)
+                    ws_normal.y *= 1.0+noise(world_vert.xz*33.0+vec2(time*10.0,0.0))*0.25;
+                    ws_normal.y *= 1.0+noise(world_vert.xz*17.0+vec2(time*-10.0,time * 4.0))*0.2;
+                    ws_normal = normalize(ws_normal);
+                #endif
             #endif
             #ifdef BEACH
             if(world_vert.y < kBeachLevel ){
@@ -2852,7 +2918,7 @@ void main() {
             #endif
         #endif
 
-        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK)
+        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK) || defined(SHADOW_POINT_LIGHTS)
         ambient_mult *= env_ambient_mult;
         #endif
         CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult);
@@ -3053,13 +3119,16 @@ void main() {
         #if defined(VOLCANO)
             val = 5.0;
         #endif
-        #if defined(MISTY) || defined(RAINY) || defined(MISTY2) || defined(WATER_HORIZON) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+        #if defined(MISTY) || defined(RAINY) || defined(WET) || defined(MISTY2) || (defined(WATER_HORIZON) && !defined(ALT2)) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
             val = 3.0;
         #endif
         fog_color = textureLod(spec_cubemap, ws_vertex, val).xyz;
     } else {
         fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex * -1.0);
     }
+    #if defined(WATER_HORIZON) && defined(ALT2)
+        fog_color = mix(fog_color, vec3(1.0), max(0.0, min(1.0, length((cam_pos+ws_vertex).xz)/200.0-2)));
+    #endif
     #ifdef SNOW_EVERYWHERE2
     fog_color = vec3(1.0);
     #endif

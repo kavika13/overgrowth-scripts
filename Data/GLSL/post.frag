@@ -443,7 +443,11 @@ void main(void)
 #ifdef BRIGHTNESS
     for(int i=0; i<3; ++i){
         color[i] = pow(color[i], 1.7 - brightness * 0.7);
+#ifdef GAMMA_CORRECT_OUTPUT
+        color[i] = pow(color[i], 1/2.2);
+#endif
     }
+    
 #endif
     // 0.2 to 1.8
     //vec2 buf = vec2(screen_width, screen_height);
