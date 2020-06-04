@@ -146,10 +146,19 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
                     break;}
             #ifdef WATER
                 case decalWaterFroth: {
-                    const float fade_time = 2.0;
-                    float opac = max(decal.tint[0], min(1.0, (time - spawn_time)*3.0) * max(0.0, (spawn_time - time + fade_time)/fade_time));
-                    float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, 1.0-opac);
-                    roughness = max(1.0-mult, roughness);
+                    #ifdef DIRECTED_WATER_DECALS
+                        float mult = 1.0 - (max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0;
+                        mult *= decal.tint[0];
+
+                        vec2 color_tex_coord = vec2(temp.x * decal.scale.x * 0.1 + time * decal.tint[1], temp.z * decal.scale.z * 0.1);
+                        vec4 decal_color = texture(tex1, color_tex_coord);
+                        colormap.xyz = mix(colormap.xyz, decal_color.xyz * 0.1, mult);
+                    #else                    
+                        const float fade_time = 2.0;
+                        float opac = max(decal.tint[0], min(1.0, (time - spawn_time)*3.0) * max(0.0, (spawn_time - time + fade_time)/fade_time));
+                        float mult = mix((max(0.5, min(1.0, pow(length(temp*2.0), 1.0))) - 0.5) * 2.0, 1.0, 1.0-opac);
+                        roughness = max(1.0-mult, roughness);
+                    #endif
                     skip = true;}
                     break;
             #endif

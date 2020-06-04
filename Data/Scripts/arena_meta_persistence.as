@@ -189,6 +189,10 @@ class GlobalArenaData {
         ReloadJSON();
     }
 
+    SavedLevel@ GetSave() {
+        return save_file.GetSave(GetCurrCampaignID(),"challenge_level",level_name);
+    }
+
     void ReloadJSON()
     {
         dictionary filesAndRoots = 
@@ -724,7 +728,7 @@ class GlobalArenaData {
 
         // Make sure our current data has been written back to the JSON structure
         if( moveDataToStore ) {
-            Print("Writing data to profile\n");
+            Log(info, "Writing data to profile");
             writeDataToProfiles(); // This'll do nothing if we haven't set a profile
         }
 

@@ -12,15 +12,20 @@ uint32 display_text_id;
 string hotspot_image_string;
 bool menu_paused = false;
 bool allow_retry = true;
-int hotspot_message_text_id = -1;
+bool non_tutorial_message = false;
 string tutorial_message = "";
 string tutorial_message_display = "";
 float tutorial_opac = 0.0;
+bool tutorial_enable = false;
+float reset_time = -999.0f;
 
 array<string> dialogue_queue;
 
 Dialogue dialogue;
 IMGUI@ imGUI;
+
+string font_path = "Data/Fonts/Lato-Regular.ttf";
+string name_font_path = "Data/Fonts/edosz.ttf";
 
 class DialogueTextCanvas {
     string text;
@@ -86,11 +91,6 @@ void Init(string p_level_name) {
     @imGUI = CreateIMGUI();
     dialogue.Init();
 	imGUI.setup();
-    if( hotspot_message_text_id == -1 ) {
-        hotspot_message_text_id = level.CreateTextElement();
-        TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
-        text.Create(GetScreenWidth()-(GetScreenWidth()/16)*2, 200);
-    }
 }
 
 int HasCameraControl() {
@@ -106,18 +106,19 @@ void CharactersNoticeEachOther() {
     for(int i=0; i<num_chars; ++i){
          MovementObject@ char = ReadCharacter(i);
          char.ReceiveScriptMessage("set_omniscient true");
-         for(int j=i+1; j<num_chars; ++j){
-             MovementObject@ char2 = ReadCharacter(j);
-             //Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
-             char.ReceiveScriptMessage("notice " + char2.GetID());
-             char2.ReceiveScriptMessage("notice " + char.GetID());
-         }
      }
 }
 
 int GetDialogueCamRotY(){
     return int(dialogue.cam_rot.y+0.5);
 }
+
+float fade_out_start;
+float fade_out_end = -1.0f;
+
+float fade_in_start;
+float fade_in_end = -1.0f;
+
 
 void ReceiveMessage(string msg) {
     TokenIterator token_iter;
@@ -133,32 +134,31 @@ void ReceiveMessage(string msg) {
     } else if(token == "disable_retry"){
         allow_retry = false;
     } else if(token == "go_to_main_menu"){
-        LoadLevel("back");
+        LoadLevel("back_to_menu");
     } else if(token == "clearhud"){
 	    hotspot_image_string.resize(0);
 	} else if(token == "manual_reset"){
         level.SendMessage("reset");
     } else if(token == "reset"){
-        Print("Level script received \"reset\"\n");
+        Log(info,"Level script received \"reset\"");
         dialogue.Init();
         dialogue_queue.resize(0);
         tutorial_opac = 0.0;
         tutorial_message = "";
         tutorial_message_display = "";
         ResetLevel();
+        fade_in_start = the_time;
+        fade_in_end = the_time+0.4f;
+        reset_time = the_time;
+    } else if(token == "tutorial_enable"){
+        tutorial_enable = true;
     } else if(token == "displaytext"){
-        //if(has_display_text){
-        //    gui.RemoveGUI(display_hotspot_message_text_id);
-        //}
-        //display_hotspot_message_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
-        //token_iter.FindNextToken(msg);
-        //gui.Execute(display_hotspot_message_text_id,"SetText(\""+token_iter.GetToken(msg)+"\")");
-        
         has_display_text = true;
         token_iter.FindNextToken(msg);
         display_text = token_iter.GetToken(msg);
 
     } else if(token == "tutorial"){
+        non_tutorial_message = false;
         token_iter.FindNextToken(msg);
         string new_tutorial_message = msg.substr(9);
         if(tutorial_message != new_tutorial_message){
@@ -171,7 +171,20 @@ void ReceiveMessage(string msg) {
         } else {
             tutorial_opac = min(1.0, tutorial_opac+time_step);
         }
-        DebugText("tutorial_opac", "tutorial_opac: "+tutorial_opac, 0.5f);
+    }else if(token == "screen_message") {
+        non_tutorial_message = true;
+        token_iter.FindNextToken(msg);
+        string new_tutorial_message = msg.substr(15);
+        if(tutorial_message != new_tutorial_message){
+            tutorial_opac -= time_step;
+            if(tutorial_opac <= 0.0f){
+                tutorial_opac = 0.0f;
+                tutorial_message = new_tutorial_message;
+                AnalyzeForLineBreaks(tutorial_message, tutorial_message_display, int(GetScreenWidth() * 0.7));
+            }
+        } else {
+            tutorial_opac = min(1.0, tutorial_opac+time_step);
+        }
     }else if(token == "displaygui"){
         /*token_iter.FindNextToken(msg);
         gui_id = gui.AddGUI("displaygui_call",token_iter.GetToken(msg),220,250,0);
@@ -183,14 +196,28 @@ void ReceiveMessage(string msg) {
 		}
     } else if(token == "loadlevel"){
 		token_iter.FindNextToken(msg);
-        Print("Received loadlevel message: "+token_iter.GetToken(msg)+"\n");
+        Log(info,"Received loadlevel message: "+token_iter.GetToken(msg));
         LoadLevel(token_iter.GetToken(msg));
     } else if(token == "make_all_aware"){
         CharactersNoticeEachOther();
     } else if(token == "start_dialogue"){
 		token_iter.FindNextToken(msg);
         dialogue_queue.push_back(token_iter.GetToken(msg));
-        dialogue.UpdatedQueue();
+        if(fade_out_end == -1.0f){
+            dialogue.UpdatedQueue();
+        }
+    } else if(token == "start_dialogue_fade"){
+        token_iter.FindNextToken(msg);
+        dialogue_queue.push_back(token_iter.GetToken(msg));
+        if(reset_time < the_time - 0.1){
+            const float fade_time = 0.2f;
+            fade_out_start = the_time;
+            fade_out_end = the_time+fade_time;
+            fade_in_start = the_time+fade_time;
+            fade_in_end = the_time+fade_time*2.0f;
+        } else {
+            dialogue.UpdatedQueue(); // Don't fade if we are resetting            
+        }
     } else if(token == "open_menu") {
 		if(!has_gui){
 			toggle_gui = true;
@@ -218,69 +245,13 @@ void DrawGUI() {
     EnterTelemetryZone("dialogue.Display()");
     dialogue.Display();
     LeaveTelemetryZone();
-
-    /************************************/
-    if( has_display_text ) {
-        HUDImage @blackout_image = hud.AddImage();
-        blackout_image.SetImageFromPath("Data/Textures/diffuse_hud.tga");
-        blackout_image.position.y = GetScreenHeight()/2.0f-GetScreenHeight()/4.0f/2.0f;
-        blackout_image.position.x = 0.0f;
-        blackout_image.position.z = -2.0f;
-        blackout_image.scale = vec3(GetScreenWidth()/16.0f, GetScreenHeight()/16.0f/4.0f, 1.0f);
-        blackout_image.color = vec4(0.0f,0.0f,0.0f,0.4f);
-
-        int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
-    
-        TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
-        text.ClearTextCanvas();
-        string font_str = "Data/Fonts/arial.ttf";
-        TextStyle small_style;
-        small_style.SetAlignment(1);
-        small_style.font_face_id = GetFontFaceID(font_str, font_size);
-
-        // Draw speaker name to canvas
-        vec2 pen_pos = vec2(0,font_size);
-        text.SetPenPosition(pen_pos);
-        text.SetPenColor(255,255,255,160);
-        text.SetPenRotation(0.0f);
-    
-        // Draw dialogue text to canvas
-        text.SetPenColor(255,255,255,255);
-        text.SetPenPosition(pen_pos);
-
-        //uint len_in_bytes = GetLengthInBytesForNCodepoints(dialogue_text,uint(dialogue_text_disp_chars));
-        //string display_dialogue_text = dialogue_text.substr(0,int(len_in_bytes));
-        
-        text.AddTextMultiline(display_text, small_style, UINT32MAX);
-
-        // Draw text canvas to screen
-        text.UploadTextCanvasToTexture();
-
-       // TextMetrics metrics;
-
-       // text.GetTextMetrics(display_text, small_style, metrics, UINT32MAX);
-
-        HUDImage @text_image = hud.AddImage();
-        text_image.SetImageFromText(level.GetTextElement(hotspot_message_text_id)); 
-        text_image.position.x = GetScreenWidth()/16;//GetScreenWidth()/2.0f - (display_text.length()/2.0f)*8.0f;
-        text_image.position.y = GetScreenHeight()/2.0f-100;
-        text_image.position.z = 4;
-        text_image.color = vec4(1,1,1,1);
-
-    }
-
-    /**********************************/
-	if(has_gui){
-        EnterTelemetryZone("imGUI.render()");
-		imGUI.render();
-	}
     LeaveTelemetryZone();
 }
 
 
 void AnalyzeForLineBreaks(string &in input, string &out output, int space){
     int font_size = dialogue.GetFontSize();
-    TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, input);
+    TextMetrics metrics = GetTextAtlasMetrics(font_path, font_size, 0, input);
     float threshold = GetScreenWidth() - kTextLeftMargin - font_size - kTextRightMargin;
     string final;
     string first_line = input;
@@ -290,12 +261,12 @@ void AnalyzeForLineBreaks(string &in input, string &out output, int space){
             int last_space = first_line.findLastOf(" ");
             second_line.insert(0, first_line.substr(last_space));
             first_line.resize(last_space);
-            metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+            metrics = GetTextAtlasMetrics(font_path, font_size, 0, first_line);
         }
         final += first_line + "\n";
         first_line = second_line.substr(1);
         second_line = "";
-        metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+        metrics = GetTextAtlasMetrics(font_path, font_size, 0, first_line);
     }
     output = final.substr(0, final.length()-1);
 }
@@ -307,23 +278,76 @@ void DrawGUI2() {
     dialogue.Display2();
     LeaveTelemetryZone();
 
-    if(dialogue.has_cam_control){
-        tutorial_message_display = "";
-    }
-    if( tutorial_message_display != "" && tutorial_opac > 0.0f && !dialogue.has_cam_control) {
-        int font_size = dialogue.GetFontSize();
+    if(tutorial_enable && !MediaMode()){
+        if(dialogue.has_cam_control){
+            tutorial_opac = 0.0;
+        }
+        //DebugText("tutorial_opac","tutorial_opac: "+tutorial_opac, 0.5f);
+        //DebugText("tutorial_message_display", "tutorial_message_display: "+tutorial_message_display, 0.5f);
+        if( tutorial_message_display != "" && tutorial_opac > 0.0f && !dialogue.has_cam_control) {
+            int font_size = dialogue.GetFontSize();
 
-        vec2 pos(GetScreenWidth() *0.5, GetScreenHeight() *0.2);
-        TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, tutorial_message_display);
-        pos.x -= metrics.bounds_x * 0.5;
-        DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, tutorial_message_display, 
-                      int(pos.x+2), int(pos.y+2), vec4(vec3(0.0f), tutorial_opac * 0.5));
-        DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, tutorial_message_display, 
-                      int(pos.x), int(pos.y), vec4(vec3(1.0f), tutorial_opac));
-        LeaveTelemetryZone();
+            vec2 pos(GetScreenWidth() *0.5, GetScreenHeight() *0.2);
+            TextMetrics metrics = GetTextAtlasMetrics(font_path, font_size, 0, tutorial_message_display);
+            pos.x -= metrics.bounds_x * 0.5;
+            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display, 
+                          int(pos.x+2), int(pos.y+2), vec4(vec3(0.0f), tutorial_opac * 0.5));
+            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display, 
+                          int(pos.x), int(pos.y), vec4(vec3(1.0f), tutorial_opac));
+        }
     }
-    
+
+    if( has_display_text && !MediaMode() ) {
+        int font_size = dialogue.GetFontSize();
+        vec2 pos(GetScreenWidth() *0.5, GetScreenHeight() *0.2);
+        TextMetrics metrics = GetTextAtlasMetrics(font_path, font_size, 0, display_text);
+        pos.x -= metrics.bounds_x * 0.5;
+        DrawTextAtlas(font_path, font_size, 0, display_text, 
+                      int(pos.x+2), int(pos.y+2), vec4(vec3(0.0f), 0.5));
+        DrawTextAtlas(font_path, font_size, 0, display_text, 
+                      int(pos.x), int(pos.y), vec4(vec3(1.0f), 1.0));
+    }    
+
+    if(level.WaitingForInput()){
+        fade_in_start = the_time;
+        fade_in_end = the_time + 0.2;
+    }
+
+    if(fade_out_end != -1.0f){        
+        float blackout_amount = min(1.0, 1.0 - ((fade_out_end - the_time) / (fade_out_end - fade_out_start)));
+        HUDImage @blackout_image = hud.AddImage();
+        blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
+        blackout_image.position.y = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+        blackout_image.position.x = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+        blackout_image.position.z = -2.0f;
+        blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight())*2.0f;
+        blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
+        if(fade_out_end <= the_time){
+            dialogue.UpdatedQueue();
+            fade_out_end = -1.0f;
+        }
+    } else if(fade_in_end != -1.0f){        
+        float blackout_amount = min(1.0, ((fade_in_end - the_time) / (fade_in_end - fade_in_start)));
+        HUDImage @blackout_image = hud.AddImage();
+        blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
+        blackout_image.position.y = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+        blackout_image.position.x = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+        blackout_image.position.z = -2.0f;
+        blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight())*2.0f;
+        blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
+        if(fade_in_end <= the_time){
+            fade_in_end = -1.0f;
+        }
+    }
 }
+
+void DrawGUI3() {
+    if(has_gui){
+        EnterTelemetryZone("imGUI.render()");
+        imGUI.render();
+    }
+}
+
 
 void Update(int paused) {
     const bool kDialogueQueueDebug = false;
@@ -395,9 +419,13 @@ void Update(int paused) {
 		}
     }
 
+    if( non_tutorial_message == false && tutorial_message.length() > 0 && GetConfigValueBool("tutorials") == false ) {
+        level.SendMessage("tutorial");
+    }
+
     if(paused == 0){
         if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
-            Print("Reset key pressed\n");
+            Log(info,"Reset key pressed");
             level.SendMessage("manual_reset");
         }
 
@@ -491,7 +519,7 @@ void HotspotExit(string str, MovementObject @mo) {
 JSON getArenaSpawns() {
     JSON testValue;
 
-    Print("Starting getArenaSpawns\n");
+    Log(info,"Starting getArenaSpawns");
 
     JSONValue jsonArray( JSONarrayValue );
 
@@ -519,7 +547,7 @@ JSON getArenaSpawns() {
 
     testValue.getRoot() = jsonArray;
 
-    Print("Done getArenaSpawns\n");
+    Log(info,"Done getArenaSpawns");
 
     return testValue;
 
@@ -528,8 +556,6 @@ JSON getArenaSpawns() {
 void SetWindowDimensions(int w, int h)
 {
     dialogue.ResizeUpdate(w,h);
-    TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
-    text.Create(w-(w/16)*2, 200);
 	imGUI.doScreenResize();
 }
 
@@ -594,13 +620,13 @@ void AddPauseMenu(){
 
     buttons_holder.setAlignment(CACenter, CACenter);
     mainDiv.append(buttons_holder);
-    AddButton("Continue", buttons_holder, 125);
-    AddButton("Retry", buttons_holder, 125);
-    AddButton("Settings", buttons_holder, 125);
+    AddButton("Continue", buttons_holder, 30, forward_chevron);
+    AddButton("Retry", buttons_holder, 30, retry_icon);
+    AddButton("Settings", buttons_holder, 30, settings_icon);
 	if(EditorEnabled()){
-		AddButton("Media Mode", buttons_holder, 125);
+		AddButton("Media Mode", buttons_holder, 30, media_icon);
 	}
-    AddButton("Main Menu", buttons_holder, 125);
+    AddButton("Main Menu", buttons_holder, 30, exit_icon);
 	
 	buttons_holder.append(IMSpacer(DOVertical, 100.0f));
 	imGUI.getMain().setElement(@background_container);

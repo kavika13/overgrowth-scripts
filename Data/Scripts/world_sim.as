@@ -73,7 +73,7 @@ void Update() {
                 if(obj.GetType() == _placeholder_object){
                     ScriptParams@ params = obj.GetScriptParams();
                     if(params.GetString("type") == "town_spawn"){
-                        Print("Town selected with ID: "+object_ids[i]+"\n");
+                        Log(info,"Town selected with ID: "+object_ids[i]);
                     }
                 }
             }
@@ -162,7 +162,7 @@ void SetupSim(){
     
     int num_city_markers = city_markers.size();
     towns.resize(num_city_markers);
-    Print("Num city markers: "+num_city_markers+"\n");
+    Log(info,"Num city markers: "+num_city_markers);
     for(int i=0; i<num_city_markers; ++i){
         int city_marker_id = city_markers[i];
         Object@ city_marker = ReadObjectFromID(city_marker_id);

@@ -1,8 +1,53 @@
 int dialogue_text_billboard_id;
+bool ready_to_skip = false;
 
 const float MPI = 3.14159265359;
 
 enum ProcessStringType { kInGame, kInEditor };
+
+class NameInfo {
+    NameInfo(){}
+
+    NameInfo(string _name, vec3 _color, int _voice) {
+        name = _name;
+        color = _color;
+        voice = _voice;
+    }
+
+    string name;
+    vec3 color;
+    int voice;
+}
+
+array<NameInfo> name_info;
+
+bool NameInfoExists(string name) {
+    for( uint i = 0; i < name_info.size(); i++ ) {
+        if( name_info[i].name == name ) {
+            return true;
+        }
+    }
+    return false;
+}
+
+NameInfo GetNameInfo(string name) {
+    for( uint i = 0; i < name_info.size(); i++ ) {
+        if( name_info[i].name == name ) {
+            return name_info[i];
+        }
+    }
+    return NameInfo();
+}
+
+void AddNameInfo(NameInfo ni)  {
+    for( uint i = 0; i < name_info.size(); i++ ) {
+        if( name_info[i].name == ni.name ) {
+            name_info.removeAt(i);
+            break;
+        }
+    }
+    name_info.insertLast(ni);
+}
 
 // What actions can be triggered from a dialogue script line
 enum ObjCommands {
@@ -25,7 +70,8 @@ enum ObjCommands {
     kWaitForClick,
     kSetCamControl,
     kSetAnimation,
-    kSay
+    kSay,
+    kFadeToBlack
 };
 
 class ScriptElement {
@@ -62,6 +108,9 @@ const int kMaxParticipants = 16;
 const float kTextLeftMargin = 100;
 const float kTextRightMargin = 100;
 
+int voice_preview = 0;
+float voice_preview_time = -100;
+
 class Dialogue {
     // Contains information from undo/redo
     string history_str;
@@ -75,8 +124,6 @@ class Dialogue {
 
     int index; // which dialogue element is being executed
     int sub_index;
-    int text_id = -1; // ID for dialogue text canvas texture
-    int text_id_position_x = 50;
     bool has_cam_control;
     bool show_dialogue;
     bool waiting_for_dialogue;
@@ -90,6 +137,11 @@ class Dialogue {
     int old_font_size;
     float speak_sound_time;
     int active_char;
+
+    float fade_start;
+    float fade_end;
+
+    bool queue_skip;
 
     vec3 cam_pos;
     vec3 cam_rot;
@@ -130,13 +182,13 @@ class Dialogue {
             Object @obj = ReadObjectFromID(object_ids[i]);
             ScriptParams@ params = obj.GetScriptParams();
             if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("DisplayName") && params.GetString("DisplayName") == name){
+                camera.SetDOF(0,0,0, 0,0,0);
                 SetDialogueObjID(object_ids[i]);
                 Play();
                 clear_on_complete = true;
             }
         }
         speak_sound_time = 0.0;
-        camera.SetDOF(0,0,0, 0,0,0);
     }
 
     void NotifyDeleted(int id){
@@ -251,7 +303,7 @@ class Dialogue {
     }
 
     void ClearEditor() {
-        Print("Clearing editor\n");        
+        Log(info,"Clearing editor");        
         if(dialogue_obj_id != -1){
             ClearSpawnedObjects();
         }
@@ -263,6 +315,8 @@ class Dialogue {
         dialogue_colors.resize(0);
         dialogue_voices.resize(0);
         active_char = 0;
+        queue_skip = false;
+        ready_to_skip = false;
         
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
@@ -272,8 +326,6 @@ class Dialogue {
     }
 
     void ResizeUpdate( int w, int h ) {
-        TextCanvasTexture @text = level.GetTextElement(text_id);
-        text.Create(w-text_id_position_x*2, 200);
     }
 
     void Init() {
@@ -284,24 +336,28 @@ class Dialogue {
         index = 0;
         sub_index = -1;
         init_time = the_time;
-
-        if( text_id == -1 ) {
-            text_id = level.CreateTextElement();
-        }
+        fade_end = -1.0;
 
         ResizeUpdate(GetScreenWidth(),GetScreenHeight());
 
-        TextCanvasTexture @text = level.GetTextElement(text_id);
         has_cam_control = false;
         show_dialogue = false;
         show_editor_info = true;
         waiting_for_dialogue = false;
+        if(level.GetScriptParams().HasParam("Dialogue Colors")){            
+            LoadNameInfo(level.GetScriptParams().GetString("Dialogue Colors"));
+        }
     }
 
     int GetActiveVoice() {
         int voice = 0;
-        if(int(dialogue_voices.size()) > active_char){
+        if(NameInfoExists(dialogue_name)){
+            voice = GetNameInfo(dialogue_name).voice;
+        } else if(int(dialogue_voices.size()) > active_char){
             voice = dialogue_voices[active_char];
+        }
+        if(voice_preview_time > the_time){
+            voice = voice_preview;
         }
         return voice;
     }
@@ -313,20 +369,20 @@ class Dialogue {
             case 2: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_fabric_choke_move.xml"); break;
             case 3: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_light_dirtyrock_run.xml"); break;
             case 4: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_leather_choke_move.xml"); break;
-            case 5: PlaySoundGroup("Data/Sounds/grass_foley/bf_grass_medium.xml"); break;
+            case 5: PlaySoundGroup("Data/Sounds/grass_foley/bf_grass_medium.xml", 0.5); break;
             case 6: PlaySoundGroup("Data/Sounds/gravel_foley/fs_light_gravel_run.xml"); break;
-            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_run.xml"); break;
-            case 8: PlaySoundGroup("Data/Sounds/snow_foley/bf_snow_light.xml"); break;
-            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_run.xml"); break;
-            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_run.xml"); break;
-            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_run.xml"); break;
-            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_run.xml"); break;
-            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_run.xml"); break;
-            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_run.xml"); break;
-            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_run.xml"); break;
-            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_jump.xml"); break;
-            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_jump.xml"); break;
-            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_run.xml"); break;
+            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_run.xml", 0.7); break;
+            case 8: PlaySoundGroup("Data/Sounds/snow_foley/bf_snow_light.xml", 0.5); break;
+            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_run.xml", 0.4); break;
+            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_run.xml", 0.4); break;
+            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_run.xml", 0.5); break;
+            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_run.xml", 0.4); break;
+            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_run.xml", 0.5); break;
+            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_run.xml", 0.3); break;
+            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_run.xml", 0.3); break;
+            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_jump.xml", 0.3); break;
+            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_jump.xml", 0.3); break;
+            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_run.xml", 0.3); break;
         }
     }
 
@@ -337,20 +393,20 @@ class Dialogue {
             case 2: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_fabric_crouchwalk.xml"); break;
             case 3: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_light_dirtyrock_crouchwalk.xml"); break;
             case 4: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_leather_crouchwalk.xml"); break;
-            case 5: PlaySoundGroup("Data/Sounds/grass_foley/fs_light_grass_run.xml"); break;
+            case 5: PlaySoundGroup("Data/Sounds/grass_foley/fs_light_grass_run.xml", 0.5); break;
             case 6: PlaySoundGroup("Data/Sounds/gravel_foley/fs_light_gravel_crouchwalk.xml"); break;
-            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_crouchwalk.xml"); break;
-            case 8: PlaySoundGroup("Data/Sounds/snow_foley/fs_light_snow_run.xml"); break;
-            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_crouchwalk.xml"); break;
-            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_walk.xml"); break;
-            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_walk.xml"); break;
-            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_walk.xml"); break;
-            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_walk.xml"); break;
-            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_walk.xml"); break;
-            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_walk.xml"); break;
-            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_run.xml"); break;
-            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_crouchwalk.xml"); break;
-            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_walk.xml"); break;
+            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_crouchwalk.xml", 0.7); break;
+            case 8: PlaySoundGroup("Data/Sounds/snow_foley/fs_light_snow_run.xml", 0.5); break;
+            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_crouchwalk.xml", 0.4); break;
+            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_walk.xml", 0.4); break;
+            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_walk.xml", 0.5); break;
+            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_walk.xml", 0.4); break;
+            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_walk.xml", 0.5); break;
+            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_walk.xml", 0.3); break;
+            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_walk.xml", 0.3); break;
+            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_run.xml", 0.3); break;
+            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_crouchwalk.xml", 0.3); break;
+            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_walk.xml", 0.3); break;
         }
     }
 
@@ -396,6 +452,9 @@ class Dialogue {
             break;
         case kSetAnimation:
             str = "send_character_message "+params[0]+" \"set_animation \\\""+params[1]+"\\\"\"";
+            break;
+        case kFadeToBlack:
+            str = "fade_to_black "+params[0];
             break;
         case kDialogueVisible:
             str = "set_dialogue_visible "+params[0];
@@ -625,7 +684,7 @@ class Dialogue {
                 ScriptParams @params = obj.GetScriptParams();
 
                 if(!params.HasParam("NumParticipants") || !params.HasParam("Dialogue")){
-                    Print("Selected dialogue object does not have the necessary parameters (id "+id+")\n");
+                    Log(info,"Selected dialogue object does not have the necessary parameters (id "+id+")");
                 } else {
                     if(!params.HasParam("Script")){
             			if(params.GetString("Dialogue") == "empty" || !LoadScriptFile(params.GetString("Dialogue"))) {
@@ -687,8 +746,61 @@ class Dialogue {
         }
     }
 
+    bool LoadNameInfo(const string &in path) {
+        Print("Attempting to load file: \""+path+"\" ...\n");
+        if(!LoadFile(path)){
+            Print("Failed\n");
+            return false;
+        } else {
+            TokenIterator token_iter;
+            Print("Success\n");
+            strings.resize(0);
+            string new_str;
+            vec3 color;
+            int voice;
+            while(true){
+                new_str = GetFileLine();
+                Print(new_str+"\n");
+                token_iter.Init();
+                if(token_iter.FindNextToken(new_str)){
+                    string name = token_iter.GetToken(new_str);
+                    Print("Name: "+name+"\n");
+                    if(token_iter.FindNextToken(new_str) && 
+                       token_iter.GetToken(new_str) == "color" && 
+                       token_iter.FindNextToken(new_str))
+                    {
+                        color[0] = atof(token_iter.GetToken(new_str));
+                        if(token_iter.FindNextToken(new_str)){
+                            color[1] = atof(token_iter.GetToken(new_str));
+                            if(token_iter.FindNextToken(new_str)){
+                                color[2] = atof(token_iter.GetToken(new_str));
+                                Print("Color: "+color+"\n");
+                                if(token_iter.FindNextToken(new_str) && 
+                                   token_iter.GetToken(new_str) == "voice" && 
+                                   token_iter.FindNextToken(new_str))
+                                {
+                                    voice = atoi(token_iter.GetToken(new_str));
+                                    Print("Voice: "+voice+"\n");
+                                    AddNameInfo(NameInfo(name,color,voice));
+                                }
+                            }
+                        }
+                    }
+                }
+                if(new_str == "end"){
+                    break;
+                }
+            }
+            Print("Done\n");
+            return true;
+        }
+    }
+
     bool SkipKeyDown() {
-        if(GetInputDown(0, "keypadenter") || GetInputDown(0, "return")){
+        if(!ready_to_skip || queue_skip){
+            return false;
+        }
+        if(GetInputDown(controller_id, "skip_dialogue") || GetInputDown(controller_id, "keypadenter")){
             return true;
         } else {
             return false;
@@ -725,7 +837,7 @@ class Dialogue {
                 if(skip_dialogue){
                     stop = false;
                 }
-                if(SkipKeyDown()){
+                if(queue_skip){
                     stop = false;
                 }
                 if(sub_index == -1){
@@ -751,7 +863,7 @@ class Dialogue {
     }
 
     void SaveToFile(const string &in path) {
-        Print("Save to file: "+path+"\n");
+        Log(info,"Save to file: "+path);
         int num_strings = strings.size();
         StartWriteFile();
         for(int i=0; i<num_strings; ++i){
@@ -803,6 +915,16 @@ class Dialogue {
         return last_wait;
     }
 
+    int GetNextWait(int line) {
+        int last_wait = -1;
+        for(int j=line, len=strings.size(); j<len; ++j){
+            if(strings[j].obj_command == kWaitForClick || strings[j].obj_command == kSay){
+                last_wait = j;
+            }
+        }
+        return last_wait;
+    }
+
     bool IsRecording() {
         if(selected_line > 0 && selected_line < int(strings.size())){
             return strings[selected_line].obj_command == kSay;
@@ -812,6 +934,10 @@ class Dialogue {
     }
 
     void Update() {     
+        if(fade_out_end != -1.0){
+            return;
+        }
+
         EnterTelemetryZone("Dialogue Update");
         if(history_str != ""){
             LoadHistoryStr();
@@ -840,11 +966,21 @@ class Dialogue {
             }
         }
 
+        if(level.WaitingForInput()){
+            dialogue_text_disp_chars = 0.0f;
+            speak_sound_time = the_time + 0.1f;
+            line_start_time = 0.0f;
+            ready_to_skip = false; 
+        } else if(the_time - start_time > 0.1f && !GetInputDown(controller_id, "skip_dialogue") && !GetInputDown(controller_id, "keypadenter")){
+            ready_to_skip = true;
+        }
+
         // Progress dialogue one character at a time
-        if(waiting_for_dialogue){
-            dialogue_text_disp_chars += time_step * 40.0f;
+        if(waiting_for_dialogue && index != 0){
+            float step = time_step * 40.0f / GetConfigValueFloat("global_time_scale_mult");
+            dialogue_text_disp_chars += step;
             if(GetInputDown(controller_id, "attack")){
-                dialogue_text_disp_chars += time_step * 40.0f;                
+                dialogue_text_disp_chars += step;                
             }
             // Continue dialogue script if we have displayed all the text that we are waiting for
             if(uint32(dialogue_text_disp_chars) >= dialogue_text.length()){
@@ -853,8 +989,13 @@ class Dialogue {
             }
             if(speak_sound_time < the_time && has_cam_control){
                 PlayLineContinueSound();
-                speak_sound_time = the_time + 0.1;
+                speak_sound_time = the_time + 0.1 * GetConfigValueFloat("global_time_scale_mult");
             }
+        }
+
+        if(voice_preview_time > the_time && speak_sound_time < the_time){
+            PlayLineContinueSound();
+            speak_sound_time = the_time + 0.1;
         }
 
         // Continue dialogue script if waiting time has completed
@@ -869,8 +1010,16 @@ class Dialogue {
             }
         }
 
-        if(SkipKeyDown() && dialogue_obj_id != -1){
+        if(queue_skip && dialogue_obj_id != -1){
             Play();   
+        }
+
+        if(SkipKeyDown() && dialogue_obj_id != -1){
+            fade_out_start = the_time;
+            fade_out_end = the_time + 0.1f;
+            fade_in_start = the_time + 0.1f;
+            fade_in_end = the_time + 0.2f;
+            queue_skip = true;
             PlayLineStartSound();
         }
         if(GetInputPressed(controller_id, "attack") && start_time != the_time){
@@ -884,7 +1033,16 @@ class Dialogue {
                         Play();   
                     }
                 } else if(line_start_time < the_time - 0.5){
-                    Play(); 
+                    if(GetNextWait(index+1) != -1){
+                        Play(); 
+                    } else {
+                        fade_out_start = the_time;
+                        fade_out_end = the_time + 0.1f;
+                        fade_in_start = the_time + 0.1f;
+                        fade_in_end = the_time + 0.2f;
+                        queue_skip = true;
+                        PlayLineStartSound();                        
+                    }
                 }  else {
                     line_start_time = -1.0;
                 }
@@ -1131,6 +1289,14 @@ class Dialogue {
                 token_iter.FindNextToken(msg);
                 se.params[i] = token_iter.GetToken(msg);
             }
+        } else if(token == "fade_to_black"){
+            se.obj_command = kFadeToBlack;
+            const int kNumParams = 1;
+            se.params.resize(kNumParams);            
+            for(int i=0; i<kNumParams; ++i){
+                token_iter.FindNextToken(msg);
+                se.params[i] = token_iter.GetToken(msg);
+            }
         } else if(token == "set_character_pos"){
             se.obj_command = kCharacter;
             const int kNumParams = 5;
@@ -1224,12 +1390,12 @@ class Dialogue {
         Object@ obj = ReadObjectFromID(dialogue_obj_id);
         ScriptParams@ params = obj.GetScriptParams();
         if(!params.HasParam("obj_"+id)){
-            Print("Error: Dialogue object "+dialogue_obj_id+" does not have parameter \""+"obj_"+id+"\"\n");
+            Log(info, "Error: Dialogue object "+dialogue_obj_id+" does not have parameter \""+"obj_"+id+"\"");
             return -1;
         }
         int connector_id = params.GetInt("obj_"+id);
         if(!ObjectExists(connector_id)){
-            Print("Error: Connector does not exist\n");
+            Log(info,"Error: Connector does not exist");
             return -1;
         }
         Object@ connector_obj = ReadObjectFromID(connector_id);
@@ -1385,7 +1551,7 @@ class Dialogue {
     }
 
     void AnalyzeForLineBreaks(string &inout str){
-        TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", GetFontSize(), 0, dialogue_text);
+        TextMetrics metrics = GetTextAtlasMetrics(font_path, GetFontSize(), 0, dialogue_text);
         int font_size = GetFontSize();
         float threshold = GetScreenWidth() - kTextLeftMargin - font_size - kTextRightMargin;
         string final;
@@ -1396,7 +1562,7 @@ class Dialogue {
                 int last_space = first_line.findLastOf(" ");
                 second_line.insert(0, first_line.substr(last_space));
                 first_line.resize(last_space);
-                metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+                metrics = GetTextAtlasMetrics(font_path, font_size, 0, first_line);
             }
             final += first_line + "\n";
             if(second_line.length() > 0){
@@ -1405,7 +1571,7 @@ class Dialogue {
             } else {
                 first_line = "";
             }
-            metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+            metrics = GetTextAtlasMetrics(font_path, font_size, 0, first_line);
         }
         dialogue_text = final.substr(0, final.length()-1);
     }
@@ -1510,6 +1676,10 @@ class Dialogue {
                 wait_time = atof(script_element.params[0]);
             }
             return true;
+        case kFadeToBlack:
+            fade_start = the_time;
+            fade_end = the_time + atof(script_element.params[0]);
+            break;
         case kDialogueVisible:
             if(script_element.params[0] == "true"){
                 show_dialogue = true;
@@ -1639,25 +1809,15 @@ class Dialogue {
                 Object @obj = ReadObjectFromID(dialogue_obj_id);
                 ScriptParams@ params = obj.GetScriptParams();
                 int num_participants = min(kMaxParticipants, params.GetInt("NumParticipants"));
-                Print("make_participants_aware\n");
+                Log(info,"make_participants_aware");
                 for(int i=0; i<num_participants; ++i){
                     int id_a = GetDialogueCharID(i+1);
                     if(id_a != -1){
-                        Print("id_a: "+id_a+"\n");
+                        Log(info,"id_a: "+id_a);
                         if( MovementObjectExists(id_a) ){
                             MovementObject@ mo_a = ReadCharacterID(id_a);
-                            for(int j=i+1; j<num_participants; ++j){
-                                int id_b = GetDialogueCharID(j+1);
-                                if(id_b != -1){
-                                    Print("id_b: "+id_b+"\n");
-                                    if( MovementObjectExists(id_a) ) {
-                                        MovementObject@ mo_b = ReadCharacterID(id_b);
-                                        mo_a.ReceiveScriptMessage("notice "+id_b);
-                                        mo_b.ReceiveScriptMessage("notice "+id_a);
-                                    } else {
-                                        Log(error, "Unable to handle " + script_element.str + " object id: " + id_b + " is invalid" );
-                                    }
-                                }
+                            if(!mo_a.controlled){
+                                mo_a.ReceiveScriptMessage("set_omniscient true");
                             }
                         } else {
                             Log(error, "Unable to handle " + script_element.str + " object id: " + id_a + " is invalid" );
@@ -1865,71 +2025,71 @@ class Dialogue {
         if(MediaMode()){
             return;
         }
+
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             int font_size = GetFontSize();
             EnterTelemetryZone("Draw text background");
-            {
-                HUDImage @blackout_image = hud.AddImage();
-                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg.png");
-                float height_scale = 1.0/75.0;
-                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
-                blackout_image.position.x = GetScreenWidth()*0.2;
-                blackout_image.position.z = -2.0f;
-                blackout_image.scale = vec3(GetScreenWidth()/32.0f*0.6, font_size * height_scale, 1.0f);
-                vec3 color = vec3(1.0);
-                if(int(dialogue_colors.size()) > active_char){
-                    color = dialogue_colors[active_char];
-                }
-                blackout_image.color = vec4(color,0.7f);
+            vec3 color = vec3(1.0);
+            if(NameInfoExists(dialogue_name)){
+                color = GetNameInfo(dialogue_name).color;
+            } else if(int(dialogue_colors.size()) > active_char){
+                color = dialogue_colors[active_char];
             }
-
-            {
+            if(fade_end != -1.0){        
+                float blackout_amount = 1.0 - ((fade_end - the_time) / (fade_end - fade_start));
                 HUDImage @blackout_image = hud.AddImage();
-                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade.png");
+                blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
+                blackout_image.position.y = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+                blackout_image.position.x = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+                blackout_image.position.z = -2.0f;
+                blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight())*2.0f;
+                blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
+            } else {
                 float height_scale = 1.0/75.0;
-                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
-                blackout_image.position.z = -2.0f;
-                blackout_image.scale = vec3(GetScreenWidth()/32.0f*0.6, font_size * height_scale, 1.0f);
-                float width_scale = GetScreenWidth()/2500.0;
-                blackout_image.position.x = GetScreenWidth()*0.2-512*width_scale;
-                blackout_image.scale = vec3(width_scale, font_size * height_scale, 1.0f);
-                vec3 color = vec3(1.0);
-                if(int(dialogue_colors.size()) > active_char){
-                    color = dialogue_colors[active_char];
+                float vert_size = (font_size * 6.8) / 512.0;
+                {
+                    HUDImage @blackout_image = hud.AddImage();
+                    blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg.png");
+                    blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                    blackout_image.position.x = GetScreenWidth()*0.2;
+                    blackout_image.position.z = -2.0f;
+                    blackout_image.scale = vec3(GetScreenWidth()/32.0f*0.6, vert_size, 1.0f);
+                    blackout_image.color = vec4(color,0.7f);
                 }
-                blackout_image.color = vec4(color,0.7f);
-            }
 
-            {
-                HUDImage @blackout_image = hud.AddImage();
-                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade_reverse.png");
-                float height_scale = 1.0/75.0;
-                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
-                blackout_image.position.z = -2.0f;
-                float width_scale = GetScreenWidth()/2500.0;
-                blackout_image.position.x = GetScreenWidth()*0.8;
-                blackout_image.scale = vec3(width_scale, font_size * height_scale, 1.0f);
-                vec3 color = vec3(1.0);
-                if(int(dialogue_colors.size()) > active_char){
-                    color = dialogue_colors[active_char];
+                {
+                    HUDImage @blackout_image = hud.AddImage();
+                    blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade.png");
+                    blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                    blackout_image.position.z = -2.0f;
+                    float width_scale = GetScreenWidth()/2500.0;
+                    blackout_image.position.x = GetScreenWidth()*0.2-512*width_scale;
+                    blackout_image.scale = vec3(width_scale, vert_size, 1.0f);
+                    blackout_image.color = vec4(color,0.7f);
                 }
-                blackout_image.color = vec4(color,0.7f);
-            }
 
-            {
-                HUDImage @blackout_image = hud.AddImage();
-                TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/edosz.ttf", int(GetFontSize()*1.8), kSmallLowercase, dialogue_name);
-        
-                blackout_image.SetImageFromPath("Data/Textures/ui/menus/main/brushStroke.png");
-                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * 1.5;
-                blackout_image.position.x = kTextLeftMargin - font_size * 2;
-                blackout_image.position.z = -2.0f;
-                blackout_image.scale = vec3((metrics.bounds_x+font_size*4)/768.0, font_size/40.0, 1.0f);
-                vec3 color = vec3(0.15);
-                /*if(int(dialogue_colors.size()) > active_char){
-                    color = dialogue_colors[active_char];
-                }*/
-                blackout_image.color = vec4(color,1.0f);
+                {
+                    HUDImage @blackout_image = hud.AddImage();
+                    blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade_reverse.png");
+                    blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                    blackout_image.position.z = -2.0f;
+                    float width_scale = GetScreenWidth()/2500.0;
+                    blackout_image.position.x = GetScreenWidth()*0.8;
+                    blackout_image.scale = vec3(width_scale, vert_size, 1.0f);
+                    blackout_image.color = vec4(color,0.7f);
+                }
+
+                {
+                    HUDImage @blackout_image = hud.AddImage();
+                    TextMetrics metrics = GetTextAtlasMetrics(name_font_path, int(GetFontSize()*1.8), kSmallLowercase, dialogue_name);
+            
+                    blackout_image.SetImageFromPath("Data/Textures/ui/menus/main/brushStroke.png");
+                    blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * 1.5;
+                    blackout_image.position.x = kTextLeftMargin - font_size * 2;
+                    blackout_image.position.z = -2.0f;
+                    blackout_image.scale = vec3((metrics.bounds_x+font_size*4)/768.0, font_size/40.0, 1.0f);
+                    blackout_image.color = vec4(vec3(0.15),1.0f);
+                }
             }
             LeaveTelemetryZone();
         }
@@ -1957,6 +2117,13 @@ class Dialogue {
                             ReceiveMessage("load_dialogue_pose \""+path+"\"");
                         }
                     }
+                    if(ImGui_BeginMenu("Preview Voice")){
+                        if(ImGui_DragInt("Voice", voice_preview, 0.1, 0, 18)){
+                            voice_preview_time = the_time + 1.0;
+                            PlayLineStartSound();
+                        }
+                        ImGui_EndMenu();
+                    }
                     ImGui_EndMenu();
                 }
                 ImGui_EndMenuBar();
@@ -1971,7 +2138,7 @@ class Dialogue {
                 if(ImGui_InputTextMultiline("##TEST", vec2(-1.0, -1.0))){
                     ClearSpawnedObjects();
                     UpdateStringsFromScript(ImGui_GetTextBuf());
-                    Print("Test\n");
+                    Log(info,"Test");
                     AddInvisibleStrings();
                     SaveScriptToParams();
                 }
@@ -2020,6 +2187,10 @@ class Dialogue {
         // Draw actual dialogue text
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             EnterTelemetryZone("Draw actual dialogue text");
+            bool use_keyboard = (max(last_mouse_event_time, last_keyboard_event_time) > last_controller_event_time);
+            string continue_string = (use_keyboard?"left mouse button":GetStringDescriptionForBinding("xbox", "attack"))+" to continue"+
+                        "\n"+GetStringDescriptionForBinding(use_keyboard?"key":"xbox", "skip_dialogue")+" to skip";
+
             int font_size = GetFontSize();
             if(font_size != old_font_size){
                 DisposeTextAtlases();
@@ -2028,25 +2199,29 @@ class Dialogue {
 
             vec2 pos(kTextLeftMargin, GetScreenHeight() *0.75 + font_size * 1.2);
             vec3 color = vec3(1.0);
-            if(int(dialogue_colors.size()) > active_char){
+            if(NameInfoExists(dialogue_name)){
+                color = GetNameInfo(dialogue_name).color;
+            } else if(int(dialogue_colors.size()) > active_char){
                 color = dialogue_colors[active_char];
             }
-            DrawTextAtlas("Data/Fonts/edosz.ttf", int(font_size*1.8), kSmallLowercase, dialogue_name, 
+            DrawTextAtlas(name_font_path, int(font_size*1.8), kSmallLowercase, dialogue_name, 
                           int(pos.x), int(pos.y)-int(font_size*0.8), vec4(color, 1.0f));
             string display_text = dialogue_text.substr(0, int(dialogue_text_disp_chars));
-            DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, display_text, 
+            DrawTextAtlas(font_path, font_size, 0, display_text, 
                           int(pos.x)+font_size, int(pos.y)+font_size, vec4(vec3(1.0f), 1.0f));
-            if(!waiting_for_dialogue && !is_waiting_time){
-                TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", GetFontSize(), 0, "(click to continue)\n(enter to skip)");
-                DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, "(click to continue)\n(enter to skip)", 
+            TextMetrics test_metrics = GetTextAtlasMetrics(font_path, GetFontSize(), 0, display_text);
+            if(!waiting_for_dialogue && !is_waiting_time && test_metrics.bounds_y < GetFontSize() * 3){
+                TextMetrics metrics = GetTextAtlasMetrics(font_path, GetFontSize(), 0, continue_string);
+                DrawTextAtlas(font_path, font_size, 0, continue_string, 
                                GetScreenWidth() - int(kTextRightMargin) - metrics.bounds_x, int(pos.y)+font_size*4, vec4(vec3(1.0f), 0.5f));
             }
+            
             LeaveTelemetryZone();
         }
     }
 
     void SaveHistoryState(SavedChunk@ chunk) {
-        Print("Called Dialogue::SaveHistoryState\n");
+        Log(info,"Called Dialogue::SaveHistoryState");
         string str = dialogue_obj_id + " ";
         str += selected_line + " ";
         str += show_editor_info + " ";
@@ -2054,14 +2229,14 @@ class Dialogue {
     }
 
     void ReadChunk(SavedChunk@ chunk) {
-        Print("Called Dialogue::ReadChunk\n");
+        Log(info,"Called Dialogue::ReadChunk");
         history_str = chunk.ReadString();
-        Print("Read "+history_str+"\n");
+        Log(info,"Read "+history_str);
     }
 
     void LoadHistoryStr(){
         ClearEditor();
-        Print("Loading history str\n");
+        Log(info,"Loading history str");
         TokenIterator token_iter;
         token_iter.Init();
         token_iter.FindNextToken(history_str);

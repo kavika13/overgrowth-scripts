@@ -1,4 +1,5 @@
 #include "controller.as"
+#include "campaign_common.as"
 // Common items for all menus in the system
 
 string col = "#fff";
@@ -54,6 +55,8 @@ const bool kAnimateMenu = false;
 
 IMMouseOverPulseColor text_color_mouse_over(button_font_mouse_over.color, button_font_mouse_over.color, 5.0f);
 IMMouseOverPulseColor mouseover_color_background(vec4(0.1f,0.1f,0.1f,1), vec4(0.1f,0.1f,0.1f,1), 5.0f);
+IMMouseOverPulseColor mouseover_pulse_full(vec4(1.0f,1.0f,1.0f,1.0f), vec4(1.0f,1.0f,1.0f,1.0f), 1.0f);
+
 IMPulseAlpha pulse(1.0f, 0.0f, 2.0f);
 IMMouseOverShowBorder show_borders();
 string button_background_diamond = "Textures/ui/menus/main/button-diamond.png";
@@ -64,6 +67,7 @@ string button_background_flag_extended = "Textures/ui/menus/main/button-flag-ext
 string button_back = "Textures/ui/menus/main/button-back.png";
 string brushstroke_background = "Textures/ui/menus/main/brushStroke.png";
 string white_background = "Textures/ui/menus/main/white_square.png";
+string black_background = "Textures/ui/menus/main/black_square.png";
 string button_back_square = "Textures/ui/menus/main/button_square.png";
 string button_background_rectangle = "Textures/ui/menus/main/button-back-rect.png";
 string checkmark = "Textures/ui/menus/main/checkmark.png";
@@ -74,44 +78,32 @@ string slider_bar = "Textures/ui/menus/main/slider_bar.png";
 string slider_bar_vertical = "Textures/ui/menus/main/slider_bar_vertical.png";
 string slider_button_vert = "Textures/ui/menus/main/button-diamond-light-vertical.png";
 
+string star_faded = "Textures/ui/menus/main/no_difficulty.png";
+string star_filled = "Textures/ui/menus/main/casual_difficulty.png";
+
+string head_faded = "Textures/ui/menus/main/no_difficulty.png";
+string head_filled = "Textures/ui/menus/main/hardcore_difficulty.png";
+
+string skull_faded = "Textures/ui/menus/main/no_difficulty.png";
+string skull_filled = "Textures/ui/menus/main/expert_difficulty.png";
+
 string play_icon = "Textures/ui/menus/main/icon-rabbit.png";
+string forward_chevron = "Textures/ui/menus/main/icon-continue.png";
 string close_icon = "Textures/ui/menus/main/icon-x.png";
-string lock_icon = "Textures/ui/menus/main/icon-lock.png";
+//string lock_icon = "Textures/ui/menus/main/icon-lock.png";
 string settings_icon = "Textures/ui/menus/main/icon-flower.png";
 string mods_icon = "Textures/ui/menus/main/icon-eye.png";
 string exit_icon = "Textures/ui/menus/main/icon-totem.png";
 string arrow_icon = "Textures/ui/menus/main/icon-navigation.png";
 string steam_icon = "Textures/ui/menus/main/icon-steam.png";
+string retry_icon = "Textures/ui/menus/main/icon-retry.png";
+string media_icon = "Textures/ui/menus/main/icon-box.png";
 string spinner_icon = "Textures/ui/menus/main/icon-steam.png";
 string navigation_arrow = "Textures/ui/menus/main/navigation_large.png";
 string navigation_arrow_slim = "Textures/ui/menus/main/navigation_large_slim.png";
 string no_results = "Textures/ui/arena_mode/10_kills.png";
 
-string level_preview_image = "Textures/lugarumenu/Wonderer.jpg";
-
-class LevelInfo
-  {
-    string name;
-    string file;
-    string image;
-	string inter_level_data;
-	bool coming_soon = false;
-
-    LevelInfo(string _file, string _name, string _image, string _inter_level_data = "")
-    {
-        name = _name;
-        file = _file;
-        image = _image;
-		inter_level_data = _inter_level_data;
-    }
-	LevelInfo(string _file, string _name, string _image, bool _coming_soon)
-    {
-        name = _name;
-        file = _file;
-        image = _image;
-		coming_soon = _coming_soon;
-    }
-};
+string level_preview_image = "Textures/LugaruMenu/Wonderer.jpg";
 
 array<LevelInfo@> levels;
 string campaign_name;
@@ -384,21 +376,24 @@ class Slider : GUIElement{
 	float max_x_slide = 100.0f;
 	float min_x_slide = 0;
 	float config_value;
-	Slider(string _name, IMContainer@ _parent, IMImage@ _slider_image, IMText@ _value_label, string _config_name, float _max_value){
+    float max_percentage;
+	Slider(string _name, IMContainer@ _parent, IMImage@ _slider_image, IMText@ _value_label, string _config_name, float _max_value, float _max_percentage = 100.0f, float _min_value = 0.0f){
 		@slider_image = @_slider_image;
 		@parent = @_parent;
 		@value_label = @_value_label;
 		name = _name;
 		config_name = _config_name;
 		max_value = _max_value;
+        min_value = _min_value;
 		max_x_slide = parent.getSizeX() - slider_image.getSizeX();
 		min_x_slide = 0.0f;
+        max_percentage = _max_percentage;
 		PutCurrentValue();
 	}
 	void PutCurrentValue(){
 		config_value = GetConfigValueFloat(config_name);
 		
-		float new_label_value = 100.0f * config_value / max_value;
+		float new_label_value = max_percentage * config_value / max_value;
 		value_label.setText(int(new_label_value) + "%");
 		
 		float new_slider_displacement = max_x_slide * config_value / max_value;
@@ -412,7 +407,7 @@ class Slider : GUIElement{
 		new_slider_displacement = min(max_x_slide,max(value + current_x_displacement, min_x_slide));
 		new_value = max_value * new_slider_displacement / max_x_slide;
 		new_value = max(min_value, min(new_value, max_value));
-		float new_label_value = 100.0f * new_value / max_value;
+		float new_label_value = max_percentage * new_value / max_value;
 		value_label.setText(ceil(new_label_value) + "%");
 		
 		slider_image.setDisplacementX( new_slider_displacement );
@@ -442,7 +437,7 @@ class Slider : GUIElement{
 			new_slider_displacement = max_x_slide * new_value / max_value;
 		}
 		new_value = max(min_value, min(new_value, max_value));
-		float new_label_value = 100.0f * new_value / max_value;
+		float new_label_value = max_percentage * new_value / max_value;
 		value_label.setText(ceil(new_label_value) + "%");
 		
 		slider_image.setDisplacementX( new_slider_displacement );
@@ -601,7 +596,9 @@ class DropdownConfigurationStringArray : DropdownConfigurationBaseClass{
 		current_option_index = config_values.find(current_value);
 		if(current_option_index != -1){
 			label.setText(display_values[current_option_index]);
-		}
+		} else {
+			label.setText(current_value);
+        }
 	}
 	void SetConfigValue(string value){
 		int index = display_values.find(value);
@@ -728,7 +725,7 @@ bool OptionMenuOpen(){
 
 void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _campaign_name, uint start_at, uint _max_items = max_items, 
 				uint _max_rows = max_rows, bool _check_locked = check_locked, bool _menu_numbered = menu_numbered, 
-				float _menu_width = menu_width, float _menu_height = menu_height){
+				float _menu_width = menu_width, float _menu_height = menu_height, bool show_difficulty_stars = false, bool fade_stars = true, bool single_star = false, bool difficulty_icons = false ){
 
 	float arrow_width = 200.0f;
 	float arrow_height = 400.0f;
@@ -754,13 +751,6 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
 	
 	IMDivider@ current_row;
     uint nr_rows = 0;
-	uint highest_unlocked = 0;
-	uint last_played = 0;
-
-	if(check_locked){
-		highest_unlocked = GetHighestUnlockedLevel();
-		last_played = GetLastPlayedLevel();
-	}
 
 	float item_width = menu_width / _max_items;
 	float item_height = menu_height / _max_rows;
@@ -777,15 +767,16 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
             }
         }
 		bool unlocked = false;
-		if((i + start_at) <= highest_unlocked || !check_locked){
-			unlocked = true;
-		}
-		//If the level isn't unlocked it won't be selectable or show the preview screen.
+
+        if(IsLevelUnlocked(levels[i+start_at]) || check_locked == false) { 
+		    unlocked = true;
+        }
+
 		bool is_last_played = false;
-		if(i == last_played && check_locked){
+		if(IsLastPlayedLevel(levels[i+start_at])){
 			is_last_played = true;
 		}
-        CreateMenuItem(current_row, levels[i + start_at], unlocked, is_last_played, (i + start_at + 1), item_width, item_height);
+        CreateMenuItem(current_row, levels[i + start_at], unlocked, is_last_played, (i + start_at + 1), item_width, item_height, show_difficulty_stars, fade_stars, single_star, difficulty_icons);
     }
 
 	//The left arrow in the level select menu.
@@ -826,12 +817,12 @@ void CreateMenu(IMDivider@ menu_holder, array<LevelInfo@>@ _levels, string _camp
 	menu_holder.append(right_arrow_container);
 }
 
-void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_played, int number, float level_item_width, float level_item_height){
+void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_played, int number, float level_item_width, float level_item_height, bool show_stars, bool fade_stars, bool single_star, bool difficulty_icons){
 	float background_size_offset = 50.0f;
 	float background_icon_size = int((level_item_width + level_item_height) / 4.0f);
 	vec4 background_icon_color = vec4(0.1f,0.1f,0.1f,1.0f);
 
-	IMImage background_icon( lock_icon );
+	IMImage background_icon( level.lock_icon );
 	if(kAnimateMenu){
 		background_icon.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
     }
@@ -861,10 +852,14 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
 	level_container.addFloatingElement(background_icon, "background_icon", vec2(middle_x - (background_icon.getSizeX() / 2.0f), middle_y - (background_icon.getSizeY() / 2.0f)), 2);
 
 	IMMessage on_click("run_file");
+    IMMessage on_hover_enter("hover_enter_file");
+    IMMessage on_hover_leave("hover_leave_file");
+    IMMessage nil_message("");
+    float number_background_width = level_item_width / 7.0f;
+    float star_width = level_item_width / 10.0f;
+    float preview_size_offset = 75.0f;
+    float text_holder_height = level_item_width / 8.0f;
 	if(unlocked){
-		float number_background_width = level_item_width / 7.0f;
-		float preview_size_offset = 75.0f;
-		float text_holder_height = level_item_width / 8.0f;
 		IMImage level_preview( level.image );
 		level_preview.setSize(vec2(level_item_width - preview_size_offset, level_item_height - preview_size_offset));
 		level_container.addFloatingElement(level_preview, "preview", vec2(middle_x - (level_preview.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f)), 3);
@@ -872,7 +867,12 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
 		if(!level.coming_soon){
 			on_click.addString(level.file);
 			on_click.addInt(number - 1);
+			on_hover_enter.addString(level.file);
+			on_hover_enter.addInt(number - 1);
+			on_hover_leave.addString(level.file);
+			on_hover_leave.addInt(number - 1);
 			level_divider.addLeftMouseClickBehavior( IMFixedMessageOnClick(on_click), "" );
+            level_divider.addMouseOverBehavior(IMFixedMessageOnMouseOver(on_hover_enter, nil_message, on_hover_leave), "");
 			background.addMouseOverBehavior(mouseover_scale_background, "");
 			if(kAnimateMenu){
 				level_preview.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
@@ -915,34 +915,149 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
 		level_text.setZOrdering(7);
 		level_container.addFloatingElement(text_holder_holder, "title_text", vec2(middle_x - (text_holder.getSizeX() / 2.0f), level_container.getSizeY() - text_holder.getSizeY()), 4);
 
-		if(menu_numbered){
-			//The background for the level number.
-			IMImage level_number_background( button_back_square );
-			if(kAnimateMenu){
-				level_number_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
-			}
-			level_number_background.setSize(vec2(number_background_width, number_background_width));
-			//Because it's rotated it needs a bit more space or else the edges get cut off.
-			float extra = number_background_width / 2.0f;
-			//Create a new container to ensure that the number and background are centered to each other.
-			//Rotate the square to create a diamond shape.
-			level_number_background.setRotation(45);
-			level_number_background.setZOrdering(6);
-			level_number_background.setClip(false);
-			IMContainer level_number_container(number_background_width, number_background_width);
-			level_number_container.addFloatingElement(level_number_background, "level_number_background", vec2(0), 6);
+        uint star_count = 3;
+        uint highest_star_index = level.highest_diff;
 
-			//The number of the level shown in the top left corner.
-			IMText level_number(number + ".", button_font_small);
-			if(kAnimateMenu){
-				level_number.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
-			}
-			level_number.setZOrdering(8);
-			level_number.setClip(false);
-			level_number_container.setElement(level_number);
-			level_container.addFloatingElement(level_number_container, "level_number", vec2(middle_x - (level_preview.getSizeX() / 2.0f) - (level_number_container.getSizeX() / 2.0f), middle_y - (level_preview.getSizeY() / 2.0f) - (level_number_container.getSizeY() / 2.0f)) , 4);
-		}
+        if( show_stars && level.hide_stars == false ) {
+            IMImage star_background( black_background );		
+            if(kAnimateMenu){
+                star_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+            }
+
+            float star_background_width = star_width * star_count + (star_width*0.5f) * (star_count+1) - (star_width*0.2f) * 2;
+
+            if( single_star ) {
+                star_background_width = star_width + (star_width*0.5f) * 2 - (star_width*0.2f) * 2;
+            }
+
+            star_background.setSize(vec2(star_background_width, star_width*1.3f));
+            star_background.setZOrdering(7);
+            if( fade_stars ) {
+                star_background.setColor(vec4(1.0f,1.0f,1.0f,0.5f));
+                star_background.addMouseOverBehavior(mouseover_pulse_full, "");
+            }
+            level_container.addFloatingElement(star_background, "star_background", vec2(middle_x + (level_preview.getSizeX() / 2.0f) * 1.1f - star_background_width , 0.0f), 4);
+
+            uint rendered = 0;
+
+            for( uint i = 0; i < star_count; i++ ) {
+                if( i == highest_star_index-1 || single_star == false ) {
+                    //The background for the level number.
+                    string used_image = star_faded;
+                    if( i == 1 ) {
+                        used_image = head_faded;
+                    }
+                    if( i == 2 ) {
+                        used_image = skull_faded;
+                    }
+
+                    if( i < highest_star_index ) {
+                        used_image = star_filled;
+                        if( i == 1 ) {
+                            used_image = head_filled;
+                        }
+                        if( i == 2 ) {
+                            used_image = skull_filled;
+                        }
+                    }
+                    IMImage level_star( used_image );
+
+                    if( fade_stars ) {
+                        level_star.setColor(vec4(1.0f,1.0f,1.0f,0.5f));
+                        level_star.addMouseOverBehavior(mouseover_pulse_full, "");
+                    }
+                    if(kAnimateMenu){
+                        level_star.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+                    }
+                    level_star.setSize(vec2(star_width, star_width));
+
+                    level_star.setZOrdering(8);
+                    level_star.setClip(false);
+                    IMContainer level_star_container(star_width, star_width);
+                    level_star_container.addFloatingElement(level_star, "level_star_" + i, vec2(0), 6);
+
+                    level_star_container.sendMouseOverToChildren(true);
+
+                    level_container.addFloatingElement(level_star_container, "level_star_" + i, vec2(middle_x + (level_preview.getSizeX() / 2.0f) * 1.1f - star_background_width - (star_width*0.2f)  + (level_star_container.getSizeX()*0.5f) + (level_star_container.getSizeX()*1.5f) * rendered, middle_y - (level_preview.getSizeY() / 2.0f) - (level_star_container.getSizeY() / 2.0f) * 1.20f ) , 4);
+                    rendered++;
+                }
+            }
+        }
 	}
+
+    if(difficulty_icons) {
+        if(level.level_played || level.highest_diff > 0) {
+            //The background for the level number.
+            IMImage level_number_background( button_back_square );
+            if(kAnimateMenu){
+                level_number_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+            }
+            level_number_background.setSize(vec2(number_background_width, number_background_width));
+            //Because it's rotated it needs a bit more space or else the edges get cut off.
+            float extra = number_background_width / 2.0f;
+            //Create a new container to ensure that the number and background are centered to each other.
+            //Rotate the square to create a diamond shape.
+            level_number_background.setRotation(45);
+            level_number_background.setZOrdering(6);
+            level_number_background.setClip(false);
+            IMContainer level_number_container(number_background_width, number_background_width);
+            level_number_container.addFloatingElement(level_number_background, "level_number_background", vec2(0), 6);
+
+            level.highest_diff;
+            //The background for the level number.
+            string used_image = star_faded;
+
+            if( level.highest_diff == 1 ) {
+                used_image = star_filled;
+            }
+            if( level.highest_diff == 2 ) {
+                used_image = head_filled;
+            }
+            if( level.highest_diff == 3 ) {
+                used_image = skull_filled;
+            }
+
+            IMImage level_number( used_image );
+
+            float number_width = level_item_width / 10.0f;
+
+            if(kAnimateMenu){
+                level_number.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+            }
+
+            level_number.setSize(vec2(number_width, number_width));
+            level_number.setZOrdering(8);
+            level_number.setClip(false);
+            level_number_container.setElement(level_number);
+            level_container.addFloatingElement(level_number_container, "difficulty_icon", vec2(middle_x - (background.getSizeX() / 2.0f) - (level_number_container.getSizeX() / 2.0f) * 0.6f, middle_y - (background.getSizeY() / 2.0f) - (level_number_container.getSizeY() / 2.0f) * 0.6f) , 4);
+        }
+    } else if(menu_numbered) {
+        //The background for the level number.
+        IMImage level_number_background( button_back_square );
+        if(kAnimateMenu){
+            level_number_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+        }
+        level_number_background.setSize(vec2(number_background_width, number_background_width));
+        //Because it's rotated it needs a bit more space or else the edges get cut off.
+        float extra = number_background_width / 2.0f;
+        //Create a new container to ensure that the number and background are centered to each other.
+        //Rotate the square to create a diamond shape.
+        level_number_background.setRotation(45);
+        level_number_background.setZOrdering(6);
+        level_number_background.setClip(false);
+        IMContainer level_number_container(number_background_width, number_background_width);
+        level_number_container.addFloatingElement(level_number_background, "level_number_background", vec2(0), 6);
+
+        //The number of the level shown in the top left corner.
+        IMText level_number(""+number, button_font_small);
+        if(kAnimateMenu){
+            level_number.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+        }
+        level_number.setZOrdering(8);
+        level_number.setClip(false);
+        level_number_container.setElement(level_number);
+        level_container.addFloatingElement(level_number_container, "level_number", vec2(middle_x - (background.getSizeX() / 2.0f) - (level_number_container.getSizeX() / 2.0f) * 0.6f, middle_y - (background.getSizeY() / 2.0f) - (level_number_container.getSizeY() / 2.0f) * 0.6f) , 4);
+    }
 	
 	ControllerItem new_controller_item();
 	if(number % max_items == 0){
@@ -959,7 +1074,7 @@ void CreateMenuItem(IMDivider@ row, LevelInfo@ level, bool unlocked, bool last_p
 	row.append(level_divider);
 }
 
-bool MenuCanShift(int direction){
+bool MenuCanShift(int direction) {
 	int new_start_item = current_start_item + (max_rows * max_items * direction);
 	if(uint(new_start_item) < levels.size() && new_start_item > -1){
 		return true;
@@ -968,14 +1083,14 @@ bool MenuCanShift(int direction){
 	}
 }
 
-int ShiftMenu(int direction){
+int ShiftMenu(int direction) {
 	if(!MenuCanShift(direction))return current_start_item;
 	//Create a new divider and add the menu again, just like in init, but start at some other level.
     current_start_item += (max_rows * max_items * direction);
     return current_start_item;
 }
 
-int NrCustomLevels(){
+int NrCustomLevels() {
 	int number = 0;
 	array<ModID>@ active_sids = GetActiveModSids();
     for( uint i = 0; i < active_sids.length(); i++ ) {
@@ -987,57 +1102,11 @@ int NrCustomLevels(){
 	return number;
 }
 
-int GetHighestUnlockedLevel( ) {
-    SavedLevel @level = save_file.GetSavedLevel(campaign_name);
-
-    string current_highest_level = level.GetValue("highest_level");
-	string curr_level = level.GetValue("current_level");
-	
-    //Log(info, "Current Higest unlocked Level id \"" + current_highest_level + "\"" );
-    int id_current_highest_level = -1;
-
-    if( current_highest_level != "" ) {
-        id_current_highest_level = atoi(current_highest_level);
-    }else{
-		//Write the first level unlocked for new users.
-		id_current_highest_level = 0;
-		level.SetValue("highest_level", "" + id_current_highest_level);
-        save_file.WriteInPlace();
-	}
-	//Check if a new level has been unlocked.
-	int curr_level_id = 0;
-	for(int i=0, len=levels.size(); i<len; ++i) {
-		if(levels[i].file == curr_level){
-			curr_level_id = i;
-		}
-	}
-	if(curr_level_id > id_current_highest_level){
-		id_current_highest_level = curr_level_id;
-		level.SetValue("highest_level", ""+id_current_highest_level);
-		save_file.WriteInPlace();
-	}
-	return id_current_highest_level;
-}
-
-int GetLastPlayedLevel(){
-	//The last played level gets a different background. This way the user can replay the campaign and still know where to continue.
-	int last_played = -1;
-	SavedLevel @level = save_file.GetSavedLevel(campaign_name);
-	string curr_level = level.GetValue("current_level");
-	for(int i = 0, len = levels.size(); i < len; ++i) {
-		if("Data/Levels/" + levels[i].file == curr_level){
-			last_played = i;
-		}
-	}
-	return last_played;
-}
-
 void AddButton(string text, IMDivider@ parent, string icon_path = "null", string background_path = button_background_diamond, 
 				bool animated = true, float button_width = default_button_width, float _text_trailing_space = text_trailing_space, 
-				IMMouseOverBehavior@ background_anim = move_button_background, IMMessage@ message = null){
+				IMMouseOverBehavior@ background_anim = move_button_background, IMMessage@ message = null, float no_icon_spacing = 0.0f, float button_horizontal_spacing = 60.0f) {
 	float button_height = 75.0f;
 	float icon_size = 75.0f;
-	float button_horizontal_spacing = 60.0f;
 	float button_vertical_spacing = 25.0f;
 	//Needed for scale animation
 	float extra_space = 10.0f;
@@ -1053,7 +1122,7 @@ void AddButton(string text, IMDivider@ parent, string icon_path = "null", string
 	IMContainer new_container(button_width + extra_space, button_height + extra_space);
 	new_container.setAlignment(CALeft, CACenter);
 
-	IMImage button_background( background_path);
+	IMImage button_background(background_path);
 	if(kAnimateMenu){
 		button_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
 	}
@@ -1072,7 +1141,7 @@ void AddButton(string text, IMDivider@ parent, string icon_path = "null", string
 	}
 
 	text_holder.setZOrdering(3);
-	if(icon_path != "null"){
+	if(icon_path != "null") {
 		text_holder.append(IMSpacer(DOHorizontal, button_horizontal_spacing));
 		IMImage icon(icon_path);
 		if(kAnimateMenu){
@@ -1082,7 +1151,9 @@ void AddButton(string text, IMDivider@ parent, string icon_path = "null", string
 		icon.scaleToSizeX(icon_size);
 		text_holder.append(icon);
 		icon.addMouseOverBehavior(text_color_mouse_over, "");
-	}
+	} else {
+        text_holder.appendSpacer(no_icon_spacing);
+    }
 	text_holder.append(IMSpacer(DOHorizontal, _text_trailing_space));
 	text_holder.append(new_text);
 	new_container.setElement(text_holder);
@@ -1098,11 +1169,11 @@ void AddButton(string text, IMDivider@ parent, string icon_path = "null", string
 	parent.append( main_divider );
 }
 
-void AddButton(string text, IMDivider@ parent, float _text_trailing_space){
-	AddButton(text, parent, "null", button_background_diamond, true, 500.0f, _text_trailing_space, mouseover_scale_button);
+void AddButton(string text, IMDivider@ parent, float _text_trailing_space, string icon = "null") {
+	AddButton(text, parent, icon, button_background_diamond, true, 500.0f, _text_trailing_space, mouseover_scale_button, null, 0.0f, 60.0f);
 }
 
-void AddBackButton(){
+void AddBackButton(bool change_diff = false, bool single_star = false){
 	float button_trailing_space = 100.0f;
 	float button_width = 400.0f;
 	bool animated = false;
@@ -1112,6 +1183,73 @@ void AddBackButton(){
     right_panel.setAlignment(CALeft, CABottom);
     right_panel.append(IMSpacer(DOHorizontal, button_trailing_space));
     AddButton("Back", right_panel, arrow_icon, button_back, animated, button_width);
+    if( change_diff ){
+        right_panel.appendSpacer(70.0f);
+        float width = 580.0f;
+        string difficulty = GetConfigValueString("difficulty_preset");
+        AddButton("Change Difficulty", right_panel, "null", button_background_diamond, animated, width, 40.0f, move_button_background, IMMessage("change_difficulty"), 30.0f);
+        uint star_count = 3;
+        uint highest_star_index = GetCurrentDifficulty()-1;
+
+		float star_width = 70.0f;
+        float star_background_width = (star_width*1.5f) * star_count + (star_width*0.3f);
+
+        if( single_star ) {
+            star_background_width = (star_width*1.5f) + (star_width*0.3f);
+        }
+
+    	IMDivider star_divider(DOHorizontal);
+	    IMContainer star_container(star_background_width,star_width*1.3f);
+
+        IMImage star_background( black_background );		
+        if(kAnimateMenu){
+            star_background.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+        }
+
+        star_background.setSize(vec2(star_background_width, star_width*1.3f));
+        star_background.setZOrdering(7);
+        star_container.addFloatingElement(star_background, "star_background", vec2(0.0f, 0.0f), 4);
+
+        uint rendered = 0;
+        for( uint i = 0; i < star_count; i++ ) {
+            //The background for the level number.
+            if( i == highest_star_index || single_star == false ) {
+                string used_image = star_faded;
+                if( i == 1 ) {
+                    used_image = head_faded;
+                }
+                if( i == 2 ) {
+                    used_image = skull_faded;
+                }
+                if( int(i) < GetCurrentDifficulty() ) {
+                    used_image = star_filled;
+                    if( i == 1 ) {
+                        used_image = head_filled;
+                    }
+                    if( i == 2 ) {
+                        used_image = skull_filled;
+                    }
+                }
+                IMImage level_star( used_image );
+                if(kAnimateMenu){
+                    level_star.addUpdateBehavior(IMFadeIn( fade_in_time, inSineTween ), "");
+                }
+                level_star.setSize(vec2(star_width, star_width));
+
+                level_star.setZOrdering(8);
+                level_star.setClip(false);
+                IMContainer level_star_container(star_width, star_width);
+                level_star_container.addFloatingElement(level_star, "diff_star_" + i, vec2(0), 6);
+
+                star_container.addFloatingElement(level_star_container, "diff_star_" + i, vec2( star_width*1.5f * rendered + star_width * 0.15f * 2.5f, star_width * 0.15f ) , 4);
+                rendered++;
+            }
+        }
+
+        star_divider.append(star_container);
+        right_panel.appendSpacer(70.0f);
+        right_panel.append(star_divider);
+    }
     imGUI.getFooter().setAlignment(CALeft, CACenter);
     imGUI.getFooter().setElement(right_panel);
 }
@@ -1160,7 +1298,7 @@ string GetRandomBackground(){
 	array<string> background_paths;
 	int counter = 0;
 	while(true){
-		string path = "Textures/ui/menus/main/background_" + counter + ".jpg";
+		string path = "Textures/ui/menus/main/bg/background_" + counter + ".jpg";
 		if(FileExists("Data/" + path)){
 	    	background_paths.insertLast(path);
 	    	counter++;
@@ -1476,7 +1614,7 @@ void AddCheckBox(string text, IMDivider@ parent, string config_name){
 	parent.append(main_container);
 }
 
-void AddSlider(string text, IMDivider@ parent, string config_name, float max_value){
+void AddSlider(string text, IMDivider@ parent, string config_name, float max_value, float max_percentage = 100.0f, float min_value = 0.0f){
 	float dropdown_width = 350.0f;
 	float dropdown_height = 55.0f;
 	float slider_width = 350.0f;
@@ -1560,7 +1698,7 @@ void AddSlider(string text, IMDivider@ parent, string config_name, float max_val
 	message_right.addString("+");
 	
 	AddControllerItem(slider_parent, null, message_left, message_right, null, null);
-	gui_elements.insertLast(Slider(text, slider_holder, slider_button_image, percentage, config_name, max_value));
+	gui_elements.insertLast(Slider(text, slider_holder, slider_button_image, percentage, config_name, max_value, max_percentage, min_value));
 	
 	main_container.setElement(main_divider);
 	parent.append(main_container);

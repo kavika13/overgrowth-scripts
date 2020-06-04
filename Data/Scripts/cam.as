@@ -19,6 +19,9 @@ float rotation = 0.0f;
 float rotation2 = 0.0f;
 float smooth_speed = 0.0f;
 
+bool focus_on_selection = false;
+bool focus_increased_distance = false;
+
 const float _camera_rotation_inertia = 0.8f;
 const float _camera_inertia = 0.8f;
 const float _camera_media_mode_rotation_inertia = 0.99f;
@@ -89,6 +92,12 @@ vec3 compMin(const vec3 &lhs, const vec3 &rhs) {
         min(lhs.x, rhs.x),
         min(lhs.y, rhs.y),
         min(lhs.z, rhs.z));
+}
+
+void FrameSelection( bool increased_distance ) {
+    focus_on_selection = true;
+    focus_increased_distance = increased_distance;
+    
 }
 
 vec3 GetScaledBounds(Object @obj) {
@@ -185,7 +194,8 @@ void Update() {
 
     float current_fov = GetAndUpdateCurrentFov();
 
-    if (GetInputPressed(0, "f")) {
+    if (focus_on_selection) {
+        focus_on_selection = false;
         // Get bounding extents of selected objects
         bool is_any_object_selected = false;
         array<int> @object_ids = GetObjectIDs();
@@ -215,7 +225,7 @@ void Update() {
             // Back away from the objects a bit, so not always directly inside them
             float framing_distance;
 
-            if (!GetInputDown(controller_id, "crouch")) {
+            if (focus_increased_distance) {
                 // Back up so loose bounding sphere of selected objects fill half of FOV
                 min_object_extents -= selected_objects_origin;
                 max_object_extents -= selected_objects_origin;

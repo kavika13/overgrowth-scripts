@@ -427,7 +427,7 @@ void ReceiveMessage(string msg) {
     } else if(token == "achievement_event_float"){
         token_iter.FindNextToken(msg);
         string achievement = token_iter.GetToken(msg);
-        Print("achievement: " + achievement + "\n");
+        Log(info, "achievement: " + achievement);
         token_iter.FindNextToken(msg);
         string value = token_iter.GetToken(msg);
         Log(info, "value: " + value);
@@ -777,7 +777,7 @@ void ReviveCharacters() {
 }
 
 void SomeFunction(){
-    Print("works\n");
+    Log(info, "works");
 }
 
 // Attach a specific preview path to a given placeholder object
@@ -819,7 +819,7 @@ void UpdateMusic() {
 }
 
 void KeyPressed( string command, bool repeated ) {
-	Print("Pressed " + command + "\n");
+	Log(info,"Pressed " + command);
     if( command == "n" && repeated == false ) {
         if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()){
             currentAssignment++;

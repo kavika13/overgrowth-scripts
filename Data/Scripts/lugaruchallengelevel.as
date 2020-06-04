@@ -135,16 +135,16 @@ class ChallengeGUI : AHGUI::GUI {
 			if(challengeData[i]["levelname"].asString() == levelName){
 				activeLevelIndex = i;
 				int newScore = points + pointsToAdd;
-				Print("highscore " + challengeData[i]["highscore"].asInt() + " points " + newScore + "!\n");
+				Log(info,"highscore " + challengeData[i]["highscore"].asInt() + " points " + newScore + "!");
 				if(challengeData[i]["highscore"].asInt() < newScore){
-					Print("New Highscore!\n");
+					Log(info,"New Highscore!");
 					challengeData[i]["highscore"] = JSONValue(newScore);
 					challengeData[i]["besttime"] = JSONValue(int(challengeDuration));
 					if(challengeLevelsFinished <= activeLevelIndex){
 						challengeLevelsFinished++;
 					}
 				}else{
-					Print("Not a new Highscore :( \n");
+					Log(info,"Not a new Highscore :(");
 				}
 				break;
 			}
@@ -175,18 +175,25 @@ class ChallengeGUI : AHGUI::GUI {
         // Update the GUI
         AHGUI::GUI::update();
     }
+
 	void render() {
 	   hud.Draw();
 	   // Update the GUI
 	   AHGUI::GUI::render();
 	}
+
+    SavedLevel@ GetSave() {
+        return save_file.GetSave("","linear_campaign_progress","lugaru_challanges");
+    }
+
 	void ReadPersistentInfo() {
-        SavedLevel @saved_level = save_file.GetSavedLevel("lugaru_levels_progress");
+        UpgradeSave();
+        SavedLevel@ saved_level = GetSave();
         // First we determine if we have a session -- if not we're not going to read data
         JSONValue sessionParams = getSessionParameters();
         if( !sessionParams.isMember("started") ) {
             // Nothing is started, so we shouldn't actually read the data
-            Print("could not find started :( \n");
+            Log(info,"could not find started :(");
             return;
         }
         // read in campaign_started
@@ -215,7 +222,7 @@ class ChallengeGUI : AHGUI::GUI {
         dataLoaded = true;
         // Now see if we have a profile in this session -- if so load it
         JSONValue profiles = profileData.getRoot()["profiles"];
-		Print( profileData.writeString(true) );
+		Log(info,profileData.writeString(true));
 		for( uint i = 0; i < profiles.size(); ++i ) {
 			if(profiles[i]["active"].asString() == "true"){
 				setDataFrom(profiles[i]["id"].asInt());
@@ -225,7 +232,7 @@ class ChallengeGUI : AHGUI::GUI {
     }
 	JSONValue getSessionParameters() {
 
-        SavedLevel @saved_level = save_file.GetSavedLevel("lugaru_levels_progress");
+        SavedLevel @saved_level = GetSave();
 
         string lugaru_session_str = saved_level.GetValue("lugaru_session");
 
@@ -235,7 +242,7 @@ class ChallengeGUI : AHGUI::GUI {
 
             // write it back
             saved_level.SetValue("lugaru_session", lugaru_session_str );
-            Print("Write back the lugaru session\n");
+            Log(info,"Write back the lugaru session");
         }
 
         JSON sessionJSON;
@@ -273,7 +280,7 @@ class ChallengeGUI : AHGUI::GUI {
 		}
 	}
 	void setSessionParameters( JSONValue session ) {
-        SavedLevel @saved_level = save_file.GetSavedLevel("lugaru_levels_progress");
+        SavedLevel @saved_level = GetSave();
 
         // set the value to the stringified JSON
         JSON sessionJSON;
@@ -282,7 +289,7 @@ class ChallengeGUI : AHGUI::GUI {
         saved_level.SetValue("lugaru_session", arena_session_str );
 
         // write out the changes
-        Print("Writing session \n");
+        Log(info,"Writing session");
         save_file.WriteInPlace();
 
     }
@@ -293,11 +300,11 @@ class ChallengeGUI : AHGUI::GUI {
 
         // Make sure our current data has been written back to the JSON structure
         if( moveDataToStore ) {
-            Print("Writing data to profile\n");
+            Log(info,"Writing data to profile");
             writeDataToProfiles(); // This'll do nothing if we haven't set a profile
         }
 
-        SavedLevel @saved_level = save_file.GetSavedLevel("lugaru_levels_progress");
+        SavedLevel @saved_level = GetSave();
 
         // Render the JSON to a string
         string profilesString = profileData.writeString(false);
@@ -305,7 +312,7 @@ class ChallengeGUI : AHGUI::GUI {
         // Set the value and write to disk
         saved_level.SetValue( "lugaru_profiles", profilesString );
         //Print("Profiles string : " + profilesString + "\n");
-		Print( profileData.writeString(true) );
+		Log( info, profileData.writeString(true) );
         save_file.WriteInPlace();
 
     }

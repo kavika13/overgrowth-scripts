@@ -7,9 +7,7 @@ const int item_per_screen = 4;
 const int rows_per_screen = 3;
 
 IMGUI@ imGUI;
-array<LevelInfo@> play_menu = {	LevelInfo("tutorial.xml",		"Tutorial",			"Textures/ui/menus/main/tutorial.jpg"),
-								LevelInfo("campaign_menu.as",	"Overgrowth Story",	"Textures/ui/menus/main/main_campaign.jpg", true),
-								LevelInfo("lugaru_menu.as",		"Lugaru Story",	"Textures/lugarumenu/smallest_Village_2.jpg")};
+array<LevelInfo@> play_menu = {};
 
 bool HasFocus() {
     return false;
@@ -31,9 +29,47 @@ void Initialize() {
     BuildUI();
 	setBackGround();
 	AddVerticalBar();
+
+    if(GetConfigValueBool("difficulty_set") == false) {
+        this_ui.SendCallback( "difficulty_menu.as" );
+    }
 }
 
+array<string> hard_order = {"com-wolfire-overgrowth-campaign","com-wolfire-lugaru-campaign"};
+
 void SetPlayMenuList(){
+    for( uint i = 0; i < hard_order.length(); i++ ) {
+        Campaign camp = GetCampaign(hard_order[i]);
+        string camp_thumbnail_path = camp.GetThumbnail();
+        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetLastLevelPlayed(camp.GetID()).length() > 0));
+    }
+
+    array<Campaign>@ campaigns = GetCampaigns();
+    for( uint i = 0; i < campaigns.length(); i++ ) {
+        Campaign camp = campaigns[i];
+        bool skip = false;
+        for( uint k = 0; k < hard_order.length(); k++ ) {
+            if( hard_order[k] == camp.GetID() ) {
+                skip = true;
+            }
+        }
+
+        if( skip == false ) {
+            string camp_thumbnail_path = camp.GetThumbnail();
+
+            play_menu.insertLast(
+                LevelInfo(  camp.GetMenuScript(), 
+                            camp.GetTitle(), 
+                            camp_thumbnail_path, 
+                            camp.GetID(),
+                            GetLastLevelPlayed(camp.GetID()).length() > 0
+                )
+            );
+        }
+    }
+
+    AddCustomLevelsMenuItem();
+
     array<ModID>@ active_sids = GetActiveModSids();
     for( uint i = 0; i < active_sids.length(); i++ ) {
         array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]); 
@@ -43,26 +79,19 @@ void SetPlayMenuList(){
                 if( thumbnail_path == "" ) {
                     thumbnail_path = "../" + ModGetThumbnail(active_sids[i]);
                 }
-				play_menu.insertLast(LevelInfo(menu_items[k].GetPath(), menu_items[k].GetTitle(), thumbnail_path));
+                LevelInfo li(menu_items[k].GetPath(), menu_items[k].GetTitle(), thumbnail_path);
+                li.hide_stars = true;
+				play_menu.insertLast(li);
             }
-        }
-        Campaign camp = ModGetCampaign(active_sids[i]);
-        if( camp.GetType() == "general" ) {
-            string camp_thumbnail_path = camp.GetThumbnail();
-            if( camp_thumbnail_path == "" ) {
-                camp_thumbnail_path = "../" + ModGetThumbnail(active_sids[i]);
-            }
-			play_menu.insertLast(LevelInfo("general_campaign_menu.as", camp.GetTitle(), camp_thumbnail_path, ModGetID(active_sids[i])));
         }
     }
-    AddCustomLevelsMenuItem();
 }
 
 void BuildUI(){
     IMDivider mainDiv( "mainDiv", DOHorizontal );
 	IMDivider header_divider( "header_div", DOHorizontal );
 	header_divider.setAlignment(CACenter, CACenter);
-	AddTitleHeader("Select Campaign", header_divider);
+	AddTitleHeader("Play", header_divider);
 	imGUI.getHeader().setElement(header_divider);
 
     int initial_offset = 0;
@@ -76,25 +105,17 @@ void BuildUI(){
             break;
         }
     }
-	CreateMenu(mainDiv, play_menu, "play_menu", initial_offset, item_per_screen, rows_per_screen, false, false);
+	CreateMenu(mainDiv, play_menu, "play_menu", initial_offset, item_per_screen, rows_per_screen, false, false, menu_width, menu_height, false,false,false,true);
     // Add it to the main panel of the GUI
     imGUI.getMain().setElement( @mainDiv );
-	AddBackButton();
+	AddBackButton(true, true);
 }
 
-void AddCustomLevelsButton(){
-	if(NrCustomLevels() != 0){
-		IMDivider custom_levels_divider("custom_levels_divider", DOHorizontal);
-		float text_trailing_space = 75.0f;
-		float button_width = 500.0f;
-		AddButton("Custom Levels", custom_levels_divider, "null", button_background_diamond, true, button_width, text_trailing_space, mouseover_scale_button);
-		imGUI.getFooter(1).setElement(custom_levels_divider);
-	}
-}
-
-void AddCustomLevelsMenuItem(){
-	if(NrCustomLevels() != 0){
-		play_menu.insertLast(LevelInfo("custom_levels.as", "Custom Levels", "Textures/ui/menus/main/custom_level_thumbnail.jpg"));
+void AddCustomLevelsMenuItem() {
+	if(NrCustomLevels() != 0) {
+        LevelInfo li("custom_levels.as", "Custom Levels", "Textures/ui/menus/main/custom_level_thumbnail.jpg");
+        li.hide_stars = true;
+		play_menu.insertLast(li);
 	}
 }
 
@@ -114,9 +135,9 @@ void Update() {
 
         if( message.name == "run_file" ) 
         {
-			string inter_level_data = play_menu[message.getInt(0)].inter_level_data;
-			if(inter_level_data != ""){
-				SetInterlevelData("current_mod_campaign", inter_level_data);
+			string campaign_id = play_menu[message.getInt(0)].campaign_id;
+			if(campaign_id != "") {
+                SetCampaignID(campaign_id);
 			}
             this_ui.SendCallback(message.getString(0));
         }
@@ -136,11 +157,6 @@ void Update() {
         {
             this_ui.SendCallback( "arena_menu.as" );
         }
-        else if( message.name == "mod_campaign" ) 
-        {
-            SetInterlevelData("current_mod_campaign",message.getString(0));
-            this_ui.SendCallback("general_campaign_menu.as");
-        }
         else if( message.name == "Play" )
         {
             this_ui.SendCallback(message.getString(0));
@@ -156,6 +172,10 @@ void Update() {
         else if( message.name == "Back" )
         {
             this_ui.SendCallback( "back" );
+        }
+        else if( message.name == "change_difficulty" )
+        {
+            this_ui.SendCallback( "difficulty_menu.as" );
         }
 		else if( message.name == "shift_menu" ){
             StorageSetInt32("play_menu-shift_offset", ShiftMenu(message.getInt(0)));
@@ -174,6 +194,7 @@ void Update() {
 			SetCurrentControllerItem(index);
 		}
     }
+
 	// Do the general GUI updating
     imGUI.update();
 	UpdateController();

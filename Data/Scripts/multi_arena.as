@@ -457,7 +457,7 @@ void CharactersNoticeEachOther() {
          MovementObject@ char = ReadCharacter(i);
          for(int j=i+1; j<num_chars; ++j) {
              MovementObject@ char2 = ReadCharacter(j);
-             Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
+             Log(info, "Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.");
              char.ReceiveScriptMessage("notice " + char2.GetID());
              char2.ReceiveScriptMessage("notice " + char.GetID());
          }
@@ -493,7 +493,7 @@ void SetUpLevel(float initial_difficulty) {
                 JSON battlesJSON = params.GetJSON("Battles");
                 
                 string save_file = "Data/BattleJSONDumps/" + level_name + "-battle_data.json";
-                Print("Battle Setup Found, saving to: " + save_file + "\n");
+                Log(info, "Battle Setup Found, saving to: " + save_file);
                 StartWriteFile();
                 AddFileString( battlesJSON.writeString(true) );
                 WriteFileToWriteDir( save_file );
@@ -501,20 +501,20 @@ void SetUpLevel(float initial_difficulty) {
                 // Pull out the battle array
                 JSONValue battlesValues = battlesJSON.getRoot()["data"]["battles"];
 
-                Print("Found " + battlesValues.size() + " battles\n" );
+                Log(info, "Found " + battlesValues.size() + " battles");
                 for( uint battleIndex = 0; battleIndex < battlesValues.size(); battleIndex++ ) {
                     battleInstanceValues.insertLast( battlesValues[ battleIndex ] );
                     
                     JSONValue battleName = battlesValues[ battleIndex ]["name"];
 
-                    Print("Adding battle: " + battleName.asString() + "\n" );
+                    Log(info, "Adding battle: " + battleName.asString());
                 }
-                Print("Done adding battles\n" );
+                Log(info, "Done adding battles");
 
             }
         }
     }
-    Print("Done adding all battles\n" );
+    Log(info, "Done adding all battles");
 
     if( battleInstanceValues.length() == 0 ) {
         //DisplayError("Error", "No battle instances found in arena level" );
@@ -698,7 +698,7 @@ void ReceiveMessage(string msg) {
             }
         }
     } else if(token == "new_match") {
-        Print("new_match received\n");
+        Log(info, "new_match received");
         msh.PlayerRevived();
 
         // Check if we're on a valid profile.
@@ -773,22 +773,22 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         int char_a = atoi(token_iter.GetToken(msg));
         if(token == "character_died") {
-            Print("Player "+char_a+" was killed\n");
+            Log(info, "Player "+char_a+" was killed");
             audience_excitement += 4.0f;
         } else if(token == "character_knocked_out") {
-            Print("Player "+char_a+" was knocked out\n");
+            Log(info, "Player "+char_a+" was knocked out");
             audience_excitement += 3.0f;
         } else if(token == "character_start_flip") {
-            Print("Player "+char_a+" started a flip\n");
+            Log(info, "Player "+char_a+" started a flip");
             audience_excitement += 0.4f;
         } else if(token == "character_start_roll") {
-            Print("Player "+char_a+" started a roll\n");
+            Log(info, "Player "+char_a+" started a roll");
             audience_excitement += 0.4f;
         } else if(token == "character_failed_flip") {
-            Print("Player "+char_a+" failed a flip\n");
+            Log(info, "Player "+char_a+" failed a flip");
             audience_excitement += 1.0f;
         } else if(token == "item_hit") {
-            Print("Player "+char_a+" was hit by an item\n");
+            Log(info, "Player "+char_a+" was hit by an item");
             audience_excitement += 1.5f;
         }
 
@@ -849,35 +849,35 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         int char_b = atoi(token_iter.GetToken(msg));
         if(token == "knocked_over") {
-            Print("Player "+char_a+" was knocked over by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" was knocked over by player "+char_b);
             audience_excitement += 1.5f;
             AggressionDetected(char_b);
         } else if(token == "passive_blocked") {
-            Print("Player "+char_a+" passive-blocked an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" passive-blocked an attack by player "+char_b);
             audience_excitement += 0.5f;
             AggressionDetected(char_b);
         } else if(token == "active_blocked") {
-            Print("Player "+char_a+" active-blocked an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" active-blocked an attack by player "+char_b);
             audience_excitement += 0.7f;
             AggressionDetected(char_b);
         } else if(token == "dodged") {
-            Print("Player "+char_a+" dodged an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" dodged an attack by player "+char_b);
             audience_excitement += 0.7f;
             AggressionDetected(char_b);
         } else if(token == "character_attack_feint") {
-            Print("Player "+char_a+" feinted an attack aimed at "+char_b+"\n");
+            Log(info, "Player "+char_a+" feinted an attack aimed at "+char_b);
             audience_excitement += 0.4f;
         } else if(token == "character_attack_missed") {
-            Print("Player "+char_a+" missed an attack aimed at "+char_b+"\n");
+            Log(info, "Player "+char_a+" missed an attack aimed at "+char_b);
             audience_excitement += 0.4f;    
         } else if(token == "character_throw_escape") {
-            Print("Player "+char_a+" escaped a throw attempt by "+char_b+"\n");
+            Log(info, "Player "+char_a+" escaped a throw attempt by "+char_b);
             audience_excitement += 0.7f;        
         } else if(token == "character_thrown") {
-            Print("Player "+char_a+" was thrown by "+char_b+"\n");
+            Log(info, "Player "+char_a+" was thrown by "+char_b);
             audience_excitement += 1.5f;
         } else if(token == "cut") {
-            Print("Player "+char_a+" was cut by "+char_b+"\n");
+            Log(info, "Player "+char_a+" was cut by "+char_b);
             audience_excitement += 2.0f;
             AggressionDetected(char_b);
         }
@@ -1004,7 +1004,7 @@ void VictoryCheck() {
                     ++match_score[last_round_winner];
                 }
                 
-                Print("Last round winner: "+last_round_winner+"\n");
+                Log(info, "Last round winner: "+last_round_winner);
                 int max_score = 1;
                 if(meta_states[1] == "two_points") {
                     max_score = 2;

@@ -238,6 +238,10 @@ class FlipInfo {
         return flip_tuck;
     }
 
+    bool IsRolling() {
+        return flipping && rolling;
+    }
+
     void StartRoll(vec3 target_velocity) {
         if(allow_rolling){
             level.SendMessage("character_start_roll "+this_mo.getID());

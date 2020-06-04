@@ -927,6 +927,9 @@ float CloudShadow(vec3 pos){
 }
 
 void main() {
+    #if defined(INVISIBLE) && !defined(COLLISION)
+        discard;
+    #endif
     /*{
         vec3 world_dx = dFdx(world_vert);
         vec3 world_dy = dFdy(world_vert);
@@ -1067,14 +1070,20 @@ void main() {
             }
         #endif
         #if defined(VOLCANO)
-            float volcano_amount = max(0.0, 1.0 - normal.y);
-            out_color.xyz = mix(out_color.xyz, textureLod(tex2,normal,5.0).xyz, volcano_amount);
+            float volcano_amount = min(1.0, max(0.0, 1.0 - normal.y));
+            out_color.xyz += (textureLod(tex2,normal,5.0).xyz - out_color.xyz) * volcano_amount;
         #endif
         #if defined(MISTY) || defined(MISTY2) || defined(SKY_ARK) || defined(CAVE)
             float haze_amount = GetHazeAmount(normal * 1000.0, haze_mult);
             vec3 fog_color;
             fog_color = textureLod(tex2, normal, 3.0).xyz * GetFogColorMult();
             out_color.xyz = mix(out_color.xyz, fog_color, haze_amount);
+        #endif
+        #ifdef SKY_ARK
+            if(normal.y < -0.02){
+                float val = 1.0 - max(0.0, min(1.0, (normal.y+0.04) / 0.02));
+                out_color.xyz = mix(out_color.xyz, textureLod(tex2, normal, 0.0).xyz * vec3(1.2,1.1,1.0), val);
+            }
         #endif
         #if defined(RAINY)
             float haze_amount = GetHazeAmount(normal * 1000.0, haze_mult);
@@ -1320,7 +1329,7 @@ void main() {
 
             vec3 spec_color = vec3(0.0);
             
-            #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA)
+            #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK)
                 ambient_mult *= env_ambient_mult;
             #endif
 
@@ -1384,6 +1393,12 @@ void main() {
             float size = length(instance_transform[instance_id] * vec4(0,0,1,0));
         #endif
         vec4 colormap = texture(tex0, tex_coord);
+        #ifdef WATER
+        if(colormap.a * color_tint.a < 0.5){
+            discard;
+        }
+        #endif
+
         float random = rand(gl_FragCoord.xy);
         #ifdef DEPTH_ONLY
             if(colormap.a *color_tint.a < random){
@@ -1914,9 +1929,15 @@ void main() {
         vec3 concat_bone3 = cross(concat_bone1, concat_bone2);
 
         float blood_amount, wetblood;
-        vec4 blood_texel = textureLod(blood_tex, tex_coord, 0.0);
+        vec4 blood_texel = textureLod(blood_tex, vec2(tex_coord[0], 1.0-tex_coord[1]), 0.0);
         ReadBloodTex(blood_tex, vec2(tex_coord[0], 1.0-tex_coord[1]), blood_amount, wetblood);
 
+
+
+        /*out_color.xyz = vec3(blood_texel);
+        out_color.a = 1.0;
+        return;
+*/
         vec2 tex_offset = vec2(pow(blood_texel.g, 8.0)) * 0.001;
 
         // Get world space normal
@@ -2212,12 +2233,20 @@ void main() {
     #endif
     #ifdef WATER
     roughness = 0.0;
+    #ifdef DIRECTED_WATER_DECALS
+        colormap = vec4(0.0);
+    #endif
     #endif
     { 
         CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
     }
     #ifdef WATER
-    extra_froth = roughness;
+        #ifdef DIRECTED_WATER_DECALS
+            extra_froth = colormap.r;
+            colormap.xyz = vec3(1.0);
+        #else
+            extra_froth = roughness;
+        #endif
     #endif
     #ifdef INSTANCED_MESH
         if(instance_color_tint[3] == -1.0){
@@ -2823,7 +2852,7 @@ void main() {
             #endif
         #endif
 
-        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA)
+        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA) || defined(SKY_ARK)
         ambient_mult *= env_ambient_mult;
         #endif
         CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult);
@@ -2946,13 +2975,21 @@ void main() {
             temp_tex_coords.x += ws_normal.x * 0.02;
             temp_tex_coords.y += ws_normal.z * 0.02;
 
-            #ifdef WATERFALL_ARENA
+            #if defined(WATERFALL_ARENA) && !defined(NO_WATER_SCROLL)
             temp_tex_coords.y += time * 0.4;
             #endif
 
+            #ifdef WATER_FROTH_SCROLL_X_SLOW
+            temp_tex_coords.x -= time * 0.1;
+            #endif
+            
             vec3 temp_color = texture(tex1, temp_tex_coords).xyz;
 
-            color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+            #ifdef DIRECTED_WATER_DECALS
+                color.xyz = mix(color.xyz, diffuse_color * 4.0, pow(extra_froth, 1.0));
+            #else
+                color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+            #endif
         }
 
         //out_color.xyz = vec3(old_depth);
@@ -2975,8 +3012,12 @@ void main() {
             #endif
 
             vec3 temp_color = texture(tex1, temp_tex_coords).xyz;
-
-            color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+            
+            #ifdef DIRECTED_WATER_DECALS
+                color.xyz = mix(color.xyz, diffuse_color * 4.0, pow(extra_froth, 1.0));
+            #else
+                color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+            #endif
         }
 
     #endif
@@ -3118,12 +3159,19 @@ void main() {
         }
     #endif
 
-
     #if defined(WATERFALL_ARENA) && !defined(CAVE)
     haze_amount = max(haze_amount, min(1.0, length(ws_vertex) * 0.01));
     #endif
 
     color = mix(color, fog_color, haze_amount);
+
+    #if defined(SKY_ARK) && defined(WATER)
+        float fade_amount = min(1.0, length(world_vert) * 0.0005);
+        fade_amount = max(0.0, fade_amount - 0.75);
+        fade_amount *= 4.0;
+    //color.xyz = vec3(pow(fade_amount, 10.0));
+        color.xyz = mix(color.xyz, textureLod(spec_cubemap, ws_vertex, 0).xyz * vec3(1.2,1.1,1.0), min(fade_amount, 1.0));
+    #endif
 
 
     #ifdef ALPHA

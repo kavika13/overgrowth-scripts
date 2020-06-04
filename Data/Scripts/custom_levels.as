@@ -46,11 +46,11 @@ void BuildUI(){
 	if(custom_levels.size() == 0){
 		AddNoResults(mainDiv, true);
 	}else{
-		CreateMenu(mainDiv, custom_levels, "custom_levels", initial_offset, item_per_screen, rows_per_screen, false, false);
+		CreateMenu(mainDiv, custom_levels, "custom_levels", initial_offset, item_per_screen, rows_per_screen, false, false, menu_width, menu_height, false, false, false, true);
 	}
 	imGUI.getMain().setElement(mainDiv);
     AddCustomLevelsHeader();
-	AddBackButton();
+	AddBackButton(true,true);
 	search.ShowSearchResults();
 }
 
@@ -69,7 +69,7 @@ void ResetLevelList(){
     for( uint i = 0; i < active_sids.length(); i++ ) {
         array<ModLevel>@ menu_items = ModGetSingleLevels(active_sids[i]); 
         for( uint k = 0; k < menu_items.length(); k++ ) {
-			custom_levels.insertLast(LevelInfo(menu_items[k].GetPath(), menu_items[k].GetTitle(), menu_items[k].GetThumbnail()));
+			custom_levels.insertLast(LevelInfo(menu_items[k]));
         }
     }
 }

@@ -1,5 +1,6 @@
 #include "music_load.as"
 #include "menu_common.as"
+#include "campaign_common.as"
 
 MusicLoad ml("Data/Music/menu.xml");
 
@@ -55,6 +56,12 @@ void BuildUI(){
     horizontal_buttons_holder.append(buttons_holder);
     left_panel.append(horizontal_buttons_holder);
 
+    string last_campaign_id = GetGlobalSave().GetValue("last_campaign_played");
+    Campaign camp = GetCampaign(last_campaign_id);  
+    if(camp.GetLevels().size() > 0 ) {
+        AddButton("Continue", buttons_holder, forward_chevron);
+    }
+
     AddButton("Play", buttons_holder, play_icon);
     AddButton("Settings", buttons_holder, settings_icon);
     AddButton("Mods",     buttons_holder, mods_icon);
@@ -99,6 +106,14 @@ void Update() {
         else if( message.name == "Play" ) 
         {
             this_ui.SendCallback( "play_menu.as" );
+        }
+        else if( message.name == "Continue" )
+        {
+            string campaign_id = GetGlobalSave().GetValue("last_campaign_played");
+            string level_id = GetGlobalSave().GetValue("last_level_played");
+
+            SetCampaignID(campaign_id);
+            LoadLevelID(level_id);
         }
         else if( message.name == "Exit" )
         {
