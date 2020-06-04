@@ -97,6 +97,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
     vec3 ik_shift;
     vec3[] last_grip_pos;
     vec3[] old_ik_offset;
+    vec3 target_pos;
 
     ShimmyAnimation() {
         hand_pos.resize(2);
@@ -123,6 +124,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         last_grip_pos[1] = vec3(0.0f);
         old_ik_offset[0] = vec3(0.0f);
         old_ik_offset[1] = vec3(0.0f);
+        target_pos = pos;
     }
 
     void Update(vec3 _target_pos, vec3 dir, const Timestep &in ts){
@@ -147,6 +149,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         lag_vel = mix(this_mo.velocity, lag_vel, pow(0.95f,ts.frames()));        // Update lagged velocity clone
 
         ledge_dir = dir;                                                        // Update ledge direction
+        target_pos = _target_pos;
     }
 
     void GetIKOffsets(const PassLedgeState &in pls, vec3 &out body, vec3 &out left_hand, vec3 &out right_hand, vec3 &out left_foot, vec3 &out right_foot) {

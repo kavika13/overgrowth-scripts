@@ -1,4 +1,5 @@
 #version 150
+
 #ifdef ALPHA
 uniform sampler2D tex0;
 in vec2 frag_tex;
@@ -7,7 +8,7 @@ in vec2 frag_tex;
 #pragma bind_out_color
 out vec4 out_color;
 
-void main() {    
+void main() {
 #ifdef ALPHA
     if(texture(tex0, frag_tex).a < 0.1) {
         discard;

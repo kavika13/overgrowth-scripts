@@ -198,8 +198,6 @@ Object@ SpawnObjectAtSpawnPoint(Object@ spawn, string &in path){
     vec4 rot_vec4 = spawn.GetRotationVec4();
     quaternion q(rot_vec4.x, rot_vec4.y, rot_vec4.z, rot_vec4.a);
     new_obj.SetRotation(q);
-    ScriptParams@ params = new_obj.GetScriptParams();
-    params.AddIntCheckbox("No Save", true);
     return new_obj;
 }
 

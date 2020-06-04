@@ -7,7 +7,7 @@ layout (std140) uniform ClusterInfo {
     uint num_lights;
     uint light_cluster_data_offset;
     uint light_data_offset;
-    uint pad2;
+    uint cluster_width;
     mat4 inv_proj_mat;
     vec4 viewport;
     float z_near;
@@ -35,10 +35,13 @@ struct PointLightData {
 #define light_decal_data_buffer tex15
 #define cluster_buffer tex13
 
+#define COUNT_BITS 24u
+#define COUNT_MASK ((1u << (32u - COUNT_BITS)) - 1u)
+#define INDEX_MASK ((1u << (COUNT_BITS)) - 1u)
 
+#if !defined(DEPTH_ONLY)
 uniform samplerBuffer light_decal_data_buffer;
 uniform usamplerBuffer cluster_buffer;
-
 
 PointLightData FetchPointLight(uint light_index) {
 	PointLightData l;
@@ -55,34 +58,12 @@ PointLightData FetchPointLight(uint light_index) {
 }
 
 
-void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness) {
-	uint num_lights_ = uint(num_lights);
-
-	uint num_z_clusters = grid_size.z;
-
-	vec4 ndcPos;
-	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-	ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
-	ndcPos.w = 1.0;
-
-	vec4 clipPos = ndcPos / gl_FragCoord.w;
-	vec4 eyePos = inv_proj_mat * clipPos;
-
-	float zVal = ZCLUSTERFUNC(eyePos.z);
-
-	zVal = max(0u, min(zVal, num_z_clusters - 1u));
-
-	uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
-
-	// index of cluster we're in
-	uint light_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z) + 1u;
-	uint val = texelFetch(cluster_buffer, int(light_cluster_index)).x;
-
+void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness, uint light_val, float ambient_mult) {
 	// number of lights in current cluster
-	uint light_count = (val >> 16) & 0xFFFFU;
+	uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
 
 	// index into cluster_lights
-	uint first_light_index = val & 0xFFFFU;
+	uint first_light_index = light_val & INDEX_MASK;
 
 	// light list data is immediately after cluster lookup data
 	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -90,7 +71,7 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
 
 	// debug option, uncomment to visualize clusters
 	//out_color = vec3(min(light_count, 63u) / 63.0);
-	//out_color = vec3(g.z / num_z_clusters);
+	//out_color = vec3(g.z / grid_size.z);
 
 	for (uint i = 0u; i < light_count; i++) {
 		uint light_index = texelFetch(cluster_buffer, int(first_light_index + i)).x;
@@ -118,7 +99,7 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
             d *= mix(pow(1.0 - (n.y-0.5)*2.0, 1.0), 1.0, 0.1);
         }
 
-		diffuse_color += falloff * d * l.color;
+		diffuse_color += falloff * d * l.color * ambient_mult;
 
 
         vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
@@ -126,9 +107,10 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
         float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
         spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
 
-		spec_color += falloff * spec * l.color;
+		spec_color += falloff * spec * l.color * ambient_mult;
 	}
 }
+#endif
 
 
 #include "lighting150.glsl"
@@ -341,8 +323,51 @@ CALC_FINAL_UNIVERSAL(1.0)
 #define CALC_FINAL_ALPHA \
 CALC_FINAL_UNIVERSAL(colormap.a)
 
+#define decalDefault 0
+#define decalShadow 1
+#define decalBlood 2
+#define decalFire 3
+#define decalUnused 4
+#define decalUnderwater 5
+#define decalWatersplat 6
+#define decalEnvShadow 7
+
+
 vec4 GetWeightMap(sampler2D tex, vec2 coord){
     vec4 weight_map = texture(tex, coord);
     weight_map[3] = max(0.0, 1.0 - (weight_map[0]+weight_map[1]+weight_map[2]));
     return weight_map;
+}
+
+// From iq on shadertoy
+float hash(vec2 p)
+{
+    float h = dot(p, vec2(127.1, 311.7));
+
+    return -1.0 + 2.0*fract(sin(h)*43758.5453123);
+}
+
+float noise(in vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    vec2 u = f*f*(3.0 - 2.0*f);
+
+    return mix(mix(hash(i + vec2(0.0, 0.0)),
+        hash(i + vec2(1.0, 0.0)), u.x),
+        mix(hash(i + vec2(0.0, 1.0)),
+            hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fractal(in vec2 uv) {
+    float f = 0.0;
+    mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+    f = 0.5000*noise(uv); uv = m*uv;
+    f += 0.2500*noise(uv); uv = m*uv;
+    f += 0.1250*noise(uv); uv = m*uv;
+    f += 0.0625*noise(uv); uv = m*uv;
+    f += 0.03125*noise(uv); uv = m*uv;
+    f += 0.016625*noise(uv); uv = m*uv;
+    return f;
 }

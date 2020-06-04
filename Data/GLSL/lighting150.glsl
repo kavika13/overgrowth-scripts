@@ -204,7 +204,7 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
 #endif
 
 
-vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, float plant_shake) {
+vec3 CalcVertexOffset (const vec3 world_pos, float wind_amount, float time, float plant_shake) {
     vec3 vertex_offset = vec3(0.0);
 
     float wind_shake_amount = 0.02;
@@ -323,14 +323,31 @@ float GetHazeAmount( in vec3 relative_position ) {
     return fog_opac;
 }
 
+
+#if defined(FRAGMENT_SHADER) && !defined(DEPTH_ONLY)
 float GetHazeAmount( in vec3 relative_position, float haze_mult) { 
     /*float near = 0.1;
     float far = 1000.0;
     float fog_opac = min(1.0,length(relative_position)/far);
     */
     float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
+    #ifdef RAINY
+    {
+        float dist = length(relative_position);
+        vec3 dir = normalize(relative_position);
+        float second_layer_opac = pow(min(1.0, dist * 0.025), 0.9);
+        float first_layer_opac = pow(min(1.0, dist * 0.05) - second_layer_opac * 0.5, 0.9);
+        //haze_amount *= 1.0 + sin(dir.y * 10.0 + time * 32.0 + cos(dir.x * 10.0)+ cos(dir.z * 7.0)) * 0.05 * first_layer_opac;
+        float angle = atan(dir.z, -dir.x);
+        float fade = 1.0 - dir.y * dir.y;
+        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 100, dir.y * 5.0 + time * 16.0)) * 0.2 * first_layer_opac * fade));
+        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y + time * 2.0)) * 0.8 * second_layer_opac * fade));
+        
+    }
+    #endif
     return fog_opac;
 }
+#endif
 
 void AddHaze( inout vec3 color, 
               in vec3 relative_position,

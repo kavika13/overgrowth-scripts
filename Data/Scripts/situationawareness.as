@@ -205,27 +205,6 @@ class Situation {
                 }
             }
         }
-        // If nobody to look at, check again, and look at unconscious enemies also
-        if(closest_id == -1){
-            for(uint i=0; i<known_chars.size(); ++i){
-                if(!known_chars[i].friendly){
-                    MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                    float dist;
-                    if(this_mo.controlled) {
-                        vec3 cam_dir = normalize(char.position - camera.GetPos());
-                        dist = -dot(cam_dir, camera.GetFacing());
-                    } else {
-                        dist = distance_squared(char.position, this_mo.position);
-                    }
-                    if(dist < _target_look_threshold_sqrd){
-                        if(closest_id == -1 || dist < closest_dist){
-                            closest_id = known_chars[i].id;
-                            closest_dist = dist;
-                        }
-                    }
-                }
-            }
-        }
         return closest_id;
     }
 };

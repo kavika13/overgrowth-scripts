@@ -1,8 +1,18 @@
 #version 150
+
+#if defined(WATER)
+#define NO_DECALS
+#endif
+
+#define FIRE_DECAL_ENABLED
+//#define RAINY
+
+uniform float time;
+
+
 #include "object_frag150.glsl"
 #include "object_shared150.glsl"
 #include "ambient_tet_mesh.glsl"
-#include "decals.glsl"
 
 #ifdef PARTICLE
     uniform sampler2D tex0; // Colormap
@@ -24,9 +34,11 @@
         uniform sampler2DArray tex19;
 
         uniform mat4 reflection_capture_matrix[10];
+        uniform mat4 reflection_capture_matrix_inverse[10];
         uniform int reflection_capture_num;
 
         uniform mat4 light_volume_matrix[10];
+        uniform mat4 light_volume_matrix_inverse[10];
         uniform int light_volume_num;
 
         uniform float haze_mult;
@@ -98,9 +110,11 @@
     uniform sampler2DArray tex19;
 
     uniform mat4 reflection_capture_matrix[10];
+    uniform mat4 reflection_capture_matrix_inverse[10];
     uniform int reflection_capture_num;
 
     uniform mat4 light_volume_matrix[10];
+    uniform mat4 light_volume_matrix_inverse[10];
     uniform int light_volume_num;
     uniform mat4 prev_projection_view_mat;
 
@@ -111,6 +125,7 @@
     #ifdef TERRAIN
     #elif defined(CHARACTER) || defined(ITEM)
     #else
+        #define INSTANCED_MESH
         const int kMaxInstances = 100;
 
         uniform InstanceInfo {
@@ -137,14 +152,14 @@
 
 uniform vec3 cam_pos;
 uniform mat4 shadow_matrix[4];
-uniform mat4 mvp;
 uniform mat4 projection_view_mat;
 
-uniform float time;
+#include "decals.glsl"
+
+in vec3 world_vert;
 
 #ifdef PARTICLE
     in vec2 tex_coord;
-    in vec3 world_vert;
     #if defined(NORMAL_MAP_TRANSLUCENT) || defined(WATER) || defined(SPLAT)
         in vec3 tangent_to_world1;
         in vec3 tangent_to_world2;
@@ -155,26 +170,24 @@ uniform float time;
     in vec2 frag_tex_coords;
     in vec2 base_tex_coord;
     in mat3 tangent_to_world;
-    in vec3 ws_vertex;
-    in vec3 world_vert;
-    in vec4 shadow_coords[4];
 #elif defined(ITEM)
     #ifndef DEPTH_ONLY
-    in vec3 ws_vertex;
-    in vec3 world_vert;
-    in vec3 vel;
+        #ifndef NO_VELOCITY_BUF
+            in vec3 vel;
+        #endif
     #ifdef TANGENT
         in vec3 frag_normal;
     #endif
     #endif
     in vec2 frag_tex_coords;
 #elif defined(TERRAIN)
-    in vec3 frag_tangent;
+    #ifdef DETAILMAP4
+        in vec3 frag_tangent;
+    #endif
     #if !defined(SIMPLE_SHADOW)
-         in float alpha;
+         //in float alpha;
     #endif
     in vec4 frag_tex_coords;
-    in vec3 world_vert;
 #elif defined(CHARACTER)
     in vec2 fur_tex_coord;
     #ifndef DEPTH_ONLY
@@ -182,24 +195,29 @@ uniform float time;
     in vec3 concat_bone2;
     in vec2 tex_coord;
     in vec2 morphed_tex_coord;
-    in vec3 world_vert;
     in vec3 orig_vert;
-    in vec3 vel;
+        #ifndef NO_VELOCITY_BUF
+        in vec3 vel;
+        #endif
     #endif
 #else
     #ifdef TANGENT
     in mat3 tan_to_obj;
     #endif
     in vec2 frag_tex_coords;
-    in vec3 world_vert;
     #ifndef NO_INSTANCE_ID
     flat in int instance_id;
     #endif
 #endif
 #pragma bind_out_color
 out vec4 out_color;
+
+#ifndef NO_VELOCITY_BUF
+
 #pragma bind_out_vel
 out vec4 out_vel;
+
+#endif  // NO_VELOCITY_BUF
 
 #define shadow_tex_coords tc1
 #define tc0 frag_tex_coords
@@ -220,34 +238,13 @@ float LinearizeDepth(float z) {
 }
 //#endif
 
-void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert) {
-    uint num_lights_ = uint(num_lights);
-
-    uint num_z_clusters = grid_size.z;
-
-    vec4 ndcPos;
-    ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-    ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
-    ndcPos.w = 1.0;
-
-    vec4 clipPos = ndcPos / gl_FragCoord.w;
-    vec4 eyePos = inv_proj_mat * clipPos;
-
-    float zVal = ZCLUSTERFUNC(eyePos.z);
-
-    zVal = max(0u, min(zVal, num_z_clusters - 1u));
-
-    uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
-
-    // index of cluster we're in
-    uint light_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z) + 1u;
-    uint val = texelFetch(cluster_buffer, int(light_cluster_index)).x;
-
+#if !defined(DEPTH_ONLY)
+void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert, uint light_val) {
     // number of lights in current cluster
-    uint light_count = (val >> 16) & 0xFFFFU;
+    uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
 
     // index into cluster_lights
-    uint first_light_index = val & 0xFFFFU;
+    uint first_light_index = light_val & INDEX_MASK;
 
     // light list data is immediately after cluster lookup data
     uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
@@ -255,7 +252,7 @@ void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert) {
 
     // debug option, uncomment to visualize clusters
     //out_color = vec3(min(light_count, 63u) / 63.0);
-    //out_color = vec3(g.z / num_z_clusters);
+    //out_color = vec3(g.z / grid_size.z);
 
     for (uint i = 0u; i < light_count; i++) {
         uint light_index = texelFetch(cluster_buffer, int(first_light_index + i)).x;
@@ -271,12 +268,13 @@ void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert) {
         diffuse_color += falloff * l.color * 0.5;
     }
 }
+#endif //!DEPTH_ONLY
 
 #if !defined(DETAIL_OBJECT) && !defined(DEPTH_ONLY)
 vec3 LookupSphereReflectionPos(vec3 world_vert, vec3 spec_map_vec, int which) {
     //vec3 sphere_pos = world_vert - reflection_capture_pos[which];
     //sphere_pos /= reflection_capture_scale[which];
-    vec3 sphere_pos = (inverse(reflection_capture_matrix[which]) * vec4(world_vert, 1.0)).xyz;
+    vec3 sphere_pos = (reflection_capture_matrix_inverse[which] * vec4(world_vert, 1.0)).xyz;
     if(length(sphere_pos) > 1.0){
         return spec_map_vec;
     }
@@ -303,13 +301,21 @@ vec3 LookupSphereReflectionPos(vec3 world_vert, vec3 spec_map_vec, int which) {
 
 const float water_speed = 0.03;
 
-float GetWaterHeight(vec2 pos){
-    float scale = 0.001;
+float GetWaterHeight(vec2 pos, vec3 tint){
+    float scale = 0.1 * tint[0];
     float height = 0.0;
-    height += texture(tex0, pos + normalize(vec2(0.0, 1.0))*time*water_speed).x * scale;
-    height += texture(tex0, pos * 0.3 + normalize(vec2(1.0, 0.0))*time*water_speed * pow(0.3, 0.5)).x * scale / 0.3;
-    height += texture(tex0, pos * 0.1 + normalize(vec2(-1.0, 0.0))*time*water_speed * pow(0.1, 0.5)).x * scale / 0.1;
-    height += texture(tex0, pos * 0.05 + normalize(vec2(-1.0, 1.0))*time*water_speed * pow(0.05, 0.5)).x * scale / 0.05;
+    float uv_scale = tint[1];
+    float scaled_water_speed = water_speed * uv_scale;
+    pos *= uv_scale;
+    height = texture(tex0, pos  * 0.3 + normalize(vec2(0.0, 1.0))*time*scaled_water_speed).x;
+    height += texture(tex0, pos * 0.7 + normalize(vec2(1.0, 0.0))*time*3.0*scaled_water_speed).x;
+    height += texture(tex0, pos * 1.1 + normalize(vec2(-1.0, 0.0))*time*5.0*scaled_water_speed).x;
+    height += texture(tex0, pos * 0.6 + normalize(vec2(-1.0, 1.0))*time*7.0*scaled_water_speed).x;
+    height *= scale;
+
+    //height += texture(tex0, pos * 0.3 + normalize(vec2(1.0, 0.0))*time*water_speed * pow(0.3, 0.5)).x * scale / 0.3;
+    //height += texture(tex0, pos * 0.1 + normalize(vec2(-1.0, 0.0))*time*water_speed * pow(0.1, 0.5)).x * scale / 0.1;
+    //height += texture(tex0, pos * 0.05 + normalize(vec2(-1.0, 1.0))*time*water_speed * pow(0.05, 0.5)).x * scale / 0.05;
 
     /*
     height += sin(pos.x * 11.0 + time * water_speed) * scale;
@@ -382,7 +388,7 @@ bool Query3DTexture(inout vec3 ambient_color, vec3 pos, vec3 normal) {
     }
     for(int i=0; i<light_volume_num; ++i){
         //vec3 temp = (world_vert - reflection_capture_pos[i]) / reflection_capture_scale[i];
-        vec3 temp = (inverse(light_volume_matrix[i]) * vec4(pos, 1.0)).xyz;
+        vec3 temp = (light_volume_matrix_inverse[i] * vec4(pos, 1.0)).xyz;
         vec3 scale_vec = (light_volume_matrix[i] * vec4(1.0, 1.0, 1.0, 0.0)).xyz;
         float scale = dot(scale_vec, scale_vec);
         float val = dot(temp, temp);
@@ -459,7 +465,7 @@ vec3 LookUpReflectionShapes(sampler2DArray reflections_tex, vec3 world_vert, vec
         float total = 0.0;
         for(int i=0; i<reflection_capture_num; ++i){
             //vec3 temp = (world_vert - reflection_capture_pos[i]) / reflection_capture_scale[i];
-            vec3 temp = (inverse(reflection_capture_matrix[i]) * vec4(world_vert, 1.0)).xyz;
+            vec3 temp = (reflection_capture_matrix_inverse[i] * vec4(world_vert, 1.0)).xyz;
             vec3 scale_vec = (reflection_capture_matrix[i] * vec4(1.0, 1.0, 1.0, 0.0)).xyz;
             float scale = dot(scale_vec, scale_vec);
             float val = dot(temp, temp);
@@ -487,39 +493,6 @@ vec3 LookUpReflectionShapes(sampler2DArray reflections_tex, vec3 world_vert, vec
 }
 #endif
 
-// From iq on shadertoy
-float hash( vec2 p )
-{
-    float h = dot(p,vec2(127.1,311.7));
-
-    return -1.0 + 2.0*fract(sin(h)*43758.5453123);
-}
-
-float noise( in vec2 p )
-{
-    vec2 i = floor( p );
-    vec2 f = fract( p );
-
-    vec2 u = f*f*(3.0-2.0*f);
-
-    return mix( mix( hash( i + vec2(0.0,0.0) ),
-                     hash( i + vec2(1.0,0.0) ), u.x),
-                mix( hash( i + vec2(0.0,1.0) ),
-                     hash( i + vec2(1.0,1.0) ), u.x), u.y);
-}
-
-float fractal( in vec2 uv){
-    float f = 0.0;
-    mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
-    f  = 0.5000*noise( uv ); uv = m*uv;
-    f += 0.2500*noise( uv ); uv = m*uv;
-    f += 0.1250*noise( uv ); uv = m*uv;
-    f += 0.0625*noise( uv ); uv = m*uv;
-    f += 0.03125*noise( uv ); uv = m*uv;
-    f += 0.016625*noise( uv ); uv = m*uv;
-    return f;
-}
-
 // From http://www.thetenthplanet.de/archives/1180
 mat3 cotangent_frame( vec3 N, vec3 p, vec2 uv )
 {
@@ -545,8 +518,43 @@ mat3 cotangent_frame( vec3 N, vec3 p, vec2 uv )
 //#define ALBEDO_ONLY
 //#define NO_DECALS
 //#define NO_DETAILMAPS
-#define WATER_DECAL_ENABLED
+
 void main() {
+    vec3 ws_vertex = world_vert - cam_pos;
+
+    vec4 ndcPos;
+    ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+    ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
+    ndcPos.w = 1.0;
+
+    vec4 clipPos = ndcPos / gl_FragCoord.w;
+    vec4 eyePos = inv_proj_mat * clipPos;
+
+    float zVal = ZCLUSTERFUNC(eyePos.z);
+
+    zVal = max(0u, min(zVal, grid_size.z - 1u));
+
+    uvec3 g = uvec3(uvec2(gl_FragCoord.xy) / cluster_width, zVal);
+
+    out_color = vec4(0.0);
+
+    // decal/light cluster stuff
+#if !(defined(NO_DECALS) || defined(DEPTH_ONLY))
+    uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * grid_size.z + g.z);
+    uint decal_val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
+    uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
+    /*out_color.xyz = vec3(decal_count * 0.1);
+    out_color.a = 1.0;
+    return;*/
+#endif  // NO_DECALS
+
+    uint light_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * grid_size.z + g.z) + 1u;
+#if defined(DEPTH_ONLY)
+    uint light_val = 0U;
+#else
+    uint light_val = texelFetch(cluster_buffer, int(light_cluster_index)).x;
+#endif //DEPTH_ONLY
+
     #ifdef DETAIL_OBJECT
         float dist_fade = 1.0 - length(ws_vertex)/max_distance;
         CALC_COLOR_MAP
@@ -573,7 +581,7 @@ void main() {
         #ifdef DEPTH_ONLY
             out_color = vec4(1.0);
             return;
-        #else
+        #else  // DEPTH_ONLY
             vec4 normalmap = texture(normal_tex,tc0);
             vec3 normal = UnpackTanNormal(normalmap);
             vec3 ws_normal = tangent_to_world * normal;
@@ -581,14 +589,31 @@ void main() {
             vec3 base_normalmap = texture(base_normal_tex,tc1).xyz;
         #ifdef TERRAIN
                 vec3 base_normal = normalize((base_normalmap*vec3(2.0))-vec3(1.0));
-        #else
+        #else  // TERRAIN
                 //I'm assuming this normal is supposed to be in world space --Max
                 vec3 base_normal = normalize(normal_matrix * UnpackObjNormalV3(base_normalmap.xyz));
-        #endif
+        #endif  // TERRAIN
             ws_normal = mix(ws_normal,base_normal,min(1.0,1.0-(dist_fade-0.5)));
 
+            float ambient_mult = 1.0;
+            float env_ambient_mult = 1.0;
+            float roughness = 1.0;
+        #ifndef NO_DECALS
+            float spec_amount = 0.0;
+            vec3 flame_final_color = vec3(0.0, 0.0, 0.0);;
+            float flame_final_contrib = 0.0;
+            CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
+        #endif
         #define shadow_tex_coords tc1
+            vec4 shadow_coords[4];
+            shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
+            shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
+            shadow_coords[2] = shadow_matrix[2] * vec4(world_vert, 1.0);
+            shadow_coords[3] = shadow_matrix[3] * vec4(world_vert, 1.0);
             CALC_SHADOWED
+            #ifdef SIMPLE_SHADOW
+                shadow_tex.r *= ambient_mult;
+            #endif
 
             vec3 ambient_cube_color[6];
             for(int i=0; i<6; ++i){
@@ -601,14 +626,14 @@ void main() {
             #endif
             CALC_DIRECT_DIFFUSE_COLOR
             if(!use_amb_cube){
-                diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) * GetAmbientContrib(1.0);
+                diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) * GetAmbientContrib(1.0) * ambient_mult * env_ambient_mult;
             } else {
-                diffuse_color += SampleAmbientCube(ambient_cube_color, ws_normal) * GetAmbientContrib(1.0);
+                diffuse_color += SampleAmbientCube(ambient_cube_color, ws_normal) * GetAmbientContrib(1.0) * ambient_mult * env_ambient_mult;
             }
 
             vec3 spec_color = vec3(0.0);
-            float roughness = 1.0;
-            CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness);
+            
+            CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, 1.0);
 
             // Put it all together
             vec3 base_color = texture(base_color_tex,tc1).rgb * color_tint;
@@ -632,63 +657,6 @@ void main() {
         return;
         #endif // DEPTH_ONLY
     #elif defined(PARTICLE)
-    #if defined(WATER_DECAL_ENABLED) && !defined(DEPTH_ONLY) && !defined(NO_DECALS) // Hide particles if they intersect water fog decal
-        { // Water decal
-            uint num_z_clusters = grid_size.z;
-
-            vec4 ndcPos;
-            ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-            ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
-            ndcPos.w = 1.0;
-
-            vec4 clipPos = ndcPos / gl_FragCoord.w;
-            vec4 eyePos = inv_proj_mat * clipPos;
-
-            float zVal = ZCLUSTERFUNC(eyePos.z);
-
-            zVal = max(0u, min(zVal, num_z_clusters - 1u));
-
-            uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
-
-            // index of cluster we're in
-            uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z);
-            uint val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
-
-            // number of decals in current cluster
-            uint decal_count = (val >> 16) & 0xFFFFU;
-
-            // debug option, uncomment to visualize clusters
-            //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
-            //colormap.xyz = vec3(g.z / num_z_clusters);
-
-            // index into cluster_decals
-            uint first_decal_index = val & 0xFFFFU;
-
-            // decal list data is immediately after cluster lookup data
-            uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
-            first_decal_index = first_decal_index + 2u * num_clusters;
-
-            vec3 world_dx = dFdx(world_vert);
-            vec3 world_dy = dFdy(world_vert);
-            for (uint i = 0u; i < decal_count; ++i) {
-                // texelFetch takes int
-                uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
-
-                DecalData decal = FetchDecal(decal_index);
-                if(int(decal.tint.a) == 5){
-
-                    mat4 test = inverse(decal.transform);
-
-                    vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
-
-                    if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-                    } else {
-                        discard;
-                    }
-                }
-            }
-        }
-    #endif // WATER_DECAL_ENABLED
         #ifdef INSTANCED
             vec4 color_tint = instance_color[instance_id];
             float size = length(instance_transform[instance_id] * vec4(0,0,1,0));
@@ -701,7 +669,6 @@ void main() {
             }
             return;
         #else
-            vec3 ws_vertex = vec3(0.0);
             vec4 shadow_coords[4];
 
             int num_samples = 2;
@@ -768,19 +735,18 @@ void main() {
             #endif
 
             diffuse_color += ambient_color * GetAmbientContrib(1.0);
-            CalculateLightContribParticle(diffuse_color, world_vert);
+
+            CalculateLightContribParticle(diffuse_color, world_vert, light_val);
 
             vec3 color = diffuse_color * colormap.xyz *color_tint.xyz;
 
             #ifdef SPLAT
-                ws_vertex = world_vert - cam_pos;
                 vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
                 blood_spec *= 10.0;
                 vec3 spec_map_vec = reflect(ws_vertex, mix(tangent_to_world3, ws_normal, 0.5));
                 vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
                 color = mix(color, (blood_spec + reflection_color), 0.1);
             #elif defined(WATER)
-                ws_vertex = world_vert - cam_pos;
                 vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
                 blood_spec *= 10.0;
                 vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
@@ -798,7 +764,7 @@ void main() {
                 color.xyz = colormap.xyz*color_tint.xyz*5.0;
             #endif
 
-            float alpha = colormap.a*color_tint.a*depth_blend;
+            float alpha = min(1.0, colormap.a*color_tint.a*depth_blend);
             #ifdef SPLAT
                 if(alpha < 0.3){
                     discard;
@@ -838,11 +804,9 @@ void main() {
         vec4 colormap = texture(tex0, base_tex_coords);
     #endif
 
-	vec3 ws_vertex = vec3(0.0);
-	vec4 shadow_coords[4];
+    vec4 shadow_coords[4];
 
-	#ifndef DEPTH_ONLY
-        ws_vertex = world_vert - cam_pos;
+    #ifndef DEPTH_ONLY
         shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
         shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
         shadow_coords[2] = shadow_matrix[2] * vec4(world_vert, 1.0);
@@ -934,6 +898,15 @@ void main() {
         #endif
 
         vec4 weight_map = GetWeightMap(weight_tex, base_tex_coords);
+        #ifdef HEIGHT_BLEND
+            float heights[4];
+            for(int i=0; i<4; ++i){
+                heights[i] = weight_map[i] + texture(detail_normal, vec3(detail_coords, i)).a;
+            }
+            for(int i=0; i<4; ++i){
+                weight_map[i] = pow(heights[i], 16.0);
+            }
+        #endif
         float total = weight_map[0] + weight_map[1] + weight_map[2] + weight_map[3];
         weight_map /= total;
         CALC_DETAIL_FADE
@@ -1170,6 +1143,8 @@ void main() {
 
         vec4 colormap = texture(color_tex, morphed_tex_coord + tex_offset);
         vec4 tintmap = texture(tint_map, morphed_tex_coord + tex_offset);
+        float tint_total = max(1.0, tintmap[0] + tintmap[1] + tintmap[2] + tintmap[3]);
+        tintmap /= tint_total;
         vec3 tint_mult = mix(vec3(0.0), tint_palette[0], tintmap.r) +
                          mix(vec3(0.0), tint_palette[1], tintmap.g) +
                          mix(vec3(0.0), tint_palette[2], tintmap.b) +
@@ -1197,23 +1172,27 @@ void main() {
             {
                 vec3 unpacked_normal = UnpackTanNormal(normalmap);
                 #ifdef WATER
+                    vec3 tint = color_tint[instance_id].xyz;
                     float sample_height[3];
-                    float eps = 0.01;
+                    float eps = 0.015 / tint[1];
                     vec2 water_uv = world_vert.xz * 0.2;
                     vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
                     proj_test_point /= proj_test_point.w;
                     proj_test_point.xy += vec2(1.0);
                     proj_test_point.xy *= 0.5;
                     float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r);
-                    if(gl_FrontFacing){
-                        water_depth += (texture(tex0, water_uv * 0.3 + normalize(vec2(0.0, 1.0))*time*water_speed).y + texture(tex0, water_uv * 0.5 + normalize(vec2(1.0, 0.0))*time*water_speed*1.1).y) * (normalize(ws_vertex).y+1.0) * 0.1;
+                    sample_height[0] = GetWaterHeight(water_uv, tint);
+                    /*if(gl_FrontFacing){
+                        water_depth += sample_height[0] * tint.x * 8.0 * (normalize(ws_vertex).y+1.0);
                         if(water_depth > old_depth){
                             discard;
                         }
-                    }
-                    sample_height[0] = GetWaterHeight(water_uv);
-                    sample_height[1] = GetWaterHeight(water_uv + vec2(eps, 0.0));
-                    sample_height[2] = GetWaterHeight(water_uv + vec2(0.0, eps));
+                    }*/
+                    /*out_color.xyz = vec3(sample_height[0]);
+                    out_color.a = 1.0;
+                    return;*/
+                    sample_height[1] = GetWaterHeight(water_uv + vec2(eps, 0.0), tint);
+                    sample_height[2] = GetWaterHeight(water_uv + vec2(0.0, eps), tint);
                     unpacked_normal.x = sample_height[1] - sample_height[0];
                     unpacked_normal.y = sample_height[2] - sample_height[0];
                     unpacked_normal.z = eps;
@@ -1229,16 +1208,25 @@ void main() {
                         }
                     #endif
 
-                    base_ws_normal = normalize((model_mat[instance_id] * vec4((tan_to_obj * vec3(0,0,1)),0.0)).xyz);
+                    base_ws_normal = normalize((model_rotation_mat[instance_id] * (tan_to_obj * vec3(0,0,1))).xyz);
                 #endif
-                ws_normal = normalize((model_mat[instance_id] * vec4((tan_to_obj * unpacked_normal),0.0)).xyz);
+                #ifdef MEGASCAN_TEST
+                unpacked_normal.y *= -1.0;
+                #endif
+                ws_normal = normalize((model_rotation_mat[instance_id] * (tan_to_obj * unpacked_normal)).xyz);
+                #ifdef WATER
+                    //ws_normal = vec3(0,1,0);
+                    //ws_normal = normalize(vec3(unpacked_normal.x, unpacked_normal.z, unpacked_normal.y));
+                #endif
             }
         #else
             vec4 normalmap = texture(tex1,tc0);
             vec3 os_normal = UnpackObjNormal(normalmap);
             vec3 ws_normal = model_rotation_mat[instance_id] * os_normal;
         #endif
-        colormap.xyz *= color_tint[instance_id].xyz;
+        #ifndef WATER
+            colormap.xyz *= color_tint[instance_id].xyz;
+        #endif
     #endif
 #ifndef PLANT
 #ifdef ALPHA
@@ -1259,6 +1247,9 @@ void main() {
         float roughness = normalmap.a;
     #elif defined(METALNESS_PBR)
         float roughness = (1.0 - normalmap.a);
+    #elif defined(MEGASCAN_TEST)
+        float roughness = pow(normalmap.a, 0.25);
+        spec_amount = 0.0;
     #elif defined(TERRAIN)
         #ifdef SNOWY
            float old_spec = spec_amount;
@@ -1287,20 +1278,41 @@ void main() {
     //out_color = vec4(vec3(roughness), 1.0);
     //return;
 
+    //out_color = vec4(vec3(ws_normal), 1.0);
+    //return;
+
 // wet character
 #ifdef CHARACTER
     float wet = 0.0;
     if(blood_texel.g < 1.0){
         wet = blood_texel.g;//pow(max(blood_texel.g-0.2, 0.0)/0.8, 0.5);
-        colormap.xyz *= mix(1.0, 0.5, wet);
+        #ifdef RAINY
+            wet = 1.0;
+        #else
+            colormap.xyz *= mix(1.0, 0.5, wet);
+        #endif
         roughness = mix(roughness, 0.3, wet);
     }
 #endif
 
     float ambient_mult = 1.0;
-#if !defined(PLANT) && !defined(NO_DECALS)
-    CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, world_vert, time);
+    float env_ambient_mult = 1.0;
+
+    vec3 flame_final_color = vec3(0.0, 0.0, 0.0);
+    float flame_final_contrib = 0.0;
+
+#if !defined(NO_DECALS)
+#ifdef PLANT
+    float spec_amount = 0.0;
 #endif
+    #ifdef INSTANCED_MESH
+        if(color_tint[instance_id][3] != -1.0)
+    #endif
+    { 
+        CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
+    }
+#endif
+
     #ifdef ALBEDO_ONLY
         out_color = vec4(colormap.xyz,1.0);
         return;
@@ -1332,7 +1344,7 @@ void main() {
 #ifdef CAN_USE_3D_TEX
     for(int i=0; i<light_volume_num; ++i){
         //vec3 temp = (world_vert - reflection_capture_pos[i]) / reflection_capture_scale[i];
-        vec3 temp = (inverse(light_volume_matrix[i]) * vec4(world_vert, 1.0)).xyz;
+        vec3 temp = (light_volume_matrix_inverse[i] * vec4(world_vert, 1.0)).xyz;
         vec3 scale_vec = (light_volume_matrix[i] * vec4(1.0, 1.0, 1.0, 0.0)).xyz;
         float scale = dot(scale_vec, scale_vec);
         float val = dot(temp, temp);
@@ -1384,11 +1396,11 @@ void main() {
     }
 
 
-    diffuse_color += ambient_color * GetAmbientContrib(shadow_tex.g) * ambient_mult;
-    #ifdef PLANT
+    diffuse_color += ambient_color * GetAmbientContrib(shadow_tex.g) * ambient_mult * env_ambient_mult;
+    #if defined(PLANT)
         vec3 spec_color = vec3(0.0);
         vec3 translucent_lighting = GetDirectColor(shadow_tex.r) * primary_light_color.a;
-        translucent_lighting += ambient_color;
+        translucent_lighting += ambient_color * GetAmbientContrib(shadow_tex.g) * ambient_mult * env_ambient_mult;
         translucent_lighting *= GammaCorrectFloat(0.6);
         vec3 translucent_map = texture(translucency_tex, frag_tex_coords).xyz;
         /*
@@ -1411,13 +1423,21 @@ void main() {
         float fresnel = pow(glancing, 4.0) * (1.0 - roughness) * 0.05;
         float spec_val = mix(base_reflectivity, 1.0, fresnel);
         spec_amount = spec_val;*/
-        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness);
+
+        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult * env_ambient_mult);
         diffuse_color *= colormap.xyz;
         diffuse_color += translucent_lighting * translucent_map;
         diffuse_color *= color_tint[instance_id].xyz;
 
         //vec3 color = mix(diffuse_color, spec_color, spec_amount);
         vec3 color = diffuse_color;
+    #elif defined(WATERFALL)
+        vec3 spec_color = vec3(0.0);
+
+        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult * env_ambient_mult);
+        vec3 color = diffuse_color;
+        diffuse_color = GetDirectColor(shadow_tex.r) + GetAmbientColor(world_vert, normalize(-ws_vertex)) * ambient_mult * env_ambient_mult;
+        color = diffuse_color * 0.5;
     #else
         vec3 spec_color = vec3(0.0);
         #ifdef CHARACTER
@@ -1432,7 +1452,7 @@ void main() {
             vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 
             vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), reflection_roughness*3.0);
-            spec_color += reflection_color;
+            spec_color += reflection_color * ambient_mult * env_ambient_mult;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = mix(spec_amount * 0.1, 0.03, wet);
@@ -1470,6 +1490,14 @@ void main() {
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;*/
         #elif defined(METALNESS_PBR) || defined(ITEM) || defined(KEEP_SPEC) || defined(TERRAIN)
+            #if defined(RAINY)
+                #ifndef TERRAIN
+                    roughness *= 0.3;
+                    spec_amount = mix(spec_amount, 1.0, 0.1);
+                #else 
+                    roughness *= 0.6;
+                #endif
+            #endif
             #ifdef ITEM
                 spec_amount = GammaCorrectFloat(spec_amount);
 
@@ -1480,9 +1508,9 @@ void main() {
             float reflection_roughness = roughness;
             roughness = mix(0.00001, 0.9, roughness);
             float metalness = pow(spec_amount, 0.3);
-            #if !defined(KEEP_SPEC) && !defined(TERRAIN)
+            /*#if defined(ITEM)
                 spec_amount = mix((1.0 - roughness) * 0.15, 1.0, metalness);
-            #endif
+            #endif*/
             float spec_pow = 2/pow(max(0.25, roughness), 4.0) - 2.0;
             float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,spec_pow);
             spec *= (spec_pow + 8) / (8 * 3.141592);
@@ -1493,7 +1521,7 @@ void main() {
             vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, min(2.5, reflection_roughness * 5.0));
             // Disabled in case ambient_cube_color is not initialized
             //reflection_color = mix(reflection_color, SampleAmbientCube(ambient_cube_color, spec_map_vec), max(0.0, reflection_roughness * 2.0 - 1.0));
-            spec_color += reflection_color;
+            spec_color += reflection_color * ambient_mult * env_ambient_mult;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
@@ -1504,8 +1532,12 @@ void main() {
             //out_color.a = 1.0;
             //return;
         #else // Standard envobject
+            #if defined(RAINY)
+                roughness *= 0.5;
+                spec_amount = mix(spec_amount, 1.0, 0.01);
+            #endif
             #ifdef WATER
-                roughness = 0.0;
+                roughness = color_tint[instance_id].x * 0.3;
                 spec_amount = 0.03;
                 //colormap.xyz = vec3(0.0, 0.01, 0.01);
                 colormap.xyz = vec3(0.02, 0.03, 0.02);
@@ -1525,7 +1557,7 @@ void main() {
 
 
             vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
-            spec_color += reflection_color;
+            spec_color += reflection_color * ambient_mult * env_ambient_mult;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
@@ -1546,12 +1578,15 @@ void main() {
                 spec_amount = spec_val;
             #endif
         #endif
-        #if defined(METALNESS_PBR)
-            colormap.xyz *= color_tint[instance_id].xyz;
-        #elif !defined(ALPHA) && !defined(DETAILMAP4) && !defined(CHARACTER) && !defined(ITEM)
-            colormap.xyz *= mix(vec3(1.0),color_tint[instance_id].xyz,normalmap.a);
+        #ifndef WATER
+            #if defined(METALNESS_PBR)
+                colormap.xyz *= color_tint[instance_id].xyz;
+            #elif !defined(ALPHA) && !defined(DETAILMAP4) && !defined(CHARACTER) && !defined(ITEM)
+                colormap.xyz *= mix(vec3(1.0),color_tint[instance_id].xyz,normalmap.a);
+            #endif
         #endif
-        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness);
+
+        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult);
         #if defined(METALNESS_PBR) || defined(ITEM)
             spec_color = mix(spec_color, spec_color * colormap.xyz, metalness);
         #endif
@@ -1587,34 +1622,43 @@ void main() {
    // out_color.xyz = spec_color.xyz;
 #endif
 
-#ifdef WATER
+#ifdef WATER // Handle water transparency, refraction, fog
     vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
     proj_test_point /= proj_test_point.w;
     proj_test_point.xy += vec2(1.0);
     proj_test_point.xy *= 0.5;
+    // proj_test_point is now world position in screen space
     float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
-    vec2 distort = vec2(base_water_offset.xy) * max(0.0, min(old_depth, 1.0) ) / (water_depth * 1.0 + 0.3);
+    // old_depth is now the amount of water we are looking through
+    const float refract_mult = 1.0;
+    vec2 distort = vec2(base_water_offset.xy);
+    distort *= max(0.0, min(old_depth, 1.0) ); // Scale refraction based on depth
+    distort /= (water_depth * 1.0 + 0.3); // Reduce refraction based on camera distance from water
+    distort *= refract_mult; // Arbitrarily control refraction amount
     proj_test_point.xy += distort;
     float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
-    if(depth < 0.5){
-        proj_test_point.xy -= distort * 0.5;
-        depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    { // Prevent objects above the water from bleeding into the refraction
+        if(depth < 0.25){
+            proj_test_point.xy -= distort * 0.5;
+            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+        }
+        if(depth < 0.125){
+            proj_test_point.xy -= distort * 0.5;
+            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+        }
     }
-    if(depth < 0.25){
-        proj_test_point.xy -= distort * 0.5;
-        depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
-    }
-    vec3 under_water = texture(tex17, proj_test_point.xy).xyz;
-    if(gl_FrontFacing){
-        #if !defined(WATER_DECAL_ENABLED) || !defined(NO_DECALS)
-            under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3, 0.2))));
-        #endif
+    vec3 under_water = texture(tex17, proj_test_point.xy).xyz; // color texture from opaque objects
+    if(gl_FrontFacing){ // Only add foam and fog if water is viewed from outside of water
+        //#if !defined(NO_DECALS)
+            under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3, 0.2)))); // Add fog
+        //#endif
         float min_depth = -0.3;
         float max_depth = 0.1;
-        float foam_detail = texture(tex0, (world_vert.xz + normalize(vec2(0.0, 1.0))*time*water_speed)*5.0).y + texture(tex0, (world_vert.xz + normalize(vec2(1.0, 0.0))*time*water_speed)*7.0).y;
+        float foam_detail = texture(tex0, (world_vert.xz + normalize(vec2(0.0, 1.0))*time*water_speed)*5.0).y + 
+                            texture(tex0, (world_vert.xz * 0.5 + normalize(vec2(1.0, 0.0))*time*water_speed)*7.0).y;
         foam_detail *= 0.5;
         foam_detail = min(1.0, foam_detail+0.3);
-        if(depth < max_depth && depth > min_depth && abs(old_depth - depth) < 0.1){
+        if(depth < max_depth && depth > min_depth && abs(old_depth - depth) < 0.1){ // Blend in foam
             if(depth > 0.0){
                 under_water = mix(diffuse_color * 0.3, under_water, min(1.0, depth/max_depth + foam_detail));
             } else {
@@ -1659,7 +1703,6 @@ void main() {
     } else {
         fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex * -1.0);
     }
-    color = mix(color, fog_color, haze_amount);
 
     #if !defined(TERRAIN) && !defined(CHARACTER) && !defined(ITEM)
     #ifdef EMISSIVE
@@ -1668,6 +1711,8 @@ void main() {
     //}
     #endif
     #endif
+
+    color = mix(color, fog_color, haze_amount);
 
 
     #ifdef ALPHA
@@ -1678,6 +1723,8 @@ void main() {
         out_color = vec4(color,1.0);
     #endif
 
+   #ifndef NO_VELOCITY_BUF
+
     #ifdef CHARACTER
         out_vel.xyz = vel;
         out_vel.a = 1.0;
@@ -1687,6 +1734,8 @@ void main() {
     #else
         out_vel = vec4(0.0);
     #endif
+
+   #endif  // NO_VELOCITY_BUF
 
 // Screen space reflection test
 //#define SCREEN_SPACE_REFLECTION
@@ -1706,22 +1755,14 @@ void main() {
     float random = rand(gl_FragCoord.xy);
 
     vec3 test_point = march;
-    #ifdef TERRAIN
-        proj_test_point = (mvp * vec4(test_point, 1.0));
-    #else
         proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-    #endif
     proj_test_point /= proj_test_point.w;
     proj_test_point.xy += vec2(1.0);
     proj_test_point.xy *= 0.5;
     vec2 a = proj_test_point.xy;
 
     test_point += spec_map_vec * 0.1;
-    #ifdef TERRAIN
-        proj_test_point = (mvp * vec4(test_point, 1.0));
-    #else
         proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-    #endif
     proj_test_point /= proj_test_point.w;
     proj_test_point.xy += vec2(1.0);
     proj_test_point.xy *= 0.5;
@@ -1733,11 +1774,7 @@ void main() {
     while(!done){
         march += spec_map_vec * step_size;
         test_point = march + (spec_map_vec * step_size * random * 1.5);
-        #ifdef TERRAIN
-            proj_test_point = (mvp * vec4(test_point, 1.0));
-        #else
             proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
-        #endif
         proj_test_point /= proj_test_point.w;
         proj_test_point.xy += vec2(1.0);
         proj_test_point.xy *= 0.5;
@@ -1827,215 +1864,9 @@ void main() {
     avg /= 6.0;
     out_color.xyz = avg;
     out_color.xyz = ambient_color;*/
-//#ifndef WATER
-#if defined(WATER_DECAL_ENABLED) && !defined(NO_DECALS)
-    { // Water decal
-        uint num_z_clusters = grid_size.z;
 
-        vec4 ndcPos;
-        ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-        ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
-        ndcPos.w = 1.0;
-
-        vec4 clipPos = ndcPos / gl_FragCoord.w;
-        vec4 eyePos = inv_proj_mat * clipPos;
-
-        float zVal = ZCLUSTERFUNC(eyePos.z);
-
-        zVal = max(0u, min(zVal, num_z_clusters - 1u));
-
-        uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
-
-        // index of cluster we're in
-        uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z);
-        uint val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
-
-        // number of decals in current cluster
-        uint decal_count = (val >> 16) & 0xFFFFU;
-
-        // debug option, uncomment to visualize clusters
-        //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
-        //colormap.xyz = vec3(g.z / num_z_clusters);
-
-        // index into cluster_decals
-        uint first_decal_index = val & 0xFFFFU;
-
-        // decal list data is immediately after cluster lookup data
-        uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
-        first_decal_index = first_decal_index + 2u * num_clusters;
-
-        vec3 world_dx = dFdx(world_vert);
-        vec3 world_dy = dFdy(world_vert);
-        for (uint i = 0u; i < decal_count; ++i) {
-            // texelFetch takes int
-            uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
-
-            DecalData decal = FetchDecal(decal_index);
-            if(int(decal.tint.a) == 5){
-                float spawn_time = decal.transform[0][3];
-                decal.transform[0][3] = 0.0;
-                mat4 test = inverse(decal.transform);
-
-                vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
-
-                if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-                } else {
-                    //spec_amount = mix(spec_amount, 1.0, 0.1);
-                    //colormap.xyz *= 0.4;
-                    // Find water surface
-                    vec3 cam_temp = (test * vec4(cam_pos, 1.0)).xyz;
-                    //mix(cam_temp[1], temp[1], t) = 0.5;
-                    //cam_temp[1] - t * cam_temp[1] + temp[1] * t = 0.5;
-                    float t = (cam_temp[1] - 0.5) / (cam_temp[1] - temp[1]);
-                    vec3 world_vert_surface_temp = mix(cam_temp, temp, t);
-                    //vec3 world_vert_surface = (decal.transform * vec4(world_vert_surface_temp, 1.0)).xyz;//mix(cam_pos, world_vert, t);
-                    vec3 world_vert_surface = mix(cam_pos, world_vert, t);
-                    vec3 world_vert_up = (decal.transform * vec4(vec3(temp.x, 0.5, temp.z), 1.0)).xyz;
-                    float surface_depth = (test * vec4(world_vert_surface, 1.0)).xyz[1];
-                    float world_depth = (test * vec4(world_vert, 1.0)).xyz[1];
-                    float fog_dist;
-                    if(cam_temp[1] > 0.5){
-                        fog_dist = length(world_vert - world_vert_surface);
-                    } else {
-                        fog_dist = length(world_vert - cam_pos);
-                    }
-                    float fog_amount = min(1.0, fog_dist * 0.2);
-                    float water_depth = distance(world_vert_up, world_vert);
-                    vec3 start;
-                    float start_depth;
-                    if(cam_temp[1] > 0.5){
-                        start = world_vert_surface;
-                        start_depth = 0.0;
-                    } else {
-                        start = cam_pos;
-                        vec3 cam_pos_up = (decal.transform * vec4(vec3(cam_temp.x, 0.5, cam_temp.z), 1.0)).xyz;
-                        start_depth = distance(cam_pos_up, cam_pos);
-                    }
-                    const int num_samples = 5;
-                    vec3 total_color = vec3(0.0);
-                    float total = 0.0;
-                    for(int i=0; i<num_samples; ++i){
-                        float t = i / float(num_samples-1);
-                        float temp_depth = mix(start_depth, water_depth, t);
-                        vec3 pos = mix(start, world_vert, t);
-                        float weight = 1.0 / (length(start-pos)+1.0);
-                        total_color += vec3(1.0 - pow(temp_depth * 0.5, 1.0)) * weight;
-                        total += weight;
-                    }
-                    vec3 fog_color = total_color / total;
-                    fog_color *= vec3(0.05, 0.03, 0.03);
-                    #ifndef WATER
-                    float caustics = (sin(world_vert.x*-10.0 + time * 5.0) + sin(world_vert.z*-7.0 + time * 3.0) + sin(world_vert.z*11.0 + world_vert.x * 5.0 + time * 2.0)+ sin(world_vert.z*-13.0 + world_vert.x * 7.0 + time * 1.4))/8.0;
-                    caustics = pow(max(0.0, min(1.0, 1.0 - abs(caustics) * 4.0)), 2.0) * 2.0;
-                    out_color.xyz *= vec3(mix(1.0, caustics, min(1.0, water_depth * 0.3)));
-                    #endif
-                    vec3 shadow_color;
-                    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), ws_light));
-                    vec3 up = normalize(cross(right, ws_light));
-                    {
-                        vec3 color = vec3(0.0);
-                        int num_samples = 5;
-                        float random = rand(gl_FragCoord.xy);
-                        vec3 target_vert = world_vert;
-                        float max_length = 2.0;
-                        if(length(target_vert - start) > max_length){
-                            target_vert = normalize(target_vert - start) * max_length + start;
-                        }
-                        float total = 0.0;
-                        for(int i=0; i<num_samples; ++i){
-                            vec3 sample_vert = mix(target_vert, start, (i+random)/float(num_samples));
-                            ws_vertex = sample_vert - start;
-                            shadow_coords[0] = shadow_matrix[0] * vec4(sample_vert, 1.0);
-                            shadow_coords[1] = shadow_matrix[1] * vec4(sample_vert, 1.0);
-                            shadow_coords[2] = shadow_matrix[2] * vec4(sample_vert, 1.0);
-                            shadow_coords[3] = shadow_matrix[3] * vec4(sample_vert, 1.0);
-                            float len = length(ws_vertex);
-                            float weight = 1.0;
-                            float lit = GetCascadeShadow(shadow_sampler, shadow_coords, len) * weight;
-                            vec2 temp = vec2(dot(right, sample_vert), dot(up, sample_vert));
-                            lit *= abs((sin(temp.x*-5.0 + time * 2.0) + sin(temp.y*-7.0 + time * 1.5) + sin(temp.x*3.0+temp.y*4.0 + time * 2.3))/3.0);
-                            color += lit;
-                            total += weight;
-                        }
-                        color /= total;
-                        shadow_color = color;
-                    }
-                    fog_color.xyz *= (shadow_color * 2.0 + 1.0);
-                    out_color.xyz = mix(out_color.xyz, out_color.xyz * fog_color, min(1.0, pow(water_depth * 0.5, 1.0)));
-                    out_color.xyz = mix(out_color.xyz, fog_color, fog_amount);
-                }
-            }
-        }
-    }
-
-    #endif // WATER_DECAL_ENABLED
-    #define FIRE_DECAL_ENABLED
     #if defined(FIRE_DECAL_ENABLED) && !defined(NO_DECALS)
-    { // Water decal
-        uint num_z_clusters = grid_size.z;
-
-        vec4 ndcPos;
-        ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
-        ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
-        ndcPos.w = 1.0;
-
-        vec4 clipPos = ndcPos / gl_FragCoord.w;
-        vec4 eyePos = inv_proj_mat * clipPos;
-
-        float zVal = ZCLUSTERFUNC(eyePos.z);
-
-        zVal = max(0u, min(zVal, num_z_clusters - 1u));
-
-        uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
-
-        // index of cluster we're in
-        uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z);
-        uint val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
-
-        // number of decals in current cluster
-        uint decal_count = (val >> 16) & 0xFFFFU;
-
-        // debug option, uncomment to visualize clusters
-        //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
-        //colormap.xyz = vec3(g.z / num_z_clusters);
-
-        // index into cluster_decals
-        uint first_decal_index = val & 0xFFFFU;
-
-        // decal list data is immediately after cluster lookup data
-        uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
-        first_decal_index = first_decal_index + 2u * num_clusters;
-
-        vec3 world_dx = dFdx(world_vert);
-        vec3 world_dy = dFdy(world_vert);
-        for (uint i = 0u; i < decal_count; ++i) {
-            // texelFetch takes int
-            uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
-
-            DecalData decal = FetchDecal(decal_index);
-            if(int(decal.tint.a) == 3){
-
-                float spawn_time = decal.transform[0][3];
-                decal.transform[0][3] = 0.0;
-                mat4 test = inverse(decal.transform);
-
-                vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
-
-                if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-                } else {
-                    float fade = max(0.0, (0.5 - length(temp))*8.0)* max(0.0, fractal(temp.xz*7.0)+0.3);
-                    temp = world_vert * 2.0;
-                    float fire = abs(fractal(temp.xz*11.0+time*3.0)+fractal(temp.xy*7.0-time*3.0)+fractal(temp.yz*5.0-time*3.0));
-                    float flame_amount = max(0.0, 0.5 - (fire*0.5 / pow(fade, 2.0))) * 2.0;
-                    flame_amount += pow(max(0.0, 0.7-fire), 2.0);
-                    out_color.xyz = mix(out_color.xyz,
-                                    vec3(1.5 * pow(flame_amount, 0.7), 0.5 * flame_amount, 0.1 * pow(flame_amount, 2.0)),
-                                    min(1.0 ,max(0.0, fade * 4.0)));
-                }
-            }
-        }
-    }
-
+        out_color.xyz = mix(out_color.xyz, flame_final_color, flame_final_contrib);
     #endif // FIRE_DECAL_ENABLED
 
     #ifdef CHARACTER
@@ -2061,7 +1892,13 @@ void main() {
                 out_color.xyz = mix(out_color.xyz,
                                 vec3(1.5 * pow(flame_amount, 0.7), 0.5 * flame_amount, 0.1 * pow(flame_amount, 2.0)),
                                 opac);
+
+#ifndef NO_VELOCITY_BUF
+
                 out_vel.xyz += vec3(0.0, fire, 0.0) * 10.0 * on_fire;
+
+#endif  // NO_VELOCITY_BUF
+
             }
         }
     #endif

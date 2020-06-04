@@ -1,10 +1,20 @@
 #version 150
 in vec4 color;
+
+#ifdef FIRE
 in vec3 world_vert;
+#endif
+
 #pragma bind_out_color
 out vec4 out_color;
+
+#ifdef FIRE
+#ifndef NO_VELOCITY_BUF
 #pragma bind_out_vel
 out vec4 out_vel;
+#endif  // NO_VELOCITY_BUF
+#endif
+
 uniform float opacity;
 uniform sampler2D tex5;
 uniform vec2 viewport_dims;
@@ -32,6 +42,7 @@ float noise( in vec2 p )
 }
 
 float fractal( in vec2 uv){
+    uv= fract(uv / 100.0 + vec2(0.5)) * 100.0;
     float f = 0.0;
     mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
     f  = 0.5000*noise( uv ); uv = m*uv;
@@ -100,12 +111,18 @@ void main() {
     //out_color = vec4(vec3((dot_val-0.2)*0.1), 1.0);
     //out_color = vec4(1.0, 1.0, 1.0, 0.1*start_fade);
     const float motion_blur_amount = 5.0;
-    out_vel.xyz = right * (noise+0.3)*motion_blur_amount;
-    out_vel.xyz += up * (noise2+0.3)*motion_blur_amount;
-    out_vel.a = start_fade * 0.3 * min(1.0, max(0.0, -0.3-color[0]));//0.0, min(1.0, pow(width / abs(u), 10.0))*start_fade);
-    out_vel.xyz *= env_depth;
+
+    #ifndef NO_VELOCITY_BUF
+
+        out_vel.xyz = right * (noise+0.3)*motion_blur_amount;
+        out_vel.xyz += up * (noise2+0.3)*motion_blur_amount;
+        out_vel.a = start_fade * 0.3 * min(1.0, max(0.0, -0.3-color[0]));//0.0, min(1.0, pow(width / abs(u), 10.0))*start_fade);
+        out_vel.xyz *= env_depth;
+
+    #endif  // NO_VELOCITY_BUF
+
     //out_color = out_vel;
-    #else
+    #else  // FIRE
 	out_color = vec4(color.rgb, color.w * opacity);
-    #endif
+    #endif  // FIRE
 }

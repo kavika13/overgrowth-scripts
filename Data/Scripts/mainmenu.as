@@ -3,8 +3,7 @@
 #include "arena_meta_persistence.as"
 #include "music_load.as"
 
-AHGUI::FontSetup labelFont("edosz", 70,HexColor("#aaa"));
-AHGUI::FontSetup topLabelFont("edosz", 75,HexColor("#fff"));
+AHGUI::FontSetup labelFont("edosz", 70,HexColor("#fff"));
 AHGUI::FontSetup versionFont("edosz", 65, HexColor("#fff"));
 
 int title_spacing = 100;
@@ -15,6 +14,8 @@ MusicLoad ml("Data/Music/menu.xml");
 AHGUI::MouseOverPulseColor buttonHover(
                                         HexColor("#ffde00"),
                                         HexColor("#ffe956"), .25 );
+
+bool draw_settings = false;
 
 class MainMenuGUI : AHGUI::GUI {
     RibbonBackground ribbon_background;
@@ -52,11 +53,9 @@ class MainMenuGUI : AHGUI::GUI {
         mainpane.addElement(titleImage,DDTop);
 
         mainpane.addSpacer(title_spacing,DDTop);
-        mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-
 
         {
-            AHGUI::Text buttonText = AHGUI::Text("Lugaru", topLabelFont);
+            AHGUI::Text buttonText = AHGUI::Text("Lugaru", labelFont);
             buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
             buttonText.addMouseOverBehavior( buttonHover );
             mainpane.addElement(buttonText, DDTop);
@@ -64,22 +63,9 @@ class MainMenuGUI : AHGUI::GUI {
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
 
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-
-		{
-			AHGUI::Text buttonText = AHGUI::Text("Tutorial", labelFont);
-			buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("tutorial") );
-			buttonText.addMouseOverBehavior( buttonHover );
-			mainpane.addElement(buttonText, DDTop);
-
-			mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-		}
-
-
         {
-            AHGUI::Text buttonText = AHGUI::Text("Editor", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("old_alpha_menu") );
+            AHGUI::Text buttonText = AHGUI::Text("Tutorial", labelFont);
+            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("tutorial") );
             buttonText.addMouseOverBehavior( buttonHover );
             mainpane.addElement(buttonText, DDTop);
 
@@ -103,7 +89,15 @@ class MainMenuGUI : AHGUI::GUI {
 
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
+/*
+        {
+            AHGUI::Text buttonText = AHGUI::Text("Editor", labelFont);
+            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("old_alpha_menu") );
+            buttonText.addMouseOverBehavior( buttonHover );
+            mainpane.addElement(buttonText, DDTop);
 
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+        }
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Settings", labelFont);
@@ -132,9 +126,6 @@ class MainMenuGUI : AHGUI::GUI {
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
 
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-
         {
             AHGUI::Text buttonText = AHGUI::Text("Exit", labelFont);
             buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("exit") );
@@ -142,7 +133,7 @@ class MainMenuGUI : AHGUI::GUI {
             mainpane.addElement(buttonText, DDTop);
 
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
+        }*/
     }
 
     void processMessage( AHGUI::Message@ message )
@@ -188,7 +179,7 @@ class MainMenuGUI : AHGUI::GUI {
         }
         else if( message.name == "settings" )
         {
-            OpenSettings(context);
+            draw_settings = true;
         }
     }
 
@@ -198,6 +189,7 @@ class MainMenuGUI : AHGUI::GUI {
 
         AHGUI::GUI::update();
     }
+
 
     void render() {
         EnterTelemetryZone("MainMenuGUI::render()");
@@ -219,11 +211,17 @@ class MainMenuGUI : AHGUI::GUI {
         LeaveTelemetryZone();
 
         LeaveTelemetryZone();
+
+        if(draw_settings){
+            ImGui_Begin("Settings", draw_settings);
+            ImGui_DrawSettings();
+            ImGui_End();
+        }
     }
 
 }
 
-MainMenuGUI mainmenuGUI;
+MainMenuGUI@ mainmenuGUI = @MainMenuGUI();
 // Comment out the above and uncomment to enable the new feature demo
 //NewFeaturesExampleGUI exampleGUI;
 
@@ -236,11 +234,10 @@ void Initialize() {
 }
 
 void Dispose() {
-    CloseSettings();
 }
 
 bool CanGoBack() {
-    return not CloseSettings();
+    return false;
 }
 
 void Update() {

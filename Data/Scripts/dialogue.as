@@ -1,6 +1,6 @@
 int dialogue_text_billboard_id;
 
-const float pi = 3.14159265359;
+const float MPI = 3.14159265359;
 
 enum ProcessStringType { kInGame, kInEditor };
 
@@ -32,6 +32,7 @@ class ScriptElement {
     bool locked; // Allow changes?
     bool record_locked; 
     int spawned_id; // ID of the object associated with this script line
+    int line_start_char; // index of the line in the full script
     // Pre-tokenized
     ObjCommands obj_command;
     array<string> params;
@@ -55,19 +56,17 @@ class CharRecord {
 
 enum SayParseState {kStart, kInBracket, kContinue};
 
-uint old_input_mode;
+const int kMaxParticipants = 16;
 
 class Dialogue {
     // Contains information from undo/redo
     string history_str;
     // This state is important for undo/redo
     int dialogue_obj_id;
-    int selected_line;
     array<ScriptElement> strings;
     array<ScriptElement> sub_strings;
-    bool recording;
+    array<int> connected_char_ids;
 
-    array<string> dialogue_poses;
     int index; // which dialogue element is being executed
     int sub_index;
     int text_id = -1; // ID for dialogue text canvas texture
@@ -76,40 +75,25 @@ class Dialogue {
     bool show_dialogue;
     bool waiting_for_dialogue;
     bool is_waiting_time;
-    bool skip_dialogue;
+    bool skip_dialogue; // This is dialogue we've already seen
     float wait_time;
+    string dialogue_name;
     string dialogue_text;
     float dialogue_text_disp_chars;
-    string dialogue_name;
+
     vec3 cam_pos;
     vec3 cam_rot;
     float cam_zoom;
-    int say_char;
+
     bool clear_on_complete;
 
     bool show_editor_info;
-    int editor_text_id = -1; // ID of editor text canvas texture
-    bool text_dirty;
-    int set_animation_char_select;
-    int set_animation_pose_select;
-	bool edit_mode;
-    int input_mode_id = -1;
-	string edit_text;
+    int selected_line; // Which line we are editing
 
-    float init_time;
-    float start_time = 0.0;
+    float init_time; // How long since level started
+    float start_time = 0.0; // How long since dialogue started
 
-    void SetRecording(bool val){
-        if(recording != val){
-            recording = val;
-            RibbonItemSetToggled("dialogue_recording", val);
-            
-            text_dirty = true;
-            HandleSelectedString(selected_line);
-            UpdateRecordLocked();
-            ClearUnselectedObjects();
-        }
-    }
+    int old_cursor_pos = -1; // Detect if cursor pos has changed since last check
 
     // Adds an extra '\' before '\' or '"' characters in string
     string EscapeString(const string &in str){
@@ -154,23 +138,16 @@ class Dialogue {
 				for(int j=1; j<=num_connectors; ++j){
 					if(params.HasParam("obj_"+j)){
 						int obj_id = params.GetInt("obj_"+j);
-						if(ObjectExists(obj_id)){
-                            Log( info, "Test" );                
+						if(ObjectExists(obj_id)){   
 							DeleteObjectID(obj_id);
 						}
 					}
 				}
 			}
 		}
-		// To be sure...
-		if (edit_mode) {
-			StopTextInput();
-			edit_mode = false;
-            Log(info, "Ending input limitation");
-		}
     }
 
-    void UpdateRecordLocked() {
+    void UpdateRecordLocked(bool recording) {
         if(dialogue_obj_id == -1 || !ObjectExists(dialogue_obj_id)){
             return;
         }
@@ -181,7 +158,7 @@ class Dialogue {
         if(recording){
             Object @obj = ReadObjectFromID(dialogue_obj_id);
             ScriptParams @params = obj.GetScriptParams();
-            int num_participants = params.GetInt("NumParticipants");
+            int num_participants = min(kMaxParticipants, params.GetInt("NumParticipants"));
 
             int num_lines = int(strings.size());
             int next_wait = num_lines-1;
@@ -247,27 +224,28 @@ class Dialogue {
                 }
             }
         }
-        text_dirty = true;
+    }
+
+    void ClearSpawnedObjects() {
+        int num_strings = int(strings.size());
+        for(int i=0; i<num_strings; ++i){
+            if(strings[i].spawned_id != -1){  
+                DeleteObjectID(strings[i].spawned_id);
+                strings[i].spawned_id = -1;
+            }
+        }
     }
 
     void ClearEditor() {
         Print("Clearing editor\n");        
         if(dialogue_obj_id != -1){
-            int num_strings = int(strings.size());
-            for(int i=0; i<num_strings; ++i){
-                if(strings[i].spawned_id != -1){
-                            Log( info, "Test" );                
-                    DeleteObjectID(strings[i].spawned_id);
-                    strings[i].spawned_id = -1;
-                }
-            }
+            ClearSpawnedObjects();
         }
-        SetRecording(false);
         selected_line = 0;
         dialogue_obj_id = -1;
-        text_dirty = true;
         strings.resize(0);
         clear_on_complete = false;
+        connected_char_ids.resize(0);
         
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
@@ -300,44 +278,6 @@ class Dialogue {
         show_dialogue = false;
         show_editor_info = true;
         waiting_for_dialogue = false;
-
-        if( editor_text_id == -1 ) {
-            editor_text_id = level.CreateTextElement();
-        }
-
-        TextCanvasTexture @editor_text = level.GetTextElement(editor_text_id);
-        editor_text.Create(800, 512);
-        set_animation_char_select = -1;
-        set_animation_pose_select = -1;
-		edit_mode = false;
-        input_mode_id = -1;
-		edit_text = "";
-
-        Print("Loading dialogue poses file\n");
-        if(!LoadFile("Data/Animations/dialogue_poses.txt")){
-            Print("Failed to load dialogue poses file\n");
-        }
-        string new_str;
-        while(true){
-            new_str = GetFileLine();
-            if(new_str == "end"){
-                break;
-            }
-            dialogue_poses.push_back(new_str);
-        }
-        Print("Finished loading dialogue poses file\n");
-    }
-
-    ~Dialogue() {
-        if( text_id != -1 ) {
-            level.DeleteTextElement(text_id); 
-            text_id = -1;
-        }
-        
-        if( editor_text_id != -1 ) {
-            level.DeleteTextElement(editor_text_id); 
-            text_id = -1;
-        }
     }
 
     string CreateStringFromParams(ObjCommands command, array<string> &in params){
@@ -417,7 +357,7 @@ class Dialogue {
 
         int num_participants = 0;
         if(params.HasParam("NumParticipants")){
-            num_participants = params.GetInt("NumParticipants");
+            num_participants = min(kMaxParticipants, params.GetInt("NumParticipants"));
         }
 
         //Place the defaults at the top, but below the title, if there are no commands before then.
@@ -438,8 +378,6 @@ class Dialogue {
             }
         }
 
-        Log( info, "index " + insert_index );
-         
         array<string> str_params;
         str_params.resize(7);
         str_params[0] = obj.GetTranslation().x;
@@ -526,6 +464,84 @@ class Dialogue {
         strings[last_line].visible = false;
     }
 
+    void UpdateScriptFromStrings(){
+        string full_script;
+        for(int i=0, len=strings.size(); i<len; ++i){
+            if(strings[i].visible && strings[i].str != ""){
+                strings[i].line_start_char = full_script.length();
+                full_script += strings[i].str + "\n";
+            }
+        }
+        ImGui_SetTextBuf(full_script);
+    }
+
+    void UpdateStringsFromScript(const string &in script){
+        strings.resize(0);
+        string token = "\n";
+        int script_len = int(script.length());
+        int line_start = 0;
+        for(int i=0; i<script_len; ++i){
+            if(script[i] == token[0] || i==script_len-1){
+                if(script[i] != token[0]){
+                    ++i;
+                }
+                int index = int(strings.size());
+                string str = script.substr(line_start, i-line_start);
+                if(str != "" && str != "\n"){
+                    AddLine(str,index);
+                    strings[index].line_start_char = line_start;
+                }
+                line_start = i+1;
+            }
+        }
+    }
+
+    void UpdateConnectedChars() {
+        bool changed = false;
+        Object @obj = ReadObjectFromID(dialogue_obj_id);
+        ScriptParams @params = obj.GetScriptParams();
+        int num_participants = min(kMaxParticipants, params.GetInt("NumParticipants"));
+        int old_size = int(connected_char_ids.size());
+        if(num_participants < old_size){
+            for(int i=num_participants; i<old_size; ++i){
+                if(connected_char_ids[i] != -1 && ObjectExists(connected_char_ids[i])){
+                    MovementObject@ char = ReadCharacterID(connected_char_ids[i]);
+                    char.ReceiveMessage("set_dialogue_control false");
+                    changed = true;
+                }
+            }
+            connected_char_ids.resize(num_participants);
+        } else if(num_participants > old_size){
+            connected_char_ids.resize(num_participants);
+            for(int i=old_size; i<num_participants; ++i){
+                connected_char_ids[i] = -1;
+            }
+
+        }
+        for(int i=0; i<num_participants; ++i){
+            int new_id = GetDialogueCharID(i+1);
+            if(connected_char_ids[i] != new_id){
+                if(connected_char_ids[i] != -1 && ObjectExists(connected_char_ids[i])){
+                    MovementObject@ char = ReadCharacterID(connected_char_ids[i]);
+                    char.ReceiveMessage("set_dialogue_control false");
+                    changed = true;
+                }
+                if(new_id != -1 && ObjectExists(new_id)){
+                    //MovementObject@ char = ReadCharacterID(new_id);
+                    //char.ReceiveMessage("set_dialogue_control true");
+                    changed = true;
+                }
+                connected_char_ids[i] = new_id;
+            }
+        }
+        if(changed){
+            ClearSpawnedObjects();
+            string script = params.GetString("Script");
+            UpdateStringsFromScript(script);
+            AddInvisibleStrings();
+        }
+    }
+
     void SetDialogueObjID(int id) {
         if(dialogue_obj_id != id){
             ClearEditor();
@@ -538,40 +554,31 @@ class Dialogue {
                     Print("Selected dialogue object does not have the necessary parameters (id "+id+")\n");
                 } else {
                     if(!params.HasParam("Script")){
-            			if(params.GetString("Dialogue") == "empty") {
+            			if(params.GetString("Dialogue") == "empty" || !LoadScriptFile(params.GetString("Dialogue"))) {
                             // Create placeholder script
             				strings.resize(0);
             				AddLine("#name \"Unnamed\"", strings.size());
             				AddLine("#participants 1", strings.size());
             				AddLine("", strings.size());
             				AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
-            			} else {
-                            // Parse script from file
-            				LoadScriptFile(params.GetString("Dialogue"));
             			}
                     } else {
                         // Parse script directly from parameters
                         string script = params.GetString("Script");
-                        string token = "\n";
-                        int script_len = int(script.length());
-                        int line_start = 0;
-                        for(int i=0; i<script_len; ++i){
-                            if(script[i] == token[0]){
-                                AddLine(script.substr(line_start, i-line_start),int(strings.size()));
-                                line_start = i+1;
-                            }
-                        }
+                        UpdateStringsFromScript(script);
                     }
 
+                    SaveScriptToParams();
+                    
+                    UpdateConnectedChars();
+
+                    UpdateStringsFromScript(params.GetString("Script"));
                     AddInvisibleStrings();
+                    UpdateScriptFromStrings();
                     selected_line = 1;
                 }
             }
         }
-    }
-
-	void DeleteLine(int index){
-        strings.removeAt(index);
     }
 
     void AddLine(const string &in str, int index){
@@ -589,16 +596,20 @@ class Dialogue {
         }
     }
 
-    void LoadScriptFile(const string &in path) {
-        strings.resize(0);
-        LoadFile(path);
-        string new_str;
-        while(true){
-            new_str = GetFileLine();
-            if(new_str == "end"){
-                break;
+    bool LoadScriptFile(const string &in path) {
+        if(!LoadFile(path)){
+            return false;
+        } else {
+            strings.resize(0);
+            string new_str;
+            while(true){
+                new_str = GetFileLine();
+                if(new_str == "end"){
+                    break;
+                }
+                AddLine(new_str, strings.size());
             }
-            AddLine(new_str, strings.size());
+            return true;
         }
     }
 
@@ -660,7 +671,6 @@ class Dialogue {
         int num_strings = int(strings.size());
         for(int i=0; i<num_strings; ++i){
             if(strings[i].spawned_id != -1 && i != selected_line && !strings[i].locked && !strings[i].record_locked){
-                            Log( info, "Test" );                
                 DeleteObjectID(strings[i].spawned_id);
                 strings[i].spawned_id = -1;
             }
@@ -669,17 +679,16 @@ class Dialogue {
 
     void RecordInput(const string &in new_string, int line, int last_wait) {
         if(new_string != strings[line].str){
-            if(recording && strings[line].record_locked && last_wait > line){
+            if(strings[line].record_locked && last_wait > line){
                 int spawned_id = strings[line].spawned_id;
                 strings[line].spawned_id = -1;
                 AddLine(new_string, last_wait+1);
                 strings[last_wait+1].spawned_id = spawned_id;
-                UpdateRecordLocked();
+                UpdateRecordLocked(IsRecording());
             } else {
                 strings[line].str = new_string;
                 strings[line].visible = true;
             }
-            text_dirty = true;
             ExecutePreviousCommands(selected_line);
         }
     }
@@ -694,30 +703,12 @@ class Dialogue {
         return last_wait;
     }
 
-    void UpdateRibbonButtons() {
-        bool can_edit_selected = false;
-        EnterTelemetryZone("GetObjectIDs()");
-        array<int> @object_ids = GetObjectIDsType(_placeholder_object);
-        LeaveTelemetryZone();
-        int num_objects = object_ids.length();
-        for(int i=0; i<num_objects; ++i){
-            if(!ObjectExists(object_ids[i])){ // This is needed because SetDialogueObjID can delete some objects
-                continue;
-            }
-            Object @obj = ReadObjectFromID(object_ids[i]);
-            ScriptParams@ params = obj.GetScriptParams();
-            if(obj.IsSelected() && params.HasParam("Dialogue")){
-                can_edit_selected = true;
-            }
+    bool IsRecording() {
+        if(selected_line > 0 && selected_line < int(strings.size())){
+            return strings[selected_line].obj_command == kSay;
+        } else {
+            return false;
         }
-        EnterTelemetryZone("RibbonItemSetEnableds()");
-        RibbonItemSetEnabled("edit_selected_dialogue", can_edit_selected);
-        RibbonItemSetEnabled("stop_editing_dialogue", dialogue_obj_id != -1);
-        RibbonItemSetEnabled("preview_dialogue", dialogue_obj_id != -1);
-        RibbonItemSetEnabled("save_dialogue", dialogue_obj_id != -1);
-        RibbonItemSetEnabled("load_dialogue_pose", dialogue_obj_id != -1);
-        RibbonItemSetEnabled("dialogue_recording", dialogue_obj_id != -1);
-        LeaveTelemetryZone();
     }
 
     void Update() {     
@@ -727,17 +718,10 @@ class Dialogue {
         }
         if(index == 0){
             camera.SetFlags(kEditorCamera);
-            SetGUIEnabled(true);
             if(clear_on_complete){
                 ClearEditor();
             }
         }
-
-        // TODO: update ribbon buttons should only happen in editor mode and when something has changed
-        EnterTelemetryZone("Update ribbon buttons");
-        UpdateRibbonButtons();
-        LeaveTelemetryZone();
-
         
         // Apply camera transform if dialogue has control
         if(has_cam_control){
@@ -774,41 +758,6 @@ class Dialogue {
             }
         }
 
-        if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
-            // Handle up/down dialogue editor navigation
-            if((selected_line < 0 || !strings[selected_line].visible) && !edit_mode){
-                int num_lines = int(strings.size());
-                int i = selected_line + 1;
-                while(i < num_lines && !strings[i].visible){
-                    ++i;
-                }
-                if(i < num_lines && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
-            if(selected_line >= int(strings.size()) && !edit_mode){
-                int i = selected_line - 1;
-                while(i > 0 && !strings[i].visible){
-                    --i;
-                }
-                if(i > 0 && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
-        }
-
         if(GetInputPressed(controller_id, "attack") && start_time != the_time){
             if(index != 0){
                 while(waiting_for_dialogue || is_waiting_time){
@@ -825,145 +774,152 @@ class Dialogue {
         
         int last_wait = GetLastWait(selected_line);
 
-        EnterTelemetryZone("Apply editor object transforms");
-        // Apply editor object transforms to scripts
-        for(int i=0; i<int(strings.size()); ++i){
-            switch(strings[i].obj_command){
-            case kCamera:
-                if(strings[i].spawned_id != -1){
-                    Object@ obj = ReadObjectFromID(strings[i].spawned_id);
-                    vec3 pos = obj.GetTranslation();
-                    vec4 v = obj.GetRotationVec4();
-                    quaternion rot(v.x,v.y,v.z,v.a);
-                    // Set camera euler angles from rotation matrix
-                    vec3 front = Mult(rot, vec3(0,0,1));
-                    float y_rot = atan2(front.x, front.z)*180.0f/pi;
-                    float x_rot = asin(front[1])*-180.0f/pi;
-                    vec3 up = Mult(rot, vec3(0,1,0));
-                    vec3 expected_right = normalize(cross(front, vec3(0,1,0)));
-                    vec3 expected_up = normalize(cross(expected_right, front));
-                    float z_rot = atan2(dot(up,expected_right), dot(up, expected_up))*180.0f/pi;            
-                    const float zoom_sensitivity = 3.5f;
-                    float zoom = min(150.0f, 90.0f / max(0.001f,(1.0f+(obj.GetScale().x-1.0f)*zoom_sensitivity)));
-                    strings[i].params[0] = pos.x;
-                    strings[i].params[1] = pos.y;
-                    strings[i].params[2] = pos.z;
-                    strings[i].params[3] = floor(x_rot*100.0f+0.5f)/100.0f;
-                    strings[i].params[4] = floor(y_rot*100.0f+0.5f)/100.0f;
-                    strings[i].params[5] = floor(z_rot*100.0f+0.5f)/100.0f;
-                    strings[i].params[6] = zoom;
-                    
-                    string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                    RecordInput(new_string, i, last_wait);
-                }
-                break;
-            case kHeadTarget:
-                if(strings[i].spawned_id != -1){
-                    Object@ obj = ReadObjectFromID(strings[i].spawned_id);
-                    vec3 pos = obj.GetTranslation();
-            
-                    float scale = obj.GetScale().x;
-                    if(scale < 0.1f){
-                        obj.SetScale(vec3(0.1f));
+        if(show_editor_info && dialogue_obj_id != -1){
+            UpdateConnectedChars();
+            EnterTelemetryZone("Apply editor object transforms");
+            // Apply editor object transforms to scripts
+            for(int i=0; i<int(strings.size()); ++i){
+                switch(strings[i].obj_command){
+                case kCamera:
+                    if(strings[i].spawned_id != -1){
+                        Object@ obj = ReadObjectFromID(strings[i].spawned_id);
+                        vec3 pos = obj.GetTranslation();
+                        vec4 v = obj.GetRotationVec4();
+                        quaternion rot(v.x,v.y,v.z,v.a);
+                        // Set camera euler angles from rotation matrix
+                        vec3 front = Mult(rot, vec3(0,0,1));
+                        float y_rot = atan2(front.x, front.z)*180.0f/MPI;
+                        float x_rot = asin(front[1])*-180.0f/MPI;
+                        vec3 up = Mult(rot, vec3(0,1,0));
+                        vec3 expected_right = normalize(cross(front, vec3(0,1,0)));
+                        vec3 expected_up = normalize(cross(expected_right, front));
+                        float z_rot = atan2(dot(up,expected_right), dot(up, expected_up))*180.0f/MPI;            
+                        const float zoom_sensitivity = 3.5f;
+                        float zoom = min(150.0f, 90.0f / max(0.001f,(1.0f+(obj.GetScale().x-1.0f)*zoom_sensitivity)));
+                        strings[i].params[0] = pos.x;
+                        strings[i].params[1] = pos.y;
+                        strings[i].params[2] = pos.z;
+                        strings[i].params[3] = floor(x_rot*100.0f+0.5f)/100.0f;
+                        strings[i].params[4] = floor(y_rot*100.0f+0.5f)/100.0f;
+                        strings[i].params[5] = floor(z_rot*100.0f+0.5f)/100.0f;
+                        strings[i].params[6] = zoom;
+                        
+                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                        RecordInput(new_string, i, last_wait);
                     }
-                    if(scale > 0.35f){
-                        obj.SetScale(vec3(0.35f));
-                    }
-                    float zoom = (obj.GetScale().x - 0.1f) * 4.0f;
-                    
-                    strings[i].params[1] = pos.x;
-                    strings[i].params[2] = pos.y;
-                    strings[i].params[3] = pos.z;
-                    strings[i].params[4] = zoom;
-                    
-                    string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                    RecordInput(new_string, i, last_wait);
+                    break;
+                case kHeadTarget:
+                    if(strings[i].spawned_id != -1){
+                        Object@ obj = ReadObjectFromID(strings[i].spawned_id);
+                        vec3 pos = obj.GetTranslation();
+                
+                        float scale = obj.GetScale().x;
+                        if(scale < 0.1f){
+                            obj.SetScale(vec3(0.1f));
+                        }
+                        if(scale > 0.35f){
+                            obj.SetScale(vec3(0.35f));
+                        }
+                        float zoom = (obj.GetScale().x - 0.1f) * 4.0f;
+                        
+                        strings[i].params[1] = pos.x;
+                        strings[i].params[2] = pos.y;
+                        strings[i].params[3] = pos.z;
+                        strings[i].params[4] = zoom;
+                        
+                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                        RecordInput(new_string, i, last_wait);
 
-                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
-                    if(char_id != -1){
-                        MovementObject@ mo = ReadCharacterID(char_id);
-                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                        if(char_id != -1){
+                            MovementObject@ mo = ReadCharacterID(char_id);
+                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        }
                     }
-                }
-                break;
-            case kChestTarget:
-                if(strings[i].spawned_id != -1){
-                    Object@ obj = ReadObjectFromID(strings[i].spawned_id);
-                    vec3 pos = obj.GetTranslation();
-            
-                    float scale = obj.GetScale().x;
-                    if(scale < 0.1f){
-                        obj.SetScale(vec3(0.1f));
-                    }
-                    if(scale > 0.35f){
-                        obj.SetScale(vec3(0.35f));
-                    }
-                    float zoom = (obj.GetScale().x - 0.1f) * 4.0f;
-                    
-                    strings[i].params[1] = pos.x;
-                    strings[i].params[2] = pos.y;
-                    strings[i].params[3] = pos.z;
-                    strings[i].params[4] = zoom;
-                    
-                    string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                    RecordInput(new_string, i, last_wait);
+                    break;
+                case kChestTarget:
+                    if(strings[i].spawned_id != -1){
+                        Object@ obj = ReadObjectFromID(strings[i].spawned_id);
+                        vec3 pos = obj.GetTranslation();
+                
+                        float scale = obj.GetScale().x;
+                        if(scale < 0.1f){
+                            obj.SetScale(vec3(0.1f));
+                        }
+                        if(scale > 0.35f){
+                            obj.SetScale(vec3(0.35f));
+                        }
+                        float zoom = (obj.GetScale().x - 0.1f) * 4.0f;
+                        
+                        strings[i].params[1] = pos.x;
+                        strings[i].params[2] = pos.y;
+                        strings[i].params[3] = pos.z;
+                        strings[i].params[4] = zoom;
+                        
+                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                        
+                        RecordInput(new_string, i, last_wait);
 
-                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
-                    if(char_id != -1){
-                        MovementObject@ mo = ReadCharacterID(char_id);
-                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                        if(char_id != -1){
+                            MovementObject@ mo = ReadCharacterID(char_id);
+                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        }
                     }
-                }
-                break;
-            case kEyeTarget:
-                if(strings[i].spawned_id != -1){
-                    Object@ obj = ReadObjectFromID(strings[i].spawned_id);
-                    vec3 pos = obj.GetTranslation();
+                    break;
+                case kEyeTarget:
+                    if(strings[i].spawned_id != -1){
+                        Object@ obj = ReadObjectFromID(strings[i].spawned_id);
+                        vec3 pos = obj.GetTranslation();
 
-                    float scale = obj.GetScale().x;
-                    if(scale < 0.05f){
-                        obj.SetScale(vec3(0.05f));
-                    }
-                    if(scale > 0.1f){
-                        obj.SetScale(vec3(0.1f));
-                    }
-                    float blink_mult = (obj.GetScale().x-0.05f)/0.05f;
+                        float scale = obj.GetScale().x;
+                        if(scale < 0.05f){
+                            obj.SetScale(vec3(0.05f));
+                        }
+                        if(scale > 0.1f){
+                            obj.SetScale(vec3(0.1f));
+                        }
+                        float blink_mult = (obj.GetScale().x-0.05f)/0.05f;
 
-                    strings[i].params[1] = pos.x;
-                    strings[i].params[2] = pos.y;
-                    strings[i].params[3] = pos.z;
-                    strings[i].params[4] = blink_mult;
-                    
-                    string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                    RecordInput(new_string, i, last_wait);
-                    
-                    int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
-                    if(char_id != -1){
-                        MovementObject@ mo = ReadCharacterID(char_id);
-                        DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        strings[i].params[1] = pos.x;
+                        strings[i].params[2] = pos.y;
+                        strings[i].params[3] = pos.z;
+                        strings[i].params[4] = blink_mult;
+                        
+                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                        
+                        RecordInput(new_string, i, last_wait);
+
+                        int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
+                        if(char_id != -1){
+                            MovementObject@ mo = ReadCharacterID(char_id);
+                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                        }
                     }
+                    break;
+                case kCharacter:
+                    if(strings[i].spawned_id != -1){
+                        Object@ obj = ReadObjectFromID(strings[i].spawned_id);
+                        vec3 pos = obj.GetTranslation();
+                        vec4 v = obj.GetRotationVec4();
+                        quaternion quat(v.x,v.y,v.z,v.a);
+                        vec3 facing = Mult(quat, vec3(0,0,1));
+                        float rot = atan2(facing.x, facing.z)*180.0f/MPI;
+                        obj.SetRotation(quaternion(vec4(0,1,0,rot*MPI/180.0f)));
+                        
+                        strings[i].params[1] = pos.x;
+                        strings[i].params[2] = pos.y;
+                        strings[i].params[3] = pos.z;
+                        strings[i].params[4] = floor(rot+0.5f);
+                        
+                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                        
+                        RecordInput(new_string, i, last_wait);
+                    }
+                    break;
                 }
-                break;
-            case kCharacter:
-                if(strings[i].spawned_id != -1){
-                    Object@ obj = ReadObjectFromID(strings[i].spawned_id);
-                    vec3 pos = obj.GetTranslation();
-                    vec4 v = obj.GetRotationVec4();
-                    quaternion quat(v.x,v.y,v.z,v.a);
-                    vec3 facing = Mult(quat, vec3(0,0,1));
-                    float rot = atan2(facing.x, facing.z)*180.0f/pi;
-                    obj.SetRotation(quaternion(vec4(0,1,0,rot*pi/180.0f)));
-                    
-                    strings[i].params[1] = pos.x;
-                    strings[i].params[2] = pos.y;
-                    strings[i].params[3] = pos.z;
-                    strings[i].params[4] = floor(rot+0.5f);
-                    
-                    string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                    RecordInput(new_string, i, last_wait);
-                }
-                break;
             }
+            SaveScriptToParams();
         }
         LeaveTelemetryZone(); // editor object transforms
         LeaveTelemetryZone(); // dialogue update
@@ -1106,6 +1062,21 @@ class Dialogue {
             se.params.resize(1);
             token_iter.FindNextToken(msg);
             se.params[0] = token_iter.GetToken(msg);            
+        } else if(token == "#name"){
+            if(token_iter.FindNextToken(msg)){
+                Object @obj = ReadObjectFromID(dialogue_obj_id);
+                ScriptParams@ params = obj.GetScriptParams();
+                params.SetString("DisplayName", token_iter.GetToken(msg));
+                obj.SetEditorLabel(params.GetString("DisplayName"));
+                cast<PlaceholderObject@>(obj).SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\"");
+            }
+        } else if(token == "#participants"){
+            if(token_iter.FindNextToken(msg)){
+                Object @obj = ReadObjectFromID(dialogue_obj_id);
+                ScriptParams@ params = obj.GetScriptParams();
+                params.SetInt("NumParticipants", atoi(token_iter.GetToken(msg)));
+                UpdateDialogueObjectConnectors(dialogue_obj_id);
+            }
         }
     }
 
@@ -1131,7 +1102,7 @@ class Dialogue {
         switch(se.obj_command){
         case kCamera: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/camera_placeholder.xml", false);
+                se.spawned_id = CreateObject("Data/Objects/placeholder/camera_placeholder.xml", true);
             }
             vec3 pos(atof(se.params[0]), atof(se.params[1]), atof(se.params[2]));
             vec3 rot(atof(se.params[3]), atof(se.params[4]), atof(se.params[5]));
@@ -1157,7 +1128,7 @@ class Dialogue {
             break;}
         case kCharacter: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", true);
             }
             int char_id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1176,7 +1147,7 @@ class Dialogue {
             break; }
         case kHeadTarget: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", true);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1197,7 +1168,7 @@ class Dialogue {
             break; }
         case kChestTarget: {
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", true);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1218,7 +1189,7 @@ class Dialogue {
             break; }
         case kEyeTarget: {           
             if(se.spawned_id == -1){
-                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
+                se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", true);
             }
             int id = atoi(se.params[0]);
             vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
@@ -1241,8 +1212,6 @@ class Dialogue {
     }
 
     void HandleSelectedString(int line){
-        set_animation_char_select = -1;
-        set_animation_pose_select = -1;
         ExecutePreviousCommands(line);
         if(line < 0 || line >= int(strings.size())){
             return;
@@ -1255,19 +1224,6 @@ class Dialogue {
         case kEyeTarget: 
             CreateEditorObj(strings[line]);
             break;
-        case kSetAnimation: {
-            int num_dialogue_poses = dialogue_poses.size();
-            int dialogue_pose_id = -1;
-            for(int i=0; i<num_dialogue_poses; ++i){
-                if(dialogue_poses[i] == strings[line].params[1]){
-                    dialogue_pose_id = i;
-                }
-            }
-            if(dialogue_pose_id != -1){
-                set_animation_char_select = atoi(strings[line].params[0]);
-                set_animation_pose_select = dialogue_pose_id;
-            } 
-            break;}
         }
     }
 
@@ -1451,10 +1407,34 @@ class Dialogue {
                     mo.ReceiveMessage(token);
                 }
             }
-            if(token == "send_level_message"){
-                token_iter.FindNextToken(script_element.str);
-                token = token_iter.GetToken(script_element.str);
-                level.SendMessage(token);
+            if(!EditorModeActive()){
+                if(token == "send_level_message"){
+                    token_iter.FindNextToken(script_element.str);
+                    token = token_iter.GetToken(script_element.str);
+                    level.SendMessage(token);
+                }
+            }
+            if(token == "make_participants_aware"){
+                Object @obj = ReadObjectFromID(dialogue_obj_id);
+                ScriptParams@ params = obj.GetScriptParams();
+                int num_participants = min(kMaxParticipants, params.GetInt("NumParticipants"));
+                Print("make_participants_aware\n");
+                for(int i=0; i<num_participants; ++i){
+                    int id_a = GetDialogueCharID(i+1);
+                    if(id_a != -1){
+                        Print("id_a: "+id_a+"\n");
+                        MovementObject@ mo_a = ReadCharacterID(id_a);
+                        for(int j=i+1; j<num_participants; ++j){
+                            int id_b = GetDialogueCharID(j+1);
+                            if(id_b != -1){
+                                Print("id_b: "+id_b+"\n");
+                                MovementObject@ mo_b = ReadCharacterID(id_b);
+                                mo_a.ReceiveMessage("notice "+id_b);
+                                mo_b.ReceiveMessage("notice "+id_a);
+                            }
+                        }
+                    }
+                }
             }
             break;
             }
@@ -1466,36 +1446,7 @@ class Dialogue {
         Object @obj = ReadObjectFromID(id);
         ScriptParams@ params = obj.GetScriptParams();
         int num_connectors = params.GetInt("NumParticipants");
-        int player_id = GetPlayerCharacterID();
-        for(int j=1; j<=num_connectors; ++j){
-            int obj_id = params.GetInt("obj_"+j);
-            if(ObjectExists(obj_id)){
-                Object @new_obj = ReadObjectFromID(obj_id);
-                vec4 v = obj.GetRotationVec4();
-                quaternion quat(v.x,v.y,v.z,v.a);
-                new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
-                new_obj.SetRotation(quat);
-                new_obj.SetScale(obj.GetScale()*0.3f);
-                if(player_id == -1){
-                    new_obj.SetEditorLabel(""+j);
-                    new_obj.SetEditorLabelScale(6);
-                    new_obj.SetEditorLabelOffset(vec3(0));
-                    
-                   // TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
-                   // text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _persistent);//_delete_on_update);
-                }
-                new_obj.SetCopyable(false);
-                new_obj.SetDeletable(false);
-            } else {
-                params.Remove("obj_"+j);
-            }
-        }
-    }
 
-	void SetupDialogueObjectConnectors(int id){
-		Object @obj = ReadObjectFromID(id);
-		ScriptParams@ params = obj.GetScriptParams();
-		int num_connectors = params.GetInt("NumParticipants");
         for(int j=1; j<=num_connectors; ++j){
             if(!params.HasParam("obj_"+j)){
                 int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", false);
@@ -1505,9 +1456,37 @@ class Dialogue {
                 PlaceholderObject@ inner_placeholder_object = cast<PlaceholderObject@>(object);
                 inner_placeholder_object.SetSpecialType(kPlayerConnect);
             }
+            int obj_id = params.GetInt("obj_"+j);
+            if(ObjectExists(obj_id)){
+                Object @new_obj = ReadObjectFromID(obj_id);
+                vec4 v = obj.GetRotationVec4();
+                quaternion quat(v.x,v.y,v.z,v.a);
+                new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
+                new_obj.SetRotation(quat);
+                new_obj.SetScale(obj.GetScale()*0.3f);
+                new_obj.SetEditorLabel(""+j);
+                new_obj.SetEditorLabelScale(6);
+                new_obj.SetEditorLabelOffset(vec3(0));
+
+                new_obj.SetCopyable(false);
+                new_obj.SetDeletable(false);
+
+                PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(new_obj);
+                placeholder_object.SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\" Connector "+j);
+            } else {
+                params.Remove("obj_"+j);
+            }
         }
-        UpdateDialogueObjectConnectors(id);
-	}
+        for(int j=num_connectors+1; j<=kMaxParticipants; ++j){
+            if(params.HasParam("obj_"+j)){
+                int obj_id = params.GetInt("obj_"+j);
+                if(ObjectExists(obj_id)){
+                    DeleteObjectID(obj_id);
+                }
+                params.Remove("obj_"+j);
+            }
+        }
+    }
 
     void MovedObject(int id){
         if(id == -1){
@@ -1517,33 +1496,13 @@ class Dialogue {
         if(obj.GetType() != _placeholder_object){
             return;
         }
+        UpdateScriptFromStrings();
         ScriptParams@ params = obj.GetScriptParams();
         if(!params.HasParam("Dialogue")){
             return;
         }
         UpdateDialogueObjectConnectors(id);
     }
-
-	void UpdateParams(string str, int id) {
-		Object @obj = ReadObjectFromID(id);
-		ScriptParams@ params = obj.GetScriptParams();
-		TokenIterator token_iter;
-		token_iter.Init();
-		if(token_iter.FindNextToken(str)){
-			string token = token_iter.GetToken(str);
-			if(token == "#name"){
-				if(token_iter.FindNextToken(str)){
-					params.SetString("DisplayName", token_iter.GetToken(str));
-                    obj.SetEditorLabel(params.GetString("DisplayName"));
-				}
-			}
-			if(token == "#participants"){
-				if(token_iter.FindNextToken(str)){
-					params.SetInt("NumParticipants", atoi(token_iter.GetToken(str)));
-				}
-			}
-		}
-	}
 
     void AddedObject(int id){
         if(id == -1){
@@ -1562,32 +1521,14 @@ class Dialogue {
         PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
         placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
         if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
-			if(params.GetString("Dialogue") == "empty") {
-				params.SetString("DisplayName", "Unnamed");
-				params.SetInt("NumParticipants", 1);
-			} else {
-				// Parse file for #name token
-				LoadFile(params.GetString("Dialogue"));
-				string new_str;
-				while(true){
-					new_str = GetFileLine();
-					if(new_str == "end"){
-						break;
-					}
-					UpdateParams(new_str, id);
-				}
-			}
+			params.SetString("DisplayName", "Unnamed");
+			params.SetInt("NumParticipants", 1);
         }
-        obj.SetEditorLabel(params.GetString("DisplayName"));
         obj.SetEditorLabelOffset(vec3(0,1.25,0)); 
         obj.SetEditorLabelScale(10);
-        int player_id = GetPlayerCharacterID();
-        // Draw dialogue name
-        //if(player_id == -1){
-        //    DrawDialogueTextCanvas(id);
-        //}
-        // Set up dialogue connectors
-        SetupDialogueObjectConnectors(id);
+        obj.SetEditorLabel(params.GetString("DisplayName"));
+        cast<PlaceholderObject@>(placeholder_object).SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\"");
+        UpdateDialogueObjectConnectors(id);
     }
 
     void ReceiveMessage(const string &in msg) {
@@ -1613,15 +1554,7 @@ class Dialogue {
             }
         } else if(token == "stop_editing_dialogue") {
             DeactivateKeyboardEvents();
-			if (edit_mode) {
-				StopTextInput();
-				edit_mode = false;
-                Log(info, "Ending input limitation");
-			}
             ClearEditor();
-        } else if(token == "dialogue_set_recording") {
-		    token_iter.FindNextToken(msg);
-            SetRecording((token_iter.GetToken(msg) == "true"));
         } else if(token == "edit_selected_dialogue"){
             ActivateKeyboardEvents();
             array<int> @object_ids = GetObjectIDs();
@@ -1634,6 +1567,7 @@ class Dialogue {
                 ScriptParams@ params = obj.GetScriptParams();
                 if(obj.IsSelected() && obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
                     dialogue.SetDialogueObjID(object_ids[i]);
+                    show_editor_info = true;
                 }
             }
         } else if(token == "preview_dialogue"){
@@ -1643,12 +1577,7 @@ class Dialogue {
                 //SetGUIEnabled(false);
                 Play();
             }
-        } else if(token == "save_dialogue"){
-		    token_iter.FindNextToken(msg);
-            string path = token_iter.GetToken(msg);
-            Print("Path token: "+path+"\n");
-            SaveToFile(path);
-        } else if(token == "load_dialogue_pose"){
+        }  else if(token == "load_dialogue_pose"){
 		    token_iter.FindNextToken(msg);
             string path = token_iter.GetToken(msg);
             
@@ -1684,7 +1613,16 @@ class Dialogue {
                 }
             
                 ExecutePreviousCommands(selected_line);
-                text_dirty = true;
+            }
+        } else if(token == "reload_dialogue"){
+            if(dialogue_obj_id != -1){
+                int id = dialogue_obj_id;
+                SetDialogueObjID(-1);
+                Object @obj = ReadObjectFromID(id);
+                ScriptParams @params = obj.GetScriptParams();
+                params.Remove("Script");
+                LoadScriptFile(params.GetString("Dialogue"));
+                SetDialogueObjID(id);
             }
         }
     }
@@ -1748,125 +1686,79 @@ class Dialogue {
         }
 
         // Draw editor text
-        if(show_editor_info && !has_cam_control && EditorModeActive()){
-            if(text_dirty){
-                TextCanvasTexture @editor_text = level.GetTextElement(editor_text_id);
-                editor_text.ClearTextCanvas();
-                int font_size = 14;
-                TextStyle small_style, big_style;
-                small_style.font_face_id = GetFontFaceID("Data/Fonts/inconsolata.ttf", font_size);
-                big_style.font_face_id = GetFontFaceID("Data/Fonts/inconsolata.ttf", font_size);
-
-                vec2 pen_pos = vec2(0,font_size);
-                uint num_strings = strings.size();
-
-				TextMetrics metrics;
-				string test_string = "test";
-				editor_text.GetTextMetrics(test_string, small_style, metrics, UINT32MAX);
-				int cur_pos = selected_line * (metrics.bounds_y / 64); // font_size should do this too?
-				uint i = 0;
-
-				while(cur_pos > 600) {
-					cur_pos = (selected_line - ++i) * (metrics.bounds_y / 64);
-				}
-
-                for(; i<num_strings; ++i){
-                    bool show_invisible = false;
-                    if(!strings[i].visible && !show_invisible){
-                        continue;
+        if(dialogue_obj_id != -1 && show_editor_info && !has_cam_control && EditorModeActive()){
+            ImGui_Begin("Dialogue Editor", show_editor_info, ImGuiWindowFlags_MenuBar);
+            if(ImGui_BeginMenuBar()){
+                if(ImGui_BeginMenu("File")){
+                    if(ImGui_MenuItem("Reload")){
+                        ReceiveMessage("reload_dialogue");
                     }
-                    editor_text.SetPenPosition(pen_pos);
-                    int opac = 255;
-                    if(!strings[i].visible){
-                        opac = 128;
-                    }
-                    if(strings[i].locked){
-                        editor_text.SetPenColor(0,0,125,opac);
-                    } else if(strings[i].record_locked){
-                        editor_text.SetPenColor(125,0,0,opac);
-                    }else {
-                        editor_text.SetPenColor(0,0,0,opac);
-                    }
-                    editor_text.SetPenRotation(0.0f);
-                    string disp = strings[i].str;
-                    if(strings[i].obj_command == kUnknown){
-                        ParseLine(strings[i]);
-                    }
-   /* kUnknown,
-    kCamera,
-    kHeadTarget,
-    kEyeTarget,
-    kChestTarget,
-    kCharacter,
-    kCharacterDialogueControl,
-    kDialogueVisible,
-    kDialogueName,
-    kSetDialogueText,
-    kAddDialogueText,
-    kCharacterStartTalking,
-    kCharacterStopTalking,
-    kWait,
-    kWaitForClick,
-    kSetCamControl,
-    kSetAnimation,
-    kSay*/
-                    if(strings[i].obj_command != kSay){
-                        continue;
-                    } else {
-                        int name_len = strings[i].params[1].length;
-                        string padding;
-                        for(int pad=0, len=max(0, 8 - name_len); pad<len; ++pad){
-                            padding += " ";
-                        }
-                        disp = strings[i].params[1] + ": " + padding + strings[i].params[2];
-                        if(strings[i].params[0] == "1"){
-                            editor_text.SetPenColor(50,0,0,opac);
-                        }
-                        if(strings[i].params[0] == "2"){
-                            editor_text.SetPenColor(0,50,0,opac);
-                        }
-                        if(strings[i].params[0] == "3"){
-                            editor_text.SetPenColor(0,0,50,opac);
+                    if(ImGui_MenuItem("Save")){
+                        string path = GetUserPickedWritePath("txt", "Data/Dialogues");
+                        if(path != ""){
+                            SaveToFile(path);
                         }
                     }
-
-                    switch(strings[i].obj_command){
-                        case kCharacter: disp = strings[i].params[0] + " Move"; break;
-                        case kCamera: disp = "Camera"; break;
-                        case kHeadTarget: disp = strings[i].params[0] + " Head"; break;
-                        case kEyeTarget: disp = strings[i].params[0] + " Eye"; break;
-                        case kChestTarget: disp = strings[i].params[0] + " Torso"; break;
-                        case kSetAnimation: disp = strings[i].params[0] + " Pose"; break;
-                        case kUnknown: continue;
-                    }
-					if(uint(selected_line) == i){
-						if(edit_mode){
-							editor_text.SetPenColor(0,125,0,opac);
-							editor_text.AddText(edit_text, big_style, UINT32MAX);
-						} else {
-                            editor_text.AddText(disp, big_style, UINT32MAX);
-                            editor_text.SetPenPosition(pen_pos + vec2(1,1));
-                            editor_text.AddText(disp, big_style, UINT32MAX);
-						}
-                    } else {
-                        editor_text.AddText(disp, small_style, UINT32MAX);
-                    }
-                    pen_pos.y += font_size;
+                    ImGui_EndMenu();
                 }
-                editor_text.UploadTextCanvasToTexture();
-                SaveScriptToParams();
-                text_dirty = false;
+                if(ImGui_BeginMenu("Edit")){
+                    if(ImGui_MenuItem("Preview")){
+                        ReceiveMessage("preview_dialogue");
+                    }
+                    if(ImGui_MenuItem("Load Pose")){
+                        string path = GetUserPickedReadPath("anm", "Data/Animations");
+                        if(path != ""){
+                            ReceiveMessage("load_dialogue_pose \""+path+"\"");
+                        }
+                    }
+                    ImGui_EndMenu();
+                }
+                ImGui_EndMenuBar();
             }
-             
-            if(camera.GetFlags() == kEditorCamera){
-                // Draw text canvas to screen
-                HUDImage @text_image = hud.AddImage();
-                text_image.SetImageFromText(level.GetTextElement(editor_text_id)); 
-                text_image.position.x = GetScreenWidth()/2-256+70;
-                text_image.position.y = GetScreenHeight()-512-100;
-                text_image.position.z = 4;
-                text_image.color = vec4(1,1,1,1);
+            if(!show_editor_info){ // User closed dialogue editor window
+                ClearEditor();
+            } else {
+                //UpdateScriptFromStrings();
+                int new_cursor_pos = imgui_text_input_CursorPos;
+
+                ImGui_Columns(2);
+                if(ImGui_InputTextMultiline("##TEST", vec2(-1.0, -1.0))){
+                    ClearSpawnedObjects();
+                    UpdateStringsFromScript(ImGui_GetTextBuf());
+                    Print("Test\n");
+                    AddInvisibleStrings();
+                    SaveScriptToParams();
+                }
+                ImGui_NextColumn();
+                for(int i=0, len=strings.size(); i<len; ++i){
+                    vec4 color = vec4(1.0);
+                    if(!strings[i].visible){
+                        color = vec4(1,1,1,0.5);
+                    }
+                    if(i == selected_line){
+                        color = vec4(0,1,0,1);
+                    }
+                    ImGui_TextColored(color, strings[i].str);
+                }
+                if(new_cursor_pos != old_cursor_pos){
+                    int line = 0;
+                    for(int i=0, len=strings.size(); i<len; ++i){
+                        if(strings[i].visible && new_cursor_pos >= strings[i].line_start_char){
+                            line = i;
+                        }
+                    }
+                    if(line != selected_line){
+                        selected_line = line;
+                        HandleSelectedString(selected_line);
+                        UpdateRecordLocked(IsRecording());
+                        ClearUnselectedObjects();
+                    }
+                    DebugText("line", "Line: "+line, 0.5);
+                    old_cursor_pos = new_cursor_pos;
+                }
+                ImGui_Columns(1);
             }
+            ImGui_End();
         }
     }
 
@@ -1874,7 +1766,7 @@ class Dialogue {
         Print("Called Dialogue::SaveHistoryState\n");
         string str = dialogue_obj_id + " ";
         str += selected_line + " ";
-        str += recording + " ";
+        str += show_editor_info + " ";
         chunk.WriteString(str);
     }
 
@@ -1885,6 +1777,7 @@ class Dialogue {
     }
 
     void LoadHistoryStr(){
+        ClearEditor();
         Print("Loading history str\n");
         TokenIterator token_iter;
         token_iter.Init();
@@ -1893,158 +1786,9 @@ class Dialogue {
         token_iter.FindNextToken(history_str);
         selected_line = atoi(token_iter.GetToken(history_str));
         token_iter.FindNextToken(history_str);
-        SetRecording(token_iter.GetToken(history_str)=="true");
+        show_editor_info = (token_iter.GetToken(history_str)=="true");
         HandleSelectedString(selected_line);
         history_str = "";
-    }
-
-    void TextInput( string text )
-    {
-		if(edit_mode) {
-			string input = text;
-			if (input.length() == 1) {
-				edit_text += input;
-			}
-			text_dirty = true;
-		}
-    }
-
-    void KeyPressed( string command, bool repeated )
-    {
-        if(strings.size() > 0 && show_editor_info && !has_cam_control && EditorModeActive()){
-            // Handle up/down dialogue editor navigation
-            if(command == "down" && !edit_mode){
-                int num_lines = int(strings.size());
-                int i = selected_line + 1;
-                if(GetInputDown(controller_id, "shift")){
-                    while(i < num_lines && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-                        ++i;
-                    }
-                } else {
-                    while(i < num_lines && !strings[i].visible){
-                        ++i;
-                    }
-                }
-                if(i < num_lines && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
-            if(command == "up" && !edit_mode){
-                int i = selected_line - 1;
-                if(GetInputDown(controller_id, "shift")){
-                    while(i > 0 && strings[i].obj_command != kWaitForClick && strings[i].obj_command != kSay){
-                        --i;
-                    }
-                } else {
-                    while(i > 0 && !strings[i].visible){
-                        --i;
-                    }
-                }
-                if(i >= 0 && strings[i].visible){
-                    selected_line = i;
-                }
-                text_dirty = true;
-                HandleSelectedString(selected_line);
-                if(recording){
-                    UpdateRecordLocked();
-                }
-                ClearUnselectedObjects();
-            }
-            if(command == "return"){
-                if (!edit_mode) {
-                    StartTextInput();
-                    edit_mode = true;
-                    Log(info, "Starting input limitation");
-                    edit_text = strings[selected_line].str;
-                    text_dirty = true;
-                } else {
-                    StopTextInput();
-                    edit_mode = false;
-                    Log(info, "Ending input limitation");
-                    strings[selected_line].str = edit_text;
-                    UpdateParams(edit_text, dialogue_obj_id);
-                    SetupDialogueObjectConnectors(dialogue_obj_id);
-                    text_dirty = true;
-                }
-            }
-            if(command == "backspace" && edit_mode) {
-                edit_text = edit_text.substr(0, edit_text.length - 1);
-                text_dirty = true;
-            }
-            if(command == "keypad+") {
-                // add new line
-                AddLine("", selected_line + 1);
-                text_dirty = true;
-            }
-            if(command == "keypad-") {
-                // delete line
-                DeleteLine(selected_line);
-                edit_mode = false;
-                Log(info, "Ending input limitation");
-                text_dirty = true;
-            }
-        }
-        // Lock selected dialogue script line
-        if( command == "f" && repeated == false ) {
-            if(selected_line >= 0 && selected_line < int(strings.size())){
-                strings[selected_line].locked = !strings[selected_line].locked;
-                text_dirty = true;
-            }
-        }
-        // Toggle recording
-        if(GetInputDown(controller_id, "ctrl") && command == "r" && repeated == false){
-            SetRecording(!recording);
-            UpdateRecordLocked();
-        }
-        // Navigate left-right through dialogue script options
-        if( command == "right" && repeated == false){
-            if(set_animation_char_select != -1){
-                ++set_animation_pose_select;
-                if(set_animation_pose_select >= int(dialogue_poses.size())){
-                    set_animation_pose_select = 0;
-                }
-                strings[selected_line].str = "send_character_message "+set_animation_char_select+
-                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
-                ExecutePreviousCommands(selected_line);
-                text_dirty = true;
-            }
-        }
-        if( command == "left" && repeated == false){
-            if(set_animation_char_select != -1){
-                --set_animation_pose_select;
-                if(set_animation_pose_select < 0){
-                    set_animation_pose_select = int(dialogue_poses.size());
-                }
-                strings[selected_line].str = "send_character_message "+set_animation_char_select+
-                    " \"set_animation \\\""+dialogue_poses[set_animation_pose_select]+"\\\"\"";
-                ExecutePreviousCommands(selected_line);
-                text_dirty = true;
-            }
-        }
-
-    }
-
-    void KeyReleased( string command )
-    {
-
-    }
-
-    uint PollKeyboardFocus()
-    {
-        if( edit_mode )
-        {
-            return KIMF_LEVEL_EDITOR_DIALOGUE_EDITOR;
-        }
-        else
-        {
-            return KIMF_NO;
-        }
     }
 };
 
