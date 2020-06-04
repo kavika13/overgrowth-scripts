@@ -3,7 +3,8 @@
 #include "arena_meta_persistence.as"
 #include "music_load.as"
 
-AHGUI::FontSetup labelFont("edosz", 70,HexColor("#fff"));
+AHGUI::FontSetup labelFont("edosz", 70,HexColor("#aaa"));
+AHGUI::FontSetup topLabelFont("edosz", 75,HexColor("#fff"));
 AHGUI::FontSetup versionFont("edosz", 65, HexColor("#fff"));
 
 int title_spacing = 100;
@@ -51,6 +52,39 @@ class MainMenuGUI : AHGUI::GUI {
         mainpane.addElement(titleImage,DDTop);
 
         mainpane.addSpacer(title_spacing,DDTop);
+        mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+
+
+        {
+            AHGUI::Text buttonText = AHGUI::Text("Lugaru", topLabelFont);
+            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
+            buttonText.addMouseOverBehavior( buttonHover );
+            mainpane.addElement(buttonText, DDTop);
+
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+        }
+
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+
+		{
+			AHGUI::Text buttonText = AHGUI::Text("Tutorial", labelFont);
+			buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("tutorial") );
+			buttonText.addMouseOverBehavior( buttonHover );
+			mainpane.addElement(buttonText, DDTop);
+
+			mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+		}
+
+
+        {
+            AHGUI::Text buttonText = AHGUI::Text("Editor", labelFont);
+            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("old_alpha_menu") );
+            buttonText.addMouseOverBehavior( buttonHover );
+            mainpane.addElement(buttonText, DDTop);
+
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+        }
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Arena", labelFont);
@@ -70,32 +104,6 @@ class MainMenuGUI : AHGUI::GUI {
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
 
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Editor", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("old_alpha_menu") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
-
-		{
-			AHGUI::Text buttonText = AHGUI::Text("Tutorial", labelFont);
-			buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("tutorial") );
-			buttonText.addMouseOverBehavior( buttonHover );
-			mainpane.addElement(buttonText, DDTop);
-
-			mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-		}
-
-        {
-            AHGUI::Text buttonText = AHGUI::Text("Lugaru", labelFont);
-            buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
-            buttonText.addMouseOverBehavior( buttonHover );
-            mainpane.addElement(buttonText, DDTop);
-
-            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Settings", labelFont);
@@ -123,6 +131,9 @@ class MainMenuGUI : AHGUI::GUI {
 
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
         }
+
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
+            mainpane.addSpacer( menu_item_spacing, DDTop ) ;
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Exit", labelFont);
