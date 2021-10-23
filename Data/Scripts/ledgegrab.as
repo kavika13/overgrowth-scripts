@@ -269,6 +269,189 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
     }
 }
 
+class LedgeDirInfo {
+    bool success;
+    vec3 ledge_dir;
+    bool downwards_surface;
+};
+
+LedgeDirInfo GetPossibleLedgeDir(vec3 &in pos) {
+    LedgeDirInfo ledge_dir_info;
+    col.GetSlidingSphereCollision(pos, _leg_sphere_size*1.5f);    
+    if(sphere_col.NumContacts() == 0){    
+        ledge_dir_info.success = false;
+        return ledge_dir_info;
+    }
+    float closest_dist = 0.0f;
+    float dist;
+    int closest_point = -1;
+    float closest_horz_dist = 0.0f;
+    int closest_horz_point = -1;
+    int num_contacts = sphere_col.NumContacts();
+    for(int i=0; i<num_contacts; ++i){
+        dist = distance_squared(sphere_col.GetContact(i).position, pos);
+        if(closest_point == -1 || dist < closest_dist){
+            closest_dist = dist;
+            closest_point = i;
+        }
+        if(closest_horz_point == -1 || dist < closest_horz_dist){
+            if(normalize(sphere_col.GetContact(i).position - pos).y >= -0.7f){
+                closest_horz_dist = dist;
+                closest_horz_point = i;
+            }
+        }
+    }
+    if(normalize(sphere_col.GetContact(closest_point).position - pos).y < -0.7f){
+        ledge_dir_info.downwards_surface = true;
+    } else {
+        ledge_dir_info.downwards_surface = false;
+    }
+    if(closest_horz_point == -1){
+        ledge_dir_info.ledge_dir = sphere_col.GetContact(closest_point).position - pos;
+    } else {
+        ledge_dir_info.ledge_dir = sphere_col.GetContact(closest_horz_point).position - pos;
+    }
+    ledge_dir_info.ledge_dir = normalize(ledge_dir_info.ledge_dir);
+    const bool _debug_draw_sphere_check = false;
+    if(_debug_draw_sphere_check){
+        DebugDrawWireSphere(pos, _leg_sphere_size*1.5f, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(pos, pos+ledge_dir_info.ledge_dir, vec3(1.0f,0.0f,0.0f), _delete_on_update);
+    }
+    ledge_dir_info.success = true;
+    return ledge_dir_info;
+}
+
+class LedgeHeightInfo {
+    bool success;
+    float edge_height;
+};
+
+LedgeHeightInfo GetLedgeHeightInfo(vec3&in pos, vec3&in ledge_dir) {
+    LedgeHeightInfo ledge_height_info;
+
+    float cyl_height = 1.0f;                                                    // Get ledge height by sweeping a cylinder downwards onto the ledge
+    vec3 test_start = pos+vec3(0.0f,7.0f,0.0f)+ledge_dir * 0.5f;
+    vec3 test_end = pos+vec3(0.0f,0.5f,0.0f)+ledge_dir * 0.5f;
+    
+    col.GetSweptCylinderCollision(test_start,
+                                  test_end,
+                                  _leg_sphere_size,
+                                  1.0f);
+
+    const bool _debug_draw_sweep_test = false;
+    if(_debug_draw_sweep_test){
+        DebugDrawWireCylinder(test_start,
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(1.0f,0.0f,0.0f),
+                              _delete_on_update);
+        DebugDrawWireCylinder(test_end,
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(0.0f,1.0f,0.0f),
+                              _delete_on_update);
+        
+        DebugDrawWireCylinder(sphere_col.position,
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(0.0f,0.0f,1.0f),
+                              _delete_on_update);
+    }
+
+    if(sphere_col.NumContacts() == 0){
+        ledge_height_info.success = false;
+        return ledge_height_info;                                               // Return if there is no ledge detected
+    }
+
+
+    ledge_height_info.edge_height = sphere_col.position.y - cyl_height * 0.5f;
+    vec3 surface_pos = sphere_col.position;
+
+    col.GetCylinderCollision(surface_pos + vec3(0.0f,0.07f,0.0f),               // Make sure that top surface is clear, i.e. player could stand on it
+                                _leg_sphere_size,
+                                1.0f);
+
+
+    const bool _debug_draw_top_surface_clear = false;
+    if(sphere_col.NumContacts() != 0){
+        if(_debug_draw_top_surface_clear){
+            DebugDrawWireCylinder(surface_pos + vec3(0.0f,0.07f,0.0f),
+                                  _leg_sphere_size,
+                                  1.0f,
+                                  vec3(1.0f,0.0f,0.0f),
+                                  _delete_on_update);
+        }
+        ledge_height_info.success = false;
+        return ledge_height_info;                                               // Return if surface is obstructed
+    }
+
+    if(_debug_draw_top_surface_clear){
+        DebugDrawWireCylinder(surface_pos + vec3(0.0f,0.07f,0.0f),
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(0.0f,1.0f,0.0f),
+                              _delete_on_update);
+    }
+    ledge_height_info.success = true;
+    return ledge_height_info;
+}
+
+class LedgeGrabInfo {
+    bool can_grab;
+    bool scramble_grab;
+    bool success;
+};
+
+LedgeGrabInfo GetLedgeGrabInfo(vec3 &in pos, vec3 &in ledge_dir, float ledge_height, float vert_vel) {
+    LedgeGrabInfo ledge_grab_info;
+    vec3 test_end = pos+ledge_dir;                                              // Use a swept cylinder to detect the distance
+    test_end.y = ledge_height;                                                  // of the ledge from the player sphere origin
+    vec3 test_start = test_end+ledge_dir*-1.0f;
+    col.GetSweptCylinderCollision(test_start,
+                                  test_end,
+                                  _leg_sphere_size,
+                                  1.0f);
+    
+    const bool _debug_draw_depth_test = false;
+    if(_debug_draw_depth_test){
+        DebugDrawWireCylinder(sphere_col.position,
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(0.0f,0.0f,1.0f),
+                              _delete_on_update);
+    }
+
+    if(sphere_col.NumContacts() == 0){
+        ledge_grab_info.success = false;
+        return ledge_grab_info;                                                 // Return if swept cylinder detects no ledge
+    }
+
+    float char_height = pos.y;                                                  // Start checking if the ledge is within vertical
+    const float _base_grab_height = 1.0f;                                       // reach of the player. Vertical reach is extended
+    float grab_height = _base_grab_height;                                      // to allow one-armed scramble grabs if velocity is
+    if(vert_vel < 1.5f){                                                        // below a threshold.
+        if(vert_vel > 0.0f){
+            grab_height += 1.5f;
+        } else {
+            grab_height += 0.5f;
+        }
+    }
+
+    if(char_height > ledge_height - grab_height){                               // If ledge is within reach, grab it
+        ledge_grab_info.can_grab = true;
+        if(char_height < ledge_height - _base_grab_height){                     
+            ledge_grab_info.scramble_grab = true;
+        } else {
+            ledge_grab_info.scramble_grab = false;
+        }
+    } else {
+        ledge_grab_info.can_grab = false;        
+    }
+    ledge_grab_info.success = true;
+    return ledge_grab_info;
+}
+
+
 vec3 ledge_grab_origin;             // Where was leg sphere origin when ledge grab started
 float transition_speed;             // How fast to transition to new position
 float transition_progress;          // How far along the transition is (0-1)
@@ -359,188 +542,69 @@ class LedgeInfo {
         return sphere_col.position - vec3(0.0f, _height_under_ledge, 0.0f);
     }
 
-    void CheckLedges() {                                                        // Get info about the ledge if there is one,
-        vec3 possible_ledge_dir;                                                // and grab on if not already grabbing
-        
-        col.GetSlidingSphereCollision(this_mo.position,                         // Otherwise try to detect the wall by colliding an enlarged 
-                                              _leg_sphere_size*1.5f);           // player sphere with the scene, and finding the closest 
-        if(sphere_col.NumContacts() == 0){                                      // collision
-            return;
-        } else {
-            float closest_dist = 0.0f;
-            float dist;
-            int closest_point = -1;
-            int num_contacts = sphere_col.NumContacts();
-            for(int i=0; i<num_contacts; ++i){
-                dist = distance_squared(
-                    sphere_col.GetContact(i).position, this_mo.position);
-                if(closest_point == -1 || dist < closest_dist){
-                    closest_dist = dist;
-                    closest_point = i;
-                }
+    bool CheckLedges(bool pure_check = false) {        
+        LedgeDirInfo ledge_dir_info = GetPossibleLedgeDir(this_mo.position);
+        if(!ledge_dir_info.success){
+            return false;
+        }        
+    
+        if(ledge_dir_info.downwards_surface && !pure_check){
+            if(on_ledge){
+                Print("Letting go because nearest surface is downwards\n");
             }
-            possible_ledge_dir = sphere_col.GetContact(closest_point).position - this_mo.position;
-            possible_ledge_dir = normalize(possible_ledge_dir);
-            const bool _debug_draw_sphere_check = false;
-            if(_debug_draw_sphere_check){
-                DebugDrawWireSphere(this_mo.position, _leg_sphere_size*1.5f, vec3(1.0f), _delete_on_update);
-            }
-            if(possible_ledge_dir.y < -0.7f){
-                if(on_ledge){
-                    Print("Letting go because nearest surface is downwards\n");
-                }
+            if(!pure_check){
                 on_ledge = false;
-                if(_debug_draw_sphere_check){
-                    DebugDrawLine(sphere_col.GetContact(closest_point).position,
-                                  this_mo.position,
-                                  vec3(1.0f,0.0f,0.0f),
-                                  _delete_on_update);
-                }
-                return;
-            } else {
-                if(_debug_draw_sphere_check){
-                    DebugDrawLine(sphere_col.GetContact(closest_point).position,
-                                  this_mo.position,
-                                  vec3(0.0f,1.0f,0.0f),
-                                  _delete_on_update);
-                }
             }
-            possible_ledge_dir.y = 0.0f;
-            possible_ledge_dir = normalize(possible_ledge_dir);
+            return false;
         }
 
-        float cyl_height = 1.0f;                                                // Get ledge height by sweeping a cylinder downwards onto the ledge
-        vec3 test_start = this_mo.position+vec3(0.0f,5.0f,0.0f)+possible_ledge_dir * 0.5f;
-        vec3 test_end = this_mo.position+vec3(0.0f,0.5f,0.0f)+possible_ledge_dir * 0.5f;
-        
-        col.GetSweptCylinderCollision(test_start,
-                                          test_end,
-                                          _leg_sphere_size,
-                                          1.0f);
-
-        if(sphere_col.NumContacts() == 0){
-            if(on_ledge){
-                Print("Let go because no height collision found\n");
-            }
-            on_ledge = false;
-            return;                                                             // Return if there is no ledge detected
-        }
-
-        const bool _debug_draw_sweep_test = false;
-        if(_debug_draw_sweep_test){
-            DebugDrawWireCylinder(test_start,
-                                  _leg_sphere_size,
-                                  1.0f,
-                                  vec3(1.0f,0.0f,0.0f),
-                                  _delete_on_update);
-            DebugDrawWireCylinder(test_end,
-                                  _leg_sphere_size,
-                                  1.0f,
-                                  vec3(0.0f,1.0f,0.0f),
-                                  _delete_on_update);
             
-            DebugDrawWireCylinder(sphere_col.position,
-                                  _leg_sphere_size,
-                                  1.0f,
-                                  vec3(0.0f,0.0f,1.0f),
-                                  _delete_on_update);
+        vec3 possible_ledge_dir = ledge_dir_info.ledge_dir;
+        possible_ledge_dir.y = 0.0f;
+        possible_ledge_dir = normalize(possible_ledge_dir);
+        LedgeHeightInfo ledge_height_info = GetLedgeHeightInfo(this_mo.position, possible_ledge_dir);
+        if(ledge_height_info.success == false){
+            if(!pure_check){
+                on_ledge = false;
+            }
+            return false;
         }
-
-        float edge_height = sphere_col.position.y - cyl_height * 0.5f;
-
-        if(on_ledge && edge_height > ledge_height + 0.5f){
-            return;
+        
+        if(on_ledge && ledge_height_info.edge_height > ledge_height + 0.5f){
+            if(!pure_check){
+                on_ledge = false;
+            }
+            return false;
         } else {
-            ledge_height = edge_height;
-        }
-
-        vec3 surface_pos = sphere_col.position;
-
-        col.GetCylinderCollision(surface_pos + vec3(0.0f,0.07f,0.0f),       // Make sure that top surface is clear, i.e. player could stand on it
-                                    _leg_sphere_size,
-                                    1.0f);
-
-
-        const bool _debug_draw_top_surface_clear = false;
-        if(sphere_col.NumContacts() != 0){
-            if(_debug_draw_top_surface_clear){
-                DebugDrawWireCylinder(surface_pos + vec3(0.0f,0.07f,0.0f),
-                                      _leg_sphere_size,
-                                      1.0f,
-                                      vec3(1.0f,0.0f,0.0f),
-                                      _delete_on_update);
+            if(!pure_check){
+                ledge_height = ledge_height_info.edge_height;
             }
-            if(on_ledge){
-                Print("Let go because top is not clear\n");
-            }
-            on_ledge = false;
-            return;                                                             // Return if surface is obstructed
-        }
-
-        if(_debug_draw_top_surface_clear){
-            DebugDrawWireCylinder(surface_pos + vec3(0.0f,0.07f,0.0f),
-                                  _leg_sphere_size,
-                                  1.0f,
-                                  vec3(0.0f,1.0f,0.0f),
-                                  _delete_on_update);
         }
 
         ledge_dir = possible_ledge_dir;
         if(on_ledge){
-            return;                                                             // The rest of this function is only useful for
+            return false;                                                             // The rest of this function is only useful for
         }                                                                       // determining whether or not we can grab the ledge
 
+        LedgeGrabInfo ledge_grab_info = 
+            GetLedgeGrabInfo(this_mo.position, ledge_dir, ledge_height_info.edge_height, this_mo.velocity.y);        
 
-        test_end = this_mo.position+possible_ledge_dir*1.0f;                             // Use a swept cylinder to detect the distance
-        test_end.y = ledge_height;                                              // of the ledge from the player sphere origin
-        test_start = test_end+possible_ledge_dir*-1.0f;
-        col.GetSweptCylinderCollision(test_start,
-                                          test_end,
-                                          _leg_sphere_size,
-                                          1.0f);
-        
-        const bool _debug_draw_depth_test = false;
-        if(_debug_draw_depth_test){
-            DebugDrawWireCylinder(sphere_col.position,
-                                  _leg_sphere_size,
-                                  1.0f,
-                                  vec3(0.0f,0.0f,1.0f),
-                                  _delete_on_update);
+        if(ledge_grab_info.success == false){
+            return false;
         }
 
-        if(sphere_col.NumContacts() == 0){
-            return;                                                             // Return if swept cylinder detects no ledge
+        /*DebugDrawWireCylinder(vec3(this_mo.position.x, ledge_height_info.edge_height + 0.5f, this_mo.position.z) + possible_ledge_dir * _leg_sphere_size,
+                              _leg_sphere_size,
+                              1.0f,
+                              vec3(1.0f,1.0f,1.0f),
+                              _delete_on_update);*/
+
+        if(pure_check){
+            return true;
         }
 
-        float char_height = this_mo.position.y;                                 // Start checking if the ledge is within vertical
-        const float _base_grab_height = 1.0f;                                   // reach of the player. Vertical reach is extended
-        float grab_height = _base_grab_height;                                  // to allow one-armed scramble grabs if velocity is
-        if(this_mo.velocity.y < 1.5f){                                          // below a threshold.
-            if(this_mo.velocity.y > 0.0f){
-                grab_height += 1.5f;
-            } else {
-                grab_height += 0.5f;
-            }
-        }
-
-        /*if(this_mo.velocity.y > 2.0f && dot(GetTargetVelocity(),possible_ledge_dir) > 0.0f){
-            vec3 old_pos = this_mo.position;
-            vec3 ledge_pos = this_mo.position;
-            ledge_pos.y = ledge_height;
-            ledge_pos += possible_ledge_dir*_leg_sphere_size;
-            this_mo.position = ledge_pos;
-            this_mo.position += possible_ledge_dir*_leg_sphere_size;
-            this_mo.position.y += _leg_sphere_size;
-            this_mo.velocity.y = -1.0f;
-            target_duck_amount = 1.0f;
-            duck_amount = 1.0f;
-            climbed_up = true;
-            //DebugDrawLine(this_mo.position, ledge_pos, vec3(1.0f), _delete_on_update);
-            return;
-        }*/
-
-        if(char_height > ledge_height - grab_height){                           // If ledge is within reach, grab it
-            if(char_height < ledge_height - _base_grab_height){                 // If height difference requires the scramble grab, then
+        if(!pure_check && ledge_grab_info.can_grab){                            // If ledge is within reach, grab it
+            if(ledge_grab_info.scramble_grab){                                  // If height difference requires the scramble grab, then
                 playing_animation = true;                                       // play the animation
                 int flags = _ANM_FROM_START;
                 if(rand()%2 == 0){
@@ -557,7 +621,7 @@ class LedgeInfo {
 
             ledge_grab_origin = this_mo.position;                               // Record current position for smooth transition
             transition_progress = 0.0f;
-            transition_speed = 10.0f/(abs(ledge_height - char_height)+0.05f);
+            transition_speed = 10.0f/(abs(ledge_height - this_mo.position.y)+0.05f);
             
             allow_ik = true;
             on_ledge = true;                                                    // Set up ledge grab starting conditions
@@ -570,7 +634,10 @@ class LedgeInfo {
             ghost_movement = false;
 
             this_mo.MaterialEvent("edge_grab", this_mo.position + ledge_dir * _leg_sphere_size);
+            HandleAIEvent(_grabbed_ledge);
         }
+
+        return true;
     }
 
     void EndClimbAnim(){
@@ -594,8 +661,8 @@ class LedgeInfo {
             }
         }
         if(playing_animation){
-            this_mo.position.y += height_offset * 0.02f;
-            height_offset *= 0.98f;
+            this_mo.position.y += height_offset * 0.02f * num_frames;
+            height_offset *= pow(0.98f, num_frames);
             allow_ik = false;
             target_duck_amount = 1.0f;
         }
@@ -635,7 +702,7 @@ class LedgeInfo {
         this_mo.velocity += ledge_dir * 0.1f * num_frames;                      // Pull towards wall
 
         float target_height = ledge_height - _height_under_ledge;
-        this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f;      // Move height towards ledge height
+        this_mo.velocity.y += (target_height - this_mo.position.y) * 0.8f * num_frames;      // Move height towards ledge height
         this_mo.velocity.y *= pow(0.92f, num_frames);
         
         this_mo.position.y = min(this_mo.position.y, target_height + 0.5f);
@@ -650,7 +717,7 @@ class LedgeInfo {
         vec3 horz_vel = target_velocity - (ledge_dir * ledge_dir_dot);
         vec3 real_velocity = horz_vel;
         if(ledge_dir_dot > 0.0f){                                               // Climb up if moving towards ledge
-            real_velocity.y += ledge_dir_dot * time_step * num_frames * _ledge_move_speed * 70.0f;
+            real_velocity.y += ledge_dir_dot * time_step * _ledge_move_speed * 70.0f;
         }    
 
         if(playing_animation){
@@ -676,7 +743,7 @@ class LedgeInfo {
                          pow(inertia,num_frames));
         this_mo.SetRotationFromFacing(disp_ledge_dir); 
         if(this_mo.velocity.y >= 0.0f && this_mo.position.y > target_height + 0.4f){ // Climb up ledge if above threshold
-            if(this_mo.velocity.y >= 3.0f){
+            if(this_mo.velocity.y >= 3.0f + num_frames * 0.25f){
                 on_ledge = false;    
                 climbed_up = true;
                 jump_info.hit_wall = false;
@@ -693,6 +760,7 @@ class LedgeInfo {
                 this_mo.SetAnimationCallback("void EndClimbAnim()");
                 ghost_movement = true;
             }
+            HandleAIEvent(_climbed_up);
         }
     }
 };
