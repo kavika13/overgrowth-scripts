@@ -77,7 +77,12 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-    if(holding_weapon) return false;
+    if(holding_weapon){
+        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+        if(item_obj.GetMass() > 1.0f){
+            return false;
+        }
+    }
     return GetInputDown(this_mo.controller_id, "grab");
 }
 

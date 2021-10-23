@@ -127,21 +127,21 @@ enum MsgType {_escort_me = 0, _excuse_me = 1};
 
 void ReceiveMessage(int source_id, int _msg_type){
     MsgType type = MsgType(_msg_type);
-    Print("Message received: Character " + source_id + " says \"");
+    //Print("Message received: Character " + source_id + " says \"");
     if(type == _escort_me){
-        Print("Escort me!");
+        //Print("Escort me!");
     }
     if(type == _excuse_me){
-        Print("Excuse me!");
+        //Print("Excuse me!");
     }
-    Print("\"\n");
+    //Print("\"\n");
     
     if(type == _escort_me && goal == _patrol){
         SetGoal(_escort);
         escort_id = source_id;
     }
     if(type == _excuse_me && (goal == _patrol || goal == _investigate)){
-        Print("\"Ok, I'll wait a second before continuing my goal.\"\n");
+        //Print("\"Ok, I'll wait a second before continuing my goal.\"\n");
         move_delay = 1.0f;
     }
 }
