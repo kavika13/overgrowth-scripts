@@ -3332,14 +3332,12 @@ int GetClosestCharacterInArray(vec3 pos, array<int> characters, uint16 flags, fl
         }
         
         character_getter.Load(this_mo.char_path);
-        if(flags & _TC_ENEMY != 0 && 
-           character_getter.OnSameTeam(char.char_path) == 1)
+        if(flags & _TC_ENEMY != 0 && this_mo.OnSameTeam(char))
         {
             continue;
         }
 
-        if(flags & _TC_ALLY != 0 && 
-           character_getter.OnSameTeam(char.char_path) == 0)
+        if(flags & _TC_ALLY != 0 && !this_mo.OnSameTeam(char))
         {
             continue;
         }
@@ -5784,6 +5782,10 @@ void SetParameters() {
     
     params.AddString("Left handed","0.0");
     left_handed = (params.GetFloat("Left handed") != 0.0f);
+    
+    string team_str;
+    character_getter.GetTeamString(team_str);
+    params.AddString("Teams",team_str);
 
     mirrored_stance = left_handed;
     primary_weapon_slot = left_handed?_held_left:_held_right;

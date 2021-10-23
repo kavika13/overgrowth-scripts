@@ -44,7 +44,7 @@ class Situation {
             kc.id = id;
             kc.interest = 1.0f;
             MovementObject@ char = ReadCharacterID(id);
-            kc.friendly = (character_getter.OnSameTeam(char.char_path) == 1);
+            kc.friendly = this_mo.OnSameTeam(char);
             known_chars.push_back(kc);
             //Print("New char seen\n");
         } else {

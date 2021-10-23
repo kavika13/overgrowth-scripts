@@ -1,6 +1,3 @@
-void Init() {
-}
-
 int controller_id = 0;
 bool reset_allowed = true;
 bool has_gui = false;
@@ -8,8 +5,14 @@ uint32 gui_id;
 bool has_display_text = false;
 uint32 display_text_id;
 float time = 0.0f;
+float no_win_time = 0.0f;
 int score_left = 0;
 int score_right = 0;
+string level_name;
+
+void Init(string p_level_name) {
+    level_name = p_level_name;
+}
 
 enum GameType {_normal, _versus};
 GameType game_type = _normal;
@@ -39,15 +42,35 @@ class Achievements {
         Init();
     }
     void UpdateDebugText() {
-        DebugText("achmt_flawless", "Flawless: "+flawless_, 0.5f);
-        DebugText("achmt_injured", "No Injuries: "+!injured_, 0.5f);
-        DebugText("achmt_no_first_strikes", "No First Strikes: "+no_first_strikes_, 0.5f);
-        DebugText("achmt_no_counter_strikes", "No Counter Strikes: "+no_counter_strikes_, 0.5f);
-        DebugText("achmt_no_kills", "No Kills: "+no_kills_, 0.5f);
-        DebugText("achmt_no_alert", "No Alerts: "+no_alert_, 0.5f);
+        /*DebugText("achmt0", "Flawless: "+flawless_, 0.5f);
+        DebugText("achmt1", "No Injuries: "+!injured_, 0.5f);
+        DebugText("achmt2", "No First Strikes: "+no_first_strikes_, 0.5f);
+        DebugText("achmt3", "No Counter Strikes: "+no_counter_strikes_, 0.5f);
+        DebugText("achmt4", "No Kills: "+no_kills_, 0.5f);
+        DebugText("achmt5", "No Alerts: "+no_alert_, 0.5f);
+        DebugText("achmt6", "Time: "+no_win_time, 0.5f);
         //DebugText("achmt_damage0", "Block damage: "+total_block_damage_, 0.5f);
         //DebugText("achmt_damage1", "Impact damage: "+total_damage_, 0.5f);
         //DebugText("achmt_damage2", "Blood loss: "+total_blood_loss_, 0.5f);
+        
+        SavedLevel @level = save_file.GetSavedLevel(level_name);
+        DebugText("saved_achmt0", "Saved Flawless: "+(level.GetValue("flawless")=="true"), 0.5f);
+        DebugText("saved_achmt1", "Saved No Injuries: "+(level.GetValue("no_injuries")=="true"), 0.5f);
+        DebugText("saved_achmt2", "Saved No Kills: "+(level.GetValue("no_kills")=="true"), 0.5f);
+        DebugText("saved_achmt3", "Saved No Alert: "+(level.GetValue("no_alert")=="true"), 0.5f);
+        DebugText("saved_achmt4", "Saved Time: "+level.GetValue("time"), 0.5f);*/
+    }
+    void Save() {
+        SavedLevel @level = save_file.GetSavedLevel(level_name);
+        if(flawless_) level.SetValue("flawless","true");
+        if(!injured_) level.SetValue("no_injuries","true");
+        if(no_kills_) level.SetValue("no_kills","true");
+        if(no_alert_) level.SetValue("no_alert","true");
+        string time_str = level.GetValue("time");
+        if(time_str == "" || no_win_time < atof(level.GetValue("time"))){
+            level.SetValue("time", ""+no_win_time);
+        }
+        save_file.WriteInPlace();
     }
     void PlayerWasHit() {
         flawless_ = false;
@@ -122,7 +145,7 @@ void Reset(){
     ResetLevel();
 }
 
-int hotspot_image_layer = -1;
+string hotspot_image_string;
 
 void ReceiveMessage(string msg) {
     if(msg == "reset"){
@@ -135,13 +158,17 @@ void ReceiveMessage(string msg) {
         }
     }
 	if(msg == "clearhud"){
-	
-	HUDImage @display_image = hud.GetImage(hotspot_image_layer);
-	
-	hotspot_image_layer = -1;
-	display_image.color.a = 0.0f;
-	}
-    
+	    hotspot_image_string.resize(0);
+	}   
+}
+
+void DrawGUI() {
+    if(hotspot_image_string.length() != 0){
+        hud.AddImage(hotspot_image_string, vec3(700,200,0));   
+    }
+    if(game_type == _versus){
+        versus_gui.DrawGUI();
+    }
 }
 
 void AchievementEvent(string event_str){
@@ -194,179 +221,178 @@ void ReceiveMessage2(string msg, string msg2) {
         gui_id = gui.AddGUI("displaygui_call",msg2,220,250,0);
         has_gui = true;
     } else if(msg == "displayhud"){
-		if(hotspot_image_layer == -1){
-		hotspot_image_layer = hud.AddImage(msg2, vec3(700,200,0));
+		if(hotspot_image_string.length() == 0){
+		    hotspot_image_string = msg2;
 		}
     }
 }
 
-class ScoreMark {
+class VersusGUI_ScoreMark {
     bool mirrored;
     bool lit;
-    int layer_id;
-    int glow_layer_id;
     float scale_mult;
 };
-int top_crete_layer = -1;
-int left_portrait_layer = -1;
-int player_one_win_layer = -1;
-int player_two_win_layer = -1;
-int right_portrait_layer = -1;
-int left_vignette_layer = -1;
-int right_vignette_layer = -1;
-float player_one_win_alpha = 0.0f;
-float player_two_win_alpha = 0.0f;
-int blackout_layer = -1;
-int blackout_over_layer = -1;
-array<ScoreMark> right_score_marks;
-array<ScoreMark> left_score_marks;
-float blackout_amount = 0.0f;
-float score_change_time = 0.0f;
 
-void UpdateVersusUI(){
-    float ui_scale = GetScreenWidth() / 2560.0f;
-    if(top_crete_layer == -1){
-        top_crete_layer = hud.AddImage("Data/Textures/ui/versus_mode/top_crete.tga", vec3(0,0,0));
-    }
-    if(left_portrait_layer == -1){
-        left_portrait_layer = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_portrait.tga", vec3(0,0,0));
-    }
-    if(right_portrait_layer == -1){
-        right_portrait_layer = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_portrait.tga", vec3(0,0,0)); 
-    }
-    if(left_vignette_layer == -1){
-        left_vignette_layer = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
-    }
-    if(right_vignette_layer == -1){
-        right_vignette_layer = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
-    }
-    if(blackout_layer == -1){
-        blackout_layer = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
-    }
-    if(blackout_over_layer == -1){
-        blackout_over_layer = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
-    }
-    if(player_one_win_layer == -1){
-        player_one_win_layer = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_win.tga", vec3(0,0,0));
-    }
-    if(player_two_win_layer == -1){
-        player_two_win_layer = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_win.tga", vec3(0,0,0));
-    }
-    if(right_score_marks.size() == 0){
+class VersusGUI {
+    float player_one_win_alpha;
+    float player_two_win_alpha;
+    array<VersusGUI_ScoreMark> right_score_marks;
+    array<VersusGUI_ScoreMark> left_score_marks;
+    float blackout_amount;
+    float score_change_time;
+
+    VersusGUI() {
+        player_one_win_alpha = 0.0f;
+        player_two_win_alpha = 0.0f;
+        blackout_amount = 0.0f;
+        score_change_time = 0.0f;
+        
         right_score_marks.resize(5);
         for(int i=0; i<5; ++i){
-            right_score_marks[i].layer_id = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
-            right_score_marks[i].glow_layer_id = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
             right_score_marks[i].mirrored = false;
             right_score_marks[i].lit = false;
             right_score_marks[i].scale_mult = 1.0f;
         }
-    }
-    if(left_score_marks.size() == 0){
+        
         left_score_marks.resize(5);
         for(int i=0; i<5; ++i){
-            left_score_marks[i].layer_id = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
-            left_score_marks[i].glow_layer_id = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
             left_score_marks[i].mirrored = true;
             left_score_marks[i].lit = false;
             left_score_marks[i].scale_mult = 1.0f;
         }
     }
-    HUDImage @blackout_image = hud.GetImage(blackout_layer);
-    blackout_image.position.y = 0;
-    blackout_image.position.x = 0;
-    blackout_image.position.z = -2.0f;
-    blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight());
-    blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
-    if(GetInputPressed(0, "j")){
-        IncrementScoreLeft();
-    }
-    HUDImage @blackout_over_image = hud.GetImage(blackout_over_layer);
-    blackout_over_image.position.y = 0;
-    blackout_over_image.position.x = 0;
-    blackout_over_image.position.z = 2.0f;
-    blackout_over_image.scale = vec3(GetScreenWidth() + GetScreenHeight());
-    blackout_over_image.color = vec4(0.0f,0.0f,0.0f,max(player_one_win_alpha,player_two_win_alpha)*0.5f);
-    HUDImage @player_one_win_image = hud.GetImage(player_one_win_layer);
-    float player_one_scale = 1.5f + sin(player_one_win_alpha*1.570796f) * 0.2f;
-    player_one_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_one_scale;
-    player_one_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_one_scale;
-    player_one_win_image.position.z = 3.0f;
-    player_one_win_image.scale = vec3(ui_scale * player_one_scale);
-    player_one_win_image.color.a = player_one_win_alpha;
-    HUDImage @player_two_win_image = hud.GetImage(player_two_win_layer);
-    float player_two_scale = 1.5f + sin(player_two_win_alpha*1.570796f) * 0.2f;
-    player_two_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_two_scale;
-    player_two_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_two_scale;
-    player_two_win_image.position.z = 3.0f;
-    player_two_win_image.scale = vec3(ui_scale * player_two_scale);
-    player_two_win_image.color.a = player_two_win_alpha;
-    HUDImage @left_portrait_image = hud.GetImage(left_portrait_layer);
-    left_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
-    left_portrait_image.position.x = GetScreenWidth() * 0.5 - 850 * ui_scale;
-    left_portrait_image.position.z = 1.0f;
-    left_portrait_image.scale = vec3(ui_scale * 0.6f);
-    HUDImage @right_portrait_image = hud.GetImage(right_portrait_layer);
-    right_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
-    right_portrait_image.position.x = GetScreenWidth() * 0.5 + 530 * ui_scale;
-    right_portrait_image.position.z = 1.0f;
-    right_portrait_image.scale = vec3(ui_scale * 0.6f);
-    HUDImage @left_vignette_image = hud.GetImage(left_vignette_layer);
-    left_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
-    left_vignette_image.position.x = 0.0f;
-    left_vignette_image.position.z = -1.0f;
-    left_vignette_image.scale = vec3(ui_scale * 2.0f);
-    HUDImage @right_vignette_image = hud.GetImage(right_vignette_layer);
-    right_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
-    right_vignette_image.position.x = GetScreenWidth();
-    right_vignette_image.position.z = -1.0f;
-    right_vignette_image.scale = vec3(ui_scale * 2.0f);
-    right_vignette_image.scale.x *= -1.0f;
-    HUDImage @top_crete_image = hud.GetImage(top_crete_layer);
-    top_crete_image.position.y = GetScreenHeight() - 256 * ui_scale;
-    top_crete_image.position.x = GetScreenWidth() * 0.5 - 1024 * ui_scale;
-    top_crete_image.scale = vec3(ui_scale);
-    for(int i=0; i<5; ++i){
-        if(right_score_marks[i].lit){
-            right_score_marks[i].scale_mult = mix(1.0f, right_score_marks[i].scale_mult, 0.9f);
-        } else {
-            right_score_marks[i].scale_mult = mix(0.0f, right_score_marks[i].scale_mult, 0.9f);
+
+    void Update(){
+        for(int i=0; i<5; ++i){
+            if(right_score_marks[i].lit){
+                right_score_marks[i].scale_mult = mix(1.0f, right_score_marks[i].scale_mult, 0.9f);
+            } else {
+                right_score_marks[i].scale_mult = mix(0.0f, right_score_marks[i].scale_mult, 0.9f);
+            }
         }
-        float special_scale = 1.0f;
-        HUDImage @hud_image = hud.GetImage(right_score_marks[i].layer_id);
-        hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
-        hud_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
-        hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
-        special_scale = right_score_marks[i].scale_mult;
-        HUDImage @glow_image = hud.GetImage(right_score_marks[i].glow_layer_id);
-        glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
-        glow_image.position.z = 0.1f;
-        glow_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
-        glow_image.scale = vec3(ui_scale * 0.6f * special_scale);
-        glow_image.color.a = 1.0f - abs(special_scale - 1.0f);
-    }
-    for(int i=0; i<5; ++i){
-        if(left_score_marks[i].lit){
-            left_score_marks[i].scale_mult = mix(1.0f, left_score_marks[i].scale_mult, 0.9f);
-        } else {
-            left_score_marks[i].scale_mult = mix(0.0f, left_score_marks[i].scale_mult, 0.9f);
+        for(int i=0; i<5; ++i){
+            if(left_score_marks[i].lit){
+                left_score_marks[i].scale_mult = mix(1.0f, left_score_marks[i].scale_mult, 0.9f);
+            } else {
+                left_score_marks[i].scale_mult = mix(0.0f, left_score_marks[i].scale_mult, 0.9f);
+            }
         }
-        float special_scale = 1.0f;
-        HUDImage @hud_image = hud.GetImage(left_score_marks[i].layer_id);
-        hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
-        hud_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;
-        hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
-        hud_image.scale.x *= -1.0f;
-        special_scale = left_score_marks[i].scale_mult;
-        HUDImage @glow_image = hud.GetImage(left_score_marks[i].glow_layer_id);
-        glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
-        glow_image.position.z = 0.1f;
-        glow_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;
-        glow_image.scale = vec3(ui_scale * 0.6f * special_scale);
-        glow_image.scale.x *= -1.0f;
-        glow_image.color.a = 1.0f - abs(special_scale - 1.0f);
+    }
+    
+    void DrawGUI(){
+        float ui_scale = GetScreenWidth() / 2560.0f;
+        
+        HUDImage @top_crete_image = hud.AddImage("Data/Textures/ui/versus_mode/top_crete.tga", vec3(0,0,0));
+        top_crete_image.position.y = GetScreenHeight() - 256 * ui_scale;
+        top_crete_image.position.x = GetScreenWidth() * 0.5 - 1024 * ui_scale;
+        top_crete_image.scale = vec3(ui_scale);
+        
+        HUDImage @left_portrait_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_portrait.tga", vec3(0,0,0));
+        left_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
+        left_portrait_image.position.x = GetScreenWidth() * 0.5 - 850 * ui_scale;
+        left_portrait_image.position.z = 1.0f;
+        left_portrait_image.scale = vec3(ui_scale * 0.6f);
+        
+        HUDImage @right_portrait_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_portrait.tga", vec3(0,0,0));
+        right_portrait_image.position.y = GetScreenHeight() - 512 * ui_scale * 0.6f;
+        right_portrait_image.position.x = GetScreenWidth() * 0.5 + 530 * ui_scale;
+        right_portrait_image.position.z = 1.0f;
+        right_portrait_image.scale = vec3(ui_scale * 0.6f);
+        
+        HUDImage @left_vignette_image = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
+        left_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
+        left_vignette_image.position.x = 0.0f;
+        left_vignette_image.position.z = -1.0f;
+        left_vignette_image.scale = vec3(ui_scale * 2.0f);
+        
+        HUDImage @right_vignette_image = hud.AddImage("Data/Textures/ui/versus_mode/corner_vignette.tga", vec3(0,0,0));
+        right_vignette_image.position.y = GetScreenHeight() - 256 * ui_scale * 2.0f;
+        right_vignette_image.position.x = GetScreenWidth();
+        right_vignette_image.position.z = -1.0f;
+        right_vignette_image.scale = vec3(ui_scale * 2.0f);
+        right_vignette_image.scale.x *= -1.0f;        
+        
+        HUDImage @blackout_image = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
+        blackout_image.position.y = 0;
+        blackout_image.position.x = 0;
+        blackout_image.position.z = -2.0f;
+        blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight());
+        blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
+        
+        HUDImage @blackout_over_image = hud.AddImage("Data/Textures/diffuse.tga", vec3(0,0,0));
+        blackout_over_image.position.y = 0;
+        blackout_over_image.position.x = 0;
+        blackout_over_image.position.z = 2.0f;
+        blackout_over_image.scale = vec3(GetScreenWidth() + GetScreenHeight());
+        blackout_over_image.color = vec4(0.0f,0.0f,0.0f,max(player_one_win_alpha,player_two_win_alpha)*0.5f);
+        
+        HUDImage @player_one_win_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_1_win.tga", vec3(0,0,0));
+        float player_one_scale = 1.5f + sin(player_one_win_alpha*1.570796f) * 0.2f;
+        player_one_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_one_scale;
+        player_one_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_one_scale;
+        player_one_win_image.position.z = 3.0f;
+        player_one_win_image.scale = vec3(ui_scale * player_one_scale);
+        player_one_win_image.color.a = player_one_win_alpha;
+        
+        HUDImage @player_two_win_image = hud.AddImage("Data/Textures/ui/versus_mode/rabbit_2_win.tga", vec3(0,0,0));
+        float player_two_scale = 1.5f + sin(player_two_win_alpha*1.570796f) * 0.2f;
+        player_two_win_image.position.y = GetScreenHeight() * 0.5 - 512 * ui_scale * player_two_scale;
+        player_two_win_image.position.x = GetScreenWidth() * 0.5 - 512 * ui_scale * player_two_scale;
+        player_two_win_image.position.z = 3.0f;
+        player_two_win_image.scale = vec3(ui_scale * player_two_scale);
+        player_two_win_image.color.a = player_two_win_alpha;
+        
+        for(int i=0; i<5; ++i){
+            float special_scale = 1.0f;
+            HUDImage @hud_image = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
+            hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
+            hud_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
+            hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
+            special_scale = right_score_marks[i].scale_mult;
+            HUDImage @glow_image = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
+            glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
+            glow_image.position.z = 0.1f;
+            glow_image.position.x = GetScreenWidth() * 0.5 + (498 - 128 * special_scale) * ui_scale - i * 90 * ui_scale;
+            glow_image.scale = vec3(ui_scale * 0.6f * special_scale);
+            glow_image.color.a = 1.0f - abs(special_scale - 1.0f);
+        }
+        for(int i=0; i<5; ++i){
+            float special_scale = 1.0f;
+            HUDImage @hud_image = hud.AddImage("Data/Textures/ui/versus_mode/match_mark.tga", vec3(0,0,0));
+            hud_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
+            hud_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;
+            hud_image.scale = vec3(ui_scale * 0.6f * special_scale);
+            hud_image.scale.x *= -1.0f;
+            special_scale = left_score_marks[i].scale_mult;
+            HUDImage @glow_image = hud.AddImage("Data/Textures/ui/versus_mode/match_win.tga", vec3(0,0,0));
+            glow_image.position.y = GetScreenHeight() - (122 + 128 * special_scale) * ui_scale;
+            glow_image.position.z = 0.1f;
+            glow_image.position.x = GetScreenWidth() * 0.5 - (528 - 128 * special_scale) * ui_scale + i * 90 * ui_scale;
+            glow_image.scale = vec3(ui_scale * 0.6f * special_scale);
+            glow_image.scale.x *= -1.0f;
+            glow_image.color.a = 1.0f - abs(special_scale - 1.0f);
+        }
+    }
+    
+    void IncrementScoreLeft(int score){
+        left_score_marks[score].lit = true;
+        left_score_marks[score].scale_mult = 2.0f;
+    }
+    
+    void IncrementScoreRight(int score){
+        right_score_marks[score].lit = true;
+        right_score_marks[score].scale_mult = 2.0f;
+    }
+    
+    void ClearScores() {
+        for(int i=0; i<5; ++i){
+            left_score_marks[i].lit = false;
+            right_score_marks[i].lit = false;
+        }                 
     }
 }
+
+VersusGUI versus_gui;
 
 void Update() {
     if(GetPlayerCharacterID() != -1){
@@ -376,7 +402,7 @@ void Update() {
     bool versus_mode = !GetSplitscreen() && GetNumCharacters() == 2 && ReadCharacter(0).controlled && ReadCharacter(1).controlled;
     if(versus_mode){
         game_type = _versus;
-        UpdateVersusUI();
+        versus_gui.Update();
     } else {
         game_type = _normal;
     }
@@ -487,8 +513,7 @@ void SetAnimUpdateFreqs() {
 
 void IncrementScoreLeft(){
     if(score_left < 5){
-        left_score_marks[score_left].lit = true;
-        left_score_marks[score_left].scale_mult = 2.0f;
+        versus_gui.IncrementScoreLeft(score_left);
     }
     if(score_left < 4){
         PlaySoundGroup("Data/Sounds/versus/fight_win1.xml");
@@ -498,8 +523,7 @@ void IncrementScoreLeft(){
 
 void IncrementScoreRight() {
     if(score_right < 5){
-        right_score_marks[score_right].lit = true;
-        right_score_marks[score_right].scale_mult = 2.0f;
+        versus_gui.IncrementScoreRight(score_right);
     }
     if(score_right < 4){
         PlaySoundGroup("Data/Sounds/versus/fight_win2.xml");
@@ -539,20 +563,21 @@ void VictoryCheckNormal() {
                 }
                 reset_allowed = false;
             }
+            if(victory){
+                achievements.Save();
+            }
             //Reset();
         }
     } else {
         reset_timer = _reset_delay;
+        no_win_time = time;
     }
 }
 
 void ClearVersusScores(){
     score_left = 0;
     score_right = 0;
-    for(int i=0; i<5; ++i){
-        left_score_marks[i].lit = false;
-        right_score_marks[i].lit = false;
-    }                         
+    versus_gui.ClearScores();        
 }
 
 void VictoryCheckVersus() {
@@ -569,7 +594,7 @@ void VictoryCheckVersus() {
     const float _blackout_speed = 2.0f;
     if(num_alive <= 1){
         if(reset_timer <= 1.0f / _blackout_speed){
-            blackout_amount = min(1.0f, blackout_amount + time_step * _blackout_speed);
+            versus_gui.blackout_amount = min(1.0f, versus_gui.blackout_amount + time_step * _blackout_speed);
         }
         if(end_game_delay == 0.0f){
             reset_timer -= time_step;
@@ -596,7 +621,7 @@ void VictoryCheckVersus() {
             }
         }
     } else {
-        blackout_amount = max(0.0f, blackout_amount - time_step * _blackout_speed);
+        versus_gui.blackout_amount = max(0.0f, versus_gui.blackout_amount - time_step * _blackout_speed);
         reset_timer = 2.0f;
     }
     if(end_game_delay != 0.0f){
@@ -611,13 +636,13 @@ void VictoryCheckVersus() {
         }
         if(end_game_delay > 1.0f){
             if(score_left > score_right){
-                player_one_win_alpha = min(1.0f, player_one_win_alpha + time_step);
+                versus_gui.player_one_win_alpha = min(1.0f, versus_gui.player_one_win_alpha + time_step);
             } else {
-                player_two_win_alpha = min(1.0f, player_two_win_alpha + time_step);
+                versus_gui.player_two_win_alpha = min(1.0f, versus_gui.player_two_win_alpha + time_step);
             }
         } else {
-            player_one_win_alpha = max(0.0f, player_one_win_alpha - time_step);
-            player_two_win_alpha = max(0.0f, player_two_win_alpha - time_step);
+            versus_gui.player_one_win_alpha = max(0.0f, versus_gui.player_one_win_alpha - time_step);
+            versus_gui.player_two_win_alpha = max(0.0f, versus_gui.player_two_win_alpha - time_step);
         }
         if(end_game_delay == 0.0f){
             ClearVersusScores();
@@ -625,8 +650,8 @@ void VictoryCheckVersus() {
             PlaySound("Data/Sounds/versus/voice_start_1.wav");
         }
     } else {
-        player_one_win_alpha = 0.0f;
-        player_two_win_alpha = 0.0f;
+        versus_gui.player_one_win_alpha = 0.0f;
+        versus_gui.player_two_win_alpha = 0.0f;
     }
 }
 
@@ -672,7 +697,6 @@ int ThreatsRemaining() {
         return -1;
     }
     MovementObject@ player_char = ReadCharacter(player_id);
-    character_getter.Load(player_char.char_path);
 
     int num = GetNumCharacters();
     int num_threats = 0;
@@ -680,7 +704,7 @@ int ThreatsRemaining() {
         MovementObject@ char = ReadCharacter(i);
         vec3 target_pos = char.position;
         if(char.GetIntVar("knocked_out") == _awake &&
-           character_getter.OnSameTeam(char.char_path) == 0)
+           !player_char.OnSameTeam(char))
         {
             ++num_threats;
         }
@@ -694,14 +718,13 @@ int ThreatsPossible() {
         return -1;
     }
     MovementObject@ player_char = ReadCharacter(player_id);
-    character_getter.Load(player_char.char_path);
-
+   
     int num = GetNumCharacters();
     int num_threats = 0;
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
         vec3 target_pos = char.position;
-        if(character_getter.OnSameTeam(char.char_path) == 0)
+        if(!player_char.OnSameTeam(char))
         {
             ++num_threats;
         }

@@ -99,7 +99,7 @@ void NotifySound(int created_by_id, float max_dist, vec3 pos) {
     if(goal == _patrol || goal == _investigate){
         bool same_team = false;
         character_getter.Load(this_mo.char_path);
-        if(character_getter.OnSameTeam(ReadCharacterID(created_by_id).char_path) == 1){
+        if(this_mo.OnSameTeam(ReadCharacterID(created_by_id))){
             same_team = true;
         }
         if(!same_team){
@@ -939,7 +939,7 @@ vec3 GetRepulsorForce(){
             continue;
         }
         MovementObject@ char = ReadCharacterID(nearby_characters[i]);
-        if(character_getter.OnSameTeam(char.char_path) != 1){
+        if(!this_mo.OnSameTeam(char)){
             continue;
         }
         float dist = length(this_mo.position - char.position);
