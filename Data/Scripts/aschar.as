@@ -348,6 +348,10 @@ void MakeBeaconParticle(){
 void Update(int _num_frames) {
     num_frames = _num_frames;
     ApplyLevelBoundaries();
+
+    if(knocked_out != _awake){
+        knocked_out_time += time_step * num_frames;
+    }
     /*if(this_mo.controlled){
         PredictPath(this_mo.position, this_mo.position + this_mo.GetFacing() * 5.0f);
     }*/
@@ -534,6 +538,7 @@ void EndAnim(){
 
 void RecoverHealth() {      
     knocked_out = _awake;
+    knocked_out_time = 0.0f;
     blood_health = 1.0f;
     block_health = 1.0f;
     blood_damage = 0.0f;
@@ -1183,6 +1188,7 @@ void UpdateHeadLook() {
         layer_attacking_fade = mix(0.0f, layer_attacking_fade, pow(0.95f, num_frames));
     }
     torso_control *= (1.0f - layer_attacking_fade);
+    torso_control *= (1.0f - duck_amount);
     
     if(throw_knife_layer_id != -1){
         layer_throwing_fade = mix(1.0f, layer_attacking_fade, pow(0.9f, num_frames));
@@ -1373,6 +1379,7 @@ float temp_health = 1.0f; // Remaining regenerating health until knocked out
 float permanent_health = 1.0f; // Remaining non-regenerating health until killed
 
 int knocked_out = _awake;
+float knocked_out_time = 0.0f;
 
 void RegenerateHealth() {
     const float _block_recover_speed = 0.3f;
@@ -1887,7 +1894,8 @@ int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
     //active_blocking = true;
     if(!on_ground || flip_info.IsFlipping() || !active_blocking || 
         attack_getter2.GetUnblockable() != 0 || 
-        (attack_getter2.GetFleshUnblockable() != 0 && held_weapon == -1))
+        (attack_getter2.GetFleshUnblockable() != 0 && held_weapon == -1) ||
+        state == _ragdoll_state)
     {
         return _miss;
     }
@@ -2026,23 +2034,25 @@ void TakeSharpDamage(float sharp_damage, vec3 pos, int attacker_id) {
     }
     if(attack_getter2.HasStabDir()){
         int attack_weapon_id = ReadCharacterID(attacker_id).GetIntVar("held_weapon");
-        int stab_type = attack_getter2.GetStabDirType();
-        ItemObject@ item_obj = ReadItemID(attack_weapon_id);
-        mat4 trans = item_obj.GetPhysicsTransform();
-        mat4 trans_rotate = trans;
-        trans_rotate.SetColumn(3, vec3(0.0f));
-        vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
-        vec3 stab_dir = trans_rotate * attack_getter2.GetStabDir();
-        stab_pos -= stab_dir * 5.0f;
-        const bool _draw_cut_line = false;
-        if(_draw_cut_line){
-            DebugDrawLine(stab_pos,
-                stab_pos + stab_dir*10.0f,
-                vec3(1.0f),
-                _fade);
+        if(attack_weapon_id != -1){
+            int stab_type = attack_getter2.GetStabDirType();
+            ItemObject@ item_obj = ReadItemID(attack_weapon_id);
+            mat4 trans = item_obj.GetPhysicsTransform();
+            mat4 trans_rotate = trans;
+            trans_rotate.SetColumn(3, vec3(0.0f));
+            vec3 stab_pos = trans * vec3(0.0f,0.0f,0.0f);
+            vec3 stab_dir = trans_rotate * attack_getter2.GetStabDir();
+            stab_pos -= stab_dir * 5.0f;
+            const bool _draw_cut_line = false;
+            if(_draw_cut_line){
+                DebugDrawLine(stab_pos,
+                    stab_pos + stab_dir*10.0f,
+                    vec3(1.0f),
+                    _fade);
+            }
+            this_mo.Stab(stab_pos, stab_dir, stab_type);
+            AddBloodToStabWeapon(attacker_id);
         }
-        this_mo.Stab(stab_pos, stab_dir, stab_type);
-        AddBloodToStabWeapon(attacker_id);
     }
 }
 
@@ -2262,6 +2272,9 @@ void EndExecution() {
 
 
 void EndAttack() {
+    if(state != _attack_state){
+        return;
+    }
     SetState(_movement_state);
     if(!on_ground){
         flip_info.StartLegCannonFlip(this_mo.GetFacing()*-1.0f, leg_cannon_flip);
@@ -2269,6 +2282,9 @@ void EndAttack() {
 }
 
 void EndHitReaction() {
+    if(state != _hit_reaction_state){
+        return;
+    }
     SetState(_movement_state);
 }
 
@@ -2415,9 +2431,10 @@ void AttachWeapon(int which){
     this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
 }
 
-void GrabWeaponFromBody(int stuck_id, const vec3 &in pos) {
-    if(stuck_id != this_mo.getID()){
-        MovementObject@ char = ReadCharacterID(stuck_id);
+void GrabWeaponFromBody(int stuck_id, int weapon_id, const vec3 &in pos) {{
+    MovementObject@ char = ReadCharacterID(stuck_id);
+    char.UnStickItem(weapon_id);
+    if(stuck_id != this_mo.getID())
         char.Execute("RagdollRefresh(1);");
         char.ApplyForceToRagdoll(vec3(0.0f,1000.0f,0.0f), pos);
     }
@@ -2441,7 +2458,7 @@ void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
             if(distance(hand_pos, pos)<0.9f){ 
                 int stuck_id = item_obj.StuckInWhom();
                 if(stuck_id != -1){
-                    GrabWeaponFromBody(stuck_id, pos);
+                    GrabWeaponFromBody(stuck_id, item_obj.GetID(), pos);
                 }
                 AttachWeapon(item_obj.GetID());
                 if(pickup_layer != -1){
@@ -3850,10 +3867,6 @@ void UpdateAttacking() {
             return;
         }
 
-        if(!this_mo.controlled){
-            this_mo.PlaySoundGroupVoice("attack",0.0f);
-        }
-
         if(attack_getter.GetSpecial() == "legcannon"){    
             leg_cannon_flip = 0.0f;
         }
@@ -3906,6 +3919,10 @@ void UpdateAttacking() {
                 return;
             }
             this_mo.SetRotationFromFacing(direction);
+        }
+
+        if(!this_mo.controlled){
+            this_mo.PlaySoundGroupVoice("attack",0.0f);
         }
 
         this_mo.SetAnimation(anim_path, 20.0f, flags);
@@ -4348,7 +4365,13 @@ float going_to_throw_item_time;
 int sheathe_layer_id = -1;
 
 void HandlePickUp() {
-    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state && tethered == _TETHERED_FREE){
+    if((WantsToDropItem() && throw_knife_layer_id == -1) || knocked_out != _awake){
+        DropWeapon();
+    }
+    if(knocked_out != _awake || state == _ragdoll_state || tethered != _TETHERED_FREE){
+        return;
+    }
+    if(WantsToPickUpItem()){
         int num_items = GetNumItems();
         
         if(held_weapon == -1){
@@ -4363,7 +4386,7 @@ void HandlePickUp() {
                     if(flip_info.IsFlipping()){
                         int stuck_id = item_obj.StuckInWhom();
                         if(stuck_id != -1){
-                            GrabWeaponFromBody(stuck_id, pos);
+                            GrabWeaponFromBody(stuck_id, item_obj.GetID(), pos);
                         }
                         AttachWeapon(item_obj.GetID());
                     } else {
@@ -4402,9 +4425,6 @@ void HandlePickUp() {
             this_mo.RemoveLayer(pickup_layer, 4.0f);
             pickup_layer = -1;
         } 
-    }
-    if((WantsToDropItem() && throw_knife_layer_id == -1) || knocked_out != _awake){
-        DropWeapon();
     }
     if(WantsToThrowItem() && held_weapon != -1 && throw_knife_layer_id == -1){        
         float throw_range = 50.0f;
@@ -5069,6 +5089,7 @@ void UpdateAnimation() {
                         if(held_weapon == -1){
                             this_mo.SetAnimation("Data/Animations/r_dragstance.xml", 3.0f, flags);
                         } else {
+                            flags = 0;
                             this_mo.SetAnimation("Data/Animations/r_dragstanceone.xml", 3.0f, flags);
                         }
                     }

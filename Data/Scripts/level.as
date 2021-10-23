@@ -413,6 +413,7 @@ void VictoryCheckNormal() {
         failure = true;
     }
     if(victory || failure){
+        /*
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             if(reset_allowed && !has_gui){
@@ -428,7 +429,7 @@ void VictoryCheckNormal() {
                 reset_allowed = false;
             }
             //Reset();
-        }
+        }*/
     } else {
         reset_timer = _reset_delay;
     }

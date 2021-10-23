@@ -3,6 +3,7 @@
 
 float throw_key_time;
 bool listening = false;
+bool delay_jump;
 
 Situation situation;
 
@@ -63,6 +64,10 @@ void UpdateBrain(){
             item_key_state = _iks_sheathe;
         }
     }
+
+    if(delay_jump && !GetInputDown(this_mo.controller_id, "jump")){
+        delay_jump = false;
+    }
 }
 
 vec3 GetTargetJumpVelocity() {
@@ -86,6 +91,9 @@ int IsIdle() {
 }
 
 void HandleAIEvent(AIEvent event){
+    if(event == _climbed_up){
+        delay_jump = true;
+    }
 }
 
 void ReceiveMessage(int source, int msg_type){
@@ -103,7 +111,7 @@ bool WantsToRoll() {
 
 bool WantsToJump() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "jump");
+    return GetInputDown(this_mo.controller_id, "jump") && !delay_jump;
 }
 
 bool WantsToAttack() {
