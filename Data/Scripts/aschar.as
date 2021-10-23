@@ -486,6 +486,9 @@ void HandleSpecialKeyPresses() {
         if(GetInputPressed(this_mo.controller_id, "7")){
             SwitchCharacter("Data/Characters/cat.xml");
         }
+        if(GetInputPressed(this_mo.controller_id, "8")){
+            SwitchCharacter("Data/Characters/raider_rabbit.xml");
+        }
         if(GetInputPressed(this_mo.controller_id, "b")){
             /*for(int i=0; i<5; ++i){
                 MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
@@ -594,6 +597,7 @@ void UpdateState() {
     
     use_foot_plants = false;
     
+    UpdateIdleType();
     if(state == _movement_state){
         UpdateDuckAmount();
         UpdateGroundAndAirTime();
@@ -641,6 +645,16 @@ void UpdateState() {
     left_smear_time += time_step * num_frames;
     right_smear_time += time_step * num_frames;
     smear_sound_time += time_step * num_frames;
+}
+
+void UpdateIdleType() {
+    if(target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsKnockedOut()") == _awake){
+        idle_type = _combat;
+    } else if(this_mo.controlled){
+        idle_type = _active;
+    } else {
+        idle_type = _stand;
+    }
 }
 
 vec3 drag_target;
@@ -1287,7 +1301,7 @@ const float drop_weapon_probability = 0.3f;
 
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
 // Type is a string that identifies the action and thus the reaction, dir is the vector from the attacker to the defender, and pos is the impact position.
-int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id) {
+int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id, float attack_damage_mult, float attack_knockback_mult) {
     attack_getter2.Load(attack_path);
 
     if(type == "grabbed"){
@@ -1297,7 +1311,7 @@ int WasHit(string type, string attack_path, vec3 dir, vec3 pos, int attacker_id)
     } else if(type == "blockprepare"){
         return PrepareToBlock(dir, pos, attacker_id);
     } else if(type == "attackimpact"){
-        return HitByAttack(dir, pos, attacker_id);
+        return HitByAttack(dir, pos, attacker_id, attack_damage_mult, attack_knockback_mult);
     } else {
         return _invalid;
     }
@@ -1633,7 +1647,7 @@ void MakeMetalSparks(vec3 pos){
     }   
 }
 
-int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
+int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float attack_damage_mult, float attack_knockback_mult){
     if((state == _hit_reaction_state && hit_reaction_dodge) ||
        (attack_getter2.GetHeight() == _high && IsDucking() == 1))
     {
@@ -1654,7 +1668,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         block_health = 0.0f;
     }
         
-    block_health -= attack_getter2.GetBlockDamage() * p_damage_multiplier;
+    block_health -= attack_getter2.GetBlockDamage() * p_damage_multiplier * attack_damage_mult;
     block_health = max(0.0f, block_health);
 
     float sharp_damage = attack_getter2.GetSharpDamage();
@@ -1680,13 +1694,15 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     bool knocked_over = false;
     
     if(!can_passive_block){
-        HandleRagdollImpact(dir, pos);
+        float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f) * attack_knockback_mult;
+        float damage = attack_getter2.GetDamage() * attack_damage_mult;
+        HandleRagdollImpact(dir, pos, damage, force);
         knocked_over = true;
         if(!this_mo.controlled){
             this_mo.PlaySoundGroupVoice("hit",0.0f);
         }
         if(sharp_damage > 0.0f){        
-            TakeSharpDamage(sharp_damage, pos, attacker_id);
+            TakeSharpDamage(sharp_damage * attack_damage_mult, pos, attacker_id);
         }
     } else {
         HandlePassiveBlockImpact(dir, pos);
@@ -1724,8 +1740,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     return _hit;
 }
 
-void HandleRagdollImpact(const vec3&in dir, const vec3&in pos){
-    float force = attack_getter2.GetForce()*(1.0f-temp_health*0.5f);
+void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, float force){
     GoLimp();
     ragdoll_limp_stun = 0.9f;
 
@@ -1740,9 +1755,9 @@ void HandleRagdollImpact(const vec3&in dir, const vec3&in pos){
     this_mo.ApplyForceToRagdoll(impact_dir_adjusted * force, pos);
 
     block_health = 0.0f;
-    TakeDamage(attack_getter2.GetDamage());
+    TakeDamage(damage);
     if(startled && knocked_out == _awake){
-        TakeDamage(attack_getter2.GetDamage());
+        TakeDamage(damage);
     }
     temp_health = max(0.0f, temp_health);
 }
@@ -2033,7 +2048,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
             vec3 facing_right = vec3(-facing.z, facing.y, facing.x);
             vec3 dir = normalize(target_pos - this_mo.position);
             int return_val = ReadCharacterID(target_id).WasHit(
-                   event, attack_getter.GetPath(), dir, world_pos, this_mo.getID());
+                   event, attack_getter.GetPath(), dir, world_pos, this_mo.getID(), p_attack_damage_mult, p_attack_knockback_mult);
             if(return_val == _going_to_block){
                 WasBlocked();
             }
@@ -2400,6 +2415,37 @@ void HandleAccelTilt() {
     }
 }
 
+
+enum IdleType{_stand, _active, _combat};
+IdleType idle_type = _active;
+
+void ApplyIdle(float speed, bool start){
+    uint8 flags = 0;
+    if(mirrored_stance){
+        flags = flags|_ANM_MIRRORED;   
+    }
+
+    if(idle_type == _combat){
+        if(start){
+            this_mo.StartCharAnimation("idle",speed,flags);
+        } else {
+            this_mo.SetCharAnimation("idle",speed,flags);
+        }
+    } else {
+        string path;
+        if(idle_type == _active){
+            path = "Data/Animations/r_actionidle.xml";
+        } else if(idle_type == _stand){
+            path = "Data/Animations/r_relaxidle.xml";
+        }
+        if(start){
+            this_mo.StartAnimation(path,speed,flags);
+        } else {
+            this_mo.SetAnimation(path,speed,flags);        
+        }
+    }
+}
+
 // Executed only when the  character is in _movement_state.  Called from the update() function.
 void UpdateMovementControls() {
     if(on_ground){ 
@@ -2419,7 +2465,7 @@ void UpdateMovementControls() {
                 duck_amount = 1.0f;
                 duck_vel = 2.0f;
                 target_duck_amount = 1.0f;
-                this_mo.StartCharAnimation("idle",20.0f);
+                ApplyIdle(20.0f, true);
                 HandleBumperCollision();
                 HandleStandingCollision();
                 this_mo.position = sphere_col.position;
@@ -2589,7 +2635,7 @@ void Land(vec3 vel) {
     SetOnGround(true);
     
     float land_speed = 10.0f;//min(30.0f,max(10.0f, -vel.y));
-    this_mo.StartCharAnimation("idle",land_speed);
+    ApplyIdle(land_speed, true);
 
     if(dot(this_mo.velocity*-1.0f, ground_normal)>0.3f){
         float slide_amount = 1.0f - (dot(normalize(this_mo.velocity*-1.0f), normalize(ground_normal)));
@@ -3145,7 +3191,7 @@ void UpdateAttacking() {
             int hit = _miss;
             if(target_id != -1){
                 hit = ReadCharacterID(target_id).WasHit(
-                    "grabbed", attack_getter.GetPath(), direction, this_mo.position, this_mo.getID());        
+                    "grabbed", attack_getter.GetPath(), direction, this_mo.position, this_mo.getID(), p_attack_damage_mult, p_attack_knockback_mult);        
             } else {
                 Print("Grabbing no target\n");
             }
@@ -3257,14 +3303,6 @@ void SetState(int _state) {
         this_mo.SetAnimationCallback("void EndGetUp()");
         this_mo.SetRotationFromFacing(normalize(vec3(wake_up_torso_up.x,0.0f,wake_up_torso_up.z))*-1.0f);
 
-        //this_mo.StartAnimation("Data/Animations/kipup.anm");
-        /*if(!mirrored_stance){
-            this_mo.StartAnimation(character_getter.GetAnimPath("idle"));
-        } else {
-            this_mo.StartAnimation(character_getter.GetAnimPath("idle"),5.0f,_ANM_MIRRORED);
-        }
-        this_mo.SetAnimationCallback("void EndGetUp()");
-        */
         getting_up_time = 0.0f;    
     }
     if(state != _attack_state){
@@ -3322,11 +3360,7 @@ void WakeUp(int how) {
     } else if(how == _wake_fall){
         SetOnGround(true);
         flip_info.Land();
-        if(!mirrored_stance){
-            this_mo.StartCharAnimation("idle");
-        } else {
-            this_mo.StartCharAnimation("idle",5.0f,_ANM_MIRRORED);
-        }
+        ApplyIdle(5.0f, true);
         ragdoll_cam_recover_speed = 10.0f;
         this_mo.SetRagdollFadeSpeed(10.0f);
     } else if (how == _wake_flip) {
@@ -3340,11 +3374,7 @@ void WakeUp(int how) {
     } else if (how == _wake_roll) {
         SetOnGround(true);
         flip_info.Land();
-        if(!mirrored_stance){
-            this_mo.StartCharAnimation("idle");
-        } else {
-            this_mo.StartCharAnimation("idle",5.0f,_ANM_MIRRORED);
-        }
+        ApplyIdle(5.0f, true);
         vec3 roll_dir = GetTargetVelocity();
         vec3 flat_vel = vec3(this_mo.velocity.x, 0.0f, this_mo.velocity.z);
         if(length(flat_vel)>1.0f){
@@ -3897,7 +3927,7 @@ void SwitchCharacter(string path){
     this_mo.char_path = path;
     character_getter.Load(this_mo.char_path);
     this_mo.RecreateRiggedObject(this_mo.char_path);
-    this_mo.StartCharAnimation("idle");
+    ApplyIdle(5.0f, true);
     SetState(_movement_state);
     Recover();
 }
@@ -3929,7 +3959,7 @@ void Reset() {
     DropWeapon(); 
     if(state == _ragdoll_state){
         this_mo.UnRagdoll();
-        this_mo.StartCharAnimation("idle");
+        ApplyIdle(5.0f,true);
         ragdoll_cam_recover_speed = 1000.0f;
         this_mo.SetRagdollFadeSpeed(1000.0f);
     }
@@ -4044,6 +4074,9 @@ void HandleFootStance() {
     }*/
 }
 
+bool idle_stance = false;
+float idle_stance_amount = 0.0f;
+
 const float _stance_move_threshold = 5.0f;
 
 void UpdateAnimation() {
@@ -4053,7 +4086,8 @@ void UpdateAnimation() {
     float speed = length(flat_velocity);
     
     this_mo.SetBlendCoord("tall_coord",1.0f-duck_amount);
-    
+    idle_stance = false;
+
     if(on_ground){
         // rolling on the ground
         if(flip_info.UseRollAnimation()){
@@ -4106,11 +4140,8 @@ void UpdateAnimation() {
                     HandleFootStance();
                 }
                 if(tethered == _TETHERED_FREE){
-                    if(!mirrored_stance){
-                        this_mo.SetCharAnimation("idle");
-                    } else {
-                        this_mo.SetCharAnimation("idle",5.0f,_ANM_MIRRORED);
-                    }
+                    idle_stance = true;
+                    ApplyIdle(5.0f, false);
                 } else {
                     if(tethered == _TETHERED_REARCHOKE){
                         this_mo.SetAnimation("Data/Animations/r_rearchokestance.xml", 5.0f, _ANM_MOBILE);
@@ -4127,6 +4158,12 @@ void UpdateAnimation() {
         }
     } else {
         jump_info.UpdateAirAnimation();
+    }
+
+    if(idle_stance){
+        idle_stance_amount = mix(idle_stance_amount, 1.0f, pow(0.94f, num_frames));
+    } else {
+        idle_stance_amount = mix(idle_stance_amount, 0.0f, pow(0.98f, num_frames));
     }
 
     old_use_foot_plants = use_foot_plants;
@@ -4291,7 +4328,6 @@ void MovementState_UpdateIKTargets() {
         this_mo.SetIKTargetOffset("left_leg",left_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + l_foot_offset);
         this_mo.SetIKTargetOffset("right_leg",right_leg_offset*(1.0f-roll_ik_fade)-tilt_offset*0.5f + r_foot_offset);
             
-        
         if(tethered == _TETHERED_DRAGBODY){
             MovementObject@ char = ReadCharacterID(tether_id);
             vec3 target = char.GetIKChainPos(drag_body_part,drag_body_part_id);
@@ -4308,6 +4344,14 @@ void MovementState_UpdateIKTargets() {
             this_mo.SetIKTargetOffset("leftarm",vec3(0.0f,0.0f,0.0f));
             this_mo.SetIKTargetOffset("rightarm",vec3(0.0f,0.0f,0.0f));
         }
+
+        vec3 body_offset(0.0f);
+        if(idle_stance_amount > 0.0f){
+            body_offset.y = sin(time*4.0f)*0.02f*idle_stance_amount;
+            body_offset.x = sin(time*2.0f)*0.02f*idle_stance_amount;
+            body_offset.z = sin(time*1.5f)*0.02f*idle_stance_amount;
+        }
+
         //float curr_avg_offset_height = min(0.0f,
         //                          min(left_leg_offset.y, right_leg_offset.y));
         float avg_offset_height = (left_leg_offset.y + right_leg_offset.y) * 0.5f;
@@ -4316,7 +4360,7 @@ void MovementState_UpdateIKTargets() {
         float curr_offset_height = mix(min_offset_height, avg_offset_height,mix_amount);
         offset_height = mix(offset_height, curr_offset_height, 1.0f-(pow(0.9f,num_frames)));
         vec3 height_offset = vec3(0.0f,offset_height*(1.0f-roll_ik_fade)-0.1f*roll_ik_fade,0.0f);
-        this_mo.SetIKTargetOffset("full_body",tilt_offset + height_offset);
+        this_mo.SetIKTargetOffset("full_body",tilt_offset + height_offset + body_offset);
 
         float ground_conform = this_mo.GetStatusKeyValue("groundconform");
         //Print(""+ground_conform+"\n");
@@ -4375,7 +4419,8 @@ float p_block_skill;
 float p_block_followup;
 float p_attack_speed_mult;
 float p_speed_mult;
-
+float p_attack_damage_mult;
+float p_attack_knockback_mult;
 
 void SetParameters() {
     params.AddString("Aggression","0.5");
@@ -4392,6 +4437,12 @@ void SetParameters() {
 
     params.AddString("Attack Speed","1.0");
     p_attack_speed_mult = min(2.0f, max(0.1f, params.GetFloat("Attack Speed")));
+
+    params.AddString("Attack Damage","1.0");
+    p_attack_damage_mult = max(0.0f, params.GetFloat("Attack Damage"));
+
+    params.AddString("Attack Knockback","1.0");
+    p_attack_knockback_mult = max(0.0f, params.GetFloat("Attack Knockback"));
 
     params.AddString("Movement Speed","1.0");
     p_speed_mult = min(100.0f, max(0.01f, params.GetFloat("Movement Speed")));
