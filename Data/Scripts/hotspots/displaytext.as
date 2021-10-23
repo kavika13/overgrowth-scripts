@@ -3,7 +3,6 @@ void Init() {
 
 void SetParameters() {
     params.AddString("Display Text", "Default text");
-    params.AddString("Jump speed", "5.0");
 }
 
 void HandleEvent(string event, MovementObject @mo){
@@ -17,8 +16,6 @@ void HandleEvent(string event, MovementObject @mo){
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
         SendLevelMessage2("displaytext", params.GetString("Display Text"));
-        mo.position.y += 0.3f;
-        mo.velocity.y += params.GetFloat("Jump speed");
     }
 }
 

@@ -543,6 +543,143 @@ void SetDuckAmount(float val){
     duck_amount = val;
 }
 
+float plant_rustle_delay = 0.0f;
+float in_plant = 0.0f;
+
+void HandlePlantCollisions(){
+    in_plant = 0.0f;
+    {
+        vec3 offset;
+        vec3 scale;
+        float size;
+        GetCollisionSphere(offset, scale, size);
+        scale.x *= 0.5f;
+        scale.z *= 0.5f;
+        col.GetScaledSpherePlantCollision(this_mo.position+offset, size*0.2f, scale);
+        if(sphere_col.NumContacts() != 0){
+            in_plant += 0.25f;
+        }
+        col.GetScaledSpherePlantCollision(this_mo.position+offset, size*0.4f, scale);
+        if(sphere_col.NumContacts() != 0){
+            in_plant += 0.25f;
+        }
+        col.GetScaledSpherePlantCollision(this_mo.position+offset, size*0.6f, scale);
+        if(sphere_col.NumContacts() != 0){
+            in_plant += 0.25f;
+        }
+        col.GetScaledSpherePlantCollision(this_mo.position+offset, size*0.8f, scale);
+        if(sphere_col.NumContacts() != 0){
+            in_plant += 0.25f;
+        }
+        col.GetScaledSpherePlantCollision(this_mo.position+offset, size, scale);
+        /*vec3 color;
+        if(in_plant == 0.0f){ 
+            color = vec3(0.0f,1.0f,0.3f);
+        } else {
+            color = vec3(1.0f,0.0f,0.0f);
+        }
+        DebugDrawWireScaledSphere(this_mo.position+offset,size,scale,color,_delete_on_update);
+        if(in_plant < 1.0f){ 
+            color = vec3(0.0f,1.0f,0.3f);
+        } else {
+            color = vec3(1.0f,0.0f,0.0f);
+        }
+        DebugDrawWireScaledSphere(this_mo.position+offset,size*0.2f,scale,color,_delete_on_update);
+        if(in_plant < 0.75f){ 
+            color = vec3(0.0f,1.0f,0.3f);
+        } else {
+            color = vec3(1.0f,0.0f,0.0f);
+        }
+        DebugDrawWireScaledSphere(this_mo.position+offset,size*0.4f,scale,color,_delete_on_update);
+        if(in_plant < 0.5f){ 
+            color = vec3(0.0f,1.0f,0.3f);
+        } else {
+            color = vec3(1.0f,0.0f,0.0f);
+        }
+        DebugDrawWireScaledSphere(this_mo.position+offset,size*0.6f,scale,color,_delete_on_update);
+        if(in_plant < 0.25f){ 
+            color = vec3(0.0f,1.0f,0.3f);
+        } else {
+            color = vec3(1.0f,0.0f,0.0f);
+        }
+        DebugDrawWireScaledSphere(this_mo.position+offset,size*0.8f,scale,color,_delete_on_update);*/
+    }
+    array<int> plant_ids;
+    {
+        bool already_known_plant;
+        for(int i=0; i<sphere_col.NumContacts(); i++){
+            const CollisionPoint contact = sphere_col.GetContact(i);
+            //DebugDrawWireSphere(contact.position, 0.1f, vec3(1.0f), _delete_on_update);
+            already_known_plant = false;
+            for(uint j=0; j<plant_ids.size(); ++j){
+                if(plant_ids[j] == contact.id){
+                    already_known_plant = true;
+                }
+            }
+            if(!already_known_plant){
+                plant_ids.push_back(contact.id);
+            }
+        }
+    }
+    float speed = length_squared(this_mo.velocity);
+    if(in_plant > 0.25f){
+        int plant = rand()%plant_ids.size();
+        SendMessage(plant_ids[plant], _plant_movement_msg, this_mo.position, this_mo.velocity);
+        EnvObject@ eo = ReadEnvObjectID(plant_ids[plant]);
+        for(int j=0; j<3; ++j){
+            if(RangedRandomFloat(0.0f,100.0f) < speed){
+                eo.CreateLeaf(this_mo.position, this_mo.velocity * 0.8f, 10);
+            }
+            if(RangedRandomFloat(0.0f,100.0f) < speed){
+                eo.CreateLeaf(vec3(0.0f),vec3(0.0f),1);
+            }
+        }
+    }
+    plant_rustle_delay = max(0.0f, plant_rustle_delay-time_step * num_frames);
+    if(plant_rustle_delay <= 0.0f && in_plant > 0.5f){
+        if(speed > 3.0f){   
+            plant_rustle_delay = 0.7f;
+            string sound;
+            //Print("Speed: "+speed+"\n");
+            if(speed < 15.0f){
+                sound = "Data/Sounds/plant_foley/bush_slow.xml";
+                //Print("Slow\n");
+            } else if(speed > 70.0f){
+                sound = "Data/Sounds/plant_foley/bush_fast.xml";
+                //Print("Fast\n");
+            } else {
+                sound = "Data/Sounds/plant_foley/bush_medium.xml";
+                //Print("Medium\n");
+            }
+            this_mo.PlaySoundGroupAttached(sound,this_mo.position);
+        }
+    }
+    if(in_plant > 0.0f && !on_ground && !flip_info.IsFlipping()){
+        this_mo.velocity.x *= pow(0.97f, num_frames*in_plant);
+        this_mo.velocity.z *= pow(0.97f, num_frames*in_plant);
+        if(this_mo.velocity.y > 0.0f){
+            this_mo.velocity.y *= pow(0.97f, num_frames*in_plant);
+        }
+        /*if(RangedRandomFloat(0.0f,10000.0f) < speed){
+            GoLimp();
+        }*/
+    }
+}
+
+
+//int plant_flinch_layer = -1;
+void UpdatePlantAvoid() {
+    /*if(plant_flinch_layer == -1 && in_plant != 0.0f){
+        Print("Adding plant avoid\n");
+        plant_flinch_layer = 
+            this_mo.AddLayer("Data/Animations/r_plantavoid.anm",4.0f,0);
+    } 
+    if(in_plant == 0.0f && plant_flinch_layer != -1){
+        this_mo.RemoveLayer(plant_flinch_layer, 4.0f);
+        plant_flinch_layer = -1;
+    }*/
+}
+
 // States are used to differentiate between various widely different situations
 const int _movement_state = 0; // character is moving on the ground
 const int _ground_state = 1; // character has fallen down or is raising up, ATM ragdolls handle most of this
@@ -557,6 +694,7 @@ void UpdateState() {
     UpdateBlink();
     UpdateEyeLook();
 
+    UpdatePlantAvoid();
     UpdateActiveBlockAndDodge();
     RegenerateHealth();
 
@@ -596,6 +734,8 @@ void UpdateState() {
         HandleAccelTilt();
         HandleCollisions();
     }
+    
+    HandlePlantCollisions();
 
     old_use_foot_plants = use_foot_plants;
     if(!use_foot_plants && foot.length() != 0){
@@ -2231,6 +2371,9 @@ void UpdateGroundMovementControls() {
 
     float speed = _walk_accel * run_phase;
     speed = mix(speed,speed*_duck_speed_mult,duck_amount);
+    if(in_plant > 0.0f){
+        speed *= mix(1.0f,mix(0.3f, 0.6f, duck_amount),in_plant);
+    }
 
     this_mo.velocity += adjusted_vel * time_step * num_frames * speed;
 }
@@ -2704,10 +2847,23 @@ const float offset = 0.05f;
 
 const bool _draw_collision_spheres = false;
 
+void GetCollisionSphere(vec3 &out offset, vec3 &out scale, float &out size){
+    if(on_ground){
+        offset = vec3(0.0f,mix(0.3f,0.15f,duck_amount),0.0f);
+        scale = vec3(1.0f,mix(1.2f,0.6f,duck_amount),1.0f);
+        size = _bumper_size;
+    } else {
+        offset = vec3(0.0f,mix(0.2f,0.35f,flip_info.GetTuck()),0.0f);
+        scale = vec3(1.0f,mix(1.25f,1.0f,flip_info.GetTuck()),1.0f);
+        size = _leg_sphere_size;
+    }
+}
+
 vec3 HandleBumperCollision(){
-    vec3 offset(0.0f,mix(0.3f,0.15f,duck_amount),0.0f);
-    float size = _bumper_size;
-    vec3 scale(1.0f,mix(1.2f,0.6f,duck_amount),1.0f);
+    vec3 offset;
+    vec3 scale;
+    float size;
+    GetCollisionSphere(offset, scale, size);
     col.GetSlidingScaledSphereCollision(this_mo.position+offset, size, scale);
     if(_draw_collision_spheres){
         DebugDrawWireScaledSphere(this_mo.position+offset,size,scale,vec3(0.0f,1.0f,0.0f),_delete_on_update);
@@ -2863,8 +3019,10 @@ void HandleAirCollisions() {
             break;
         }
         this_mo.position += offset/num_frames;
-        vec3 col_offset(0.0f,mix(0.2f,0.35f,flip_info.GetTuck()),0.0f);
-        vec3 col_scale(1.0f,mix(1.25f,1.0f,flip_info.GetTuck()),1.0f);
+        vec3 col_offset;
+        vec3 col_scale;
+        float size;
+        GetCollisionSphere(col_offset, col_scale, size);
         col.GetSlidingScaledSphereCollision(this_mo.position+col_offset, _leg_sphere_size, col_scale);
         if(_draw_collision_spheres){
             DebugDrawWireScaledSphere(this_mo.position+col_offset, _leg_sphere_size, col_scale, vec3(0.0f,1.0f,0.0f), _delete_on_update);
