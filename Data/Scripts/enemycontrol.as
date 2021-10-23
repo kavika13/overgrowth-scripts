@@ -114,7 +114,7 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _choking){
         MovementObject@ char = ReadCharacterID(tether_id);
-        if(char.GetNumAttachedWeapons() == -1){
+        if(char.GetNumAttachedWeapons() == 0){
             SetGoal(_struggle);
         } else {
             SetGoal(_hold_still);

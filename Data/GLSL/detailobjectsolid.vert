@@ -25,11 +25,15 @@ void main()
 
     CALC_TAN_TO_WORLD
     CALC_REL_POS
-     
-    transformed_vertex.y -= length(ws_vertex)*height/max_distance;
+        
+    vec4 aux = texcoords2[int(index)];
+
+    float embed = aux.z;
+    float height_scale = aux.a;
+    transformed_vertex.y -= max(embed,length(ws_vertex)/max_distance)*height*height_scale;
     gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
 
     tc0 = gl_MultiTexCoord0.xy;
-    tc1 = texcoords2[int(index)].xy+TERRAIN_LIGHT_OFFSET;
+    tc1 = aux.xy+TERRAIN_LIGHT_OFFSET;
     CALC_CASCADE_TEX_COORDS
 } 
