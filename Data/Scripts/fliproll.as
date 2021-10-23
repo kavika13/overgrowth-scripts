@@ -167,9 +167,9 @@ class FlipInfo {
         this_mo.SetFlip(vec3(0.0f), 0.0f, 0.0f);
     }
 
-    void RotateTowardsCameraFacing() {
+    void RotateTowardsTarget() {
         if(flipping){
-            vec3 facing = InterpDirections(camera.GetFlatFacing(),
+            vec3 facing = InterpDirections(FlipFacing(),
                                            this_mo.GetFacing(),
                                            pow(1.0f-_flip_facing_inertia,num_frames));
             this_mo.SetRotationFromFacing(facing);
@@ -195,7 +195,7 @@ class FlipInfo {
             return;
         }
         UpdateFlipProgress();
-        RotateTowardsCameraFacing();
+        RotateTowardsTarget();
         UpdateFlipTuckAmount();
         UpdateFlipAngle();
         

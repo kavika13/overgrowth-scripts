@@ -173,7 +173,7 @@ void UpdateBrain(){
         return;
     }
 
-    if(!holding_weapon && goal != _struggle){
+    if(!holding_weapon && goal != _struggle && hostile){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;
@@ -344,6 +344,10 @@ bool WantsToPickUpItem() {
 }
 
 bool WantsToDropItem() {
+    return false;
+}
+
+bool WantsToThrowItem() {
     return false;
 }
 
