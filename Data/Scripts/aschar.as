@@ -10,6 +10,8 @@ void ChokedOut(int target){
     head_choke_queue = target;
 }
 
+vec3 push_velocity;
+
 void HitByItem(string material, vec3 point, int id, int type) {
     //Print(""+ this_mo.getID() + " was hit by item id "+id+" with material \""+material+"\" at ");
     //PrintVec3(point);
@@ -346,6 +348,7 @@ void ApplyLevelBoundaries(){
 }
 
 void Update(int _num_frames) {
+    num_frames = _num_frames;
     ApplyLevelBoundaries();
     /*if(holding_weapon){
         if(target_id != -1){
@@ -397,6 +400,7 @@ void Update(int _num_frames) {
         return;
     }    
     
+    reset_no_collide = max(0.0f, reset_no_collide - time_step * num_frames);
     if(being_executed == 1){
         int other_id = tether_id;
         CutThroat();
@@ -418,12 +422,13 @@ void Update(int _num_frames) {
     }
 
     if(on_ground){
+        push_velocity *= pow(0.9f, num_frames);
         vec3 offset = this_mo.velocity - old_slide_vel;
         old_slide_vel = this_mo.velocity;
         this_mo.velocity = new_slide_vel + offset;
+    } else {
+        push_velocity = vec3(0.0f);
     }
-
-    num_frames = _num_frames;
     time += time_step * num_frames;
 
     if(!this_mo.controlled && on_ground){
@@ -525,19 +530,25 @@ void EndAnim(){
     in_animation = false;
 }
 
-void Recover() {      
+void RecoverHealth() {      
     knocked_out = _awake;
     blood_health = 1.0f;
     block_health = 1.0f;
     blood_damage = 0.0f;
     temp_health = 1.0f;
     permanent_health = 1.0f;
-    recovery_time = 0.0f;
+}
+
+void Recover() {      
+    RecoverHealth();
     cut_throat = false;
     cut_torso = false;
     this_mo.CleanBlood();
     ClearTemporaryDecals();
     blood_amount = _max_blood_amount;
+    recovery_time = 0.0f;
+    roll_recovery_time = 0.0f;
+    lives = p_lives;
 }
 
 void CutThroat() {
@@ -874,7 +885,8 @@ void UpdateState() {
     } 
     
     use_foot_plants = false;
-    
+
+    UpdateThreatAmount();
     UpdateIdleType();
     if(state == _movement_state){
         UpdateDuckAmount();
@@ -1533,8 +1545,10 @@ void SetActiveRagdollInjuredPose(){
 const float _auto_wake_vel_threshold = 20.0f;
 
 float recovery_time;
+float roll_recovery_time;
 void HandleRagdollRecovery() {
     recovery_time -= time_step * num_frames;
+    roll_recovery_time -= time_step * num_frames;
     if(recovery_time <= 0.0f && length_squared(this_mo.GetAvgVelocity())<_auto_wake_vel_threshold){
         bool can_roll = CanRoll();
         if(can_roll){
@@ -1543,7 +1557,7 @@ void HandleRagdollRecovery() {
             WakeUp(_wake_fall);
         }
     } else {
-        if(WantsToRollFromRagdoll() && ragdoll_time > 0.2f){
+        if(WantsToRollFromRagdoll() && roll_recovery_time <= 0.0f){
             bool can_roll = CanRoll();
             if(!can_roll){
                 WakeUp(_wake_flip);
@@ -1556,10 +1570,11 @@ void HandleRagdollRecovery() {
 }
 
 
-const int _RGDL_NO_TYPE = 3;
-const int _RGDL_FALL = 0;
-const int _RGDL_LIMP = 1;
-const int _RGDL_INJURED = 2;
+const int _RGDL_NO_TYPE = 0;
+const int _RGDL_FALL = 1;
+const int _RGDL_LIMP = 2;
+const int _RGDL_INJURED = 3;
+const int _RGDL_ANIMATION = 4;
 
 int ragdoll_type;
 int ragdoll_layer_fetal;
@@ -1568,8 +1583,14 @@ float ragdoll_limp_stun;
 
 void SetRagdollType(int type) {
     if(ragdoll_type == type){
-        //Print("*Setting ragdoll type to "+type+"\n");
+        //Print("*Setting ragdoll type to "+type+" but skipping\n");
         return;
+    }    
+    if(ragdoll_layer_fetal != -1){
+        this_mo.RemoveLayer(ragdoll_layer_fetal, 4.0f);       
+    }
+    if(ragdoll_layer_catchfallfront != -1){
+        this_mo.RemoveLayer(ragdoll_layer_catchfallfront, 4.0f);       
     }
     //Print("Setting ragdoll type to "+type+"\n");
     ragdoll_type = type;
@@ -1599,15 +1620,24 @@ void SetRagdollType(int type) {
             //    this_mo.AddLayer("Data/Animations/r_grabface.anm",4.0f,0);
             injured_mouth_open = 0.0f;
             break;
+        case _RGDL_ANIMATION:
+            no_freeze = true;
+            this_mo.DisableSleep();
+            this_mo.SetRagdollStrength(1.0);
+            this_mo.SetAnimation("Data/Animations/r_idle.anm",4.0f,_ANM_FROM_START);
+            this_mo.AddLayer("Data/Animations/r_stomachcut.anm",4.0f,_ANM_FROM_START);
+            break;
     }
 }
 
 void Ragdoll(int type){
+    //Print("Ragdoll type " + type+"\n");
     UnTether();
     this_mo.SetRagdollDamping(0.0f);
     HandleAIEvent(_ragdolled);
     const float _ragdoll_recovery_time = 1.0f;
     recovery_time = _ragdoll_recovery_time;
+    roll_recovery_time = 0.2f;
     ragdoll_time = 0.0f;
     
     if(state == _ragdoll_state){
@@ -1616,6 +1646,8 @@ void Ragdoll(int type){
     ledge_info.on_ledge = false;
     this_mo.Ragdoll();
     SetState(_ragdoll_state);
+    ragdoll_layer_catchfallfront = -1;
+    ragdoll_layer_fetal = -1;
     ragdoll_static_time = 0.0f;
     ragdoll_time = 0.0f;
     ragdoll_limp_stun = 0.0f;
@@ -2254,6 +2286,8 @@ void EndHitReaction() {
     SetState(_movement_state);
 }
 
+int lives;
+
 void TakeDamage(float how_much){
     const float _permananent_damage_mult = 0.4f;
     how_much *= p_damage_multiplier;
@@ -2265,11 +2299,19 @@ void TakeDamage(float how_much){
     }
     if(temp_health <= 0.0f && knocked_out == _awake){
         knocked_out = _unconscious;
-        if(this_mo.controlled){
-            TimedSlowMotion(0.1f,0.7f, 0.05f);
-        }
-        if(!this_mo.controlled && tethered == _TETHERED_FREE){
-            this_mo.PlaySoundGroupVoice("death",0.4f);
+        --lives;
+        if(lives > 0){
+            RecoverHealth();
+            recovery_time = 3.0f;
+            roll_recovery_time = 3.0f;
+        } else {
+            if(this_mo.controlled){
+                TimedSlowMotion(0.1f,0.7f, 0.05f);
+            }
+            if(!this_mo.controlled && tethered == _TETHERED_FREE){
+                this_mo.PlaySoundGroupVoice("death",0.4f);
+            }
+            //SetRagdollType(_RGDL_INJURED);
         }
     }
 }
@@ -3495,6 +3537,19 @@ void UpdateDuckAmount() { // target_duck_amount is 1.0 when the character should
     duck_amount = min(1.0,duck_amount);
 }
 
+float threat_amount = 0.0f;
+float target_threat_amount = 0.0f;
+float threat_vel = 0.0f;
+
+void UpdateThreatAmount() { 
+    target_threat_amount = WantsToAttack()?1.0f:0.0f;
+    const float _threat_accel = holding_weapon?150.0f:300.0f;
+    const float _threat_vel_inertia = 0.89f;
+    threat_vel += (target_threat_amount - threat_amount) * time_step * num_frames * _threat_accel;
+    threat_vel *= pow(_threat_vel_inertia,num_frames);
+    threat_amount += threat_vel * time_step * num_frames;
+}
+
 float air_time = 0.0f;
 float on_ground_time = 0.0f;
 
@@ -4084,6 +4139,7 @@ void Execute(int type) {
 
 void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
     if(state == _ragdoll_state || 
+       reset_no_collide > 0.0f ||
        other.QueryIntFunction("int GetState()") == _ragdoll_state ||
        (state == _attack_state && attack_getter.IsThrow() == 1) ||
        (state == _hit_reaction_state && attack_getter2.IsThrow() == 1) ||
@@ -4106,6 +4162,10 @@ void HandleCollisionsBetweenTwoCharacters(MovementObject @other){
             if(on_ground || other.IsOnGround()==1){
                 other.position += dir * 0.5f;
                 this_mo.position -= dir * 0.5f;
+                
+                vec3 other_push = dir * 0.5f / (time_step) * 0.15f;
+                push_velocity -= other_push;
+                other.Execute("push_velocity += vec3("+other_push.x+","+other_push.y+","+other_push.z+");");
             } else {
                 other.velocity += dir * 0.5f / (time_step);
                 this_mo.velocity -= dir * 0.5f / (time_step);
@@ -4310,6 +4370,9 @@ float target_side_weight = 0.5f;
 float target_weight = 0.0f;
 float angle = 0.2f;
 const bool cam_input = true;
+float shared_cam_elevation = 0.0f;
+float target_shared_cam_elevation = 0.0f;
+array<float> shared_cam_elevation_history;
 
 void ApplyCameraControls() {
     bool shared_cam = !GetSplitscreen() && GetNumCharacters() == 2 && ReadCharacter(0).controlled && ReadCharacter(1).controlled;
@@ -4327,7 +4390,7 @@ void ApplyCameraControls() {
     const float _cam_collision_radius = 0.15f;
 
     vec3 cam_center;
-    {
+    if(!shared_cam){
         vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
         col.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
         cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
@@ -4338,18 +4401,23 @@ void ApplyCameraControls() {
         cam_center = (char.position + this_mo.position) * 0.5;
     }
 
-    vec3 cam_pos = cam_center + cam_pos_offset;
-    if(state != _ragdoll_state){
-        vec3 cam_offset;
-        if(on_ground){
-            cam_offset = vec3(0.0f,mix(0.6f,0.4f,duck_amount),0.0f);
+    vec3 cam_pos = cam_center;
+    if(!shared_cam){
+        cam_pos += cam_pos_offset;
+        if(state != _ragdoll_state){
+            vec3 cam_offset;
+            if(on_ground){
+                cam_offset = vec3(0.0f,mix(0.6f,0.4f,duck_amount),0.0f);
+            } else {
+                cam_offset = vec3(0.0f,0.6f,0.0f);
+            }
+            col.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, _cam_collision_radius);
+            cam_pos = sphere_col.position;
         } else {
-            cam_offset = vec3(0.0f,0.6f,0.0f);
+            cam_pos += vec3(0.0f,0.3f,0.0f);
         }
-        col.GetSweptSphereCollision(cam_pos, cam_pos+cam_offset, _cam_collision_radius);
-        cam_pos = sphere_col.position;
     } else {
-        cam_pos += vec3(0.0f,0.3f,0.0f);
+        cam_pos += vec3(0.0f,0.6f,0.0f);
     }
 
 
@@ -4461,10 +4529,20 @@ void ApplyCameraControls() {
        while(target_rotation > cam_rotation + 90.0f){
             target_rotation -= 180.0f;
        }
-       target_rotation2 = 0.0f;
+       target_rotation2 = shared_cam_elevation;
+       if(!char.VisibilityCheck(cam_pos - camera.GetFacing() * cam_distance)){
+           target_shared_cam_elevation -= 1.0f;
+       }
+       if(!this_mo.VisibilityCheck(cam_pos - camera.GetFacing() * cam_distance)){
+           target_shared_cam_elevation -= 1.0f;
+       }
+       shared_cam_elevation = mix(target_shared_cam_elevation, shared_cam_elevation, 0.99f);
+       target_shared_cam_elevation = mix(0.0f, target_shared_cam_elevation, 0.99f);
     }
 
-    ApplyCameraCones(cam_pos);
+    if(!shared_cam){
+        ApplyCameraCones(cam_pos);
+    }
 
     float inertia = pow(_camera_rotation_inertia, num_frames);
     cam_rotation = cam_rotation * inertia + 
@@ -4673,6 +4751,8 @@ void ScriptSwap() {
     }
 }
 
+float reset_no_collide = 0.2f;
+
 void Reset() {
     StartFootStance();
     DropWeapon(); 
@@ -4689,6 +4769,7 @@ void Reset() {
     ClearTemporaryDecals();
     blood_amount = _max_blood_amount;
     ResetMind();
+    reset_no_collide = 0.2f;
 }
 
 bool stance_move = true;
@@ -4724,28 +4805,30 @@ void HandleFootStance() {
     if(!old_use_foot_plants){
         StartFootStance();
     }
-    const float step_speed = max(2.0f,length(this_mo.velocity)*1.5f + 1.0f);
+
+    vec3 temp_vel = this_mo.velocity + push_velocity;
+    const float step_speed = max(2.0f,length(temp_vel)*1.5f + 1.0f);
 
     for(int i=0; i<2; ++i){
         foot[i].target_pos = this_mo.position;
     }
     vec3 diff = this_mo.GetIKTargetAnimPosition("right_leg") -
                 this_mo.GetIKTargetAnimPosition("left_leg");
-    if(length_squared(this_mo.velocity) > 0.001f){
+    if(length_squared(temp_vel) > 0.001f){
         vec3 n_diff = normalize(diff);
-        vec3 n_vel = normalize(this_mo.velocity);
+        vec3 n_vel = normalize(temp_vel);
         float val = dot(n_diff, n_vel);
-        foot[0].target_pos += this_mo.velocity * time_step * 1.0f * (-val+1.0f);
-        foot[1].target_pos += this_mo.velocity * time_step * 1.0f * (val+1.0f);
+        foot[0].target_pos += temp_vel * time_step * 1.0f * (-val+1.0f);
+        foot[1].target_pos += temp_vel * time_step * 1.0f * (val+1.0f);
         for(int i=0; i<2; ++i){
-            foot[i].target_pos += this_mo.velocity * time_step * 60.0f / step_speed;
+            foot[i].target_pos += temp_vel * time_step * 60.0f / step_speed;
         }
     }
     if(foot[0].planted && foot[1].planted &&
         (distance_squared(foot[1].target_pos, foot[1].old_pos) > 0.01f ||
          distance_squared(foot[0].target_pos, foot[0].old_pos) > 0.01f))
     {
-        if(dot(diff, this_mo.velocity) > 0.0f){
+        if(dot(diff, temp_vel) > 0.0f){
             foot[1].planted = false;
         } else {
             foot[0].planted = false;
@@ -4755,7 +4838,7 @@ void HandleFootStance() {
     for(int i=0; i<2; ++i){
         if(!foot[i].planted){
             foot[i].progress += time_step * num_frames * step_speed;
-            foot[i].height = min(0.1f,sin(foot[i].progress * 3.1415f) * length_squared(this_mo.velocity)*0.005f);
+            foot[i].height = min(0.1f,sin(foot[i].progress * 3.1415f) * length_squared(temp_vel)*0.005f);
         }
         if(foot[i].progress >= 1.0f){
             foot[i].old_pos = foot[i].target_pos;
@@ -4774,9 +4857,9 @@ void HandleFootStance() {
                 event_pos = this_mo.GetIKTargetPosition("right_leg");
                 event_name += "right";
             }
-            if(length_squared(this_mo.velocity) < 4.0f){
+            if(length_squared(temp_vel) < 4.0f){
                 event_name += "crouchwalk";
-            } else if(length_squared(this_mo.velocity) < 20.0f){
+            } else if(length_squared(temp_vel) < 20.0f){
                 event_name += "walk";
             } else {
                 event_name += "run";
@@ -4806,6 +4889,7 @@ void UpdateAnimation() {
     float speed = length(flat_velocity);
     
     this_mo.SetBlendCoord("tall_coord",1.0f-duck_amount);
+    this_mo.SetBlendCoord("threat_coord",threat_amount);
     idle_stance = false;
 
     if(on_ground){
@@ -5190,8 +5274,13 @@ float p_attack_speed_mult;
 float p_speed_mult;
 float p_attack_damage_mult;
 float p_attack_knockback_mult;
+int p_lives;
 
 void SetParameters() {
+    params.AddString("Lives","1");
+    p_lives = max(1, params.GetFloat("Lives"));
+    lives = p_lives;
+
     params.AddString("Aggression","0.5");
     p_aggression = min(1.0f, max(0.0f, params.GetFloat("Aggression")));
 
