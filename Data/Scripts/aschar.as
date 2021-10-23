@@ -490,39 +490,11 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
-            /*for(int i=0; i<5; ++i){
-                MakeParticle("Data/Particles/bloodsplat.xml",this_mo.position,
-                    vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-1.0f,1.0f))*3.0f);
-            }*/
-            //this_mo.AddLayer("Data/Animations/r_bow.anm",4.0f,0);
-            //this_mo.velocity = vec3(0.0f);
-            //this_mo.AddLayer("Data/Animations/r_pickup.anm",4.0f,0);
-            /*int8 flags = _ANM_MOBILE;
+            int8 flags = _ANM_MOBILE | _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
-            int rand_val = rand()%4;
-            if(rand_val == 0){
-                this_mo.StartAnimation("Data/Animations/r_frontkick.xml",20.0f,flags);
-                mirrored_stance = !mirrored_stance;
-            } else if(rand_val == 1){
-                this_mo.StartAnimation("Data/Animations/r_thrustpunch.xml",20.0f,flags);
-                mirrored_stance = !mirrored_stance;
-            } else if(rand_val == 2){
-                this_mo.StartAnimation("Data/Animations/r_kneestrike.xml",20.0f,flags);
-                mirrored_stance = !mirrored_stance;
-            } else if(rand_val == 3){
-                this_mo.StartAnimation("Data/Animations/r_throw.anm",20.0f,flags);
-            }
-            this_mo.SetBlendCoord("attack_height_coord",RangedRandomFloat(-0.8,0.8));
-            in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");*/
-            int8 flags = _ANM_MOBILE;
-            if(mirrored_stance){
-                flags = flags | _ANM_MIRRORED;
-            }
-            //mirrored_stance = !mirrored_stance;
-            this_mo.StartAnimation("Data/Animations/r_bigdogswordattackoverblocked.anm",20.0f,flags);
+            this_mo.SetAnimation("Data/Animations/r_bigdogswordattackoverblocked.anm",20.0f,flags);
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");
         }
@@ -762,7 +734,6 @@ void UpdateTilt() {
 float stance_move_fade = 0.0f;
 float stance_move_fade_val = 0.0f;
 vec3 head_dir;
-vec3 target_head_dir;
 const float _target_look_threshold = 7.0f; // How close target must be to look at it
 const float _target_look_threshold_sqrd = 
     _target_look_threshold * _target_look_threshold;
@@ -770,12 +741,30 @@ const float _target_look_threshold_sqrd =
 float head_look_opac;
 float choke_look_time = 0.0f;
 
-void UpdateHeadLook() {
-    const float _head_inertia = 0.8f;
+vec3 random_look_dir;
+float random_look_delay = 0.0f;
+float look_inertia;
 
+vec3 GetTargetHeadDir() {
     bool look_at_target = false;
     vec3 target_dir;
-    if(tethered != _TETHERED_REARCHOKED){
+    vec3 target_head_dir;
+    if(tethered == _TETHERED_REARCHOKED){
+        if(choke_look_time <= 0.0f){
+            target_head_dir = vec3(RangedRandomFloat(-1.0f, 1.0f),
+                                   RangedRandomFloat(-0.2f, 0.2f),
+                                   RangedRandomFloat(-1.0f, 1.0f));
+            choke_look_time = RangedRandomFloat(0.1f,0.3f);
+            look_inertia = 0.8f;
+            if(rand()%4 == 0){
+                this_mo.MaterialEvent("choke_move", this_mo.position, RangedRandomFloat(0.0f,1.0f));
+            }
+        }
+        choke_look_time = max(0.0f, choke_look_time - time_step * num_frames);
+    } else if(trying_to_get_weapon != 0){
+        look_inertia = 0.8f;
+        target_head_dir = normalize(get_weapon_pos - this_mo.GetAvgIKChainPos("head"));
+    } else {
         if(target_id != -1){
             vec3 target_pos = ReadCharacterID(target_id).GetAvgIKChainPos("head");
             if(distance_squared(this_mo.position,target_pos) < _target_look_threshold_sqrd){
@@ -783,41 +772,56 @@ void UpdateHeadLook() {
                 target_dir = normalize(target_pos - this_mo.GetAvgIKChainPos("head"));
             }
         }
-        if(this_mo.controlled){
-            if(!look_at_target){
-                target_head_dir = camera.GetFacing();
-                target_head_dir.y *= 0.5f;
-            } else {
-                target_head_dir = target_dir;
+        if(look_at_target){
+            target_head_dir = target_dir;
+            look_inertia = 0.8f;
+        } else if(this_mo.controlled){
+            vec3 dir_flat = camera.GetFacing();
+            dir_flat.y = 0.0f;
+            target_head_dir = mix(dir_flat, normalize(dir_flat), 0.5f);
+            target_head_dir.y = camera.GetFacing().y * 0.4f;
+            if(!on_ground){
+                target_head_dir = mix(target_head_dir, this_mo.GetFacing(), 0.5f);
             }
+            target_head_dir = normalize(target_head_dir);
+            look_inertia = 0.8f;
         } else {
-            if(!look_at_target){
-                target_head_dir = this_mo.GetFacing();
-            } else {
-                target_head_dir = target_dir;
-            }
+            target_head_dir = random_look_dir;//this_mo.GetFacing();
+            look_inertia = 0.9f;
         }
-    } else {
-        if(choke_look_time <= 0.0f){
-            target_head_dir = vec3(RangedRandomFloat(-1.0f, 1.0f),
-                                   RangedRandomFloat(-0.2f, 0.2f),
-                                   RangedRandomFloat(-1.0f, 1.0f));
-            choke_look_time = RangedRandomFloat(0.1f,0.3f);
-            if(rand()%4 == 0){
-                this_mo.MaterialEvent("choke_move", this_mo.position, RangedRandomFloat(0.0f,1.0f));
-            }
-        }
-        choke_look_time = max(0.0f, choke_look_time - time_step * num_frames);
     }
 
-    if(trying_to_get_weapon != 0){
-        target_head_dir = normalize(get_weapon_pos - this_mo.GetAvgIKChainPos("head"));
+    random_look_delay -= time_step * num_frames;
+    if(random_look_delay <= 0.0f){
+        random_look_delay = RangedRandomFloat(0.8f,2.0f);
+        vec3 rand_dir;
+        do {
+            rand_dir = vec3(RangedRandomFloat(-1.0f,1.0f),
+                            0.0f,
+                            RangedRandomFloat(-1.0f,1.0f));
+        } while(length_squared(rand_dir) > 1.0f);
+        if(dot(this_mo.GetFacing(), rand_dir) < 0.0f){
+            rand_dir *= -1.0f;
+        }
+        rand_dir = normalize(rand_dir);
+        rand_dir.y += RangedRandomFloat(-0.3f,0.3f);
+        random_look_dir = normalize(rand_dir);
+        random_look_dir = mix(this_mo.GetFacing(), random_look_dir, 0.5f);
     }
 
+    return target_head_dir;
+}
+
+vec3 head_vel;
+
+void UpdateHeadLook() {
+
+    vec3 target_head_dir = GetTargetHeadDir();
     const bool _draw_gaze_line = false;
     if(_draw_gaze_line){
         vec3 head_pos = this_mo.GetAvgIKChainPos("head");
-        DebugDrawLine(head_pos, head_pos + target_head_dir, vec3(1.0f), _delete_on_update);
+        DebugDrawLine(head_pos, head_pos + target_head_dir, vec3(1.0f,0.0f,0.0f), _fade);
+        DebugDrawLine(head_pos, head_pos + head_dir, vec3(0.0f,1.0f,0.0f), _fade);
     }
 
     float target_head_look_opac = 1.0f;
@@ -828,7 +832,10 @@ void UpdateHeadLook() {
     }
 
     head_look_opac = mix(target_head_look_opac, head_look_opac, pow(0.95f, num_frames));
-    head_dir = normalize(mix(target_head_dir, head_dir, _head_inertia));
+    head_dir = head_dir + head_vel * time_step * num_frames;
+    vec3 target_head_vel = normalize(mix(target_head_dir, head_dir, look_inertia)) - head_dir;
+    head_vel = mix(target_head_vel * 50.0f, head_vel, 0.7f);
+    //head_dir = normalize(mix(target_head_dir, head_dir, look_inertia));
     this_mo.SetIKTargetOffset("head",head_dir * head_look_opac);
     if(!stance_move){
         stance_move_fade_val = mix(stance_move_fade,stance_move_fade_val,pow(0.9f,num_frames));
@@ -842,7 +849,7 @@ void UpdateHeadLook() {
     flat_head_dir.y = 0.0f;
     flat_head_dir = normalize(flat_head_dir);
     float torso_control = min(0.0,dot(flat_head_dir, this_mo.GetFacing()))+1.0f;
-    torso_control *= stance_move_fade_val;
+    torso_control *= max(0.3f,stance_move_fade_val);
     torso_control = min(head_look_opac, torso_control);
     this_mo.SetIKTargetOffset("torso",head_dir*torso_control);
     stance_move_fade = max(0.0f, stance_move_fade - time_step * num_frames);
@@ -1224,13 +1231,13 @@ void SetRagdollType(int type) {
             no_freeze = false;
             this_mo.EnableSleep();
             this_mo.SetRagdollStrength(0.0);
-            this_mo.StartAnimation("Data/Animations/r_idle.anm",4.0f);
+            this_mo.SetAnimation("Data/Animations/r_idle.anm",4.0f,_ANM_FROM_START);
             break;
         case _RGDL_FALL:
             no_freeze = false;
             this_mo.EnableSleep();
             this_mo.SetRagdollStrength(1.0);
-            this_mo.StartAnimation("Data/Animations/r_flail.anm",4.0f);
+            this_mo.SetAnimation("Data/Animations/r_flail.anm",4.0f,_ANM_FROM_START);
             ragdoll_layer_catchfallfront = 
                 this_mo.AddLayer("Data/Animations/r_catchfallfront.anm",4.0f,0);
             ragdoll_layer_fetal = 
@@ -1240,7 +1247,7 @@ void SetRagdollType(int type) {
             no_freeze = true;
             this_mo.DisableSleep();
             this_mo.SetRagdollStrength(1.0);
-            this_mo.StartAnimation("Data/Animations/r_writhe.anm",4.0f);
+            this_mo.SetAnimation("Data/Animations/r_writhe.anm",4.0f,_ANM_FROM_START);
             //ragdoll_layer_fetal = 
             //    this_mo.AddLayer("Data/Animations/r_grabface.anm",4.0f,0);
             injured_mouth_open = 0.0f;
@@ -1339,13 +1346,13 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
     float rot_offset = cur_rotation - dir_rotation;
     this_mo.velocity.x = attacker.velocity.x;
     this_mo.velocity.z = attacker.velocity.z;
-    int8 flags = _ANM_MOBILE;
+    int8 flags = _ANM_MOBILE | _ANM_FROM_START;
     mirrored_stance = false;
     if(attack_getter2.GetMirrored() == 0){
         flags = flags | _ANM_MIRRORED;
         mirrored_stance = true;
     }
-    this_mo.StartAnimation(attack_getter2.GetThrownAnimPath(),5.0f,flags);
+    this_mo.SetAnimation(attack_getter2.GetThrownAnimPath(),5.0f,flags);
     this_mo.AddAnimationOffset(offset);
     this_mo.AddAnimationRotOffset(rot_offset);
     this_mo.SetAnimationCallback("void EndHitReaction()");
@@ -1440,7 +1447,14 @@ void HandleWeaponCollision(int other_id, vec3 pos){
                                                                        RangedRandomFloat(-5.0f,5.0f)));
         }   
     }
-    PlaySoundGroup(sound, col_point);  
+
+    int sound_priority;
+    if(this_mo.controlled || char.controlled){
+        sound_priority = _sound_priority_very_high;  
+    } else {
+        sound_priority = _sound_priority_high;  
+    }
+    PlaySoundGroup(sound, col_point, sound_priority);  
 }
 
 int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
@@ -1449,7 +1463,15 @@ int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
         sound = "Data/Sounds/hit/hit_block.xml";
         MakeParticle("Data/Particles/impactfast.xml",pos,vec3(0.0f));
         MakeParticle("Data/Particles/impactslow.xml",pos,vec3(0.0f));
-        PlaySoundGroup(sound, pos);
+
+        MovementObject@ char = ReadCharacterID(attacker_id);
+        int sound_priority;
+        if(this_mo.controlled || char.controlled){
+            sound_priority = _sound_priority_very_high;  
+        } else {
+            sound_priority = _sound_priority_high;  
+        } 
+        PlaySoundGroup(sound, pos, sound_priority);
     } else {
         HandleWeaponCollision(attacker_id, pos);
     }
@@ -1711,18 +1733,25 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
         }
     }
     
+    MovementObject@ char = ReadCharacterID(attacker_id);
+    int sound_priority;
+    if(this_mo.controlled || char.controlled){
+        sound_priority = _sound_priority_very_high;  
+    } else {
+        sound_priority = _sound_priority_high;  
+    } 
     if(sharp_damage <= 0.0f){
         if(knocked_over){
             if(knocked_out == _dead){
                 string sound = "Data/Sounds/hit/hit_hard.xml";
-                PlaySoundGroup(sound, pos);
+                PlaySoundGroup(sound, pos, sound_priority);
             } else {
                 string sound = "Data/Sounds/hit/hit_medium.xml";
-                PlaySoundGroup(sound, pos);
+                PlaySoundGroup(sound, pos, sound_priority);
             }
         } else {
             string sound = "Data/Sounds/hit/hit_normal.xml";
-            PlaySoundGroup(sound, pos);        
+            PlaySoundGroup(sound, pos, sound_priority);        
         }
     } else {
         string sound;
@@ -1730,7 +1759,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             HandleWeaponCollision(attacker_id, pos);
         } else {
             sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
-            PlaySoundGroup(sound, pos);  
+            PlaySoundGroup(sound, pos, sound_priority);  
         }
         if(RangedRandomFloat(0.0f,1.0f) < drop_weapon_probability){
             DropWeapon();
@@ -1818,11 +1847,11 @@ bool HandleDodge(const vec3&in dir, int attacker_id){
     hit_reaction_anim_set = true;
     hit_reaction_dodge = true;
 
-    int8 flags = _ANM_MOBILE;
+    int8 flags = _ANM_MOBILE | _ANM_FROM_START;
     if(mirrored_stance){
         flags = flags | _ANM_MIRRORED;
     }
-    this_mo.StartAnimation(anim_path,10.0f,flags);
+    this_mo.SetAnimation(anim_path,10.0f,flags);
     this_mo.SetAnimationCallback("void EndHitReaction()");
     //TimedSlowMotion(0.1f,0.4f, 0.15f);
     target_id = attacker_id;
@@ -1878,8 +1907,9 @@ const float _leg_sphere_size = 0.45f; // affects the size of a sphere collider u
 const float _bumper_size = 0.5f;
 
 const float _base_run_speed = 8.0f; // used to calculate movement and jump velocities, change this instead of max_speed
-const float _true_max_speed = 12.0f; // speed can never exceed this amount
+const float _base_true_max_speed = 12.0f; // speed can never exceed this amount
 float run_speed = _base_run_speed;
+float true_max_speed = _base_true_max_speed;
 float max_speed = run_speed; // this is recalculated constantly because actual max speed is affected by slopes
 
 const float _tilt_transition_vel = 8.0f;
@@ -2194,7 +2224,7 @@ void UpdateGroundMovementControls() {
 
     max_speed *= 1.0 - adjusted_vel.y;
     max_speed = max(curr_speed * 0.98f, max_speed);
-    max_speed = min(max_speed, _true_max_speed);
+    max_speed = min(max_speed, true_max_speed);
 
     float speed = _walk_accel * run_phase;
     speed = mix(speed,speed*_duck_speed_mult,duck_amount);
@@ -2424,13 +2454,12 @@ void ApplyIdle(float speed, bool start){
     if(mirrored_stance){
         flags = flags|_ANM_MIRRORED;   
     }
+    if(start){
+        flags = flags | _ANM_FROM_START;
+    }
 
     if(idle_type == _combat){
-        if(start){
-            this_mo.StartCharAnimation("idle",speed,flags);
-        } else {
-            this_mo.SetCharAnimation("idle",speed,flags);
-        }
+        this_mo.SetCharAnimation("idle",speed,flags);
     } else {
         string path;
         if(idle_type == _active){
@@ -2438,11 +2467,7 @@ void ApplyIdle(float speed, bool start){
         } else if(idle_type == _stand){
             path = "Data/Animations/r_relaxidle.xml";
         }
-        if(start){
-            this_mo.StartAnimation(path,speed,flags);
-        } else {
-            this_mo.SetAnimation(path,speed,flags);        
-        }
+        this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
     }
 }
 
@@ -2470,7 +2495,7 @@ void UpdateMovementControls() {
                 HandleStandingCollision();
                 this_mo.position = sphere_col.position;
                 //this_mo.velocity = vec3(0.0f);
-                this_mo.velocity = GetTargetVelocity() * _true_max_speed * 0.2f;
+                this_mo.velocity = GetTargetVelocity() * true_max_speed * 0.2f;
                 feet_moving = false;
                 this_mo.MaterialEvent("land_soft", this_mo.position);
                 //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
@@ -3170,7 +3195,7 @@ void UpdateAttacking() {
             mirror = mirrored_stance;
         }
 
-        int8 flags = 0;
+        int8 flags = _ANM_FROM_START;
         if(attack_getter.GetMobile() == 1){
             flags = flags | _ANM_MOBILE;
         }
@@ -3202,7 +3227,7 @@ void UpdateAttacking() {
             this_mo.SetRotationFromFacing(direction);
         }
 
-        this_mo.StartAnimation(anim_path, 20.0f, flags);
+        this_mo.SetAnimation(anim_path, 20.0f, flags);
         this_mo.SetSpeedMult(p_attack_speed_mult);
 
         string material_event = attack_getter.GetMaterialEvent();
@@ -3254,16 +3279,16 @@ void UpdateHitReaction() {
             }
             block_string += "block";
             if(mirrored_stance){
-                this_mo.StartCharAnimation(block_string,20.0f, _ANM_MIRRORED);
+                this_mo.SetCharAnimation(block_string,20.0f, _ANM_MIRRORED | _ANM_FROM_START);
             } else {
-                this_mo.StartCharAnimation(block_string,20.0f);
+                this_mo.SetCharAnimation(block_string,20.0f, _ANM_FROM_START);
             }
         } else if(hit_reaction_event == "attackimpact") {
             if(reaction_getter.GetMirrored() == 0){
-                this_mo.StartAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE);
+                this_mo.SetAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE | _ANM_FROM_START);
                 mirrored_stance = false;
             } else {
-                this_mo.StartAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE|_ANM_MIRRORED);
+                this_mo.SetAnimation(reaction_getter.GetAnimPath(1.0f-block_health),20.0f,_ANM_MOBILE|_ANM_MIRRORED | _ANM_FROM_START);
                 mirrored_stance = true;
             }
         }
@@ -3368,7 +3393,7 @@ void WakeUp(int how) {
         jump_info.StartFall();
         flip_info.StartFlip();
         flip_info.FlipRecover();
-        this_mo.StartCharAnimation("jump");
+        this_mo.SetCharAnimation("jump", 5.0f, _ANM_FROM_START);
         ragdoll_cam_recover_speed = 100.0f;
         this_mo.SetRagdollFadeSpeed(10.0f);
     } else if (how == _wake_roll) {
@@ -4119,6 +4144,9 @@ void UpdateAnimation() {
                 stance_move = true;
 
             }
+            if(speed < _walk_threshold && GetTargetVelocity() != vec3(0.0f)){
+                stance_move = true;
+            }
             if(speed > _walk_threshold && feet_moving && !stance_move){
                 this_mo.SetRotationFromFacing(InterpDirections(this_mo.GetFacing(),
                                                                normalize(flat_velocity),
@@ -4447,4 +4475,5 @@ void SetParameters() {
     params.AddString("Movement Speed","1.0");
     p_speed_mult = min(100.0f, max(0.01f, params.GetFloat("Movement Speed")));
     run_speed = _base_run_speed * p_speed_mult;
+    true_max_speed = _base_true_max_speed * p_speed_mult;
 }

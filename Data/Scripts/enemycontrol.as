@@ -534,6 +534,16 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius, float target_dist, float 
     float seek_dist = slow_radius;
     dist = max(0.0, dist-seek_dist);
     target_velocity = normalize(target_vel_direct) * dist + target_vel_indirect;
+
+
+
+    vec3 repulsor_force = GetRepulsorForce();
+    if(length_squared(repulsor_force) > 0.0f){
+        vec3 raycast_point = NavRaycast(this_mo.position, this_mo.position + repulsor_force);
+        repulsor_force *= distance(raycast_point, this_mo.position)/length(repulsor_force);
+    }
+    target_velocity += repulsor_force;
+
     if(length_squared(target_velocity) > 1.0){
         target_velocity = normalize(target_velocity);
     }
@@ -608,10 +618,12 @@ vec3 GetBaseTargetVelocity() {
     }
 }
 
-vec3 ApplyRepulsor(vec3 vel){
+vec3 GetRepulsorForce(){
     array<int> nearby_characters;
     const float _avoid_range = 2.0f;
     GetCharactersInSphere(this_mo.position, _avoid_range, nearby_characters);
+
+    vec3 repulsor_total;
 
     for(uint i=0; i<nearby_characters.size(); ++i){
         if(this_mo.getID() == nearby_characters[i]){
@@ -625,19 +637,15 @@ vec3 ApplyRepulsor(vec3 vel){
         if(dist == 0.0f || dist > _avoid_range){
             continue;
         }
-        vel += (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
+        repulsor_total += (this_mo.position - char.position)/dist * (_avoid_range - dist) / _avoid_range;
     }
-    if(length_squared(vel) > 1.0f){
-        vel = normalize(vel);
-    }
-    return vel;
+
+    return repulsor_total;
 }
 
 vec3 GetTargetVelocity(){
     vec3 base_target_velocity = GetBaseTargetVelocity();
     vec3 target_vel = base_target_velocity;
-    
-    target_vel = ApplyRepulsor(target_vel);
 
     return target_vel;
 }
