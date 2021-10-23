@@ -18,14 +18,10 @@ void HandleEvent(string event, MovementObject @mo){
 void OnEnter(MovementObject @mo) {
     Print("Entering start.as hotspot\n");
     if(mo.controlled){
-        //SendLevelMessage("reset");
-        SendLevelMessage2("displaytext", params.GetString("Display Text"));
-        //SendLevelMessage2("loadlevel", "Data/Levels/TerrainSculpt2_IGF.xml");
-        //SendLevelMessage2("displaygui", "dialogs/parameters.html");
+        level.Execute("ReceiveMessage2(\"displaytext\",\""+params.GetString("Display Text")+"\")");
     }
 }
 
 void OnExit(MovementObject @mo) {
-    Print("Exiting start.as hotspot\n");
-    SendLevelMessage("cleartext");
+    level.Execute("ReceiveMessage(\"cleartext\")");
 }

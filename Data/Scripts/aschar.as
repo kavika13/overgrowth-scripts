@@ -388,7 +388,9 @@ void Update(int _num_frames) {
             if(this_mo.controller_id == 0){
                 UpdateAirWhooshSound();
             }
-            ApplyCameraControls();
+            if(this_mo.controller_id == 0 || GetSplitscreen()){
+                ApplyCameraControls();
+            }
         }
         ApplyPhysics();
         HandleCollisions();
@@ -439,7 +441,9 @@ void Update(int _num_frames) {
         if(this_mo.controller_id == 0){
             UpdateAirWhooshSound();
         }
-        ApplyCameraControls();
+        if(this_mo.controller_id == 0 || GetSplitscreen()){
+            ApplyCameraControls();
+        }
     }
 
     if(on_ground){
@@ -593,6 +597,34 @@ void HandleSpecialKeyPresses() {
         if(GetInputPressed(this_mo.controller_id, "v")){
             string sound = "Data/Sounds/voice/torikamal/fallscream.xml";
             this_mo.ForceSoundGroupVoice(sound, 0.0f);
+        }
+        if(GetInputPressed(this_mo.controller_id, "f")){
+            int num_chars = GetNumCharacters();
+            for(int i=0; i<num_chars; ++i){
+                MovementObject @char = ReadCharacter(i);
+                if(char.getID() == this_mo.getID()){
+                    continue;
+                }
+                vec3 start = this_mo.GetAvgIKChainPos("head");
+                vec3 end = char.GetAvgIKChainPos("torso");
+                float length = distance(end, start);
+                if(length > 10){
+                    continue;
+                }
+                PlaySound("Data/Sounds/ambient/amb_canyon_rock_1.wav", this_mo.position);
+                MakeMetalSparks(start);
+                MakeMetalSparks(end);
+                int num_sparks = length * 5;
+                for(int j=0; j<num_sparks; ++j){
+                    MakeMetalSparks(mix(start, end, j/float(num_sparks)));
+                }
+                vec3 force = normalize(char.position - this_mo.position) * 40000.0f;
+                force.y += 1000.0f;
+                char.Execute("vec3 impulse = vec3("+force.x+", "+force.y+", "+force.z+");" +
+                             "HandleRagdollImpactImpulse(impulse, this_mo.GetAvgIKChainPos(\"torso\"), 5.0f);"+
+                             "ragdoll_limp_stun = 1.0f;"+
+                             "recovery_time = 2.0f;");
+            }
         }
         if(GetInputPressed(this_mo.controller_id, "1")){    
             SwitchCharacter("Data/Characters/guard.xml");
@@ -4277,8 +4309,19 @@ vec3 chase_cam_pos;
 float target_side_weight = 0.5f;
 float target_weight = 0.0f;
 float angle = 0.2f;
+const bool cam_input = true;
 
 void ApplyCameraControls() {
+    bool shared_cam = !GetSplitscreen() && GetNumCharacters() == 2 && ReadCharacter(0).controlled && ReadCharacter(1).controlled;
+    int other_player_id;
+    if(shared_cam){
+        if(ReadCharacter(0).getID() == this_mo.getID()){
+            other_player_id = ReadCharacter(1).getID();
+        } else {
+            other_player_id = ReadCharacter(0).getID();
+        }
+    }
+
     const float _camera_rotation_inertia = 0.5f;
     const float _cam_follow_distance = 2.0f;
     const float _cam_collision_radius = 0.15f;
@@ -4288,6 +4331,11 @@ void ApplyCameraControls() {
         vec3 dir = normalize(vec3(0.0f,1.0f,0.0f)-this_mo.GetFacing());
         col.GetSlidingSphereCollision(this_mo.position+dir*_leg_sphere_size*0.25f, _leg_sphere_size*0.75f);
         cam_center = sphere_col.adjusted_position-dir*_leg_sphere_size*0.25f;
+    }
+
+    if(shared_cam){
+        MovementObject @char = ReadCharacterID(other_player_id);
+        cam_center = (char.position + this_mo.position) * 0.5;
     }
 
     vec3 cam_pos = cam_center + cam_pos_offset;
@@ -4305,11 +4353,11 @@ void ApplyCameraControls() {
     }
 
 
-    if(QueryLevelIntFunction("int HasFocus()")==0){
+    if(level.QueryIntFunction("int HasFocus()")==0){
         SetGrabMouse(true);
     }
     if(!camera.GetAutoCamera()){
-        if(QueryLevelIntFunction("int HasFocus()")==0){   
+        if(level.QueryIntFunction("int HasFocus()")==0 && cam_input){   
             target_rotation -= GetLookXAxis(this_mo.controller_id);
             target_rotation2 -= GetLookYAxis(this_mo.controller_id);   
         }
@@ -4382,15 +4430,39 @@ void ApplyCameraControls() {
         target_rotation2 = mix(target_rotation2, old_tr2, min(1.0f,auto_cam_override));
 
        //cam_pos = chase_cam_pos + camera.GetFacing() * _cam_follow_distance;
-        target_rotation -= GetLookXAxis(this_mo.controller_id);
-        target_rotation2 -= GetLookYAxis(this_mo.controller_id); 
+        if(cam_input){
+            target_rotation -= GetLookXAxis(this_mo.controller_id);
+            target_rotation2 -= GetLookYAxis(this_mo.controller_id); 
+        }
 
         auto_cam_override *= pow(0.99f, num_frames);
-        auto_cam_override += abs(GetLookXAxis(this_mo.controller_id))*0.05f + abs(GetLookYAxis(this_mo.controller_id))*0.05f;
+        if(cam_input){
+            auto_cam_override += abs(GetLookXAxis(this_mo.controller_id))*0.05f + abs(GetLookYAxis(this_mo.controller_id))*0.05f;
+        }
         auto_cam_override = min(2.5f, auto_cam_override);
     }
 
     target_rotation2 = max(-90,min(50,target_rotation2));
+
+    if(shared_cam){
+        MovementObject @char = ReadCharacterID(other_player_id);
+        vec3 vec = normalize(char.position - this_mo.position);
+        target_rotation = atan2(vec.x, vec.z) * 180.0f / 3.1415f + 90.0f;
+        
+       while(target_rotation < cam_rotation - 180.0f){
+            target_rotation += 360.0f;
+       } 
+       while(target_rotation > cam_rotation + 180.0f){
+            target_rotation -= 360.0f;
+       }
+       while(target_rotation < cam_rotation - 90.0f){
+            target_rotation += 180.0f;
+       } 
+       while(target_rotation > cam_rotation + 90.0f){
+            target_rotation -= 180.0f;
+       }
+       target_rotation2 = 0.0f;
+    }
 
     ApplyCameraCones(cam_pos);
 
@@ -4434,6 +4506,12 @@ void ApplyCameraControls() {
     if(sphere_col.NumContacts() != 0){
         target_cam_distance = distance(cam_pos, sphere_col.position);
     }
+    
+    if(shared_cam){
+        MovementObject @char = ReadCharacterID(other_player_id);
+        target_cam_distance = length(char.position - this_mo.position) * 0.5f + _cam_follow_distance;
+    }
+
     cam_distance = min(cam_distance, target_cam_distance);
     cam_distance = mix(target_cam_distance, cam_distance, 0.95f);
     
