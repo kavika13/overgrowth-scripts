@@ -6,6 +6,7 @@ UNIFORM_COMMON_TEXTURES
 UNIFORM_TRANSLUCENCY_TEXTURE
 
 uniform float time;
+uniform float plant_shake;
 UNIFORM_LIGHT_DIR
 UNIFORM_EXTRA_AO
 UNIFORM_STIPPLE_FADE
@@ -33,4 +34,5 @@ void main()
     CALC_EXPOSURE
     CALC_DISTANCE_ADJUSTED_ALPHA
     CALC_FINAL_ALPHA    
+    //gl_FragColor = vec4(vec3(plant_shake), 1.0);
 }

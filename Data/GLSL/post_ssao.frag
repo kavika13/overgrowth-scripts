@@ -50,7 +50,7 @@ void main() {
     
     occlusion = min(1.0,pow((1.0-occlusion) * 1.0,1.0));
     occlusion = mix(occlusion, 1.0, distance/far);
-    color_map *= vec3(occlusion);
+    color_map *= vec3(occlusion*1.4);
 
     //color_map.xyz = vec3(pow(1.0-occlusion,3.0));
 

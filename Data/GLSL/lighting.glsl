@@ -84,7 +84,7 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     return shadow_amount;
 }
 
-vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time) {
+vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, float plant_shake) {
     vec3 vertex_offset = vec3(0.0);
 
     float wind_shake_amount = 0.02;
@@ -94,6 +94,7 @@ vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time) {
     wind_shake_amount *= max(0.0,sin((world_pos.x+world_pos.y)+time*0.3));
     wind_shake_amount *= sin((world_pos.x*0.1+world_pos.z)*0.3+time*0.6)+1.0;
     wind_shake_amount = max(0.002,wind_shake_amount);
+    wind_shake_amount += plant_shake;
     wind_shake_amount *= wind_amount;
 
     vertex_offset.x += sin(time*wind_time_scale+wind_shake_offset);

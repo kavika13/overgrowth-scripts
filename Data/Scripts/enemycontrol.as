@@ -1,4 +1,7 @@
 #include "aschar.as"
+#include "situationawareness.as"
+
+Situation situation;
 
 float startle_time;
 
@@ -40,6 +43,7 @@ bool WantsToDragBody(){
 void ResetMind() {
     goal = _patrol;
     target_id = -1;
+    situation.clear();
 }
 
 int IsIdle() {
@@ -50,7 +54,12 @@ int IsIdle() {
     }
 }
 
+int IsAggressive() {
+    return (knocked_out == _awake && (goal == _attack || goal == _get_help))?1:0;
+}
+
 void Notice(int character_id){
+    situation.Notice(character_id);
     target_id = character_id;
     last_seen_target_position = ReadCharacterID(character_id).position;
     last_seen_target_velocity = ReadCharacterID(character_id).velocity;
@@ -84,7 +93,6 @@ void NotifySound(int created_by_id, float max_dist, vec3 pos) {
         if(!same_team){
             nav_target = pos;
             SetGoal(_investigate);
-            //Notice(created_by_id);
         }
     }
 }
@@ -267,6 +275,9 @@ void UpdateBrain(){
     }
     //MouseControlPathTest();
     //HandleDebugRayDraw();
+
+    situation.Update();
+    force_look_target_id = situation.GetForceLookTarget();
 }
 
 array<int> ray_lines;
@@ -670,4 +681,12 @@ void ChooseAttack(bool front) {
 void ResetWaypointTarget() {
     waypoint_target = -1;
     old_waypoint_target = -1;
+}
+
+bool WantsToWalkBackwards() {
+    return (goal == _patrol && waypoint_target == -1);
+}
+
+bool WantsReadyStance() {
+    return (goal != _patrol);
 }
