@@ -14,6 +14,79 @@ int score_right = 0;
 enum GameType {_normal, _versus};
 GameType game_type = _normal;
 
+class Achievements {
+    bool flawless_;
+    bool no_first_strikes_;
+    bool no_counter_strikes_;
+    bool no_kills_;
+    bool no_alert_;
+    bool injured_;
+    float total_block_damage_;
+    float total_damage_;
+    float total_blood_loss_;
+    void Init() {
+        flawless_ = true;
+        no_first_strikes_ = true;
+        no_counter_strikes_ = true;
+        no_kills_ = true;
+        no_alert_ = true;
+        injured_ = false;
+        total_block_damage_ = 0.0f;
+        total_damage_ = 0.0f;
+        total_blood_loss_ = 0.0f;
+    }
+    Achievements() {
+        Init();
+    }
+    void UpdateDebugText() {
+        DebugText("achmt_flawless", "Flawless: "+flawless_, 0.5f);
+        DebugText("achmt_injured", "No Injuries: "+!injured_, 0.5f);
+        DebugText("achmt_no_first_strikes", "No First Strikes: "+no_first_strikes_, 0.5f);
+        DebugText("achmt_no_counter_strikes", "No Counter Strikes: "+no_counter_strikes_, 0.5f);
+        DebugText("achmt_no_kills", "No Kills: "+no_kills_, 0.5f);
+        DebugText("achmt_no_alert", "No Alerts: "+no_alert_, 0.5f);
+        //DebugText("achmt_damage0", "Block damage: "+total_block_damage_, 0.5f);
+        //DebugText("achmt_damage1", "Impact damage: "+total_damage_, 0.5f);
+        //DebugText("achmt_damage2", "Blood loss: "+total_blood_loss_, 0.5f);
+    }
+    void PlayerWasHit() {
+        flawless_ = false;
+    }
+    void PlayerWasInjured() {
+        injured_ = true;
+        flawless_ = false;
+    }
+    void PlayerAttacked() {
+        no_first_strikes_ = false;
+    }
+    void PlayerSneakAttacked() {
+        no_first_strikes_ = false;
+    }
+    void PlayerCounterAttacked() {
+        no_counter_strikes_ = false;
+    }
+    void EnemyDied() {
+        no_kills_ = false;
+    }
+    void EnemyAlerted() {
+        no_alert_ = false;
+    }
+    void PlayerBlockDamage(float val) {
+        total_block_damage_ += val;
+        PlayerWasHit();
+    }
+    void PlayerDamage(float val) {
+        total_damage_ += val;
+        PlayerWasInjured();
+    }
+    void PlayerBloodLoss(float val) {
+        total_blood_loss_ += val;
+        PlayerWasInjured();
+    }
+};
+
+Achievements achievements;
+
 void GUIDeleted(uint32 id){
     if(id == gui_id){
         has_gui = false;
@@ -45,6 +118,7 @@ void Reset(){
     time = 0.0f;
     reset_allowed = true;
     reset_timer = _reset_delay;
+    achievements.Init();
     ResetLevel();
 }
 
@@ -68,6 +142,42 @@ void ReceiveMessage(string msg) {
 	display_image.color.a = 0.0f;
 	}
     
+}
+
+void AchievementEvent(string event_str){
+    if(event_str == "player_was_hit"){
+	    achievements.PlayerWasHit();
+	}
+	if(event_str == "player_was_injured"){
+	    achievements.PlayerWasInjured();
+	}
+	if(event_str == "player_attacked"){
+	    achievements.PlayerAttacked();
+	}
+	if(event_str == "player_sneak_attacked"){
+	    achievements.PlayerSneakAttacked();
+	}
+	if(event_str == "player_counter_attacked"){
+	    achievements.PlayerCounterAttacked();
+	}
+	if(event_str == "enemy_died"){
+	    achievements.EnemyDied();
+	}
+	if(event_str == "enemy_alerted"){
+	    achievements.EnemyAlerted();
+	}
+}
+
+void AchievementEventFloat(string event_str, float val){
+    if(event_str == "player_block_damage"){
+	    achievements.PlayerBlockDamage(val);
+	}
+    if(event_str == "player_damage"){
+	    achievements.PlayerDamage(val);
+	}
+    if(event_str == "player_blood_loss"){
+	    achievements.PlayerBloodLoss(val);
+	}
 }
 
 void ReceiveMessage2(string msg, string msg2) {
@@ -259,8 +369,10 @@ void UpdateVersusUI(){
 }
 
 void Update() {
-
-
+    if(GetPlayerCharacterID() != -1){
+        achievements.UpdateDebugText();
+    }
+    
     bool versus_mode = !GetSplitscreen() && GetNumCharacters() == 2 && ReadCharacter(0).controlled && ReadCharacter(1).controlled;
     if(versus_mode){
         game_type = _versus;
