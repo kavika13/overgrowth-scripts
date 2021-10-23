@@ -702,13 +702,13 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
-            int8 flags = _ANM_FROM_START;
+            /*int8 flags = _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
             this_mo.SetAnimation("Data/Animations/w_combatidlewild.anm",20.0f,flags);
             in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");
+            this_mo.SetAnimationCallback("void EndAnim()");*/
             //this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
             //this_mo.AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
             /*if(sheathed_weapon == -1 && held_weapon != -1) {
@@ -727,7 +727,7 @@ void HandleSpecialKeyPresses() {
             }
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
-            //SwapWeaponHands();
+            SwapWeaponHands();
         }
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
@@ -2488,6 +2488,7 @@ array<int> weapon_slots;
 vec3 last_seen_target_position;
 vec3 last_seen_target_velocity;
 
+//int event_counter = 99999;
 
 // Animation events are created by the animation files themselves. For example, when the run animation is played, it calls HandleAnimationEvent( "leftrunstep", left_foot_pos ) when the left foot hits the ground.
 void HandleAnimationEvent(string event, vec3 world_pos){
@@ -3227,8 +3228,6 @@ void UpdateMovementControls() {
                 this_mo.velocity = GetTargetVelocity() * true_max_speed * 0.2f;
                 feet_moving = false;
                 this_mo.MaterialEvent("land_soft", this_mo.position);
-                //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
-                //this_mo.PlaySoundGroupAttached(path, this_mo.position);
             } else {
                 flip_info.UpdateFlip();
                 
@@ -3411,8 +3410,6 @@ void Land(vec3 vel) {
         duck_vel = land_speed * 0.3f;
     } else {
         this_mo.MaterialEvent("land_soft", this_mo.position - vec3(0.0f,_leg_sphere_size, 0.0f));
-        //string path = "Data/Sounds/concrete_foley/bunny_jump_land_soft_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, this_mo.position);
     }
 
     if(WantsToCrouch()){
@@ -5293,6 +5290,10 @@ void UpdateAnimation() {
     float run_amount, walk_amount, idle_amount;
     float speed = length(flat_velocity);
     
+    /*if(this_mo.controlled){
+        DebugText("a","Tall coord: "+(1.0f-duck_amount), 0.5f);
+        DebugText("b","Threat coord: "+max(0.0f,threat_amount-0.01f), 0.5f);
+    }*/
     this_mo.SetBlendCoord("tall_coord",1.0f-duck_amount);
     this_mo.SetBlendCoord("threat_coord",threat_amount);
     idle_stance = false;

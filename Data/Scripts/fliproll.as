@@ -234,8 +234,6 @@ class FlipInfo {
     }
 
     void StartRoll(vec3 target_velocity) {
-        //string path = "Data/Sounds/concrete_foley/bunny_roll_concrete.xml";
-        //this_mo.PlaySoundGroupAttached(path, this_mo.position);
         this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
 
         flipping = true;
