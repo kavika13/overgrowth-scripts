@@ -363,7 +363,7 @@ void SetAnimUpdateFreqs() {
             continue;
         }
         int period = 120.0f/(framerate_request[i]*scale);
-        if(char.QueryIntFunction("int GetTetherID()") != -1){
+        if(char.GetIntVar("tether_id") != -1){
             char.SetAnimUpdatePeriod(2);
             char.SetScriptUpdatePeriod(2);
         } else {
@@ -409,7 +409,7 @@ void VictoryCheckNormal() {
     }
     bool failure = false;
     MovementObject@ player_char = ReadCharacter(player_id);
-    if(player_char.IsKnockedOut() != _awake){
+    if(player_char.GetIntVar("knocked_out") != _awake){
         failure = true;
     }
     if(victory || failure){
@@ -449,7 +449,7 @@ void VictoryCheckVersus() {
     int num = GetNumCharacters();
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
-        if(char.IsKnockedOut() == _awake){
+        if(char.GetIntVar("knocked_out") == _awake){
             which_alive = i;
             ++num_alive;
         }
@@ -521,7 +521,7 @@ void VictoryCheckVersus() {
 
 void UpdateMusic() {
     int player_id = GetPlayerCharacterID();
-    if(player_id != -1 && ReadCharacter(player_id).QueryIntFunction("int IsKnockedOut()") != _awake){
+    if(player_id != -1 && ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
         PlaySong("sad");
         return;
     }
@@ -567,7 +567,7 @@ int ThreatsRemaining() {
     for(int i=0; i<num; ++i){
         MovementObject@ char = ReadCharacter(i);
         vec3 target_pos = char.position;
-        if(char.IsKnockedOut() == _awake &&
+        if(char.GetIntVar("knocked_out") == _awake &&
            character_getter.OnSameTeam(char.char_path) == 0)
         {
             ++num_threats;

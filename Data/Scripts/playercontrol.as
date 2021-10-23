@@ -39,7 +39,7 @@ void UpdateBrain(){
     if(!GetInputDown(this_mo.controller_id, "drop")){
         drop_key_state = _dks_nothing;
     } else if (drop_key_state == _dks_nothing){
-        if(!holding_weapon){
+        if(held_weapon == -1){
             drop_key_state = _dks_pick_up;
         } else {
             if(GetInputDown(this_mo.controller_id, "crouch") && 
@@ -57,9 +57,9 @@ void UpdateBrain(){
     if(!GetInputDown(this_mo.controller_id, "item")){
         item_key_state = _iks_nothing;
     } else if (item_key_state == _iks_nothing){
-        if(!holding_weapon && sheathed){
+        if(held_weapon == -1 && sheathed_weapon != -1){
             item_key_state = _iks_unsheathe;
-        } else if(holding_weapon){
+        } else if(held_weapon != -1 && sheathed_weapon == -1){
             item_key_state = _iks_sheathe;
         }
     }
@@ -123,8 +123,8 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-    if(holding_weapon){
-        ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
+    if(held_weapon != -1){
+        ItemObject@ item_obj = ReadItemID(held_weapon);
         if(item_obj.GetMass() > 1.0f){
             return false;
         }

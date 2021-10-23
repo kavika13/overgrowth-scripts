@@ -63,7 +63,7 @@ class Situation {
         for(uint i=0; i<known_chars.size(); ++i){
             if(!known_chars[i].friendly){
                 MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                if(char.IsKnockedOut() == _awake &&
+                if(char.GetIntVar("knocked_out") == _awake &&
                    distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2){
                     return true;
                 }
@@ -71,7 +71,6 @@ class Situation {
         }
 
         return false;
-        //target_id != -1 && ReadCharacterID(target_id).QueryIntFunction("int IsKnockedOut()") == _awake
     }
 
     void GetLookTarget(LookTarget& lt){
@@ -144,7 +143,7 @@ class Situation {
             if(!known_chars[i].friendly){
                 MovementObject@ char = ReadCharacterID(known_chars[i].id);
                 float dist = distance_squared(char.position, this_mo.position);
-                if(char.IsKnockedOut() == _awake && dist < _target_look_threshold_sqrd){
+                if(char.GetIntVar("knocked_out") == _awake && dist < _target_look_threshold_sqrd){
                     if(closest_id == -1 || dist < closest_dist){
                         closest_id = known_chars[i].id;
                         closest_dist = dist;
