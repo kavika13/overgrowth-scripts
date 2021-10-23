@@ -114,8 +114,7 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _choking){
         MovementObject@ char = ReadCharacterID(tether_id);
-        int weap_id = char.GetWeapon();
-        if(weap_id == -1){
+        if(char.GetNumAttachedWeapons() == -1){
             SetGoal(_struggle);
         } else {
             SetGoal(_hold_still);
@@ -212,6 +211,7 @@ void UpdateBrain(){
         }
     } else {
         target_id = -1;
+        force_look_target_id = -1;
     }
 
     if(!hostile &&  goal == _attack){
@@ -296,7 +296,13 @@ void UpdateBrain(){
     //HandleDebugRayDraw();
 
     situation.Update();
-    force_look_target_id = situation.GetForceLookTarget();
+    if(hostile){
+        force_look_target_id = situation.GetForceLookTarget();
+    }
+}
+
+bool IsAware(){
+    return hostile;
 }
 
 array<int> ray_lines;
@@ -331,6 +337,14 @@ void HandleDebugRayDraw() {
 }
 
 bool WantsToDodge() {
+    return false;
+}
+
+bool WantsToSheatheItem() {
+    return false;
+}
+
+bool WantsToUnSheatheItem() {
     return false;
 }
 

@@ -10,14 +10,41 @@ void ChokedOut(int target){
     head_choke_queue = target;
 }
 
-void HitByItem(string material, vec3 point, int id) {
+void HitByItem(string material, vec3 point, int id, int type) {
     //Print(""+ this_mo.getID() + " was hit by item id "+id+" with material \""+material+"\" at ");
     //PrintVec3(point);
     //Print("\n");
     ItemObject@ io = ReadItemID(id);
     vec3 lin_vel = io.GetLinearVelocity();
-    if(length_squared(lin_vel) > 10.0f){
-        HandleRagdollImpactImpulse(lin_vel * 200.0f * io.GetMass(), point, 1.0f);
+    vec3 force = (lin_vel - this_mo.velocity) * io.GetMass();
+    this_mo.velocity += force * 0.1f;
+    float force_len = length(force);
+    TakeDamage(force_len / 30.0f);
+    if(type == 1){
+        TakeBloodDamage(force_len / 50.0f);
+    }
+    if(type == 2){
+        TakeBloodDamage(force_len / 8.0f);
+    }
+    if(length(force) > 20.0f || knocked_out != _awake){
+        HandleRagdollImpactImpulse(force * 200.0f, point, 0.0f);
+    } else {
+        vec3 face_dir = lin_vel * -1.0f;
+        face_dir.y = 0.0f;
+        face_dir = normalize(face_dir);
+        this_mo.SetRotationFromFacing(face_dir);
+        
+        reaction_getter.Load("Data/Attacks/reaction_medfront.xml");
+        string anim_path = reaction_getter.GetAnimPath(force_len/20.0f);
+        SetState(_hit_reaction_state);
+        hit_reaction_anim_set = true;
+
+        int8 flags = _ANM_MOBILE | _ANM_FROM_START;
+        if(mirrored_stance){
+            flags = flags | _ANM_MIRRORED;
+        }
+        this_mo.SetAnimation(anim_path,10.0f,flags);
+        this_mo.SetAnimationCallback("void EndHitReaction()");
     }
 }
 
@@ -468,6 +495,7 @@ void Recover() {
     knocked_out = _awake;
     blood_health = 1.0f;
     block_health = 1.0f;
+    blood_damage = 0.0f;
     temp_health = 1.0f;
     permanent_health = 1.0f;
     recovery_time = 0.0f;
@@ -569,6 +597,12 @@ void HandleSpecialKeyPresses() {
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
             //this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
+            //this_mo.AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
+            if(!sheathed && holding_weapon) {
+                this_mo.AddLayer("Data/Animations/r_knifesheathe.anm",8.0f,0);
+            } else if(sheathed) {
+                this_mo.AddLayer("Data/Animations/r_knifeunsheathe.anm",8.0f,0);
+            }
         }
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
@@ -891,7 +925,10 @@ void HandleTethering() {
         // Choking
         
         MovementObject@ char = ReadCharacterID(tether_id);
-        int weap_id = char.GetWeapon();
+        int weap_id = -1;
+        if(char.GetNumAttachedWeapons() > 0){
+            weap_id = char.GetAttachedWeaponID(0);
+        }
         if(weap_id == -1){
             TakeDamage(time_step * num_frames * 0.25f);
             if(knocked_out != _awake){
@@ -1265,6 +1302,7 @@ void UpdateActiveDodgeMechanics() {
     }
 }
 
+float blood_damage = 0.0f; // How much blood damage remains to be dealt
 float blood_health = 1.0f; // How much blood remaining before passing out
 float block_health = 1.0f; // How strong is auto-block? Similar to ssb shield
 float temp_health = 1.0f; // Remaining regenerating health until knocked out
@@ -1279,6 +1317,15 @@ void RegenerateHealth() {
     block_health = min(temp_health, block_health);
     temp_health += time_step * _temp_health_recover_speed * num_frames;
     temp_health = min(permanent_health, temp_health);
+    if(blood_damage > 0.0f){
+        float damage = min(time_step, blood_damage);
+        blood_damage -= damage;
+        blood_health -= damage;
+        if(blood_health <= 0.0f && knocked_out == _awake){
+            knocked_out = _unconscious;
+            Ragdoll(_RGDL_LIMP);
+        }
+    }
 }
 
 float ragdoll_time; // How long spent in ragdoll mode this time
@@ -1554,6 +1601,9 @@ void LayerRemoved(int id) {
         //Print("That was the active knife slash layer\n");
         throw_knife_layer_id = -1;
     }
+    if(id == sheathe_layer_id){
+        sheathe_layer_id = -1;
+    }
 }
 
 // Handles what happens if a character was hit.  Includes blocking enemies' attacks, hit reactions, taking damage, going ragdoll and applying forces to ragdoll.
@@ -1624,16 +1674,16 @@ int WasGrabbed(const vec3&in dir, const vec3&in pos, int attacker_id){
 }
 
 void HandleWeaponCollision(int other_id, vec3 pos){                   
-    if(other_id == -1 || !holding_weapon || this_mo.weapon_id == -1){
+    if(other_id == -1 || !holding_weapon || this_mo.GetNumAttachedWeapons() == 0){
         return;
     }
     MovementObject@ char = ReadCharacterID(other_id);
-    if(char.weapon_id == -1){
+    if(char.GetNumAttachedWeapons() == 0){
         return;
     }
        
-    ItemObject@ item_obj_a = ReadItemID(this_mo.weapon_id);
-    ItemObject@ item_obj_b = ReadItemID(char.weapon_id);
+    ItemObject@ item_obj_a = ReadItemID(this_mo.GetAttachedWeaponID(0));
+    ItemObject@ item_obj_b = ReadItemID(char.GetAttachedWeaponID(0));
     if(item_obj_a.GetNumLines() == 0 ||
        item_obj_b.GetNumLines() == 0)
     {
@@ -1786,8 +1836,8 @@ int IsDucking(){
 void AddBloodToStabWeapon(int attacker_id) {
     MovementObject@ attacker = ReadCharacterID(attacker_id);
     vec3 char_pos = attacker.position;
-    if(attacker.weapon_id != -1){
-        ItemObject@ item_obj = ReadItemID(attacker.weapon_id);
+    if(attacker.GetNumAttachedWeapons() != 0){
+        ItemObject@ item_obj = ReadItemID(attacker.GetAttachedWeaponID(0));
         mat4 trans = item_obj.GetPhysicsTransform();
         int num_lines = item_obj.GetNumLines();
         vec3 dist_point;
@@ -1819,8 +1869,8 @@ void AddBloodToStabWeapon(int attacker_id) {
 
 void AddBloodToCutPlaneWeapon(int attacker_id, vec3 dir) {
     MovementObject@ attacker = ReadCharacterID(attacker_id);
-    if(attacker.weapon_id != -1){
-        ItemObject@ item_obj = ReadItemID(attacker.weapon_id);
+    if(attacker.GetNumAttachedWeapons() != 0){
+        ItemObject@ item_obj = ReadItemID(attacker.GetAttachedWeaponID(0));
         mat4 trans = item_obj.GetPhysicsTransform();
         mat4 torso_transform = this_mo.GetAvgIKChainTransform("head");
         vec3 char_pos = torso_transform * vec3(0.0f);
@@ -1858,6 +1908,7 @@ void AddBloodToCutPlaneWeapon(int attacker_id, vec3 dir) {
 }
 
 void TakeSharpDamage(float sharp_damage, vec3 pos, int attacker_id) {
+    this_mo.AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
     TakeBloodDamage(sharp_damage);
      /*for(int i=0; i<5; ++i){
         MakeParticle("Data/Particles/bloodcloud.xml",pos,
@@ -1894,7 +1945,7 @@ void TakeSharpDamage(float sharp_damage, vec3 pos, int attacker_id) {
         AddBloodToCutPlaneWeapon(attacker_id, cut_plane_x*0.8f+cut_plane_world*0.2f);
     }
     if(attack_getter2.HasStabDir()){
-        int attack_weapon_id = ReadCharacterID(attacker_id).weapon_id;
+        int attack_weapon_id = ReadCharacterID(attacker_id).GetAttachedWeaponID(0);
         int stab_type = attack_getter2.GetStabDirType();
         ItemObject@ item_obj = ReadItemID(attack_weapon_id);
         mat4 trans = item_obj.GetPhysicsTransform();
@@ -1986,6 +2037,9 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
             if(!this_mo.controlled){
                 this_mo.PlaySoundGroupVoice("hit",0.0f);
             }
+            if(sharp_damage > 0.0f && sharp_damage < 0.5f){
+                ragdoll_limp_stun = 0.0f;
+            }
         }
     } else {
         HandlePassiveBlockImpact(dir, pos);
@@ -2027,6 +2081,7 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
         }
     }
 
+    active_dodge_recharge = 0.0f;
     return _hit;
 }
 
@@ -2165,6 +2220,13 @@ void TakeBloodDamage(float how_much){
     }
 }
 
+
+void TakeDelayedBloodDamage(float how_much){
+    how_much *= p_damage_multiplier;
+    blood_damage += how_much;
+}
+
+
 // whether the character is in the ground or in the air, and how long time has passed since the status changed. 
 bool on_ground = false;
 
@@ -2256,17 +2318,18 @@ void AttachWeapon(int which){
     PlaySoundGroup(sound, pos,0.5f);
     //item_object_getter.SceneMaterialEvent("weapon_metal_pickup", item_object_getter.GetPhysicsPosition());
     holding_weapon = true;
-    this_mo.weapon_id = which;
     range_extender = item_obj.GetRangeExtender();
     range_multiplier = item_obj.GetRangeMultiplier();
     this_mo.AttachItem(which);
     this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
 }
 
+bool sheathed = false;
+
 void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
     if(event == "grabitem" && !holding_weapon && knocked_out == _awake && tethered == _TETHERED_FREE )
     {
-        Print("Grabbing item\n");
+        //Print("Grabbing item\n");
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
             ItemObject@ item_obj = ReadItem(i);
@@ -2288,6 +2351,34 @@ void HandleAnimationMiscEvent(const string&in event, const vec3&in world_pos) {
         if(pickup_layer_attempts > 4 && pickup_layer != -1){
             this_mo.RemoveLayer(pickup_layer, 4.0f);
             pickup_layer = -1;
+        }
+    }
+    if(event == "sheatheweaponright" )
+    {
+        if(this_mo.GetNumAttachedWeapons() != 0){
+            this_mo.SheatheItem(this_mo.GetAttachedWeaponID(0));
+            sheathed = true;
+            holding_weapon = false;
+            this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
+
+            ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
+            vec3 pos = item_obj.GetPhysicsPosition();
+            string sound = "Data/Sounds/weapon_foley/impact/weapon_drop_light_dirt.xml";
+            PlaySoundGroup(sound, pos,0.5f);
+        }
+    }
+    if(event == "unsheatheweaponright" )
+    {
+        if(this_mo.GetNumAttachedWeapons() != 0){
+            this_mo.UnSheatheItem(this_mo.GetAttachedWeaponID(0));
+            sheathed = false;
+            holding_weapon = true;
+            this_mo.SetMorphTargetWeight("fist_r",1.0f,1.0f);
+
+            ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
+            vec3 pos = item_obj.GetPhysicsPosition();
+            string sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
+            PlaySoundGroup(sound, pos,0.5f);
         }
     }
 }
@@ -2372,7 +2463,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
             }
             if(return_val == _hit){
                 if(attack_getter.GetSharpDamage() > 0.0f && holding_weapon){
-                    ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+                    ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
                     item_obj.AddBlood();
                 }
             }
@@ -2697,6 +2788,9 @@ void UpdateGroundAttackControls() {
             }
             backslash = !backslash;
             last_knife_time = time;
+            if(!this_mo.controlled){
+                this_mo.PlaySoundGroupVoice("attack",0.0f);
+            }
         } else {
             SetState(_attack_state);
             attack_animation_set = false;
@@ -2705,9 +2799,6 @@ void UpdateGroundAttackControls() {
         can_feint = true;
         feinting = false;
         target_id = attack_id;
-        if(!this_mo.controlled){
-            this_mo.PlaySoundGroupVoice("attack",0.0f);
-        }
     } 
 }
 
@@ -2739,7 +2830,7 @@ bool executing = false;
 void UpdateGroundControls() {
     if(tethered == _TETHERED_FREE){
         UpdateGroundAttackControls();
-    } else if(tethered == _TETHERED_REARCHOKE && WantsToAttack() && !executing) {
+    } else if(tethered == _TETHERED_REARCHOKE && WantsToAttack() && !executing && holding_weapon) {
         //Print("Throat cut!\n");
         uint8 flags = _ANM_FROM_START;
         if(mirrored_stance){
@@ -2748,7 +2839,7 @@ void UpdateGroundControls() {
         this_mo.SetAnimation("Data/Animations/r_throatcutter.anm", 10.0f, flags);
         this_mo.SetAnimationCallback("void EndExecution()");
         executing = true;        
-        vec3 pos = ReadItemID(this_mo.weapon_id).GetPhysicsPosition();
+        vec3 pos = ReadItemID(this_mo.GetAttachedWeaponID(0)).GetPhysicsPosition();
         string sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
         PlaySoundGroup(sound, pos, _sound_priority_very_high);  
         MovementObject@ char = ReadCharacterID(tether_id);
@@ -2792,16 +2883,24 @@ void ApplyIdle(float speed, bool start){
         flags = flags | _ANM_FROM_START;
     }
 
-    if(idle_type == _combat){
-        this_mo.SetCharAnimation("idle",speed,flags);
-    } else {
-        string path;
-        if(idle_type == _active){
-            path = "Data/Animations/r_actionidle.xml";
-        } else if(idle_type == _stand){
-            path = "Data/Animations/r_relaxidle.xml";
+    if(blood_health < 1.0f){
+        if(blood_health < 0.5f && length_squared(this_mo.velocity) < 0.5f){
+            this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedidle.xml", speed, flags,"idle");
+        } else {
+            this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedidle.xml", speed, flags,"idle");
         }
-        this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
+    } else {
+        if(idle_type == _combat){
+            this_mo.SetCharAnimation("idle",speed,flags);
+        } else {
+            string path;
+            if(idle_type == _active){
+                path = "Data/Animations/r_actionidle.xml";
+            } else if(idle_type == _stand){
+                path = "Data/Animations/r_relaxidle.xml";
+            }
+            this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
+        }
     }
 }
 
@@ -3557,6 +3656,9 @@ void UpdateAttacking() {
             return;
         }
 
+        if(!this_mo.controlled){
+            this_mo.PlaySoundGroupVoice("attack",0.0f);
+        }
 
         if(attack_getter.GetSpecial() == "legcannon"){    
             leg_cannon_flip = 0.0f;
@@ -3957,9 +4059,8 @@ void NoWeapon() {
 }
 
 void DeletedWeapon(int id){
-    if(this_mo.weapon_id == id){
-        this_mo.DetachItem(this_mo.weapon_id);
-        this_mo.weapon_id = -1;
+    if(this_mo.GetAttachedWeaponID(0) == id){
+        this_mo.DetachItem(id);
         NoWeapon();
     }
 }
@@ -3967,7 +4068,7 @@ void DeletedWeapon(int id){
 void DropWeapon() {
     if(holding_weapon){
         this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-        this_mo.DetachItem(this_mo.weapon_id);
+        this_mo.DetachItem(this_mo.GetAttachedWeaponID(0));
         NoWeapon();
     }
     if(pickup_layer != -1){
@@ -4003,12 +4104,12 @@ void ThrowWeapon() {
     if(holding_weapon){
         int target = target_id;
         if(target != -1){
-            int weapon_id = this_mo.weapon_id;
+            int weapon_id = this_mo.GetAttachedWeaponID(0);
             this_mo.SetMorphTargetWeight("fist_r",1.0f,0.0f);
-            this_mo.DetachItem(this_mo.weapon_id);
+            this_mo.DetachItem(weapon_id);
             NoWeapon();
             MovementObject@ char = ReadCharacterID(target);
-            ItemObject@ io = ReadItemID(this_mo.weapon_id);
+            ItemObject@ io = ReadItemID(weapon_id);
             float time;
             vec3 start = io.GetPhysicsPosition();
             vec3 end = char.GetAvgIKChainPos("torso");
@@ -4019,8 +4120,9 @@ void ThrowWeapon() {
             vec3 twist_ang_vel = dir * dot(ang_vel, dir);
             ang_vel = ang_vel - twist_ang_vel;
             float num_turns = floor(time * 2.0f / io.GetMass()) + 0.25f;
-            Print("Num turns: "+num_turns+"\n");
-            Print("Time: "+time+"\n");
+            // Calculate spins
+            //Print("Num turns: "+num_turns+"\n");
+            //Print("Time: "+time+"\n");
             io.SetThrown();
             io.SetAngularVelocity((normalize(ang_vel)* 6.28318f * num_turns)/time + twist_ang_vel);//(normalize(ang_vel)*(1.5f+num_turns * 3.1415f))/time);
             this_mo.velocity -= launch_vel * io.GetMass() * 0.05f;
@@ -4038,9 +4140,10 @@ int pickup_layer = -1;
 int pickup_layer_attempts = 0;
 bool going_to_throw_item = false;
 float going_to_throw_item_time;
+int sheathe_layer_id = -1;
 
 void HandlePickUp() {
-    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state && tethered == _TETHERED_FREE){
+    if(WantsToPickUpItem() && knocked_out == _awake && state != _ragdoll_state && tethered == _TETHERED_FREE && !sheathed){
         int num_items = GetNumItems();
         
         if(!holding_weapon){
@@ -4094,7 +4197,7 @@ void HandlePickUp() {
     if((WantsToDropItem() && throw_knife_layer_id == -1) || knocked_out != _awake){
         DropWeapon();
     }
-    if(WantsToThrowItem() && holding_weapon){        
+    if(WantsToThrowItem() && holding_weapon && throw_knife_layer_id == -1){        
         float throw_range = 50.0f;
         int target = GetClosestCharacterID(throw_range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
         if(target != -1 && (on_ground || flip_info.IsFlipping())){
@@ -4113,6 +4216,16 @@ void HandlePickUp() {
                 throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowfliplayer.anm",8.0f,0);
             }
             going_to_throw_item = false;
+        }
+    }
+    if(sheathe_layer_id == -1){
+        if(WantsToSheatheItem() && holding_weapon){     
+            ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
+            if(item_obj.HasSheatheAttachment()){
+                sheathe_layer_id = this_mo.AddLayer("Data/Animations/r_knifesheathe.anm",8.0f,0);
+            }
+        } else if(WantsToUnSheatheItem() && !holding_weapon && sheathed){    
+            sheathe_layer_id = this_mo.AddLayer("Data/Animations/r_knifeunsheathe.anm",8.0f,0);
         }
     }
 }
@@ -4439,8 +4552,10 @@ void Init(string character_path) {
 
 void ScriptSwap() {
     last_col_pos = this_mo.position;
-    //this_mo.position.y += 0.5f;
-    int weap_id = this_mo.GetWeapon();
+    int weap_id = -1;
+    if(this_mo.GetNumAttachedWeapons() > 0){
+        weap_id = this_mo.GetAttachedWeaponID(0);
+    }
     DropWeapon();
     this_mo.DetachAllItems();
     if(weap_id != -1){
@@ -4601,7 +4716,7 @@ void UpdateAnimation() {
             // when there are more than two animations to blend, the XML file refers to another 
             // XML file which asks for another blending variable.
             stance_move = false;
-            int force_look_target = situation.GetForceLookTarget();
+            int force_look_target = IsAware()?situation.GetForceLookTarget():-1;
             if(force_look_target != -1 && speed < _stance_move_threshold && trying_to_get_weapon == 0){
                 if(situation.NeedsCombatPose())
                 {
@@ -4664,7 +4779,10 @@ void UpdateAnimation() {
                         }
                     } else if(tethered == _TETHERED_REARCHOKED){
                         MovementObject@ char = ReadCharacterID(tether_id);
-                        int weap_id = char.GetWeapon();
+                        int weap_id = -1;
+                        if(char.GetNumAttachedWeapons() > 0){
+                            weap_id = char.GetAttachedWeaponID(0);
+                        }
                         if(weap_id == -1){
                             this_mo.SetAnimation("Data/Animations/r_rearchokedstance.xml", 5.0f, flags);
                         } else {

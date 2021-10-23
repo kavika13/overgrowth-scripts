@@ -13,6 +13,11 @@ int IsUnaware() {
 void NotifySound(int created_by_id, float max_dist, vec3 pos) {
 }
 
+enum DropKeyState {_dks_nothing, _dks_pick_up, _dks_drop, _dks_throw};
+DropKeyState drop_key_state = _dks_nothing;
+
+enum ItemKeyState {_iks_nothing, _iks_sheathe, _iks_unsheathe};
+ItemKeyState item_key_state = _iks_nothing;
 
 void UpdateBrain(){
     if(GetInputDown(this_mo.controller_id, "grab")){
@@ -29,6 +34,39 @@ void UpdateBrain(){
 
     situation.Update();
     force_look_target_id = situation.GetForceLookTarget();
+    old_targ_vel = GetTargetVelocity();
+
+    if(!GetInputDown(this_mo.controller_id, "drop")){
+        drop_key_state = _dks_nothing;
+    } else if (drop_key_state == _dks_nothing){
+        if(!holding_weapon){
+            drop_key_state = _dks_pick_up;
+        } else {
+            if(GetInputDown(this_mo.controller_id, "crouch") && 
+               duck_amount > 0.5f && 
+               on_ground && 
+               !flip_info.IsFlipping())
+            {
+                drop_key_state = _dks_drop;
+            } else {
+                drop_key_state = _dks_throw;
+            }
+        }
+    } 
+    
+    if(!GetInputDown(this_mo.controller_id, "item")){
+        item_key_state = _iks_nothing;
+    } else if (item_key_state == _iks_nothing){
+        if(!holding_weapon && sheathed){
+            item_key_state = _iks_unsheathe;
+        } else if(holding_weapon){
+            item_key_state = _iks_sheathe;
+        }
+    }
+}
+
+bool IsAware(){
+    return true;
 }
 
 void ResetMind() {
@@ -78,7 +116,7 @@ bool WantsToFlip() {
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
     if(holding_weapon){
-        ItemObject@ item_obj = ReadItemID(this_mo.weapon_id);
+        ItemObject@ item_obj = ReadItemID(this_mo.GetAttachedWeaponID(0));
         if(item_obj.GetMass() > 1.0f){
             return false;
         }
@@ -99,22 +137,29 @@ bool WantsToDragBody() {
 
 bool WantsToPickUpItem() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "item");
-}
-
-bool DropDifferentiator() {
-    return GetInputDown(this_mo.controller_id, "crouch") && duck_amount > 0.5f && on_ground && !flip_info.IsFlipping();
+    return drop_key_state == _dks_pick_up;
 }
 
 bool WantsToDropItem() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "drop") && DropDifferentiator();
+    return drop_key_state == _dks_drop;
 }
 
 bool WantsToThrowItem() {
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "drop") && !DropDifferentiator();
+    return drop_key_state == _dks_throw;
 }
+
+bool WantsToSheatheItem() {
+    if(!this_mo.controlled) return false;
+    return item_key_state == _iks_sheathe;
+}
+
+bool WantsToUnSheatheItem() {
+    if(!this_mo.controlled) return false;
+    return item_key_state == _iks_unsheathe;
+}
+
 
 bool WantsToStartActiveBlock(){
     if(!this_mo.controlled) return false;
@@ -146,14 +191,21 @@ bool WantsToAccelerateJump() {
     return GetInputDown(this_mo.controller_id, "jump");
 }
 
+vec3 older_targ_vel;
+vec3 old_targ_vel;
 bool WantsToDodge() {
     if(!this_mo.controlled) return false;
 
+    vec3 targ_vel = GetTargetVelocity();
+   
     bool movement_key_down = false;
-    if(length_squared(GetTargetVelocity()) > 0.1f)
+    if(length_squared(targ_vel) > 0.1f && distance_squared(targ_vel, older_targ_vel) > 0.8f)
     {
         movement_key_down = true;
     }
+
+    older_targ_vel = old_targ_vel;
+    old_targ_vel = targ_vel;
 
     return movement_key_down;
 }
