@@ -702,13 +702,13 @@ void HandleSpecialKeyPresses() {
             SwitchCharacter("Data/Characters/raider_rabbit.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
-            /*int8 flags = _ANM_MOBILE | _ANM_FROM_START;
+            int8 flags = _ANM_FROM_START;
             if(mirrored_stance){
                 flags = flags | _ANM_MIRRORED;
             }
-            this_mo.SetAnimation("Data/Animations/r_knifethrow.anm",20.0f,flags);
+            this_mo.SetAnimation("Data/Animations/w_combatidlewild.anm",20.0f,flags);
             in_animation = true;
-            this_mo.SetAnimationCallback("void EndAnim()");*/
+            this_mo.SetAnimationCallback("void EndAnim()");
             //this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,0);
             //this_mo.AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
             /*if(sheathed_weapon == -1 && held_weapon != -1) {
@@ -727,7 +727,7 @@ void HandleSpecialKeyPresses() {
             }
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
-            SwapWeaponHands();
+            //SwapWeaponHands();
         }
         if(GetInputPressed(this_mo.controller_id, "h")){
             context.PrintGlobalVars();
@@ -2494,6 +2494,9 @@ void HandleAnimationEvent(string event, vec3 world_pos){
     HandleAnimationMiscEvent(event, world_pos);
     HandleAnimationMaterialEvent(event, world_pos);
     HandleAnimationCombatEvent(event, world_pos);
+    /*if(this_mo.controlled){
+        DebugText("event"+(event_counter--), "Event: "+event, 3.0f);
+    }*/
     //DebugDrawText(world_pos, event, _persistent);
 }
 
