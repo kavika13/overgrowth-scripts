@@ -25,7 +25,12 @@ void main()
     vec3 vertex_offset = CalcVertexOffset(transformed_vertex, gl_Vertex.y*2.0, time, plant_shake);
     vertex_offset.y *= 0.2;
 
-    CALC_TAN_TO_WORLD
+    mat3 obj2worldmat3 = mat3(normalize(obj2world[0].xyz), 
+                              normalize(obj2world[1].xyz), 
+                              normalize(obj2world[2].xyz));
+    mat3 tan_to_obj = mat3(gl_MultiTexCoord1.xyz, gl_MultiTexCoord2.xyz, normalize(gl_Normal));
+    tangent_to_world = obj2worldmat3 * tan_to_obj;
+
     CALC_REL_POS
      
     vec4 aux = texcoords2[int(index)];

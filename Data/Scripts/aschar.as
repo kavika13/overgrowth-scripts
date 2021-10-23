@@ -317,15 +317,36 @@ void CheckForStartBodyDrag(){
     }
 }
 
-void Update(int _num_frames) {
-    if(being_executed == 1){
-        int other_id = tether_id;
-        CutThroat();
-        vec3 impulse = this_mo.GetFacing() * 1000.0f;
-        this_mo.ApplyForceToRagdoll(impulse, this_mo.GetIKChainPos("head", 1));
-        ReadCharacterID(other_id).PassIntFunction("void ChokedOut(int)", this_mo.getID());
-        being_executed = 0;
+void ApplyLevelBoundaries(){
+    const float _level_size = 460.0f;
+    const float _push_level_size = 450.0f;
+    const float _push_force_mult = 0.2f;
+    this_mo.position.x = max(-_level_size, min(_level_size, this_mo.position.x));
+    this_mo.position.z = max(-_level_size, min(_level_size, this_mo.position.z));
+    vec3 push_force;
+    if(this_mo.position.x < -_push_level_size){
+        push_force.x -= (this_mo.position.x + _push_level_size);
     }
+    if(this_mo.position.x > _push_level_size){
+        push_force.x -= (this_mo.position.x - _push_level_size);
+    }
+    if(this_mo.position.z < -_push_level_size){
+        push_force.z -= (this_mo.position.z + _push_level_size);
+    }
+    if(this_mo.position.z > _push_level_size){
+        push_force.z -= (this_mo.position.z - _push_level_size);
+    }
+    push_force *= _push_force_mult;
+    if(length_squared(push_force) > 0.0f){
+        this_mo.velocity += push_force;
+        if(state == _ragdoll_state){
+            this_mo.ApplyForceToRagdoll(push_force * 500.0f, this_mo.GetCenterOfMass());       
+        }
+    }
+}
+
+void Update(int _num_frames) {
+    ApplyLevelBoundaries();
     /*if(holding_weapon){
         if(target_id != -1){
             MovementObject@ char = ReadCharacterID(target_id);
@@ -373,6 +394,15 @@ void Update(int _num_frames) {
         HandleCollisions();
         return;
     }    
+    
+    if(being_executed == 1){
+        int other_id = tether_id;
+        CutThroat();
+        vec3 impulse = this_mo.GetFacing() * 1000.0f;
+        this_mo.ApplyForceToRagdoll(impulse, this_mo.GetIKChainPos("head", 1));
+        ReadCharacterID(other_id).PassIntFunction("void ChokedOut(int)", this_mo.getID());
+        being_executed = 0;
+    }
     if(cut_throat && blood_amount > 0.0f){
         UpdateCutThroatEffect();
     }
@@ -2594,7 +2624,7 @@ void UpdateGroundMovementControls() {
     // Adjust speed based on ground slope
     max_speed = run_speed;
     if(tethered != _TETHERED_FREE){
-        max_speed *= 0.5f;   
+        max_speed *= 0.25f;   
         //if(tethered == _TETHERED_DRAGBODY){
             max_speed *= 0.5f;   
         //}
@@ -2909,7 +2939,7 @@ void UpdateMovementControls() {
     if(on_ground){ 
         if(!flip_info.HasControl()){
             UpdateGroundControls();
-        }
+        } 
         flip_info.UpdateRoll();
     } else {
         if(ledge_info.on_ledge){

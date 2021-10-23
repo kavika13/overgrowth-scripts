@@ -258,6 +258,11 @@ class FlipInfo {
     void UpdateRollVelocity(){
         if(flip_progress < 0.95f){
             vec3 adjusted_vel = WorldToGroundSpace(roll_direction);
+            vec3 flat_ground_normal = ground_normal;
+            flat_ground_normal.y = 0.0f;
+            roll_direction = InterpDirections(roll_direction,normalize(flat_ground_normal),mix(0.0f,0.1f,min(1.0f,(1.0f-ground_normal.y)*5.0f)));
+            flip_axis = AxisFromDir(roll_direction);
+            this_mo.SetRotationFromFacing(roll_direction);
             this_mo.velocity = mix(adjusted_vel * _roll_ground_speed,
                                 this_mo.velocity, 
                                 pow(0.95f,num_frames));
