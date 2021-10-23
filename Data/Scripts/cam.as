@@ -1,4 +1,4 @@
-void init() {
+void Init() {
 }
 
 int controller_id = 0;

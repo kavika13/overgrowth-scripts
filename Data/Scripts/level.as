@@ -1,4 +1,4 @@
-void init() {
+void Init() {
 }
 
 int controller_id = 0;
@@ -50,6 +50,7 @@ void ReceiveMessage(string msg) {
     if(msg == "cleartext"){
         if(has_display_text){
             gui.RemoveGUI(display_text_id);
+            has_display_text = false;
         }
     }
 }
@@ -62,6 +63,11 @@ void ReceiveMessage2(string msg, string msg2) {
         display_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
         gui.CallFunction(display_text_id,"SetText(\""+msg2+"\")");
         has_display_text = true;
+    } else if(msg == "loadlevel"){
+        LoadLevel(msg2);
+    } else if(msg == "displaygui"){
+        gui_id = gui.AddGUI("displaygui_call",msg2,220,250,0);
+        has_gui = true;
     }
 }
 
