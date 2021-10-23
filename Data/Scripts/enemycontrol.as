@@ -148,7 +148,7 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _choking){
         MovementObject@ char = ReadCharacterID(tether_id);
-        if(char.GetIntVar("held_weapon") == -1){
+        if(GetCharPrimaryWeapon(char) == -1){
             SetGoal(_struggle);
         } else {
             SetGoal(_hold_still);
@@ -212,7 +212,7 @@ void UpdateBrain(){
         return;
     }
 
-    if(held_weapon == -1 && goal != _struggle && goal != _hold_still && hostile){
+    if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;
@@ -307,7 +307,7 @@ void UpdateBrain(){
             }
             break;
         case _get_weapon:
-            if(held_weapon != -1 || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
+            if(weapon_slots[primary_weapon_slot] != -1 || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
                 if(target_id == -1){
                     SetGoal(_patrol);           
                 } else {
