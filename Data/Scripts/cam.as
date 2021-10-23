@@ -60,7 +60,7 @@ void Update() {
         vec3 pos = camera_animation_reader.GetPosition();
         pos = vec3(pos.x, pos.z, -pos.y);
         co.position = pos;
-        quaternion quat = camera_animation_reader.GetRotation();
+        quaternion quat(camera_animation_reader.GetRotationVec4());
         vec3 facing = Mult(quat, vec3(0.0f,0.0f,1.0f));
         facing = vec3(facing.x, facing.z, -facing.y);
         /*DebugDrawLine(pos,
