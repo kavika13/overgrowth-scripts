@@ -176,6 +176,7 @@ void Init(string str) {
 void DeleteObjectsInList(array<int> &inout ids){
     int num_ids = ids.length();
     for(int i=0; i<num_ids; ++i){
+        Log(info, "Test");
         DeleteObjectID(ids[i]);
     }
     ids.resize(0);
@@ -458,8 +459,8 @@ void SetUpLevel(float initial_difficulty){
             color = mix(color, vec3(1.0-(player_skill-0.5f)), 0.5f);
             player_colors[2] = color;
             
-            for(int i=0; i<4; ++i){
-                char_obj.SetPaletteColor(i, player_colors[i]);
+            for(int j=0; j<4; ++j){
+                char_obj.SetPaletteColor(j, player_colors[j]);
             }
         }
     }
@@ -550,7 +551,7 @@ void SetUpLevel(float initial_difficulty){
     audience_excitement = 0.0f;
     total_excitement = 0.0f;
     // Audience size increases exponentially based on difficulty
-    audience_size = (rand()%1000+100)*pow(4.0f,initial_difficulty)*0.1f;
+    audience_size = int((rand()%1000+100)*pow(4.0f,initial_difficulty)*0.1f);
     if(audience_sound_handle == -1){
         audience_sound_handle = PlaySoundLoop(level.GetPath("crowd_sound"),0.0f);
     }
@@ -765,7 +766,7 @@ float ProbabilityOfWin(float a, float b){
 
 float GetRandomDifficultyNearPlayerSkill() {
     float var = player_skill * RangedRandomFloat(0.5f,1.5f);
-    var = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
+    var = min(max(var, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
     return var;
 }
 
@@ -781,20 +782,21 @@ void EndMatch(bool victory){
             audience_fan_ratio += (0.5f - win_prob) * kMatchImportance;
         }
         audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level * 0.4f;
-        int new_fans = audience_size * audience_fan_ratio;
+        int new_fans = int(audience_size * audience_fan_ratio);
         fan_base += new_fans;
         player_skill -= player_skill * win_prob * kMatchImportance;
+        player_skill = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
         SetLoseText(new_fans, excitement_level);
     } else if(victory){ // Increase difficulty on win
         level_outcome = kVictory;
         player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;        
+        player_skill = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
         float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
         audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
-        int new_fans = audience_size * audience_fan_ratio;
+        int new_fans = int(audience_size * audience_fan_ratio);
         fan_base += new_fans;
         SetWinText(new_fans, fan_base, excitement_level);
     }
-    player_skill = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
 
     WritePersistentInfo();
                
@@ -847,7 +849,7 @@ void VictoryCheck() {
                 ++match_score[last_round_winner];
             }
             
-            Print("Last round winner: "+last_round_winner);
+            Print("Last round winner: " + last_round_winner + "\n");
             int max_score = 1;
             if(meta_states[1] == "two_points"){
                 max_score = 2;
@@ -1119,7 +1121,7 @@ void SendMessageToAllCharacters(const string &in msg){
 void ProcessMetaEvent(MetaEvent me){
     switch(me.type){
     case kWait:
-        meta_event_wait = global_time + 1000 * atof(me.data);
+        meta_event_wait = uint64(global_time + 1000 * atof(me.data));
         break;
     case kDisplay:
         UpdateIngameText(me.data);
@@ -1165,7 +1167,7 @@ bool MetaEventWaiting(){
 }
 
 void Update() { 
-    global_time += time_step * 1000;
+    global_time += uint64(time_step * 1000);
 
     SetPlaceholderPreviews();
     if(DebugKeysEnabled() && GetInputPressed(0, "t")){

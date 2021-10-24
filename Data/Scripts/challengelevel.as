@@ -345,8 +345,8 @@ class ChallengeEndGUI {
                     gui.Execute(gui_id,"addElement('enemies', 'heading', 'enemies:')");
                     MovementObject@ player_char = ReadCharacter(player_id);
                     int num = GetNumCharacters();
-                    for(int i=0; i<num; ++i){
-                        MovementObject@ char = ReadCharacter(i);
+                    for(int j=0; j<num; ++j){
+                        MovementObject@ char = ReadCharacter(j);
                         if(!player_char.OnSameTeam(char)){
                             int knocked_out = char.GetIntVar("knocked_out");
                             if(knocked_out == 1 && char.GetFloatVar("blood_health") <= 0.0f){

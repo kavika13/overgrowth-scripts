@@ -1,3 +1,5 @@
+#version 150
+
 uniform samplerCube tex0;
 uniform mat4 rotate;
 uniform float max_angle;
@@ -6,8 +8,10 @@ uniform float src_mip;
 	uniform vec3 hemisphere_dir;
 #endif
 
-varying vec3 vec;
-varying vec3 face_vec;
+in vec3 vec;
+in vec3 face_vec;
+
+out vec4 out_color;
 
 #define M_PI 3.1415926535897932384626433832795
 
@@ -16,7 +20,7 @@ float rand(vec2 co){
 }
 
 void main() {    
-	vec3 accum;
+	vec3 accum = vec3(0.0);
 	vec3 front = normalize((rotate * vec4(vec,0.0)).xyz);
 	vec3 right = normalize(cross(front, vec3(0.0, 1.0, 0.0)));
 	vec3 up = cross(front, right);
@@ -35,9 +39,9 @@ void main() {
 				opac *= step(0.0, dot(hemisphere_dir, sample_dir));
 			#endif
 			total += opac;
-			accum += textureCubeLod(tex0, sample_dir, src_mip).xyz * opac;
+			accum += textureLod(tex0, sample_dir, src_mip).xyz * opac;
 		}
 	}
-	gl_FragColor.xyz = accum / total;
-    gl_FragColor.a = 1.0;
+	out_color.xyz = accum / total;
+    out_color.a = 1.0;
 }

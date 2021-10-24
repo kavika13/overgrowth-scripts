@@ -1,11 +1,7 @@
-uniform sampler2D tex;
+#version 150
 
-void main()
-{		
-	gl_Position = ftransform();
-	
-	gl_TexCoord[0] = gl_MultiTexCoord0;
-	
-	gl_FrontColor = gl_Color;
+in vec3 vert_attrib;
+
+void main() {    
+    gl_Position = vec4(vert_attrib, 1.0);
 } 
-

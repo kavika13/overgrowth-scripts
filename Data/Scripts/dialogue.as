@@ -63,7 +63,6 @@ class Dialogue {
     array<ScriptElement> sub_strings;
     bool recording;
 
-    int dialogue_editor_gui_id;
     array<string> dialogue_poses;
     int index; // which dialogue element is being executed
     int sub_index;
@@ -79,7 +78,6 @@ class Dialogue {
     vec3 cam_pos;
     vec3 cam_rot;
     float cam_zoom;
-    float cam_dist;
     int say_char;
     bool clear_on_complete;
 
@@ -115,6 +113,7 @@ class Dialogue {
         return new_str;
     }
 
+    // Play dialogue with given name
     void StartDialogue(const string &in name){
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
@@ -143,6 +142,7 @@ class Dialogue {
 					if(params.HasParam("obj_"+j)){
 						int obj_id = params.GetInt("obj_"+j);
 						if(ObjectExists(obj_id)){
+                            Log( info, "Test" );                
 							DeleteObjectID(obj_id);
 						}
 					}
@@ -237,6 +237,7 @@ class Dialogue {
             int num_strings = int(strings.size());
             for(int i=0; i<num_strings; ++i){
                 if(strings[i].spawned_id != -1){
+                            Log( info, "Test" );                
                     DeleteObjectID(strings[i].spawned_id);
                     strings[i].spawned_id = -1;
                 }
@@ -257,10 +258,7 @@ class Dialogue {
     }
 
     void Init() {
-        Print("Dialogue init\n");
-
         ClearEditor();
-
         is_waiting_time = false;
         index = 0;
         sub_index = -1;
@@ -279,7 +277,7 @@ class Dialogue {
 
         Print("Loading dialogue poses file\n");
         if(!LoadFile("Data/Animations/dialogue_poses.txt")){
-            Print("Failed to load file\n");
+            Print("Failed to load dialogue poses file\n");
         }
         string new_str;
         while(true){
@@ -289,20 +287,7 @@ class Dialogue {
             }
             dialogue_poses.push_back(new_str);
         }
-
-        bool dialogue_gui = false;
-        if(dialogue_gui){
-            dialogue_editor_gui_id = gui.AddGUI( "levelpicker", "dialogueeditor/dialogue.html", 400, 400, 0 );
-            int num_strings = int(strings.size());
-            for(int i=0; i<num_strings; ++i){
-                gui.Execute(dialogue_editor_gui_id, "addLine()");
-            }
-            for(int i=0; i<num_strings; ++i){
-                gui.Execute(dialogue_editor_gui_id, "SetLine("+i+",\""+EscapeString(strings[i].str)+"\")");
-            }
-        } else {
-            dialogue_editor_gui_id = -1;
-        }
+        Print("Finished loading dialogue poses file\n");
     }
 
     string CreateStringFromParams(ObjCommands command, array<string> &in params){
@@ -571,6 +556,7 @@ class Dialogue {
         int num_strings = int(strings.size());
         for(int i=0; i<num_strings; ++i){
             if(strings[i].spawned_id != -1 && i != selected_line && !strings[i].locked && !strings[i].record_locked){
+                            Log( info, "Test" );                
                 DeleteObjectID(strings[i].spawned_id);
                 strings[i].spawned_id = -1;
             }
@@ -606,7 +592,9 @@ class Dialogue {
 
     void UpdateRibbonButtons() {
         bool can_edit_selected = false;
-        array<int> @object_ids = GetObjectIDs();
+        EnterTelemetryZone("GetObjectIDs()");
+        array<int> @object_ids = GetObjectIDsType(_placeholder_object);
+        LeaveTelemetryZone();
         int num_objects = object_ids.length();
         for(int i=0; i<num_objects; ++i){
             if(!ObjectExists(object_ids[i])){ // This is needed because SetDialogueObjID can delete some objects
@@ -614,19 +602,22 @@ class Dialogue {
             }
             Object @obj = ReadObjectFromID(object_ids[i]);
             ScriptParams@ params = obj.GetScriptParams();
-            if(obj.IsSelected() && obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
+            if(obj.IsSelected() && params.HasParam("Dialogue")){
                 can_edit_selected = true;
             }
         }
+        EnterTelemetryZone("RibbonItemSetEnableds()");
         RibbonItemSetEnabled("edit_selected_dialogue", can_edit_selected);
         RibbonItemSetEnabled("stop_editing_dialogue", dialogue_obj_id != -1);
         RibbonItemSetEnabled("preview_dialogue", dialogue_obj_id != -1);
         RibbonItemSetEnabled("save_dialogue", dialogue_obj_id != -1);
         RibbonItemSetEnabled("load_dialogue_pose", dialogue_obj_id != -1);
         RibbonItemSetEnabled("dialogue_recording", dialogue_obj_id != -1);
+        LeaveTelemetryZone();
     }
 
     void Update() {     
+        EnterTelemetryZone("Dialogue Update");
         if(history_str != ""){
             LoadHistoryStr();
         }
@@ -638,98 +629,11 @@ class Dialogue {
             }
         }
 
-        if(dialogue_editor_gui_id != -1){
-            string callback = gui.GetCallback(dialogue_editor_gui_id);
-            while(callback != ""){
-                Print("AS Callback: "+callback+"\n");
-                if(callback == "ok" || callback == "cancel"){
-                    gui.RemoveGUI(dialogue_editor_gui_id);
-                    dialogue_editor_gui_id = -1;
-                    break;
-                }
-                callback = gui.GetCallback(dialogue_editor_gui_id);
-           }
-        }
-
+        // TODO: update ribbon buttons should only happen in editor mode and when something has changed
+        EnterTelemetryZone("Update ribbon buttons");
         UpdateRibbonButtons();
+        LeaveTelemetryZone();
 
-        int player_id = GetPlayerCharacterID();
-
-        array<int> @object_ids = GetObjectIDsType(_placeholder_object);
-        int num_objects = object_ids.length();
-        for(int i=0; i<num_objects; ++i){
-            if(!ObjectExists(object_ids[i])){ // This is needed because SetDialogueObjID can delete some objects
-                continue;
-            }
-            Object @obj = ReadObjectFromID(object_ids[i]);
-            ScriptParams@ params = obj.GetScriptParams();
-            if(!params.HasParam("Dialogue")){
-                continue;
-            }
-            obj.SetCopyable(false);
-            /*if(obj.IsSelected()){
-                dialogue.SetDialogueObjID(object_ids[i]);
-            }*/
-            PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
-            placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
-            if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
-                // Parse file for #name token
-                LoadFile(params.GetString("Dialogue"));
-                string new_str;
-                while(true){
-                    new_str = GetFileLine();
-                    if(new_str == "end"){
-                        break;
-                    }
-                    TokenIterator token_iter;
-                    token_iter.Init();
-                    if(token_iter.FindNextToken(new_str)){
-                        string token = token_iter.GetToken(new_str);
-                        if(token == "#name"){
-                            if(token_iter.FindNextToken(new_str)){
-                                params.SetString("DisplayName", token_iter.GetToken(new_str));
-                            }
-                        }
-                        if(token == "#participants"){
-                            if(token_iter.FindNextToken(new_str)){
-                                params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
-                            }
-                        }
-                    }
-                }
-            }
-            if(player_id == -1){
-                DrawDialogueTextCanvas(object_ids[i]);
-            }
-            int num_connectors = params.GetInt("NumParticipants");
-            for(int j=1; j<=num_connectors; ++j){
-                if(!params.HasParam("obj_"+j)){
-                    int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
-                    params.AddInt("obj_"+j, obj_id);
-                    Object@ obj = ReadObjectFromID(obj_id);
-                    PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
-                    placeholder_object.SetSpecialType(kPlayerConnect);
-                } else {
-                    int obj_id = params.GetInt("obj_"+j);
-                    if(ObjectExists(obj_id)){
-                        Object @new_obj = ReadObjectFromID(obj_id);
-                        vec4 v = obj.GetRotationVec4();
-                        quaternion quat(v.x,v.y,v.z,v.a);
-                        new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
-                        new_obj.SetRotation(quat);
-                        new_obj.SetScale(obj.GetScale()*0.3f);
-                        if(player_id == -1){
-                            TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
-                            text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _delete_on_update);
-                        }
-                        new_obj.SetCopyable(false);
-                        new_obj.SetDeletable(false);
-                    } else {
-                        params.Remove("obj_"+j);
-                    }
-                }
-            }
-        }
         
         // Apply camera transform if dialogue has control
         if(has_cam_control){
@@ -737,7 +641,7 @@ class Dialogue {
             camera.SetYRotation(cam_rot.y);
             camera.SetZRotation(cam_rot.z);
             camera.SetPos(cam_pos);
-            camera.SetDistance(cam_dist);
+            camera.SetDistance(0.0f);
             camera.SetFOV(cam_zoom);
             UpdateListener(cam_pos,vec3(0.0f),camera.GetFacing(),camera.GetUpVector());
         }
@@ -852,6 +756,7 @@ class Dialogue {
         
         int last_wait = GetLastWait(selected_line);
 
+        EnterTelemetryZone("Apply editor object transforms");
         // Apply editor object transforms to scripts
         for(int i=0; i<int(strings.size()); ++i){
             switch(strings[i].obj_command){
@@ -973,6 +878,8 @@ class Dialogue {
                 break;
             }
         }
+        LeaveTelemetryZone(); // editor object transforms
+        LeaveTelemetryZone(); // dialogue update
     }
 
     void ExecutePreviousCommands(int id) {
@@ -1036,6 +943,7 @@ class Dialogue {
         }
     }
 
+    // Fill script element from selected line string
     void ParseLine(ScriptElement &se){
         se.locked = false;
         se.obj_command = kUnknown;
@@ -1342,8 +1250,6 @@ class Dialogue {
                 // Set camera control
                 has_cam_control = true;
             }
-            // Set camera distance
-            cam_dist = 0.0f;
             // Set camera position
             cam_pos.x = atof(script_element.params[0]);
             cam_pos.y = atof(script_element.params[1]);
@@ -1417,7 +1323,6 @@ class Dialogue {
             int char_id = GetDialogueCharID(atoi(script_element.params[0]));
             if(char_id != -1){
                 MovementObject@ mo = ReadCharacterID(char_id);
-                mo.position = pos;
                 mo.ReceiveMessage("set_rotation "+rot);
                 mo.ReceiveMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
             }
@@ -1449,6 +1354,108 @@ class Dialogue {
         return false;
     }
     
+    void UpdateDialogueObjectConnectors(int id){
+        Object @obj = ReadObjectFromID(id);
+        ScriptParams@ params = obj.GetScriptParams();
+        int num_connectors = params.GetInt("NumParticipants");
+        int player_id = GetPlayerCharacterID();
+        for(int j=1; j<=num_connectors; ++j){
+            int obj_id = params.GetInt("obj_"+j);
+            if(ObjectExists(obj_id)){
+                Object @new_obj = ReadObjectFromID(obj_id);
+                vec4 v = obj.GetRotationVec4();
+                quaternion quat(v.x,v.y,v.z,v.a);
+                new_obj.SetTranslation(obj.GetTranslation() + Mult(quat,vec3((num_connectors*0.5f+0.5f-j)*obj.GetScale().x*0.35f,obj.GetScale().y*(0.5f+0.2f),0)));
+                new_obj.SetRotation(quat);
+                new_obj.SetScale(obj.GetScale()*0.3f);
+                if(player_id == -1){
+                    TextCanvasTexture @text = level.GetTextElement(number_text_canvases[j-1]);
+                    text.DebugDrawBillboard(new_obj.GetTranslation(), 0.25f*obj.GetScale().x, _delete_on_update);
+                }
+                new_obj.SetCopyable(false);
+                new_obj.SetDeletable(false);
+            } else {
+                params.Remove("obj_"+j);
+            }
+        }
+    }
+
+    void MovedObject(int id){
+        if(id == -1){
+            return;
+        }
+        Object @obj = ReadObjectFromID(id);
+        if(obj.GetType() != _placeholder_object){
+            return;
+        }
+        ScriptParams@ params = obj.GetScriptParams();
+        if(!params.HasParam("Dialogue")){
+            return;
+        }
+        UpdateDialogueObjectConnectors(id);
+    }
+
+    void AddedObject(int id){
+        if(id == -1){
+            return;
+        }
+        Object @obj = ReadObjectFromID(id);
+        if(obj.GetType() != _placeholder_object){
+            return;
+        }
+        ScriptParams@ params = obj.GetScriptParams();
+        if(!params.HasParam("Dialogue")){
+            return;
+        }
+        // Object @obj is a dialogue object
+        obj.SetCopyable(false);
+        PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(obj);
+        placeholder_object.SetBillboard("Data/Textures/ui/dialogue_widget.tga");
+        if(!params.HasParam("DisplayName") || !params.HasParam("NumParticipants")){
+            // Parse file for #name token
+            LoadFile(params.GetString("Dialogue"));
+            string new_str;
+            while(true){
+                new_str = GetFileLine();
+                if(new_str == "end"){
+                    break;
+                }
+                TokenIterator token_iter;
+                token_iter.Init();
+                if(token_iter.FindNextToken(new_str)){
+                    string token = token_iter.GetToken(new_str);
+                    if(token == "#name"){
+                        if(token_iter.FindNextToken(new_str)){
+                            params.SetString("DisplayName", token_iter.GetToken(new_str));
+                        }
+                    }
+                    if(token == "#participants"){
+                        if(token_iter.FindNextToken(new_str)){
+                            params.SetInt("NumParticipants", atoi(token_iter.GetToken(new_str)));
+                        }
+                    }
+                }
+            }
+        }
+        int player_id = GetPlayerCharacterID();
+        // Draw dialogue name
+        //if(player_id == -1){
+        //    DrawDialogueTextCanvas(id);
+        //}
+        // Set up dialogue connectors
+        int num_connectors = params.GetInt("NumParticipants");
+        for(int j=1; j<=num_connectors; ++j){
+            if(!params.HasParam("obj_"+j)){
+                int obj_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml");
+                params.AddInt("obj_"+j, obj_id);
+                Object@ object = ReadObjectFromID(obj_id);
+                PlaceholderObject@ inner_placeholder_object = cast<PlaceholderObject@>(object);
+                inner_placeholder_object.SetSpecialType(kPlayerConnect);
+            }
+        }
+        UpdateDialogueObjectConnectors(id);
+    }
+
     void ReceiveMessage(const string &in msg) {
         TokenIterator token_iter;
         token_iter.Init();
@@ -1459,6 +1466,14 @@ class Dialogue {
         if(token == "notify_deleted"){
 		    token_iter.FindNextToken(msg);
             NotifyDeleted(atoi(token_iter.GetToken(msg)));
+        } else if(token == "added_object"){
+            token_iter.FindNextToken(msg);
+            int obj_id = atoi(token_iter.GetToken(msg));
+            AddedObject(obj_id);
+        } else if(token == "moved_object"){
+            token_iter.FindNextToken(msg);
+            int obj_id = atoi(token_iter.GetToken(msg));
+            MovedObject(obj_id);
         } else if(token == "stop_editing_dialogue") {
             ClearEditor();
         } else if(token == "dialogue_set_recording") {
@@ -1550,7 +1565,7 @@ class Dialogue {
             blackout_image.scale = vec3(GetScreenWidth()/16.0f, GetScreenHeight()/4.0f/16.0f, 1.0f);
             blackout_image.color = vec4(0.0f,0.0f,0.0f,0.7f);
 
-            int font_size = max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50));
+            int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
 
             // Set up font style and canvas
             TextCanvasTexture @text = level.GetTextElement(text_id);

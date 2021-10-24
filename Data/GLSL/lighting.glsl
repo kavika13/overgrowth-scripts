@@ -1,12 +1,14 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
+uniform vec4 primary_light_color;
+
 float rand(vec2 co){
     return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
 }
 
 float GetDirectContribSimple( float amount ) {
-    return amount * gl_LightSource[0].diffuse.a;
+    return amount * primary_light_color.a;
 }
 
 float GetDirectContrib( const vec3 light_pos,
@@ -38,25 +40,7 @@ void SetCascadeShadowCoords(vec4 vert, inout vec4 sc[4]) {
 float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     float rand_a = rand(gl_FragCoord.xy);
     vec3 shadow_tex = vec3(1.0);
-    /*float shadow_amount = 0.0;
-    float offset = 0.0007;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(0.0,0.0,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset,offset*0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset,offset*-0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(offset*0.2,offset,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,ProjShadow+vec4(-offset*0.2,-offset,0.0,0.0)).r * 0.2;
-    shadow_tex.r = shadow_amount;*/
     int index = 0;
-    /*
-    if(dist > 20.0/2.8284){
-        index = 1;
-    }
-    if(dist > 60.0/2.8284){
-        index = 2;
-    }
-    if(dist > 250.0/2.8284){
-        index = 3;
-    }*/
     if(length(sc[0].xy-vec2(0.5)) > 0.49 - rand_a * 0.05){
         index = 1;
     }    
@@ -154,7 +138,7 @@ vec3 UnpackTanNormal(const vec4 normalmap) {
 }
 
 vec3 GetDirectColor(const float intensity) {
-    return gl_LightSource[0].diffuse.xyz * intensity;
+    return primary_light_color.xyz * intensity;
 }
 
 vec3 LookupCubemap(const mat3 obj2world_mat3, 
@@ -184,7 +168,7 @@ vec3 LookupCubemapSimpleLod(const vec3 vec,
 }
 
 float GetAmbientMultiplier() {
-    return (1.5-gl_LightSource[0].diffuse.a*0.5);
+    return (1.5-primary_light_color.a*0.5);
 }
 
 float GetAmbientMultiplierScaled() {
@@ -202,7 +186,7 @@ float GetSpecContrib ( const vec3 light_pos,
                        const vec3 vertex_pos,
                        const float unshadowed ) {
     vec3 H = normalize(normalize(vertex_pos*(0.0-1.0)) + normalize(light_pos));
-    return min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0)*unshadowed*gl_LightSource[0].diffuse.a;
+    return min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0)*unshadowed*primary_light_color.a;
 }
 
 float GetSpecContrib ( const vec3 light_pos,
@@ -211,7 +195,7 @@ float GetSpecContrib ( const vec3 light_pos,
                        const float unshadowed,
                        const float pow_val) {
     vec3 H = normalize(normalize(vertex_pos*(0.0-1.0)) + normalize(light_pos));
-    return min(1.0, pow(max(0.0,dot(normal,H)),pow_val)*1.0)*unshadowed*gl_LightSource[0].diffuse.a;
+    return min(1.0, pow(max(0.0,dot(normal,H)),pow_val)*1.0)*unshadowed*primary_light_color.a;
 }
 
 float BalanceAmbient ( const float direct_contrib ) {
@@ -230,10 +214,6 @@ void AddHaze( inout vec3 color,
               in samplerCube fog_cube ) { 
     vec3 fog_color = textureCubeLod(fog_cube,relative_position,5.0).xyz;
     color = mix(color, fog_color, GetHazeAmount(relative_position));
-}
-
-float Exposure() {
-    return gl_LightSource[0].ambient.a;
 }
 
 float GammaCorrectFloat(in float val) {

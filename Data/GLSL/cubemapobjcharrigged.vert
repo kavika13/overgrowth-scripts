@@ -1,51 +1,57 @@
-#include "object_vert.glsl"
-#include "object_shared.glsl"
+#version 150
 
-UNIFORM_REL_POS
-uniform mat4 shadowmat;
-#ifdef GPU_SKINNING
-uniform mat4 bone_mats[128];
+in vec3 vertex_attrib;
+in vec2 tex_coord_attrib;
+in vec2 morph_tex_offset_attrib;
+in vec2 fur_tex_coord_attrib;
+in vec4 transform_mat_column_a;
+in vec4 transform_mat_column_b;
+in vec4 transform_mat_column_c;
+
+#ifndef DEPTH_ONLY
+uniform vec3 cam_pos;
+uniform mat4 shadow_matrix[4];
 #endif
+uniform mat4 mvp;
 
-VARYING_REL_POS
-VARYING_SHADOW
-varying vec3 concat_bone1;
-varying vec3 concat_bone2;
+out vec2 fur_tex_coord;
+#ifndef DEPTH_ONLY
+out vec3 concat_bone1;
+out vec3 concat_bone2;
+out vec3 ws_vertex;
+out vec4 shadow_coords[4];
+out vec2 tex_coord;
+out vec2 morphed_tex_coord;
+out vec3 world_vert;
+#endif
 
 void main()
 {    
-    // Reconstruct bone matrix from tex_coords
-    vec4 index = gl_MultiTexCoord1;
-    vec4 weight = gl_MultiTexCoord2;
-    #ifdef GPU_SKINNING
-        mat4 concat_bone = 
-            bone_mats[int(index[0])]*weight[0] +
-            bone_mats[int(index[1])]*weight[1] +
-            bone_mats[int(index[2])]*weight[2] +
-            bone_mats[int(index[3])]*weight[3];
-    #else
-        mat4 concat_bone;
-        concat_bone[0] = vec4(gl_MultiTexCoord1[0],gl_MultiTexCoord2[0],gl_MultiTexCoord4[0],0.0);
-        concat_bone[1] = vec4(gl_MultiTexCoord1[1],gl_MultiTexCoord2[1],gl_MultiTexCoord4[1],0.0);
-        concat_bone[2] = vec4(gl_MultiTexCoord1[2],gl_MultiTexCoord2[2],gl_MultiTexCoord4[2],0.0);
-        concat_bone[3] = vec4(gl_MultiTexCoord1[3],gl_MultiTexCoord2[3],gl_MultiTexCoord4[3],1.0);
-    #endif
+    mat4 concat_bone;
+    concat_bone[0] = vec4(transform_mat_column_a[0], transform_mat_column_b[0], transform_mat_column_c[0], 0.0);
+    concat_bone[1] = vec4(transform_mat_column_a[1], transform_mat_column_b[1], transform_mat_column_c[1], 0.0);
+    concat_bone[2] = vec4(transform_mat_column_a[2], transform_mat_column_b[2], transform_mat_column_c[2], 0.0);
+    concat_bone[3] = vec4(transform_mat_column_a[3], transform_mat_column_b[3], transform_mat_column_c[3], 1.0);
     // Set up varyings to pass bone matrix to fragment shader
+    vec3 transformed_vertex = (concat_bone * vec4(vertex_attrib, 1.0)).xyz;
+
+    gl_Position = mvp * vec4(transformed_vertex, 1.0);
+
+#ifndef DEPTH_ONLY
+    world_vert = transformed_vertex;
     concat_bone1 = concat_bone[0].xyz;
     concat_bone2 = concat_bone[1].xyz;
 
-    #ifdef GPU_SKINNING
-        vec4 transformed_vertex = concat_bone * (gl_Vertex + vec4(gl_MultiTexCoord4[0],gl_MultiTexCoord4[1],gl_MultiTexCoord4[2],0.0));
-    #else
-        vec4 transformed_vertex = concat_bone * gl_Vertex;
-    #endif
-    CALC_REL_POS
- 
-    gl_Position = gl_ModelViewProjectionMatrix * transformed_vertex;
-
-    gl_TexCoord[0].xy = gl_MultiTexCoord0.xy;
-    gl_TexCoord[0].zw = gl_MultiTexCoord0.xy + gl_MultiTexCoord5.xy;
-    gl_TexCoord[1] = gl_MultiTexCoord6;
-    gl_TexCoord[2] = shadowmat *gl_ModelViewMatrix * transformed_vertex;
-    CALC_CASCADE_TEX_COORDS
+    ws_vertex = transformed_vertex - cam_pos;
+    tex_coord = tex_coord_attrib;
+    morphed_tex_coord = tex_coord_attrib + morph_tex_offset_attrib;
+    fur_tex_coord = fur_tex_coord_attrib;
+    
+    shadow_coords[0] = shadow_matrix[0] * vec4(transformed_vertex, 1.0);
+    shadow_coords[1] = shadow_matrix[1] * vec4(transformed_vertex, 1.0);
+    shadow_coords[2] = shadow_matrix[2] * vec4(transformed_vertex, 1.0);
+    shadow_coords[3] = shadow_matrix[3] * vec4(transformed_vertex, 1.0);
+#else
+    fur_tex_coord = vec2(0.0, 0.0);
+#endif
 } 

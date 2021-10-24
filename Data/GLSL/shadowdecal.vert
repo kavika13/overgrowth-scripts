@@ -19,13 +19,13 @@ void main()
         dot (bitangent, eyeSpaceVert),
         dot (normal, eyeSpaceVert));
         
-    light_pos.x = dot(gl_LightSource[0].position.xyz, temp_tangent);
-    light_pos.y = dot(gl_LightSource[0].position.xyz, bitangent);
-    light_pos.z = dot(gl_LightSource[0].position.xyz, normal);
+    light_pos.x = dot(gl_LightSourceDEPRECATED[0].position.xyz, temp_tangent);
+    light_pos.y = dot(gl_LightSourceDEPRECATED[0].position.xyz, bitangent);
+    light_pos.z = dot(gl_LightSourceDEPRECATED[0].position.xyz, normal);
   
-    light2_pos.x = dot(gl_LightSource[1].position.xyz, temp_tangent);
-    light2_pos.y = dot(gl_LightSource[1].position.xyz, bitangent);
-    light2_pos.z = dot(gl_LightSource[1].position.xyz, normal);
+    light2_pos.x = dot(gl_LightSourceDEPRECATED[1].position.xyz, temp_tangent);
+    light2_pos.y = dot(gl_LightSourceDEPRECATED[1].position.xyz, bitangent);
+    light2_pos.z = dot(gl_LightSourceDEPRECATED[1].position.xyz, normal);
   
     gl_Position = ftransform();
     

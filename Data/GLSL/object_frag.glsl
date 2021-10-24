@@ -20,55 +20,21 @@ void object_frag(){} // This is just here to make sure it gets added to include 
     }
 #endif
 
-#ifdef BAKED_SHADOWS
-    #ifndef ATTACHED
-    #define CALC_SHADOWED \
-        vec3 shadow_tex = texture2D(shadow_sampler,shadow_tex_coords).rgb;
-    #define UNIFORM_SHADOW_TEXTURE \
-        uniform sampler2D shadow_sampler;
-    #else
-    #define CALC_SHADOWED \
-        vec3 shadow_tex = texture2D(tex14,gl_TexCoord[2].xy).rgb; \
-        shadow_tex.r *= shadow2DProj(shadow_sampler,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
-    #define UNIFORM_SHADOW_TEXTURE \
-        uniform sampler2DShadow shadow_sampler;
-        uniform sampler2D tex14;
-    #endif
-    #ifdef SHADOW_CATCHER
-        #define CALC_SHADOW_CATCH \
-            vec3 shadow_tex = texture2D(shadow_sampler,gl_TexCoord[2].xy).rgb;
-    #else
-        #define CALC_SHADOW_CATCH \
-            vec3 shadow_tex = vec3(in_light);
-    #endif
-    #define CALC_DYNAMIC_SHADOWED \
-        CALC_SHADOW_CATCH \
-        shadow_tex.r *= shadow2DProj(projected_shadow_sampler,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
-    #define CALC_DYNAMIC_SHADOWED_BLUR \
-        CALC_SHADOW_CATCH \
-        { \
-            float offset = 2.0/512.0; \
-            float shadow_amount = 0.0; \
-            float z_bias = -0.00002; \
-            shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(0.0,0.0,z_bias,0.0)).r * 0.2; \
-            shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset,offset*0.2,z_bias,0.0)).r * 0.2; \
-            shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset,offset*-0.2,z_bias,0.0)).r * 0.2; \
-            shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(offset*0.2,offset,z_bias,0.0)).r * 0.2; \
-            shadow_amount += shadow2DProj(tex5,gl_TexCoord[2]+vec4(-offset*0.2,-offset,z_bias,0.0)).r * 0.2; \
-            shadow_tex.r *= shadow_amount; \
-        }
-#else
-    #define UNIFORM_SHADOW_TEXTURE \
-        uniform sampler2DShadow shadow_sampler;
-    #define CALC_SHADOWED \
-        vec3 shadow_tex = vec3(1.0);\
-        shadow_tex.r = GetCascadeShadow(shadow_sampler, shadow_coords, length(ws_vertex));
-    #define CALC_DYNAMIC_SHADOWED \
-        vec3 shadow_tex = vec3(1.0); \
-        shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
-    #define CALC_DYNAMIC_SHADOWED_BLUR \
-        CALC_DYNAMIC_SHADOWED
-#endif
+#define CALC_HALFTONE_STIPPLE \
+if(mod(gl_FragCoord.x + gl_FragCoord.y, 2.0) == 0.0){ \
+    discard; \
+}
+
+#define UNIFORM_SHADOW_TEXTURE \
+    uniform sampler2DShadow shadow_sampler;
+#define CALC_SHADOWED \
+    vec3 shadow_tex = vec3(1.0);\
+    shadow_tex.r = GetCascadeShadow(shadow_sampler, shadow_coords, length(ws_vertex));
+#define CALC_DYNAMIC_SHADOWED \
+    vec3 shadow_tex = vec3(1.0); \
+    shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
+#define CALC_DYNAMIC_SHADOWED_BLUR \
+    CALC_DYNAMIC_SHADOWED
 
 #define color_tex tex0
 #define normal_tex tex1
@@ -159,17 +125,17 @@ uniform vec3 tint_palette[5];
 #define CALC_BLOODY_WEAPON_SPEC \
 float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(100.0,50.0,(1.0-wetblood)*blood_amount)); \
 spec *= 5.0; \
-vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * mix(1.0,0.3,blood_amount); \
+vec3 spec_color = primary_light_color.xyz * vec3(spec) * mix(1.0,0.3,blood_amount); \
 vec3 spec_map_vec = reflect(ws_vertex,ws_normal); \
-spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.5 * \
+spec_color += LookupCubemapSimpleLod(spec_map_vec, tex2, 0.0) * 0.5 * \
               GetAmbientContrib(shadow_tex.g) * max(0.0,(1.0 - blood_amount * 2.0));
 
 #define CALC_BLOODY_CHARACTER_SPEC \
 float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,mix(200.0,50.0,(1.0-wetblood)*blood_amount)); \
 spec *= 5.0; \
-vec3 spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec) * 0.3; \
+vec3 spec_color = primary_light_color.xyz * vec3(spec) * 0.3; \
 vec3 spec_map_vec = reflect(ws_vertex, ws_normal); \
-spec_color += LookupCubemapSimple(spec_map_vec, tex2) * 0.2 * \
+spec_color += LookupCubemapSimpleLod(spec_map_vec, tex2, 0.0) * 0.2 * \
     GetAmbientContrib(shadow_tex.g) * max(0.0,(1.0 - blood_amount * 2.0));
 
 #define CALC_STIPPLE_FADE \
@@ -204,7 +170,7 @@ diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) *\
 CALC_DIRECT_DIFFUSE_COLOR \
 vec3 ambient = LookupCubemapSimpleLod(ws_normal, tex2, 5.0) * GetAmbientContrib(shadow_tex.g); \
 diffuse_color += ambient; \
-vec3 translucent_lighting = GetDirectColor(shadow_tex.r) * gl_LightSource[0].diffuse.a; \
+vec3 translucent_lighting = GetDirectColor(shadow_tex.r) * primary_light_color.a; \
 translucent_lighting += ambient; \
 translucent_lighting *= GammaCorrectFloat(0.6);
 
@@ -217,7 +183,7 @@ vec3 spec_color;\
 {\
     vec3 H = normalize(normalize(ws_vertex*-1.0) + normalize(ws_light));\
     float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r);\
-    spec_color = gl_LightSource[0].diffuse.xyz * vec3(spec);\
+    spec_color = primary_light_color.xyz * vec3(spec);\
     vec3 spec_map_vec = reflect(ws_vertex,ws_normal);\
     spec_color += LookupCubemapSimple(spec_map_vec, spec_cubemap) * amb_mult *\
                   GetAmbientContrib(shadow_tex.g);\
@@ -250,7 +216,7 @@ vec3 view = normalize(ws_vertex*-1.0); \
 float back_lit = max(0.0,dot(normalize(ws_vertex),ws_light));  \
 float rim_lit = max(0.0,(1.0-dot(view,ws_normal))); \
 rim_lit *= pow((dot(ws_light,ws_normal)+1.0)*0.5,0.5); \
-color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * GammaCorrectFloat(normalmap.a) * gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a * shadow_tex.r;
+color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * GammaCorrectFloat(normalmap.a) * primary_light_color.xyz * primary_light_color.a * shadow_tex.r;
     
 #define CALC_COMBINED_COLOR_WITH_NORMALMAP_TINT \
 vec3 color = diffuse_color * colormap.xyz  * mix(vec3(1.0),color_tint,normalmap.a)+ \
@@ -269,9 +235,6 @@ color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 
 #define CALC_HAZE \
 AddHaze(color, ws_vertex, spec_cubemap);
-
-#define CALC_EXPOSURE \
-color *= Exposure();
 
 #define CALC_FINAL_UNIVERSAL(alpha) \
 gl_FragColor = vec4(color,alpha);

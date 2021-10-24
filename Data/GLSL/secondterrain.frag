@@ -1,47 +1,45 @@
+#version 150
+
 uniform vec3 light_pos;
-uniform sampler2D tex0;
-uniform sampler2D tex1;
-uniform samplerCube tex3;
-uniform sampler2D tex4;
-varying vec3 normal;
+uniform sampler2D tex0; // diffuse color
+uniform samplerCube tex3; // skybox
+uniform sampler2D tex4; // normal map
+
+in vec2 var_uv;
+
+out vec4 out_color;
 
 const float texture_offset = 0.001;
 const float border_fade_size = 0.1;
 
-#include "lighting.glsl"
+#include "lighting150.glsl"
 
 void main()
 {    
-    vec4 normal_map = texture2D(tex4,gl_TexCoord[0].xy+vec2(light_pos.x * texture_offset, light_pos.z * texture_offset));
+    // Get lighting
+    vec4 normal_map = texture(tex4, var_uv + light_pos.xz * texture_offset);
     vec3 normal_vec = normalize((normal_map.xyz*vec3(2.0))-vec3(1.0));
-    
-    vec3 shadow_tex = texture2D(tex1,gl_TexCoord[0].xy).rgb;
+    float NdotL = GetDirectContrib(light_pos, normal_vec, 1.0);
+    vec3 color = GetDirectColor(NdotL) + LookupCubemapSimpleLod(normal_vec, tex3, 5.0) * GetAmbientContrib(1.0);
 
-    float NdotL = GetDirectContrib(light_pos, normal_vec, shadow_tex.r);
-
-    vec3 color = GetDirectColor(NdotL);
-    
-    // Add ambient lighting to baked texture
-    color += LookupCubemapSimpleLod(normal_vec, tex3, 5.0) * GetAmbientContrib(shadow_tex.g);
-
-    // Combine diffuse color with baked texture
-    color *= texture2D(tex0,gl_TexCoord[0].xy).xyz;
-    
+    // Combine diffuse lighting with color
+    color *= texture(tex0,var_uv).xyz;    
     color *= BalanceAmbient(NdotL);
 
+    // Fade borders
     float alpha = 1.0;
-    if(gl_TexCoord[0].x<border_fade_size) {
-        alpha *= gl_TexCoord[0].x/border_fade_size;
+    if(var_uv.x<border_fade_size) {
+        alpha *= var_uv.x/border_fade_size;
     }
-    if(gl_TexCoord[0].x>1.0-border_fade_size) {
-        alpha *= (1.0-gl_TexCoord[0].x)/border_fade_size;
+    if(var_uv.x>1.0-border_fade_size) {
+        alpha *= (1.0-var_uv.x)/border_fade_size;
     }
-    if(gl_TexCoord[0].y<border_fade_size) {
-        alpha *= gl_TexCoord[0].y/border_fade_size;
+    if(var_uv.y<border_fade_size) {
+        alpha *= var_uv.y/border_fade_size;
     }
-    if(gl_TexCoord[0].y>1.0-border_fade_size) {
-        alpha *= (1.0-gl_TexCoord[0].y)/border_fade_size;
+    if(var_uv.y>1.0-border_fade_size) {
+        alpha *= (1.0-var_uv.y)/border_fade_size;
     }
         
-    gl_FragColor = vec4(color,alpha);
+    out_color = vec4(color,alpha);
 }

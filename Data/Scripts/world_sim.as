@@ -38,9 +38,11 @@ void Init(string str){
 void Dispose(){
     int num_towns = towns.size();
     for(int i=0; i<num_towns; ++i){
+        Log(info, "Test");
         DeleteObjectID(towns[i].vis_id);
         int len=towns[i].goods_vis_id.size();
         for(int j=0; j<len; ++j){
+            Log(info, "Test");
             DeleteObjectID(towns[i].goods_vis_id[j]);
         }
     }
@@ -48,6 +50,7 @@ void Dispose(){
     
     int num_caravans = caravans.size();
     for(int i=0; i<num_caravans; ++i){
+        Log(info, "Test");
         DeleteObjectID(caravans[i].vis_id);
     }
     caravans.resize(0);

@@ -1,10 +1,9 @@
-uniform samplerCube tex2;
-
-varying vec3 normal;
-varying float opac;
+#version 150
+uniform mat4 mvp;
+in vec3 vert_attrib;
+out vec3 normal;
 
 void main() {    
-    normal = gl_Vertex.xyz;
-    opac = gl_Color.a;    
-    gl_Position = ftransform();
+    normal = vert_attrib.xyz;
+    gl_Position = mvp * vec4(vert_attrib, 1.0);
 } 

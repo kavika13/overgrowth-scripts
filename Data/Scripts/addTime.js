@@ -1,1 +1,0 @@
-timer.addTime(20);

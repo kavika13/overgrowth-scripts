@@ -1,14 +1,13 @@
-#extension GL_ARB_texture_rectangle : enable
+#version 150
 
-uniform sampler2D tex0;
-uniform sampler2DRect tex5;
-uniform float size;
+uniform mat4 mvp;
 
-void main()
-{    
-    gl_Position = ftransform();
-    
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-    
-    gl_FrontColor = gl_Color;
+in vec3 vertex_attrib;
+in vec2 tex_coord_attrib;
+
+out vec2 tex_coord;
+
+void main() {    
+    gl_Position = mvp * vec4(vertex_attrib, 1.0);    
+    tex_coord = tex_coord_attrib;    
 } 

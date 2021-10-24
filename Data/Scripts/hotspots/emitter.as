@@ -17,7 +17,7 @@ void Update() {
             offset.x += RangedRandomFloat(-scale.x*2.0f,scale.x*2.0f);
             offset.y += RangedRandomFloat(-scale.y*2.0f,scale.y*2.0f);
             offset.z += RangedRandomFloat(-scale.z*2.0f,scale.z*2.0f);
-            uint32 id = MakeParticle("Data/Particles/smoke_ambient.xml",pos + Mult(rotation, offset),vec3(0.0f),vec3(1.0f));
+            uint32 id = MakeParticle("Data/Particles/smoke_ambient.xml", pos + Mult(rotation, offset), vec3(0.0f), vec3(1.0f));
         }
         delay += frequency;
     }

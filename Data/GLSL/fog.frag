@@ -1,10 +1,14 @@
-uniform sampler2D tex0;
-uniform samplerCube tex3;
-uniform mat4 obj2world;
-uniform vec3 cam_pos;
+#version 150
 
-varying vec3 rel_pos;
+uniform sampler2D tex0; // fog band
+uniform samplerCube tex3; // skybox
+
+in vec3 rel_pos;
+in vec2 var_uv;
+
+out vec4 out_color;
 
 void main() {    
-    gl_FragColor = vec4(textureCubeLod(tex3,normalize(rel_pos), 5.0).xyz,texture2D(tex0,gl_TexCoord[0].xy).a);
+    out_color = vec4(textureLod(tex3,normalize(rel_pos), 5.0).xyz,
+                     texture(tex0,var_uv).a);
 }

@@ -1,28 +1,30 @@
-#include "object_shared.glsl"
-#include "object_frag.glsl"
+#include "object_shared150.glsl"
+#include "object_frag150.glsl"
+#include "lighting150.glsl"
 
 uniform samplerCube spec_cubemap;
 uniform vec4 emission;
 uniform vec3 cam_pos;
+uniform vec3 ws_light;
+uniform vec3 color_tint;
 
-varying vec3 normal;
-varying vec3 world_normal;
-VARYING_REL_POS
+in vec3 ws_vertex;
+in vec4 shadow_coords[4];
+in vec3 normal;
 
-#include "lighting.glsl"
+out vec4 out_color;
 
 void main()
 {    
-    float NdotL = GetDirectContrib(gl_LightSource[0].position.xyz, normal, 1.0);
+    float NdotL = GetDirectContrib(ws_light, normal, 1.0);
     vec3 color = GetDirectColor(NdotL);
 
-    color += textureCubeLod(spec_cubemap,world_normal,5.0).xyz * GetAmbientContrib(1.0);
+    color += textureLod(spec_cubemap, normal, 5.0).xyz * GetAmbientContrib(1.0);
     
     color *= BalanceAmbient(NdotL);
-    color *= gl_Color.xyz;
+    color *= color_tint;
     color += emission.xyz;
 
     CALC_HAZE
-    CALC_EXPOSURE
     CALC_FINAL
 }
