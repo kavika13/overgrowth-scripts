@@ -175,6 +175,10 @@ void Update() {
         
         camera.CalcFacing();
         camera.CalcUp();
+        
+        /*DebugText("camx","Camera X: "+co.position.x,0.5f);
+        DebugText("camy","Camera Y: "+co.position.y,0.5f);
+        DebugText("camz","Camera Z: "+co.position.z,0.5f);*/
 
         UpdateListener(co.position,vel,camera.GetFacing(),camera.GetUpVector());
     }

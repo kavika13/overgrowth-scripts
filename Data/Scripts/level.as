@@ -462,10 +462,7 @@ class ChallengeEndGUI {
     
     void CreateGUI() {
         gui_id = gui.AddGUI("text2","challengelevel/challenge.html",800,600, _GG_IGNORES_MOUSE);   
-        gui.Execute(gui_id,"addElement('', 'title', 'challenge complete')");
-        gui.Execute(gui_id,"addElement('', 'hr', '')");
-        gui.Execute(gui_id,"addElement('', 'spacer', '')");
-        gui.Execute(gui_id,"addElement('objectives', 'heading', 'objectives:')");
+        
         string mission_objective;
         string mission_objective_color;
         bool success = false;
@@ -490,9 +487,16 @@ class ChallengeEndGUI {
                 mission_objective += threats_possible;
                 mission_objective += ")";
             }
-            gui.Execute(gui_id,"addElement('', '"+mission_objective_color+
-                "', '"+mission_objective+"', 'objectives')");
         }
+        
+        string title = success?'challenge complete':'challenge incomplete';
+        gui.Execute(gui_id,"addElement('', 'title', '"+title+"')");
+        gui.Execute(gui_id,"addElement('', 'hr', '')");
+        gui.Execute(gui_id,"addElement('', 'spacer', '')");
+        gui.Execute(gui_id,"addElement('objectives', 'heading', 'objectives:')");
+        
+        gui.Execute(gui_id,"addElement('', '"+mission_objective_color+
+                "', '"+mission_objective+"', 'objectives')");
         gui.Execute(gui_id,"addElement('time', 'heading', 'time:')");
         string time_color;
         if(success){
@@ -656,9 +660,13 @@ class ChallengeEndGUI {
         {
             Reset(); 
         }
-        DrawButton("Data/Textures/ui/challenge_mode/continue_icon_c.tga",
-                   vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
-                   ui_scale, 2);
+        if(DrawButton("Data/Textures/ui/challenge_mode/continue_icon_c.tga",
+        //if(DrawButton("Data/Textures/ui/challenge_mode/fast_forward_icon.tga",
+                        vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
+                       ui_scale, 2))
+        {
+            target_visible = 0.0f;
+        }
     }
 }
 
@@ -849,9 +857,9 @@ void VictoryCheckNormal() {
                 }
                 if(failure){
                     gui.Execute(gui_id,"SetText(\"You were defeated.\")");
-                }
-                reset_allowed = false;*/
+                }*/
                 challenge_end_gui.target_visible = 1.0;
+                reset_allowed = false;
             }
             if(victory){
                 achievements.Save();
