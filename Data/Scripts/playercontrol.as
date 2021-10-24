@@ -88,7 +88,8 @@ void UpdateBrain(const Timestep &in ts){
                duck_amount > 0.5f && 
                on_ground && 
                !flip_info.IsFlipping() &&
-               GetThrowTarget() == -1)
+               GetThrowTarget() == -1 && 
+               target_rotation2 < -60.0f)
             {
                 drop_key_state = _dks_drop;
             } else {
@@ -97,10 +98,15 @@ void UpdateBrain(const Timestep &in ts){
         }
     } 
     
-    if(!GetInputDown(this_mo.controller_id, "item")){
+    int primary_weapon_id = weapon_slots[primary_weapon_slot];
+    string label = "";
+    if(primary_weapon_id != -1){
+        label = ReadItemID(weapon_slots[primary_weapon_slot]).GetLabel();
+    }
+    if(!GetInputDown(this_mo.controller_id, "item") || label == "spear" || label == "big_sword" || label == "staff"){
         item_key_state = _iks_nothing;
     } else if (item_key_state == _iks_nothing){
-        if(weapon_slots[primary_weapon_slot] == -1 ){
+        if(primary_weapon_id == -1 || (weapon_slots[_sheathed_left] != -1 && weapon_slots[_sheathed_right] != -1)){
             item_key_state = _iks_unsheathe;
         } else {//if(held_weapon != -1 && sheathed_weapon == -1){
             item_key_state = _iks_sheathe;
@@ -171,8 +177,15 @@ bool WantsToAttack() {
 }
 
 bool WantsToRollFromRagdoll(){
+    if(game_difficulty <= 0.5){
+        return true;
+    }
     if(!this_mo.controlled) return false;
     return GetInputPressed(this_mo.controller_id, "crouch");
+}
+
+void BrainSpeciesUpdate() {
+
 }
 
 bool ActiveDodging(int attacker_id) {
@@ -258,11 +271,20 @@ bool WantsToSheatheItem() {
 
 bool WantsToUnSheatheItem(int &out src) {
     if(!this_mo.controlled) return false;
-    if(item_key_state != _iks_unsheathe){ 
+    if(item_key_state != _iks_unsheathe && throw_weapon_time < time - 0.2){ 
         return false;
     }
     src = -1;
-    if(weapon_slots[_sheathed_right] != -1){
+    if(weapon_slots[_sheathed_left] != -1 && weapon_slots[_sheathed_right] != -1){
+        // If we have two weapons, draw better one
+        string label1 = ReadItemID(weapon_slots[_sheathed_left]).GetLabel();
+        string label2 = ReadItemID(weapon_slots[_sheathed_right]).GetLabel();
+        if((label1 == "sword" || label1 == "rapier") && label2 == "knife"){
+            src = _sheathed_left;
+        } else {
+            src = _sheathed_right;
+        }
+    } else if(weapon_slots[_sheathed_right] != -1){
         src = _sheathed_right;
     } else if(weapon_slots[_sheathed_left] != -1){
         src = _sheathed_left;
@@ -396,7 +418,7 @@ int GetLeftFootPlanted(){
 }
 
 int GetRightFootPlanted(){
-    Print("progress " + foot[1].progress + "\n");
+    Log(info, "progress " + foot[1].progress);
     if(foot[1].progress >= 1.0f){
         return 1;
     }else{

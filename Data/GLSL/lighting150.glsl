@@ -431,6 +431,11 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
         fog_opac += noise_3d(temp_cam_pos+dir*2.0)*0.1*min(1.0, max(0.0, dist-1.0));
         fog_opac += noise_3d(temp_cam_pos+dir*3.0)*0.1*min(1.0, max(0.0, (dist-2.0)*0.5));
         fog_opac += noise_3d(temp_cam_pos+dir*4.0)*0.1*min(1.0, max(0.0, (dist-4.0)*0.25));
+        #ifdef SKY_ARK // fade out noise as camera height increases
+        if(cam_pos.y > fog_height){
+            fog_opac *= 1.0 / ((cam_pos.y - fog_height)*0.2 + 1.0);
+        }
+        #endif
         //fog_opac *= min(1.0, max(0.0, 8/dist));
         #if defined(MISTY) || defined(DAMP_FOG) || defined(WATERFALL_ARENA)
         fog_opac = orig_fog_opac + fog_opac * 0.3;

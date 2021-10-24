@@ -52,6 +52,7 @@ uniform float far_blur_transition_size;
 
 uniform float saturation;
 uniform float motion_blur_mult;
+uniform float brightness;
 
 const float near = 0.1;
 const float far = 1000.0;
@@ -437,8 +438,12 @@ void main(void)
 #else
     color = textureLod( tex0, tex, 0.0 );
 #endif
-    
-
+#ifdef BRIGHTNESS
+    for(int i=0; i<3; ++i){
+        color[i] = pow(color[i], 1.7 - brightness * 0.7);
+    }
+#endif
+    // 0.2 to 1.8
     //vec2 buf = vec2(screen_width, screen_height);
     //color = FXAA(tex0, tex, buf);
 #endif

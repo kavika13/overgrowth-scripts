@@ -12,6 +12,7 @@ class Particle {
 
 int count = 0;
 int num_ribbons;
+float sound_start_time;
 
 class Ribbon : C_ACCEL {
     array<Particle> particles;
@@ -171,9 +172,13 @@ void PreDraw(float curr_game_time) {
         fire_object_id = CreateObject("Data/Objects/default_light.xml", true);
     }
     if(sound_handle == -1){
-        sound_handle = PlaySoundLoopAtLocation("Data/Sounds/fire/campfire_loop.wav",pos,1.0f);
+        if(!level.WaitingForInput()){
+            sound_handle = PlaySoundLoopAtLocation("Data/Sounds/fire/campfire_loop.wav",pos,0.0f);
+            sound_start_time = curr_game_time;
+        }
     } else {
         SetSoundPosition(sound_handle, pos);
+        SetSoundGain(sound_handle, min(1.0, curr_game_time - sound_start_time));
     }
 
     if(int(ribbons.size()) == num_ribbons){
@@ -223,4 +228,5 @@ void SetParameters() {
     params.AddInt("Fire Ribbons",4);
     params.AddIntCheckbox("Ignite Characters", true);
     num_ribbons = max(0, min(500, params.GetInt("Fire Ribbons")));
+    hotspot.SetCollisionEnabled(params.GetInt("Ignite Characters") == 1);
 }

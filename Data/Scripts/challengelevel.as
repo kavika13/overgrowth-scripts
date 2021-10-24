@@ -30,6 +30,17 @@ void Init(string p_level_name) {
     level_name = p_level_name;
 }
 
+SavedLevel@ GetSave() {
+    SavedLevel @saved_level;
+    if(save_file.GetLoadedVersion() == 1 && save_file.SaveExist("","",level_name)) {
+        @saved_level = save_file.GetSavedLevel(level_name);
+        saved_level.SetKey(GetCurrentLevelModsourceID(),"challenge_level",level_name);
+    } else {
+        @saved_level = save_file.GetSave(GetCurrentLevelModsourceID(),"challenge_level",level_name);
+    }
+    return saved_level; 
+}
+
 class Achievements {
     bool flawless_;
     bool no_first_strikes_;
@@ -66,7 +77,7 @@ class Achievements {
         //DebugText("achmt_damage1", "Impact damage: "+total_damage_, 0.5f);
         //DebugText("achmt_damage2", "Blood loss: "+total_blood_loss_, 0.5f);
 
-        SavedLevel @level = save_file.GetSavedLevel(level_name);
+        SavedLevel @level = GetSave();
         DebugText("saved_achmt0", "Saved Flawless: "+(level.GetValue("flawless")=="true"), 0.5f);
         DebugText("saved_achmt1", "Saved No Injuries: "+(level.GetValue("no_injuries")=="true"), 0.5f);
         DebugText("saved_achmt2", "Saved No Kills: "+(level.GetValue("no_kills")=="true"), 0.5f);
@@ -74,7 +85,7 @@ class Achievements {
         DebugText("saved_achmt4", "Saved Time: "+level.GetValue("time"), 0.5f);
     }
     void Save() {
-        SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
+        SavedLevel @saved_level = GetSave();
         if(flawless_) saved_level.SetValue("flawless","true");
         if(!injured_) saved_level.SetValue("no_injuries","true");
         if(no_kills_) saved_level.SetValue("no_kills","true");
@@ -402,7 +413,7 @@ class ChallengeEndGUI : AHGUI::GUI{
         AHGUI::Text time1Text = AHGUI::Text("  " + StringFromFloatTime(no_win_time),timefont);
         mainpane.addElement( time1Text, DDTop ); 
        
-        SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
+        SavedLevel @saved_level = GetSave();
         float best_time = atof(saved_level.GetValue("time"));
         if(best_time > 0.0f){
             AHGUI::Text time2Text = AHGUI::Text("  " + StringFromFloatTime(no_win_time),tealValueFont);
@@ -497,11 +508,13 @@ class ChallengeEndGUI : AHGUI::GUI{
         retryButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("retry"));
         buttonpane.addElement(retryButton,DDLeft);
 
-        AHGUI::Image continueButton = AHGUI::Image("Textures/ui/challenge_mode/continue_icon_c.tga");
-        continueButton.scaleToSizeX(250); 
-        continueButton.addMouseOverBehavior( buttonHover );
-        continueButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
-        buttonpane.addElement(continueButton,DDLeft);
+        if( success ) {
+            AHGUI::Image continueButton = AHGUI::Image("Textures/ui/challenge_mode/continue_icon_c.tga");
+            continueButton.scaleToSizeX(250); 
+            continueButton.addMouseOverBehavior( buttonHover );
+            continueButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
+            buttonpane.addElement(continueButton,DDLeft);
+        }
     }
 
     ~ChallengeEndGUI() {
@@ -524,6 +537,7 @@ class ChallengeEndGUI : AHGUI::GUI{
             level.SendMessage("reset"); 
         } else if( message.name == "continue" ) {
             target_visible = 0.0f;
+            SendGlobalMessage("levelwin");
         }
     }
 }

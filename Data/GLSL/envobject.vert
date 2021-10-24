@@ -554,6 +554,9 @@ void main() {
             float plant_shake = 0.0;
             vec3 vertex_offset = CalcVertexOffset(transformed_vertex, vertex_attrib.y*2.0, time, plant_shake);
             vertex_offset.y *= 0.2;
+            #ifdef LESS_PLANT_MOVEMENT
+                vertex_offset *= 0.1;
+            #endif
         #endif
 
         mat3 obj2worldmat3 = mat3(normalize(obj2world[0].xyz), 

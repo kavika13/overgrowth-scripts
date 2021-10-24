@@ -1,5 +1,6 @@
 #include "menu_common.as"
 #include "music_load.as"
+#include "mod_common.as"
 
 MusicLoad ml("Data/Music/menu.xml");
 
@@ -17,6 +18,7 @@ int last_shift_direction = 0;
 WorkshopWatcher workshopwatcher;
 
 FontSetup description_font("Cella", 27 , HexColor("#CCCCCC"), true);
+FontSetup description_error_font("Cella", 27 , HexColor("#FF9999"), true);
 
 class WaitingAnimation{
 	IMContainer@ parent;
@@ -141,7 +143,7 @@ Pulse@ ConstructFavoritePulse(IMContainer@ _parent, bool _fav, ModID _mod_id) {
 }
 
 void ResetModsList(){
-	current_mods = SortAlphabetically(GetModSids());
+	current_mods = SortAlphabetically(FilterCore(GetModSids()));
 }
 
 bool HasFocus() {
@@ -159,7 +161,7 @@ void Initialize() {
 	imGUI.setFooterPanels(500.0f, 500.0f);
     // Actually setup the GUI -- must do this before we do anything
     imGUI.setup();
-	current_mods = SortAlphabetically(GetModSids());
+	current_mods = SortAlphabetically(FilterCore(GetModSids()));
 	search.SetCollection(current_mods);
 	BuildUI();
 	setBackGround();
@@ -170,7 +172,7 @@ array<ModID> SortAlphabetically(array<ModID> input_mods){
 	for(uint i = 32; i <= 126; i++){
 		for(uint p = 0; p < input_mods.size(); p++){
             string modname = ModGetName(input_mods[p]);
-            if(modname.length() > 0 ) {
+            if( modname.length() > 0 ) {
                 uint first_letter = modname[0];
                 if(first_letter >= 65 && first_letter <= 90){
                     first_letter += 32;
@@ -178,13 +180,19 @@ array<ModID> SortAlphabetically(array<ModID> input_mods){
                 if(i == first_letter){
                     return_mods.insertLast(input_mods[p]);
                 }
-            } else {
-                if( i == 0 ) {
-                    return_mods.insertLast(input_mods[p]);
-                }
             }
 		}
 	}
+	return return_mods;
+}
+
+array<ModID> FilterCore(array<ModID> input_mods){
+	array<ModID> return_mods;
+    for(uint p = 0; p < input_mods.size(); p++){
+        if(ModIsCore(input_mods[p]) == false) {
+            return_mods.insertLast(input_mods[p]);
+        }
+    }
 	return return_mods;
 }
 
@@ -473,7 +481,6 @@ void AddModInspector(IMDivider@ parent, ModID mod_id, bool fadein, int index){
             vec4 active = vec4(1.0f,1.0f,1.0f,1.0f);
             vec4 not_active = vec4(0.3f,0.3f,0.3f,1.0f);
             UserVote vote = ModGetUserVote(mod_id);
-            Print("vote state " + vote + "\n");
             {
                 //Upvote
                 IMContainer vote_container(buttons_size.y + button_vert_offset, buttons_size.y + button_vert_offset);
@@ -664,9 +671,23 @@ void AddModInspector(IMDivider@ parent, ModID mod_id, bool fadein, int index){
 	description_divider.setZOrdering(5);
 	description_divider.appendSpacer(15.0f);
 
-	string description = ModGetDescription(mod_id);
-	
-	IMText@ current_line = IMText("", description_font);
+    string description;
+    FontSetup font;
+
+    if(ModCanActivate(mod_id)) {
+        description = ModGetDescription(mod_id);
+        font = description_font;
+    }else{
+        string collision_mod_name = GetModNameWithID(ModGetID(mod_id));
+        description = "Errors: " + ModGetValidityString(mod_id);
+        if( collision_mod_name.length() > 0 ) {
+            description = description + ". The active mod \"" + collision_mod_name + "\" has the same ID.";
+        }
+        font = description_error_font;
+    }
+
+    IMText@ current_line = @IMText("", font);
+
 	if(fadein){
 		current_line.addUpdateBehavior(IMFadeIn( fadein_time, inSineTween ), "");
 	}
@@ -690,7 +711,7 @@ void AddModInspector(IMDivider@ parent, ModID mod_id, bool fadein, int index){
 				break;
 			}
 			line_chars = 0;
-			IMText new_line("", description_font);
+			IMText new_line("", font);
 			if(fadein){
 				new_line.addUpdateBehavior(IMFadeIn( fadein_time, inSineTween ), "");
 			}
@@ -1157,92 +1178,117 @@ void UpdateWaitingAnims(){
 }
 
 class WorkshopWatcher{
-	IMDivider@ parent;
-	IMDivider@ download_count_divider;
-	IMDivider@ download_pending_divider;
-	IMDivider@ not_installed_divider;
-	uint count_downloads = 0;
-	uint pending_downloads = 0;
-	uint installed_downloads = 0;
+    IMDivider@ parent;
+    IMDivider@ download_count_divider;
+    IMDivider@ download_pending_divider;
+    IMDivider@ not_installed_divider;
+    IMDivider@ needs_update_divider;
+    IMDivider@ info1_div;
+    IMDivider@ info2_div;
 
-	void SetParent(IMDivider@ parent_){
-		@parent = @parent_;
-		count_downloads = 0;
-		pending_downloads = 0;
-		installed_downloads = 0;
-		
-		@download_count_divider = IMDivider("download_count");
-		@download_pending_divider = IMDivider("download_pending");
-		@not_installed_divider = IMDivider("download_installing");
-		
-		parent.append(download_count_divider);
-		parent.append(download_pending_divider);
-		parent.append(not_installed_divider);
-	}
-	void Update(){
-		uint not_installed = WorkshopSubscribedNotInstalledCount();
-		uint download_count = WorkshopDownloadingCount();
-		uint download_pending = WorkshopDownloadPendingCount();
-		
-		//Show nr of current mods downloading
-		if(download_count > 0){
-			if(download_count > count_downloads){
-				count_downloads++;
-				download_count_divider.clear();
-				IMText label("Downloading " + count_downloads + "...", button_font_small);
-				download_count_divider.append(label);
-			//Remove one current download if finished
-			}else if(download_count < count_downloads){
-				count_downloads--;
-				download_count_divider.clear();
-				//Leave it empty if no more downloads
-				if(download_count == 0){
-					return;
-				}
-				IMText label("Downloading " + count_downloads + "...", button_font_small);
-				download_count_divider.append(label);
-			}
-		}
-		//Show nr of current mods that are pending
-		if(download_pending > 0){
-			if(download_pending > pending_downloads){
-				pending_downloads++;
-				download_pending_divider.clear();
-				IMText label("Downloads pending " + pending_downloads + "...", button_font_small);
-				download_pending_divider.append(label);
-			//Remove one download pending
-			}else if(download_count < pending_downloads){
-				pending_downloads--;
-				download_pending_divider.clear();
-				//Leave it empty if no more downloads pending
-				if(download_count == 0){
-					return;
-				}
-				IMText label("Downloads pending " + pending_downloads + "...", button_font_small);
-				download_pending_divider.append(label);
-			}
-		}
-		//Show nr of current mods that are not yet installed
-		if(not_installed > 0){
-			if(not_installed > installed_downloads){
-				installed_downloads++;
-				not_installed_divider.clear();
-				IMText label("Not yet installed " + installed_downloads + "...", button_font_small);
-				not_installed_divider.append(label);
-			//Remove one mod yet to be installed
-			}else if(download_count < installed_downloads){
-				installed_downloads--;
-				not_installed_divider.clear();
-				//Leave it empty if no more yet to be installed
-				if(download_count == 0){
-					return;
-				}
-				IMText label("Not yet installed " + installed_downloads + "...", button_font_small);
-				not_installed_divider.append(label);
-			}
-		}
-	}
+    uint count_downloads = 0;
+    uint pending_downloads = 0;
+    uint not_installed_downloads = 0;
+    uint needs_update_downloads = 0;
+
+    uint update_reset_timer = 0;
+
+    float workshop_total_download_progress = 0.0f;
+    float workshop_prev_progress = 0.0f;
+    uint download_counter = 0;
+
+    void SetParent(IMDivider@ parent_){
+        @parent = @parent_;
+
+        @download_count_divider = IMDivider("download_count");
+        @download_pending_divider = IMDivider("download_pending");
+        @not_installed_divider = IMDivider("download_installing");
+        @needs_update_divider = IMDivider("needs_update");
+        @info1_div = IMDivider("info1");
+        @info2_div = IMDivider("info2");
+        
+        //parent.append(download_pending_divider);
+        //parent.append(not_installed_divider);
+        parent.append(needs_update_divider);
+        //parent.append(download_count_divider);
+        parent.append(info1_div);
+        parent.append(info2_div);
+    }
+
+    void Update() {
+        if( update_reset_timer == 0 ) {
+            count_downloads = WorkshopSubscribedNotInstalledCount();
+            pending_downloads = WorkshopDownloadingCount();
+            not_installed_downloads = WorkshopDownloadPendingCount();
+            needs_update_downloads = WorkshopNeedsUpdateCount();
+
+            if( count_downloads + pending_downloads + not_installed_downloads + needs_update_downloads > 0 ) {
+                update_reset_timer = 1000;
+            } else {
+                update_reset_timer = 10;
+                download_counter = 0;
+            }
+        } else {
+            update_reset_timer--;
+        }
+
+        /*
+        //Show nr of current mods that are pending
+        download_pending_divider.clear();
+        if(pending_downloads > 0){
+            IMText label("Pending download: " + pending_downloads, button_font_small);
+            download_pending_divider.append(label);
+        }
+
+        //Show nr of current mods that are not yet installed
+        not_installed_divider.clear();
+        if(not_installed_downloads > 0){
+            IMText label("Not yet installed: " + not_installed_downloads , button_font_small);
+            not_installed_divider.append(label);
+        }
+        */
+
+        needs_update_divider.clear();
+        if(needs_update_downloads > 0){
+            IMText label("Mods needing update: " + needs_update_downloads , button_font_small);
+            needs_update_divider.append(label);
+        }
+
+        /*
+        download_count_divider.clear();
+        if(count_downloads > 0){
+            IMText label("Downloading: " + count_downloads + "...", button_font_small);
+            download_count_divider.append(label);
+        }
+        */
+
+        info1_div.clear();
+        info2_div.clear();
+        if( count_downloads + pending_downloads + not_installed_downloads + needs_update_downloads > 0 ) {
+            workshop_total_download_progress = WorkshopTotalDownloadProgress();
+
+            IMText label("Progress: " + int(100 * workshop_total_download_progress) + "%", button_font_small);
+            info1_div.append(label);
+
+            if(workshop_prev_progress == workshop_total_download_progress) {
+                download_counter++;
+            } else {
+                download_counter = 0;
+            }
+
+            workshop_prev_progress = workshop_total_download_progress;
+
+            if( download_counter > 3000 ) {
+                IMText label2("Slow, Downloads Paused?", button_font_small);
+                info2_div.append(label2);
+            }
+        } else {
+            IMText label2("Up To Date", button_font_small);
+            info2_div.append(label2);
+        }
+    }
 }
+
 
 void Resize() {
     imGUI.doScreenResize(); // This must be called first
@@ -1258,7 +1304,7 @@ void ScriptReloaded() {
 }
 
 void ModActivationReload(){
-	Print("ModActivationReload!\n");
+	Log(info, "ModActivationReload!");
 
     imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
 }
@@ -1299,6 +1345,6 @@ class ModSearch : Search{
         		}
         	}
         }
-		collection = SortAlphabetically(results);
+		collection = SortAlphabetically(FilterCore(results));
 	}
 }

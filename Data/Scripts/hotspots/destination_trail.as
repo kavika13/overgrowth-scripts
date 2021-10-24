@@ -157,7 +157,7 @@ void CheckForNewPoints(){
 			if(placeholderParams.HasParam("belongsto")){
 				if(placeholderParams.GetString("belongsto") == ("" + hotspot.GetID())){
 					points.insertLast(placeholderIDs[o]);
-					Print("add at " + placeholderIDs[o] + "\n");
+					Log(info, "add at " + placeholderIDs[o]);
 				}
 			}
 		}
@@ -168,7 +168,7 @@ void CheckForDeletedPoints(){
 	for(uint i = 0; i < points.size(); i++){
 		if(!ObjectExists(points[i])){
 			points.removeAt(i);
-			Print("delete at " + i + "\n");
+			Log(info, "delete at " + i);
 			i--;
 		}
 	}

@@ -6,6 +6,7 @@ int sound_handle = -1;
 string playing_sound_path;
 bool one_shot = false;
 float sound_play_time = 0.0f;
+float wind_gain = 0.0;
 
 void Stop() {
     if(sound_handle != -1){
@@ -17,6 +18,7 @@ void Stop() {
 void SetParameters() {
     params.AddString("Sound Path","Data/Sounds/filename.wav");
     params.AddIntCheckbox("Global",true);
+    params.AddIntCheckbox("Wind Scale",false);
     params.AddFloat("Fade Distance",1.0f);
     if(params.GetFloat("Fade Distance") < 0.01f){
         params.SetFloat("Fade Distance", 0.01f);
@@ -37,7 +39,7 @@ void SetParameters() {
         is_xml = false;
     } else {
         for(int i=0; i<4; ++i){
-            Print("Comparing "+path[path.length()-i-1]+" to "+suffix[3-i]+"\n");
+            Log(info, "Comparing "+path[path.length()-i-1]+" to "+suffix[3-i]);
             if(path[path.length()-i-1] != suffix[3-i] && path[path.length()-i-1] != suffix_alternate[3-i]){
                 is_wav = false;
             }
@@ -48,17 +50,17 @@ void SetParameters() {
     }
     one_shot = false;
     if(is_wav && FileExists(path)){
-        Print("File exists: "+path+"\n");
+        Log(info, "File exists: "+path);
         if(playing_sound_path != path){
             Stop();
         }
         if(sound_handle == -1){
-            Print("playing sound\n");
+            Log(info, "playing sound");
             sound_handle = PlaySoundLoop(path, 0.0);
             playing_sound_path = path;
         }
     } else if(is_xml && FileExists(path)){
-        Print("File exists: "+path+"\n");
+        Log(info,"File exists: "+path);
         Stop();
         playing_sound_path = path;
         one_shot = true;
@@ -88,6 +90,16 @@ void OnEnter(MovementObject @mo) {
 void OnExit(MovementObject @mo) {
 }
 
+// From envobject.vert
+float WindShakeAmount (vec3 world_pos, float time) {
+    float wind_shake_amount = 1.0;
+    wind_shake_amount *= max(0.0,sin((world_pos.x+world_pos.y)+time*0.3));
+    wind_shake_amount *= sin((world_pos.x*0.1+world_pos.z)*0.3+time*0.6)+1.0;
+    wind_shake_amount = max(0.0f, wind_shake_amount);
+
+    return wind_shake_amount;
+}
+
 float GetGain() {
     if(params.GetInt("Global") == 1){
         return params.GetFloat("Gain");
@@ -105,8 +117,27 @@ float GetGain() {
 
 void PreDraw(float curr_game_time) {
     EnterTelemetryZone("Ambient Sound Update");
-    if(sound_handle != -1){
-        SetSoundGain(sound_handle, GetGain());
+    if(sound_handle != -1 && !level.WaitingForInput()){
+        if(params.GetInt("Wind Scale") == 1){
+            float avg_wind_shake_amount = 0.0;
+            for(int x = -1; x<=1; ++x){
+                for(int z = -1; z<=1; ++z){
+                    vec3 test_pos =  camera.GetPos()+normalize(vec3(x,0,z))*3.0;
+                    float amount = WindShakeAmount(test_pos, the_time);
+                    //DebugDrawWireSphere(test_pos, 1.0, vec3(amount), _delete_on_draw);
+                    if(x==0 && z==0){
+                        avg_wind_shake_amount += amount * 3.0f;
+                    } else {
+                        avg_wind_shake_amount += amount;
+                    }
+                }
+            }
+            avg_wind_shake_amount /= 12.0;
+            wind_gain = mix(avg_wind_shake_amount, wind_gain, 0.99);
+            SetSoundGain(sound_handle, GetGain() * max(0.4, min(1.0, wind_gain*3.0)));
+        } else {
+            SetSoundGain(sound_handle, GetGain());
+        }
     }
     if(one_shot){
         if(sound_play_time < the_time){

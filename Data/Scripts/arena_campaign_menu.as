@@ -15,50 +15,27 @@ const int rows_per_screen = 3;
 string this_campaign_name = "custom_campaign";
 
 array<LevelInfo@> level_list;
-bool is_linear;
 
 void LoadModCampaign() {
-    string modid = GetInterlevelData("current_mod_campaign");
-    this_campaign_name = modid;
+    string campaign_id = GetCurrCampaignID();
+    this_campaign_name = campaign_id;
     level_list.removeRange(0, level_list.length());
-    array<ModID>@ active_sids = GetActiveModSids();
-    for( uint i = 0; i < active_sids.length(); i++ ) {
-        if( ModGetID(active_sids[i]) == modid ) {
-            array<ModLevel>@ campaign_levels = ModGetCampaignLevels(active_sids[i]);
-			Campaign c = ModGetCampaign(active_sids[i]);
-			is_linear = c.IsLinear();
-            for( uint k = 0; k < campaign_levels.length(); k++ ) {
-                level_list.insertLast(LevelInfo(
-                    campaign_levels[k].GetPath(),
-                    campaign_levels[k].GetTitle(),
-                    campaign_levels[k].GetThumbnail()));
-            }
-        }
+    Log(info, campaign_id);
+    Campaign c = GetCampaign(campaign_id);
+
+    array<ModLevel>@ campaign_levels = c.GetLevels();
+
+    Log( info, "size: " + campaign_levels.length());
+    for( uint k = 0; k < campaign_levels.length(); k++ ) {
+        level_list.insertLast(LevelInfo(campaign_levels[k]));
     }
 }
 
 string GetModTitle() {
-    string modid = GetInterlevelData("current_mod_campaign");
-    array<ModID>@ active_sids = GetActiveModSids();
-    for( uint i = 0; i < active_sids.length(); i++ ) {
-        if( ModGetID(active_sids[i]) == modid ) {
-            Campaign c = ModGetCampaign(active_sids[i]);
-            return c.GetTitle();
-        }
-    }
-    return "";
-}
-
-bool GetModIsLinear() {
-    string modid = GetInterlevelData("current_mod_campaign");
-    array<ModID>@ active_sids = GetActiveModSids();
-    for( uint i = 0; i < active_sids.length(); i++ ) {
-        if( ModGetID(active_sids[i]) == modid ) {
-            Campaign c = ModGetCampaign(active_sids[i]);
-            return c.IsLinear();
-        }
-    }
-    return true;
+    string campaign_id = GetCurrCampaignID();
+    this_campaign_name = campaign_id;
+    Campaign c = GetCampaign(campaign_id);
+    return c.GetTitle();
 }
 
 void Initialize() {
@@ -93,8 +70,7 @@ void BuildUI(){
     }
     IMDivider mainDiv( "mainDiv", DOHorizontal );
     mainDiv.setAlignment(CACenter, CACenter);
-    bool is_linear = GetModIsLinear();
-    CreateMenu(mainDiv, level_list, this_campaign_name, initial_offset, item_per_screen, rows_per_screen, is_linear, is_linear);
+    CreateMenu(mainDiv, level_list, this_campaign_name, initial_offset, item_per_screen, rows_per_screen, false, false);
     // Add it to the main panel of the GUI
     imGUI.getMain().setElement( @mainDiv );
 	IMDivider header_divider( "header_div", DOHorizontal );
@@ -125,7 +101,6 @@ void Update() {
         }
         else if( message.name == "run_file" ) 
         {
-            SetInterlevelData("current_level", "Data/Levels/" + message.getString(0));
             this_ui.SendCallback(message.getString(0));
         }
         else if( message.name == "shift_menu" ){

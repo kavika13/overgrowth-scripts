@@ -33,14 +33,12 @@ class BattleEntitySpawn {
         // If we have a valid object id, free it
         // Start with any attached objects
         if( attachedObjectId != -1 ) {
-            Print("Deleting attached object: " + attachedObjectId + "\n" );
-            Log(info, "Test");
+            Log(info, "Deleting attached object: " + attachedObjectId  );
             DeleteObjectID( attachedObjectId );
         }
         // Now the object itself
         if( spawnedObjectId != -1 ) {
-            Print("Deleting object: " + spawnedObjectId + "\n" );
-            Log(info, "Test");
+            Log(info, "Deleting object: " + spawnedObjectId );
             DeleteObjectID( spawnedObjectId );
         }
     }

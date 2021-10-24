@@ -126,7 +126,7 @@ void Update(){
                         curVictim.char.velocity.y *= pow(0.97f, in_water);
                     }
 
-                    Print("depth " + charDepth + "\n");
+                    Log(info, "depth " + charDepth);
                     if(speed > 80.0f && charPos.y < hotspotTop.y && charDepth > 0.25f){
                         curVictim.char.Execute("GoLimp();");
                     }

@@ -143,8 +143,7 @@ void SwitchSettingsScreen(string screen_name){
 void AddGraphicsScreen(){
 	current_screen = "Graphics";
 
-	array<string> overall_settings = {"Custom", "Low", "Medium", "High"};
-	string overall = GetConfigValueString("overall");
+	array<string> overall_settings = GetConfigValueOptions("overall");
 	AddDropDown("Overall", settings_content, DropdownConfiguration(overall_settings, overall_settings, "overall"));
 	
 	array<vec2> possible_resolutions = GetPossibleResolutions();
@@ -155,7 +154,9 @@ void AddGraphicsScreen(){
 	array<string> config_names = {"screenwidth", "screenheight"};
 	AddDropDown("Resolution", settings_content, DropdownConfiguration(possible_resolutions, resolutions, config_names ));
 	
-	AddCheckBox("Fullscreen", settings_content, "fullscreen");
+	array<int> window_type_values = { 0, 1, 2 };
+	array<string> window_type_options = { "Windowed", "Fullscreen", "Borderless"};
+	AddDropDown("Window mode", settings_content, DropdownConfiguration(window_type_values, window_type_options, "fullscreen"));
 
 	array<int> aa_values = { 1, 2, 4, 8 };
 	array<string> aa_options = {"none", "2X", "4X", "8X"};
@@ -173,6 +174,7 @@ void AddGraphicsScreen(){
 	
 	AddCheckBox("VSync", settings_content, "vsync");
 	AddCheckBox("Simple Shadows", settings_content, "simple_shadows");
+	AddCheckBox("Simple Water", settings_content, "simple_water");
 	//AddCheckBox("Use tet mesh lighting", settings_content, "tet_mesh_lighting");
 	//AddCheckBox("Use ambient light volumes", settings_content, "light_volume_lighting");
 	AddCheckBox("GPU Particle Field", settings_content, "particle_field");
@@ -181,6 +183,7 @@ void AddGraphicsScreen(){
 	AddCheckBox("No reflection capture", settings_content, "no_reflection_capture");
 	
 	AddSlider("Motion Blur", settings_content, "motion_blur_amount", 1.0f);
+	AddSlider("Brightness", settings_content, "brightness", 2.0f, 200.0f);
 }
 
 void AddAudioScreen(){
@@ -192,10 +195,16 @@ void AddAudioScreen(){
 
 void AddGameScreen(){
 	current_screen = "Game";
+
+    array<string> difficulty_options = GetConfigValueOptions("difficulty_preset");
+	AddDropDown("Difficulty Preset", settings_content, DropdownConfiguration( difficulty_options, difficulty_options, "difficulty_preset" ));
+
+	AddSlider("Game Speed", settings_content, "global_time_scale_mult", 1.0f, 100.0f, 0.5f);
+	AddSlider("Game Difficulty", settings_content, "game_difficulty", 1.0f);
+	AddCheckBox("Tutorials", settings_content, "tutorials");
 	
 	array<int> blood_amount_values = { 0, 1, 2};
 	array<string> blood_amount_options = {"None", "No dripping", "Full"};
-	
 	AddDropDown("Blood Amount", settings_content, DropdownConfiguration( blood_amount_values, blood_amount_options, "blood" ));
 	
 	array<string> blood_color_values = {"0.4 0 0", "0 0.4 0", "0 0.4 0.4", "0.1 0.1 0.1"};
@@ -224,6 +233,7 @@ void AddInputScreen(){
 	AddKeyRebind("Slow Motion", settings_content, "key", "slow");
 	AddKeyRebind("Equip/sheathe item", settings_content, "key", "item");
 	AddKeyRebind("Throw/pick-up item", settings_content, "key", "drop");
+	AddKeyRebind("Skip dialogue", settings_content, "key", "skip_dialogue");
 	
 	AddBasicButton("Reset to defaults", "reset_bindings", 400, settings_content);
 }
@@ -278,7 +288,7 @@ void ProcessSettingsMessage(IMMessage@ message){
 		RefreshAllOptions();
 	}
 	else if( message.name == "back" ){
-		Print("Received back message \n");
+		Log(info,"Received back message");
 		if(OptionMenuOpen()){
 			CloseAllOptionMenus();
 		}else{
@@ -303,7 +313,7 @@ void UpdateKeyRebinding(){
 			if( last_pressed.s_id != uint16(initial_sequence_id) ) {
 				//If pressed esc then do nothing.
 				if(last_pressed.keycode == 27){
-					Print("Skipping key rebinding because esc.\n");
+					Log(info,"Skipping key rebinding because esc.");
 				}else{
 					gui_elements[active_rebind].SwitchOption(last_pressed.scancode);
 				}

@@ -296,7 +296,7 @@ array<float> target_leg_length;
 vec3 push_velocity;
 
 void CacheSkeletonInfo() {
-    Print("Caching skeleton info\n");
+    Log(info, "Caching skeleton info");
     RiggedObject@ rigged_object = this_mo.rigged_object();
     Skeleton@ skeleton = rigged_object.skeleton();
     int num_bones = skeleton.NumBones();

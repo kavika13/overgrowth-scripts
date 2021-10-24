@@ -8,7 +8,7 @@ void HandleEvent(string event, MovementObject @mo){
 }
 
 void OnEnter(MovementObject @mo) {
-    Print("Entered\n");
+    Log(info, "Entered");
     float latest_time = -1.0f;
     int best_obj = -1;
     array<int> @object_ids = GetObjectIDsType(_hotspot_object);
@@ -16,14 +16,14 @@ void OnEnter(MovementObject @mo) {
         Object@ obj = ReadObjectFromID(object_ids[i]);
         ScriptParams@ params = obj.GetScriptParams();
         if(params.HasParam("LastEnteredTime")){
-            Print("Found hotspot\n");
+            Log(info, "Found hotspot");
             float curr_time = params.GetFloat("LastEnteredTime");
             if(curr_time > latest_time){
-                Print("Best time: " + curr_time + "\n");
+                Log(info, "Best time: " + curr_time);
                 best_obj = object_ids[i];
                 latest_time = curr_time;
             } else {
-                Print("Bad time: " + curr_time + "\n");                
+                Log(info, "Bad time: " + curr_time);                
             }
         }
     }

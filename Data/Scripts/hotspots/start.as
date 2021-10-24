@@ -1,5 +1,5 @@
 void Init() {
-    Print("Initializing start.as hotspot\n");
+    Log(info, "Initializing start.as hotspot");
 }
 
 void SetParameters() {
@@ -7,7 +7,7 @@ void SetParameters() {
 }
 
 void HandleEvent(string event, MovementObject @mo){
-    Print("Handling event: "+event+"\n");  
+    Log(info, "Handling event: "+event);  
     if(event == "enter"){
         OnEnter(mo);
     } else if(event == "exit"){
@@ -16,7 +16,7 @@ void HandleEvent(string event, MovementObject @mo){
 }
 
 void OnEnter(MovementObject @mo) {
-    Print("Entering start.as hotspot\n");
+    Log(info, "Entering start.as hotspot");
     if(mo.controlled) {
         level.SendMessage("displaytext \"Display Text\"");
     }

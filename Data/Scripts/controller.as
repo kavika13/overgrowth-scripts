@@ -199,7 +199,7 @@ void UpdateItemPositions(){
 void PrintPositions(){
 	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
 		//Print("Position " + controller_items[i].position.x + " " + current_controller_items[i].position.y + "\n");
-		Print("default size " + GetCurrentControllerItems()[i].element.getSize().x + "\n" );
+		Log(info,"default size " + GetCurrentControllerItems()[i].element.getSize().x);
 	}
 }
 

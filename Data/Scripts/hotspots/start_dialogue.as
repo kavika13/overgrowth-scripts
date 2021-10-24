@@ -1,4 +1,6 @@
 bool played;
+float visible_amount = 0.0;
+float last_game_time = 0.0f;
 
 void Reset() {
     played = false;
@@ -14,7 +16,9 @@ void Init() {
 void SetParameters() {
     params.AddString("Dialogue", "Default text");
     params.AddIntCheckbox("Automatic", true);
+    params.AddIntCheckbox("Fade", true);
     params.AddIntCheckbox("Visible in game", true);
+    params.AddString("Color", "1.0 1.0 1.0");
 }
 
 void ReceiveMessage(string msg){
@@ -61,7 +65,11 @@ void TryToPlayDialogue() {
             }
         }
         if(player_in_valid_state){
-            level.SendMessage("start_dialogue \""+params.GetString("Dialogue")+"\"");
+            if(!params.HasParam("Fade") || params.GetInt("Fade") == 1){
+                level.SendMessage("start_dialogue_fade \""+params.GetString("Dialogue")+"\"");
+            } else {
+                level.SendMessage("start_dialogue \""+params.GetString("Dialogue")+"\"");                
+            }
             played = true;
         }
     }
@@ -85,28 +93,42 @@ void Draw() {
                            vec4(1.0f),
                            _delete_on_draw);
     }
-    if(!played && level.QueryIntFunction("int HasCameraControl()") == 0){
+    if(visible_amount > 0.0){
+        vec3 color(1.0);
+        if(params.HasParam("Color")){
+            TokenIterator token_iter;
+            token_iter.Init();
+            string str = params.GetString("Color");
+            token_iter.FindNextToken(str);
+            color[0] = atof(token_iter.GetToken(str));
+            if(token_iter.FindNextToken(str)){
+                color[1] = atof(token_iter.GetToken(str));
+                if(token_iter.FindNextToken(str)){
+                    color[2] = atof(token_iter.GetToken(str));
+                }
+            }
+        }
+        vec3 offset;
+        if(params.HasParam("Offset")){
+            offset = vec3(0.4, 0.0, -0.4);
+        }
         if(params.HasParam("Exclamation Character")){
             int id = params.GetInt("Exclamation Character");
             if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                DebugDrawBillboard("Data/Textures/ui/stealth_debug/exclamation.tga",
-                            ReadCharacterID(id).position + vec3(0.0, 1.6, 0.0),
-                                1.0f,
-                                vec4(vec3(1.0f), 1.0f),
+                DebugDrawBillboard("Data/Textures/ui/stealth_debug/exclamation_themed.png",
+                            ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
+                                1.0f+sin(the_time*3.0)*0.05,
+                                vec4(color, visible_amount),
                               _delete_on_draw);
             }
         }
         if(params.HasParam("Question Character")){
             int id = params.GetInt("Question Character");
             if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                vec3 offset;
-                if(params.HasParam("Offset")){
-                    offset = vec3(0.4, 0.0, -0.4);
-                }
-                DebugDrawBillboard("Data/Textures/ui/stealth_debug/question.tga",
-                            ReadCharacterID(id).position + vec3(0, 1.6, 0) + offset,
-                                1.0f,
-                                vec4(vec3(1.0f), 1.0f),
+                DebugDrawBillboard("Data/Textures/ui/stealth_debug/question_themed.png",
+                            ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
+                                1.0f+sin(the_time*3.0)*0.05,
+                                vec4(color, visible_amount),
                               _delete_on_draw);
             }
         }
@@ -129,5 +151,18 @@ void PreDraw(float curr_game_time) {
             }
         }        
     }
+
+    if(params.HasParam("Exclamation Character") || params.HasParam("Question Character")){
+        const float kFadeSpeed = 2.0;
+        float offset = (curr_game_time-last_game_time) * kFadeSpeed;
+        if(!played && level.QueryIntFunction("int HasCameraControl()") == 0){
+            visible_amount = min(visible_amount+offset, 1.0);
+        } else {
+            visible_amount = max(visible_amount-offset, 0.0);
+        }
+    }
+
+    last_game_time = curr_game_time;
+
     LeaveTelemetryZone();
 }

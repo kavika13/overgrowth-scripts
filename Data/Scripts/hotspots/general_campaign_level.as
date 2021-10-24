@@ -3,15 +3,14 @@
 string campaign_name = "my_simple_campaign";
 string current_level_path;
 array<string> level_list;
-bool is_linear;
 
 void SetParameters() {
 	params.AddString("next_level", "");
 }
 
 void Init() {
-    campaign_name = GetInterlevelData("current_mod_campaign");
-    current_level_path = GetInterlevelData("current_level");
+    campaign_name = GetCurrCampaignID();
+    current_level_path = GetCurrLevelRelPath();
     if(campaign_name == ""){
         Log(error, "Did not find an active campaign!");
     }else{
@@ -30,7 +29,6 @@ void LoadModCampaign() {
         if( ModGetID(active_sids[i]) == campaign_name ) {
             array<ModLevel>@ campaign_levels = ModGetCampaignLevels(active_sids[i]);
 			Campaign c = ModGetCampaign(active_sids[i]);
-			is_linear = c.IsLinear();
             for( uint k = 0; k < campaign_levels.length(); k++ ) {
                 level_list.insertLast(campaign_levels[k].GetPath());
             }
@@ -72,7 +70,6 @@ void ReceiveMessage(string msg) {
             if(path != ""){
                 FinishedGeneralCampaignLevel(current_level_path);
                 level.SendMessage("loadlevel \""+path+"\"");
-                SetInterlevelData("current_level", path);
             } else {
                 level.SendMessage("go_to_main_menu");		
             }

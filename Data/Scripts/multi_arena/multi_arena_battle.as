@@ -143,7 +143,7 @@ class BattleInstance {
     }   
 
     void initialize( string _gamemode, JSONValue battleParams ) {
-        Print("Starting initialize battle\n");
+        Log(info,"Starting initialize battle");
 
         JSONValue newTeams = battleParams["teams"];
         JSONValue newItems = battleParams["items"];
@@ -534,7 +534,7 @@ class BattleInstance {
             }
         }
 
-        Print("weaponSpawn.entityPath: " + weaponSpawn.entityPath + "\n" );
+        Log(info, "weaponSpawn.entityPath: " + weaponSpawn.entityPath);
 
         // Finally, store the weapon
         weaponsInUse = true;

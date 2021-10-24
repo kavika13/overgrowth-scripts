@@ -1,10 +1,4 @@
-bool visited = false;
-
 void Init() {
-}
-
-void Reset() {
-    visited = false;
 }
 
 void SetParameters() {
@@ -20,14 +14,9 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
-        visited = true;
-        Log(info,"Visited!");
+       SendGlobalMessage("levelwin");
     }
 }
 
 void OnExit(MovementObject @mo) {
-}
-
-string GetTypeString() {
-    return "must_visit_trigger";
 }

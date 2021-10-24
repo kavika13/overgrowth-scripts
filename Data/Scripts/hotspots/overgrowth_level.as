@@ -1,5 +1,4 @@
 #include "threatcheck.as"
-#include "lugaru_campaign.as"
 
 int progress = 0;
 bool queued_goal_check = true;
@@ -84,18 +83,33 @@ void Dispose() {
     level.StopReceivingLevelEvents(hotspot.GetID());
 }
 
-void TriggerGoalString(const string &in goal_str){
-    Print("Triggering goal string: "+goal_str+"\n");
+enum GoalTriggerType {_sting_only, _all_but_sting};
+
+void TriggerGoalString(const string &in goal_str, GoalTriggerType type){
+    Log(info, "Triggering goal string: "+goal_str);
     TokenIterator token_iter;
     token_iter.Init();
     while(token_iter.FindNextToken(goal_str)){
         if(token_iter.GetToken(goal_str) == "dialogue" && !EditorModeActive()){
-            if(token_iter.FindNextToken(goal_str)){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
                 level.SendMessage("start_dialogue \""+token_iter.GetToken(goal_str)+"\"");
             }
         }
+        if(token_iter.GetToken(goal_str) == "dialogue_fade" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
+                level.SendMessage("start_dialogue_fade \""+token_iter.GetToken(goal_str)+"\"");
+            }
+        }
+        if(token_iter.GetToken(goal_str) == "dialogue_fade_if_not_hostile" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
+                int player_id = GetPlayerCharacterID();
+                if(player_id != -1 && ReadCharacter(player_id).QueryIntFunction("int CombatSong()") != 1){
+                    level.SendMessage("start_dialogue_fade \""+token_iter.GetToken(goal_str)+"\"");
+                }
+            }
+        }
         if(token_iter.GetToken(goal_str) == "activate" && !EditorModeActive()){
-            if(token_iter.FindNextToken(goal_str)){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
                 int id = atoi(token_iter.GetToken(goal_str));
                 if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
                     ReadCharacterID(id).Execute("static_char = false;");
@@ -105,10 +119,32 @@ void TriggerGoalString(const string &in goal_str){
                 }
             }
         }
+        if(token_iter.GetToken(goal_str) == "disable" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
+                int id = atoi(token_iter.GetToken(goal_str));
+                if(ObjectExists(id)){
+                    Print("Disabling object "+id+"\n");
+                    ReadObjectFromID(id).SetEnabled(false);
+                }
+            }
+        }
+        if(token_iter.GetToken(goal_str) == "enable" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
+                int id = atoi(token_iter.GetToken(goal_str));
+                if(ObjectExists(id)){
+                    ReadObjectFromID(id).SetEnabled(true);
+                }
+            }
+        }
         if(token_iter.GetToken(goal_str) == "music_layer_override" && !EditorModeActive()){
-            if(token_iter.FindNextToken(goal_str)){
+            if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
                 int id = atoi(token_iter.GetToken(goal_str));
                 music_layer_override = id;
+            }
+        }
+        if(token_iter.GetToken(goal_str) == "play_success_sting" && !EditorModeActive()){
+            if(type == _sting_only){
+                PlaySuccessSting();
             }
         }
     }    
@@ -116,15 +152,15 @@ void TriggerGoalString(const string &in goal_str){
 
 void TriggerGoalPre() {
     if(params.HasParam("goal_"+progress+"_pre")){
-        Print("Triggering "+"goal_"+progress+"_pre"+"\n");
-        TriggerGoalString(params.GetString("goal_"+progress+"_pre"));
+        Log(info, "Triggering "+"goal_"+progress+"_pre");
+        TriggerGoalString(params.GetString("goal_"+progress+"_pre"), _all_but_sting);
     }
 }
 
-void TriggerGoalPost() {
+void TriggerGoalPost(GoalTriggerType type) {
     if(params.HasParam("goal_"+progress+"_post")){
-        Print("Triggering "+"goal_"+progress+"_post"+"\n");
-        TriggerGoalString(params.GetString("goal_"+progress+"_post"));
+        Log(info, "Triggering "+"goal_"+progress+"_post");
+        TriggerGoalString(params.GetString("goal_"+progress+"_post"), type);
     }
 }
 
@@ -152,8 +188,8 @@ void PlayDeathSting() {
 
 void IncrementProgress() {
     EnterTelemetryZone("IncrementProgress()");
-    Print("IncrementProgress: "+progress+" to "+(progress+1)+"\n");
-    TriggerGoalPost();
+    Log(info, "IncrementProgress: "+progress+" to "+(progress+1));
+    TriggerGoalPost(_all_but_sting);
     ++progress;
     win_time = -1.0;
 
@@ -166,15 +202,18 @@ void IncrementProgress() {
         if(token_iter.FindNextToken(goal_str)){
             if(token_iter.GetToken(goal_str) == "spawn_defeat"){
                 while(token_iter.FindNextToken(goal_str)){
-                    int id = atoi(token_iter.GetToken(goal_str));
-                    if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                        SetEnabledCharacterAndItems(id, true);
+                     string token = token_iter.GetToken(goal_str);
+                    if(token == "no_delay"){
+                    } else {
+                        int id = atoi(token_iter.GetToken(goal_str));
+                        if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                            SetEnabledCharacterAndItems(id, true);
+                        }
                     }
                 }
             }
         }
     }
-
 
     // Place player character at correct spawn point
     int player_id = GetPlayerCharacterID();
@@ -185,6 +224,11 @@ void IncrementProgress() {
         LeaveTelemetryZone();
     }
     LeaveTelemetryZone();
+
+    // Check if enemies are already defeated
+     if(win_time == -1.0){
+        PossibleWinEvent("character_defeated", -1, progress);
+    }
 }
 
 void SetEnabledCharacterAndItems(int id, bool enabled){
@@ -232,16 +276,20 @@ void CheckReset() {
 
     // Disable all defeated characters
     for(int i=0; i<progress; ++i){
-        Print("Iterating through completed goal: "+i+"\n");
+        Log(info, "Iterating through completed goal: "+i);
         if(params.HasParam("goal_"+i)){
             string goal_str = params.GetString("goal_"+i);
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
                 if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat" || token_iter.GetToken(goal_str) == "defeat_optional"){
                     while(token_iter.FindNextToken(goal_str) && token_iter.GetToken(goal_str) != ""){
-                        int id = atoi(token_iter.GetToken(goal_str));
-                        if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                            SetEnabledCharacterAndItems(id, false);
+                        string token = token_iter.GetToken(goal_str);
+                        if(token == "no_delay"){
+                        } else {
+                            int id = atoi(token_iter.GetToken(goal_str));
+                            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                                SetEnabledCharacterAndItems(id, false);
+                            }
                         }
                     }
                 }
@@ -251,18 +299,22 @@ void CheckReset() {
 
     // Disable all characters that have not been spawned yet
     for(int i=progress+1; params.HasParam("goal_"+i); ++i){
-        Print("Iterating through future goals: "+i+"\n");
+        Log(info, "Iterating through future goals: "+i);
         if(params.HasParam("goal_"+i)){
             string goal_str = params.GetString("goal_"+i);
-            Print("Goal_str: "+goal_str+"\n");
+            Log(info, "Goal_str: "+goal_str);
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
                 if(token_iter.GetToken(goal_str) == "spawn_defeat"){
                     while(token_iter.FindNextToken(goal_str)){
-                        int id = atoi(token_iter.GetToken(goal_str));
-                        if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                            Print("Disabling: "+id+"\n");
-                            SetEnabledCharacterAndItems(id, false);
+                         string token = token_iter.GetToken(goal_str);
+                        if(token == "no_delay"){
+                        } else {
+                            int id = atoi(token_iter.GetToken(goal_str));
+                            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                                Log(info, "Disabling: "+id);
+                                SetEnabledCharacterAndItems(id, false);
+                            }
                         }
                     }
                 }
@@ -301,52 +353,69 @@ void CheckReset() {
     LeaveTelemetryZone();
 }
 
-void PossibleWinEvent(const string &in event, int val, int goal_check){
+
+void PossibleWinEvent(const string &in event, int val, int goal_check, int recursion = 0){
+    if(ko_time != -1.0){
+        return;
+    }
+    Log(info, "PossibleWinEvent("+event+", "+val+", "+goal_check+", " + recursion + ")");
+    if( recursion > 5000 ) {
+        Log( error, "we have recursed over 5000 times, will break" );
+        return;
+    }
     if(event == "checkpoint"){
-        Print("Player entered checkpoint: "+val+"\n");
+        Log(info, "Player entered checkpoint: "+val);
         if(params.HasParam("goal_"+goal_check)){
             string goal_str = params.GetString("goal_"+goal_check);
-            Print("Looking at goal: "+goal_str+"\n");
+            Log(info, "Looking at goal: "+goal_str);
             TokenIterator token_iter;
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
                 string goal_type = token_iter.GetToken(goal_str);
-                Print("goal_type: "+goal_type+"\n");
+                Log(info, "goal_type: "+goal_type);
                 if(goal_type == "reach" || goal_type == "reach_skippable"){
                     if(token_iter.FindNextToken(goal_str)){
                         int id = atoi(token_iter.GetToken(goal_str));
-                        Print("id: "+id+"\n");
+                        Log(info, "id: "+id);
                         if(id == val){
                             win_time = the_time + 1.0;
+                            TriggerGoalPost(_sting_only);
                             win_target = goal_check+1;
                         } else if(goal_type == "reach_skippable") {
-                            Print("Checking next\n");
-                            PossibleWinEvent(event, val, goal_check+1);
+                            Log(info, "Checking next");
+                            PossibleWinEvent(event, val, goal_check+1, recursion+1);
                         }
                     }
                 }
                 if(goal_type == "defeat_optional"){
-                    PossibleWinEvent(event, val, goal_check+1);
+                    PossibleWinEvent(event, val, goal_check+1,recursion+1);
                 }
             }
         }
     } else if(event == "character_defeated"){
-        Print("Character defeated, checking goal\n");
+        Log(info, "Character defeated, checking goal");
         if(params.HasParam("goal_"+goal_check)){
             string goal_str = params.GetString("goal_"+goal_check);
-            Print("Goal_str: "+goal_str+"\n");
+            Log(info, "Goal_str: "+goal_str);
             TokenIterator token_iter;
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
-                if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat" || token_iter.GetToken(goal_str) == "defeat_optional"){
-                    Print("Checking defeat conditions\n");
+                string goal_type = token_iter.GetToken(goal_str);
+                if(goal_type == "defeat" || goal_type == "spawn_defeat" || goal_type == "defeat_optional"){
+                    Log(info, "Checking defeat conditions");
                     bool success = true;
+                    bool no_delay = false;
                     while(token_iter.FindNextToken(goal_str) && token_iter.GetToken(goal_str) != ""){
-                        Print("Looking at token \""+token_iter.GetToken(goal_str)+"\"\n");
-                        int id = atoi(token_iter.GetToken(goal_str));
-                        if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object && ReadCharacterID(id).GetIntVar("knocked_out") == _awake){
-                            success = false;
-                            Print("Conditions failed, "+id+" is awake\n");
+                        string token = token_iter.GetToken(goal_str);
+                        if(token == "no_delay"){
+                            no_delay = true;
+                        } else {
+                            Log(info, "Looking at token \""+token_iter.GetToken(goal_str)+"\"");
+                            int id = atoi(token_iter.GetToken(goal_str));
+                            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object && ReadCharacterID(id).GetIntVar("knocked_out") == _awake){
+                                success = false;
+                                Log(info, "Conditions failed, "+id+" is awake");
+                            }
                         }
                     }
                     if(success){
@@ -354,13 +423,23 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
                         if(player_id != -1){
                             EnterTelemetryZone("Restore player health");
                             MovementObject@ mo = ReadCharacter(player_id);
-                            mo.ReceiveScriptMessage("restore_health");
+                            mo.QueueScriptMessage("restore_health");
                             LeaveTelemetryZone();
                         }
-                        PlaySuccessSting();
-                        win_time = the_time + 5.0;
+                        if(no_delay) {
+                            win_time = the_time + 2.0;
+                        } else {
+                            win_time = the_time + 5.0;
+                        }
+                        TriggerGoalPost(_sting_only);
                         win_target = goal_check+1;
-                    }
+                    } else if(goal_type == "defeat_optional") {
+                            Log(info, "Checking next");
+                            PossibleWinEvent(event, val, goal_check+1,recursion+1);
+                        }
+                }
+                if(goal_type == "reach_skippable"){
+                    PossibleWinEvent(event, val, goal_check+1,recursion+1);
                 }
             }
         }
@@ -400,7 +479,7 @@ void ReceiveMessage(string msg) {
         string sub_msg = token_iter.GetToken(msg);
         if(sub_msg == "music_layer_override"){
             if(token_iter.FindNextToken(msg)){
-                Print("Set music_layer_override to "+atoi(token_iter.GetToken(msg))+"\n");
+                Log(info, "Set music_layer_override to "+atoi(token_iter.GetToken(msg)));
                 music_layer_override = atoi(token_iter.GetToken(msg));
             }
         } else if(sub_msg == "crowd_override"){
@@ -456,22 +535,22 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         int char_a = atoi(token_iter.GetToken(msg));
         if(token == "character_died"){
-            Print("Player "+char_a+" was killed\n");
+            Log(info, "Player "+char_a+" was killed");
             audience_excitement += 4.0f;
         } else if(token == "character_knocked_out"){
-            Print("Player "+char_a+" was knocked out\n");
+            Log(info, "Player "+char_a+" was knocked out");
             audience_excitement += 3.0f;
         } else if(token == "character_start_flip"){
-            Print("Player "+char_a+" started a flip\n");
+            Log(info, "Player "+char_a+" started a flip");
             audience_excitement += 0.4f;
         } else if(token == "character_start_roll"){
-            Print("Player "+char_a+" started a roll\n");
+            Log(info, "Player "+char_a+" started a roll");
             audience_excitement += 0.4f;
         } else if(token == "character_failed_flip"){
-            Print("Player "+char_a+" failed a flip\n");
+            Log(info, "Player "+char_a+" failed a flip");
             audience_excitement += 1.0f;
         } else if(token == "item_hit"){
-            Print("Player "+char_a+" was hit by an item\n");
+            Log(info, "Player "+char_a+" was hit by an item");
             audience_excitement += 1.5f;
         }
     } else if(type == kTwoInt){
@@ -480,35 +559,47 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         int char_b = atoi(token_iter.GetToken(msg));
         if(token == "knocked_over"){
-            Print("Player "+char_a+" was knocked over by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" was knocked over by player "+char_b);
             audience_excitement += 1.5f;
         } else if(token == "passive_blocked"){
-            Print("Player "+char_a+" passive-blocked an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" passive-blocked an attack by player "+char_b);
             audience_excitement += 0.5f;
         } else if(token == "active_blocked"){
-            Print("Player "+char_a+" active-blocked an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" active-blocked an attack by player "+char_b);
             audience_excitement += 0.7f;
         } else if(token == "dodged"){
-            Print("Player "+char_a+" dodged an attack by player "+char_b+"\n");
+            Log(info, "Player "+char_a+" dodged an attack by player "+char_b);
             audience_excitement += 0.7f;
         } else if(token == "character_attack_feint"){
-            Print("Player "+char_a+" feinted an attack aimed at "+char_b+"\n");
+            Log(info, "Player "+char_a+" feinted an attack aimed at "+char_b);
             audience_excitement += 0.4f;
         } else if(token == "character_attack_missed"){
-            Print("Player "+char_a+" missed an attack aimed at "+char_b+"\n");
+            Log(info, "Player "+char_a+" missed an attack aimed at "+char_b);
             audience_excitement += 0.4f;    
         } else if(token == "character_throw_escape"){
-            Print("Player "+char_a+" escaped a throw attempt by "+char_b+"\n");
+            Log(info, "Player "+char_a+" escaped a throw attempt by "+char_b);
             audience_excitement += 0.7f;        
         } else if(token == "character_thrown"){
-            Print("Player "+char_a+" was thrown by "+char_b+"\n");
+            Log(info, "Player "+char_a+" was thrown by "+char_b);
             audience_excitement += 1.5f;
         } else if(token == "cut"){
-            Print("Player "+char_a+" was cut by "+char_b+"\n");
+            Log(info, "Player "+char_a+" was cut by "+char_b);
             audience_excitement += 2.0f;
         }
     }
     
+    if(msg_start == "player_entered_checkpoint_fall_death"){
+        if(token_iter.FindNextToken(msg)){
+            int checkpoint_id = atoi(token_iter.GetToken(msg));
+            if(progress >= checkpoint_id){
+                int player_id = GetPlayerCharacterID();
+                if(player_id != -1 && ObjectExists(player_id)){
+                    MovementObject@ char = ReadCharacter(player_id);
+                    char.ReceiveMessage("fall_death");
+                }
+            }
+        }
+    }
 
     if(win_time == -1.0){
         if(msg_start == "player_entered_checkpoint"){
@@ -527,7 +618,9 @@ void SetMusicLayer(int layer){
         DebugText("music_prefix", "music_prefix: "+music_prefix, 0.5);
     }
     if(layer != curr_music_layer){
-        SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);
+        for(int i=0; i<5; ++i){
+            SetLayerGain(music_prefix+"layer_"+i, 0.0);
+        }
         SetLayerGain(music_prefix+"layer_"+layer, 1.0);
         curr_music_layer = layer;
     }
@@ -589,11 +682,16 @@ void Update() {
 }
 
 bool can_press_attack = false;
+bool queue_enable_tutorial = true;
 
 void PreDraw(float curr_game_time) {
     EnterTelemetryZone("Overgrowth Level PreDraw");
-    camera.SetTint(camera.GetTint() * (1.0 - blackout_amount));
-    
+
+    if(queue_enable_tutorial){
+        level.SendMessage("tutorial_enable");
+        queue_enable_tutorial = false;
+    }
+
     if(kDebugText){
         DebugText("progress", "progress: "+progress, 0.5);
     }
@@ -603,22 +701,26 @@ void PreDraw(float curr_game_time) {
     }
 
     int player_id = GetPlayerCharacterID();
-    if(music_layer_override == -1){
-        if(player_id == -1){
-            SetMusicLayer(-1);
-        } else if(ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
-            SetMusicLayer(0);
-        } else if(ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1){
-            SetMusicLayer(3);
-        } else if(params.HasParam("music")){
-            SetMusicLayer(1);
+    if(ko_time == -1.0){
+        if(music_layer_override == -1){
+            if(player_id == -1){
+                SetMusicLayer(-1);
+            } else if(ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
+                SetMusicLayer(0);
+            } else if(ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1){
+                SetMusicLayer(3);
+            } else if(params.HasParam("music")){
+                SetMusicLayer(1);
+            }
+        } else {
+            SetMusicLayer(music_layer_override);
         }
     } else {
-        SetMusicLayer(music_layer_override);
+        SetMusicLayer(-2);
     }
 
     if(the_time >= music_sting_end ){
-        if(music_sting_end != 0.0){
+        if(music_sting_end != 0.0 && ko_time == -1.0){
             music_sting_end = 0.0;
             SetLayerGain(music_prefix+"layer_"+curr_music_layer, 1.0);
         }
@@ -639,8 +741,7 @@ void PreDraw(float curr_game_time) {
                 if(!GetInputDown(0, "attack")){
                     can_press_attack = true;
                 }
-                if((GetInputDown(0, "attack") && can_press_attack) || GetInputDown(0, "keypadenter") || 
-                   GetInputDown(0, "return"))// ||  ko_time < the_time - 5.0)
+                if((GetInputDown(0, "attack") && can_press_attack) || GetInputDown(0, "skip_dialogue") || GetInputDown(0, "keypadenter"))
                 {
                     if(sting_handle != -1){
                         music_sting_end = the_time;
@@ -655,6 +756,7 @@ void PreDraw(float curr_game_time) {
         } else {
             ko_time = -1.0f;
         }
+        ReadCharacter(player_id).Execute("level_blackout = "+blackout_amount+";");
     } else {
         ko_time = -1.0f;
     }
