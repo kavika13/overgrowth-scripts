@@ -53,6 +53,7 @@ bool backslash = false;
 float last_knife_time = 0.0f;
 int knife_layer_id = -1;
 int throw_knife_layer_id = -1;
+int swim_layer_id = -1;
 
 float plant_rustle_delay = 0.0f;
 float in_plant = 0.0f;
@@ -184,6 +185,10 @@ int ragdoll_type;
 int ragdoll_layer_fetal;
 int ragdoll_layer_catchfallfront;
 float ragdoll_limp_stun;
+array<int> fixed_bone_ids;
+array<vec3> fixed_bone_pos;
+float impale_timer = 0.0f;
+bool col_up_down = false;
 
 const int _miss = 0;
 const int _going_to_block = 1;
@@ -196,6 +201,7 @@ const float drop_weapon_probability = 0.2f;
 
 // whether the character is in the ground or in the air, and how long time has passed since the status changed. 
 bool on_ground = false;
+bool allow_rolling = true;
 
 const float _duck_speed_mult = 0.5f;
 
@@ -223,6 +229,7 @@ string hit_reaction_event;
 
 bool attack_animation_set = false;
 bool hit_reaction_anim_set = false;
+bool block_reaction_anim_set = false;
 bool hit_reaction_dodge = false;
 bool hit_reaction_thrown = false;
 int attacking_with_throw;
@@ -451,6 +458,7 @@ ExecutionType being_executed = NO_EXECUTION;
 
 void ChokedOut(int target){
     head_choke_queue = target;
+    AchievementEvent("choke_hold_kill");
 }
 
 void ParryItem(int id){
@@ -2057,7 +2065,7 @@ void HandlePlantCollisions(const Timestep &in ts){
         bool already_known_plant;
         for(int i=0; i<sphere_col.NumContacts(); i++){
             const CollisionPoint contact = sphere_col.GetContact(i);
-            //DebugDrawWireSphere(contact.position, 0.1f, vec3(1.0f), _delete_on_update);
+            DebugDrawWireSphere(contact.position, 0.1f, vec3(1.0f), _delete_on_update);
             already_known_plant = false;
             for(uint j=0; j<plant_ids.size(); ++j){
                 if(plant_ids[j] == contact.id){
@@ -2144,6 +2152,7 @@ void UpdateState(const Timestep &in ts) {
      if(state == _ragdoll_state){ // This is not part of the else chain because
         UpdateRagDoll(ts);         // the character may wake up and need other
         HandlePickUp();          // state updates
+        HandleImpalement(ts);
     } 
     
     use_foot_plants = false;
@@ -3322,6 +3331,7 @@ int IsDodging(){
 int PrepareToBlock(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(active_dodging){
         if(HandleDodge(dodge_dir, attacker_id)){
+            AchievementEvent("active_dodging");
             return _miss;
         }
     }
@@ -3444,6 +3454,11 @@ void AddBloodToCutPlaneWeapon(int attacker_id, vec3 dir) {
 }
 
 void TakeSharpDamage(float sharp_damage, vec3 pos, int attacker_id, bool allow_heavy_cut) {
+    if(this_mo.controlled){
+        AchievementEvent("player_took_sharp_damage");
+    }else{
+        AchievementEvent("ai_took_sharp_damage");
+    }
     this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_painflinch.anm",8.0f,0);
     TakeBloodDamage(sharp_damage);
     if(attack_getter2.HasCutPlane()){
@@ -3981,6 +3996,8 @@ void ReceiveMessage(string msg){
 void TakeDamage(float how_much){
     if(this_mo.controlled){
         AchievementEventFloat("player_damage", how_much);
+    }else{
+        AchievementEventFloat("ai_damage", how_much);
     }
     HandleAIEvent(_damaged);
     const float _permananent_damage_mult = 0.4f;
@@ -4622,6 +4639,7 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
         sneak_throw_id = GetClosestCharacterID(range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL | _TC_UNAWARE);
     }
     if(throw_id != -1){
+
         if(this_mo.controlled){
             AchievementEvent("player_counter_attacked");
         }
@@ -4660,6 +4678,8 @@ void UpdateGroundAttackControls(const Timestep &in ts) {
     } else if(attack_id != -1){
         if(this_mo.controlled){
             AchievementEvent("player_attacked");
+        }else{
+            AchievementEvent("ai_attacked");
         }
         breath_speed += 2.0f;
         LoadAppropriateAttack(false);
@@ -5194,6 +5214,7 @@ void HandleGroundCollisions(const Timestep &in ts) {
             scale.y = 1.0f;
         }
         col.GetSlidingScaledSphereCollision(this_mo.position+offset, size, scale);
+        
         test_bumper_collision_response = normalize(sphere_col.adjusted_position - sphere_col.position);
         if(test_bumper_collision_response.y < -0.8f){
             duck_amount += 0.01f;
@@ -5242,12 +5263,22 @@ void HandleGroundCollisions(const Timestep &in ts) {
         SetOnGround(false);
         jump_info.StartFall();
         UnTether();
+
     } else {
         this_mo.position = sphere_col.position;
         /*DebugDrawWireSphere(sphere_col.position,
         sphere_col.radius,
         vec3(1.0f,0.0f,0.0f),
         _delete_on_update);*/
+        //col.GetScaledSpherePlantCollision(this_mo.position, 5.0f, vec3(1));
+        
+        
+        //CollisionPoint coll = sphere_col.GetContact(0);
+        //Print("id " + coll.id + "\n");
+        //DebugDrawLine(this_mo.position, coll.position, vec3(0), _delete_on_update);
+
+        
+
         for(int i=0; i<sphere_col.NumContacts(); i++){
             const CollisionPoint contact = sphere_col.GetContact(i);
             float dist = distance(contact.position, this_mo.position);
@@ -5271,6 +5302,9 @@ void HandleGroundCollisions(const Timestep &in ts) {
         dot(this_mo.GetFacing(),ground_normal) < -0.6f){
         GoLimp();    
         }*/
+        
+        //Print("hit " + hit + "\n");
+        //
     }
 }
 
@@ -5342,6 +5376,8 @@ void HandleAirCollisions(const Timestep &in ts) {
     if(this_mo.velocity.y < 0.0f && old_vel.y >= 0.0f){
         this_mo.velocity.y = 0.0f;
     }
+    
+    
 }
 
 
@@ -5373,6 +5409,8 @@ void HandleLedgeCollisions(const Timestep &in ts) {
     }    
 }
 
+
+
 void HandleCollisions(const Timestep &in ts) {
     vec3 initial_vel = this_mo.velocity;
     if(_draw_collision_spheres){
@@ -5403,8 +5441,108 @@ void HandleCollisions(const Timestep &in ts) {
     if(length_squared(initial_vel) < length_squared(this_mo.velocity)){         // If speed is greater than before collision, set it to the
         this_mo.velocity = normalize(this_mo.velocity)*length(initial_vel);     // old speed
     }
+    HandleSpikeCollisions(ts);
 }
 
+void HandleSpikeCollisions(const Timestep &in ts){
+    vec3 end = this_mo.position - vec3(0,2,0);
+    
+    //col.GetObjRayCollision(start, end);
+    vec3 col_offset;
+    vec3 scale;
+    float size = 0.5f - duck_amount / 6;
+    //GetCollisionSphere(col_offset, scale, size);
+    vec3 start;
+    if(col_up_down){
+        start = this_mo.position - vec3(0, 0.1f, 0);
+    }else{
+        start = this_mo.position + vec3(0, 0.5f, 0);
+    }
+    col_up_down = !col_up_down;
+     
+    start -= vec3(0, duck_amount / 4, 0);
+    col.GetObjectsInSphere(start, size);
+
+    //DebugDrawWireSphere(start, size, vec3(1), _delete_on_update);
+    //DebugDrawWireScaledSphere(start, size, vec3(scale.x, scale.z, scale.y) ,vec3(1), _delete_on_update);
+    //DebugDrawLine(start, end, vec3(0,1,0), _delete_on_update);
+
+    if(sphere_col.NumContacts() > 0){
+        for(int i=0; i<sphere_col.NumContacts(); i++){
+            CollisionPoint coll = sphere_col.GetContact(i);            
+            if(coll.id > 0 && ReadObjectFromID(coll.id).GetLabel() == "impale"){
+                float force = length(this_mo.velocity);
+                Print("Speed: "+ force + "\n");
+                if(on_ground){
+                    TakeBloodDamage(force / 100);
+                    PlaySoundGroup("Data/Sounds/weapon_foley/cut/flesh_hit.xml", this_mo.position);
+                }else{
+                    TakeBloodDamage(force);
+                    PlaySoundGroup("Data/Sounds/weapon_foley/cut/slice.xml", this_mo.position);
+                }
+                
+                if(knocked_out != _awake){
+                    Ragdoll(_RGDL_INJURED);
+                    PlaySoundGroup("Data/Sounds/voice/animal2/voice_bunny_death.xml", this_mo.position);
+                }
+                break;
+                //Print("Label " + ReadObjectFromID(coll.id).GetLabel() + "\n");
+                //SetKnockedOut(_dead);
+                //Ragdoll(_RGDL_INJURED);
+                //PlaySoundGroup("Data/Sounds/weapon_foley/impact/weapon_knife_hit.xml", coll.position);
+            }
+        }
+    }
+}
+
+void HandleImpalement(const Timestep &in ts){
+    impale_timer += time_step;
+    if(!frozen && impale_timer > 0.01f){
+        float boneColSize = 0.1f;
+        Skeleton @skeleton = this_mo.rigged_object().skeleton();
+        for(int i=0, len=skeleton.NumBones(); i<len; ++i){
+            int pos = fixed_bone_ids.find(i);
+            if(pos == -1){
+                if(skeleton.HasPhysics(i) && i > 0){
+                    col.GetObjectsInSphere(skeleton.GetBoneTransform(i).GetTranslationPart(), boneColSize);
+                    //DebugDrawWireSphere(skeleton.GetBoneTransform(i).GetTranslationPart(), boneColSize, vec3(1), _delete_on_update);
+                    if(sphere_col.NumContacts() > 0){
+                        for(int p=0; p<sphere_col.NumContacts(); p++){
+                            CollisionPoint coll = sphere_col.GetContact(p);            
+                            if(coll.id > 0 && ReadObjectFromID(coll.id).GetLabel() == "impale"){
+                                this_mo.rigged_object().SetRagdollDamping(0.9f);
+                                this_mo.rigged_object().FixedRagdollPart(i,coll.position);
+
+                                //PlaySoundGroup("Data/Sounds/weapon_foley/cut/flesh_hit.xml", coll.position);
+                                //PlaySoundGroup("Data/Sounds/weapon_foley/impact/weapon_knife_hit.xml", coll.position);
+                                fixed_bone_pos.insertLast(coll.position);
+                                fixed_bone_ids.insertLast(i);
+                                for(int o = 0; o < 10; o++){
+                                    MakeParticle("Data/Particles/blooddrop.xml",coll.position,vec3(0, RangedRandomFloat(-1.0f, 1.0f), 0),GetBloodTint());
+                                }
+                                this_mo.rigged_object().CreateBloodDripAtBone(i, 1, vec3(0.0f,RangedRandomFloat(-10.0f,10.0f),RangedRandomFloat(-10.0f,10.0f)));
+                                return;
+                            }
+                        }
+                    }
+                }
+            }else{
+                //If the bone is too far from the collision point then release it.
+                if(skeleton.HasPhysics(i) && i > 0){
+                    //this_mo.rigged_object().CreateBloodDripAtBone(i, 1, vec3(0.0f,RangedRandomFloat(-10.0f,10.0f),RangedRandomFloat(-10.0f,10.0f)));
+                    //MakeParticle("Data/Particles/blooddrop.xml",skeleton.GetBoneTransform(i).GetTranslationPart(),vec3(0, -0.1f, 0),GetBloodTint());
+
+                    if(distance(fixed_bone_pos[pos], skeleton.GetBoneTransform(i).GetTranslationPart()) > 1.0f){
+                        this_mo.rigged_object().ClearBoneConstraints();
+                        fixed_bone_ids.resize(0);
+                        fixed_bone_pos.resize(0);
+                    }
+                }
+            }
+        }
+        impale_timer = 0.0f;
+    }
+}
 
 void UpdateDuckAmount(const Timestep &in ts) { // target_duck_amount is 1.0 when the character should crouch down, and 0.0 when it should stand straight.
     const float _duck_accel = 120.0f;
@@ -5534,6 +5672,7 @@ bool LoadAppropriateAttack(bool mirrored) {
            (curr_attack == "moving" && (ducking_enemy || ragdoll_enemy) && weapon_slots[primary_weapon_slot] == -1)){
             if(attack_distance < (_close_attack_range + range_extender * 0.5f) * this_mo.rigged_object().GetCharScale()){
                 attack_path = character_getter.GetAttackPath("stationary_close");
+                AchievementEvent("attack_stationary_close");
             } else {
                 attack_path = character_getter.GetAttackPath("stationary");
             }
@@ -5545,11 +5684,14 @@ bool LoadAppropriateAttack(bool mirrored) {
                 attack_path = character_getter.GetAttackPath("moving_close");
             } else {
                 attack_path = character_getter.GetAttackPath("moving");
+                AchievementEvent("attack_moving");
             }
         } else if(curr_attack == "low"){
             attack_path = character_getter.GetAttackPath("low");
+            AchievementEvent("attack_low");
         } else if(curr_attack == "air"){
             attack_path = character_getter.GetAttackPath("air");
+            AchievementEvent("attack_air");
         }
     }
 
@@ -5806,12 +5948,14 @@ void UpdateHitReaction(const Timestep &in ts) {
     if(this_mo.rigged_object().GetStatusKeyValue("cancel")>=1.0f && WantsToCancelAnimation() && hit_reaction_time > 0.1f){
         EndHitReaction();
     }
-    if(this_mo.rigged_object().GetStatusKeyValue("escape")>=1.0f && WantsToCounterThrow()){
+    if(this_mo.rigged_object().GetStatusKeyValue("escape")>=1.0f && WantsToCounterThrow() && !block_reaction_anim_set){
         level.SendMessage("character_throw_escape "+this_mo.getID() + " " + target_id);
         this_mo.SwapAnimation(attack_getter2.GetThrownCounterAnimPath());
         this_mo.rigged_object().anim_client().SetAnimationCallback("void EndHitReaction()");
         string sound = "Data/Sounds/weapon_foley/swoosh/weapon_whoos_big.xml";
         this_mo.PlaySoundGroupAttached(sound,this_mo.position);
+        AchievementEvent("character_throw_escape");
+        block_reaction_anim_set = true;
         //TimedSlowMotion(0.1f,0.3f, 0.1f);
     }
     hit_reaction_time += ts.step();
@@ -5866,6 +6010,7 @@ void SetState(int _state) {
         active_block_anim = false;
         hit_reaction_time = 0.0f;
         hit_reaction_anim_set = false;
+        block_reaction_anim_set = false;
         hit_reaction_thrown = false;
         hit_reaction_dodge = false;
         flip_modifier_rotation = 0.0f;
@@ -6362,9 +6507,13 @@ void HandleThrow() {
                 attack_animation_set = true;
                 attacking_with_throw = 0;
                 throw_anim = true;
+
             } else {
                 if(!flip_info.IsFlipping()){
                     throw_knife_layer_id = this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,flags);
+                    if(this_mo.controlled){
+                        AchievementEvent("player_threw_knife");
+                    }
                 } else {
                     throw_knife_layer_id = this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_knifethrowfliplayer.anm",8.0f,flags);
                 }
@@ -6972,6 +7121,9 @@ void Reset() {
     ResetMind();
     reset_no_collide = the_time;
     SetTetherID(-1);
+    this_mo.rigged_object().ClearBoneConstraints();
+    fixed_bone_ids.resize(0);
+    fixed_bone_pos.resize(0);
 }
 
 void PostReset() {

@@ -82,8 +82,6 @@ class Divider : Container {
      */
     void clear() {
 
-        Print("Divider " + getName() + " is being cleared");
-
         topLeftContents.resize(0);
         @centeredElement = null;
         bottomRightContents.resize(0);

@@ -192,10 +192,12 @@ class JumpInfo {
             SetFacingFromWallDir();
         }
         if(WantsToJumpOffWall()){
+            AchievementEvent("jump_off_wall");
             StartWallJump(wall_dir * -1.0f);
         }
         
         if(WantsToFlipOffWall()){
+            AchievementEvent("wall_flip");
             StartWallJump(wall_dir * -1.0f);
             flip_info.StartWallFlip(wall_dir * -1.0f);
         }

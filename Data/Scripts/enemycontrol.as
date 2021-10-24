@@ -37,8 +37,12 @@ float dodge_delay;
 bool going_to_dodge = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
+bool allow_active_block = true;
+bool always_unaware = false;
+bool always_active_block = false;
 
 bool combat_allowed = true;
+bool chase_allowed = false;
 
 class InvestigatePoint {
     vec3 pos;
@@ -118,7 +122,7 @@ void AIMovementObjectDeleted(int id) {
 }
 
 int IsUnaware() {
-    return (goal == _patrol || startled)?1:0;
+    return (goal == _patrol || startled || always_unaware)?1:0;
 }
 
 bool WantsToDragBody(){
@@ -308,8 +312,14 @@ void HandleAIEvent(AIEvent event){
         if(sub_goal == _provoke_attack){
             temp_block_followup = 1.0 - (pow(1.0 - temp_block_followup, 2.0));
         }
-        if(RangedRandomFloat(0.0f, 1.0f) < temp_block_followup){
-            throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.7f;
+        if(always_active_block){
+            throw_after_active_block = true;
+        } else if(RangedRandomFloat(0.0f, 1.0f) < temp_block_followup){
+            if(allow_active_block){
+                throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.7f;
+            }else{
+                throw_after_active_block = false;
+            }
             if(!throw_after_active_block){
                 throw_after_active_block = false;
                 SetSubGoal(_rush_and_attack);
@@ -790,8 +800,10 @@ void UpdateBrain(const Timestep &in ts){
                 target_goal = PickAttackSubGoal();
             }
         }
-                        
-        if(!combat_allowed){
+        
+        if(!combat_allowed && chase_allowed){
+            target_goal = _provoke_attack;
+        } else if(!combat_allowed){
             target_goal = _defend;
         }
 
@@ -1047,7 +1059,7 @@ bool WantsToJump() {
 }
 
 bool WantsToAttack() { 
-    if(ai_attacking && !startled){
+    if(ai_attacking && !startled && combat_allowed){
         return true;
     } else {
         return false;
@@ -1684,7 +1696,7 @@ vec3 GetDodgeDirection() {
 }
 
 vec3 GetAttackMovement() {
-    if(combat_allowed){
+    if(combat_allowed || chase_allowed){
         float target_react_time = 0.2f; // How slow AI is to react to changes
         vec3 target_react_pos = target_history.GetPos(time-target_react_time);
         vec3 target_react_vel = target_history.GetVel(time-target_react_time);

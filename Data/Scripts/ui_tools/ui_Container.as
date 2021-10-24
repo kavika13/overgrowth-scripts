@@ -189,7 +189,7 @@ class Container : Element {
         array<string>@ keys = floatingContents.getKeys();
         for( uint k = 0; k < keys.length(); k++ ) {
             ContainerElement@ element = cast<ContainerElement>(floatingContents[keys[k]]);
-            element.element.doRelayout();
+            element.element.doScreenResize();
         }
      }
 
@@ -228,7 +228,6 @@ class Container : Element {
             element.setZOrdering( getZOrdering() + z );    
         }
         
-
         // Signal that something new has changed
         onRelayout();
 

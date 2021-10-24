@@ -131,18 +131,20 @@ class FlipInfo {
     }
 
     void StartFlip(vec3 dir){
-        level.SendMessage("character_start_flip "+this_mo.getID());
-        rolling = false;
-        flipping = true;
-        wall_flip_protection = 0.0f;
-        flip_progress = 0.0f;
-        flip_angle = PrepareFlipAngle(flip_angle);
-        target_flip_axis = AxisFromDir(GetFlipDir(dir));
-        if(NeedWindup()){
-            flip_axis = target_flip_axis;
-            flip_vel = -2.0f;
+        if(allow_rolling){
+            level.SendMessage("character_start_flip "+this_mo.getID());
+            rolling = false;
+            flipping = true;
+            wall_flip_protection = 0.0f;
+            flip_progress = 0.0f;
+            flip_angle = PrepareFlipAngle(flip_angle);
+            target_flip_axis = AxisFromDir(GetFlipDir(dir));
+            if(NeedWindup()){
+                flip_axis = target_flip_axis;
+                flip_vel = -2.0f;
+            }
+            this_mo.MaterialEvent("flip", this_mo.position);
         }
-        this_mo.MaterialEvent("flip", this_mo.position);
     }
 
     void StartFlip(){
@@ -234,29 +236,31 @@ class FlipInfo {
     }
 
     void StartRoll(vec3 target_velocity) {
-        level.SendMessage("character_start_roll "+this_mo.getID());
-        if(character_getter.GetTag("species") == "cat"){
-            this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
-        } else {
-            this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
-            AISound(this_mo.position, QUIET_SOUND_AI);
+        if(allow_rolling){
+            level.SendMessage("character_start_roll "+this_mo.getID());
+            if(character_getter.GetTag("species") == "cat"){
+                this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
+            } else {
+                this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+                AISound(this_mo.position, QUIET_SOUND_AI);
+            }
+
+            flipping = true;
+            flip_progress = 0.0f;
+            flip_angle = PrepareFlipAngle(flip_angle);
+            flip_vel = 0.0f;
+
+            roll_direction = GetFlipDir(target_velocity);
+            flip_axis = AxisFromDir(roll_direction);
+            target_flip_axis = AxisFromDir(roll_direction);
+
+            start_roll_angle = atan2(roll_direction.z, roll_direction.x);
+            vec3 roll_facing = this_mo.GetFacing();
+            roll_face_angle = atan2(roll_facing.z, roll_facing.x);
+                
+            feet_moving = false;
+            rolling = true;
         }
-
-        flipping = true;
-        flip_progress = 0.0f;
-        flip_angle = PrepareFlipAngle(flip_angle);
-        flip_vel = 0.0f;
-
-        roll_direction = GetFlipDir(target_velocity);
-        flip_axis = AxisFromDir(roll_direction);
-        target_flip_axis = AxisFromDir(roll_direction);
-
-        start_roll_angle = atan2(roll_direction.z, roll_direction.x);
-        vec3 roll_facing = this_mo.GetFacing();
-        roll_face_angle = atan2(roll_facing.z, roll_facing.x);
-            
-        feet_moving = false;
-        rolling = true;
     }
 
     void UpdateRollProgress(const Timestep &in ts){

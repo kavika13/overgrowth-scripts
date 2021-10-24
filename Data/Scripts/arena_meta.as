@@ -34,7 +34,7 @@ int label_font_size = 75;
 int menu_button_font_size = 100;
 int infotext_font_size = 75;
 int body_font_size = 75;
-int query_font_size = 50;
+int query_font_size = 60;
 int world_map_font_size = 50;
 
 string title_font = "edosz";
@@ -74,6 +74,7 @@ array<string> arenaImages = {"Textures/arenamenu/cave_arena.tga",
 AHGUI::MouseOverPulseColor buttonHover( 
                                         HexColor("#ffde00"), 
                                         HexColor("#ffe956"), .25 );
+
 
 
 float limitDecimalPoints( float n, int points ) {
@@ -806,15 +807,18 @@ class ArenaGUI : AHGUI::GUI {
 
                 AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
                                              DOHorizontal,
-                                             ivec2(800, 500) ); 
+                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                bodydiv.addSpacer(100, DDLeft);
 
-                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDTop,
+                AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
                                              DOVertical,
-                                             ivec2(800, UNDEFINEDSIZE) ); 
+                                             ivec2(1407, 961) ); 
+                subbodydiv.setBackgroundImage( "Textures/ui/arena_mode/meta_background.png" );
+                subbodydiv.addSpacer(100,DDTop);
 
                 AHGUI::Divider@ descriptiondiv = subbodydiv.addDivider( DDTop,
                                              DOVertical,
-                                             ivec2(800, UNDEFINEDSIZE) );
+                                             ivec2(1207, 500) );
 
                 descriptiondiv.setName("description");
 
@@ -1129,7 +1133,9 @@ class ArenaGUI : AHGUI::GUI {
                     currentState = agsNewProfile;
                 }
                 else if( message.name == "next" ) {
-                    currentState = agsSelectProfile;
+                    global_data.setDataFrom(  global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
+                    global_data.setSessionProfile( global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
+                    UpdateStateBasedOnCurrentWorldNode();
                 }
                 else if( message.name == "next_page" ) {
                     currentIntroPage++;
@@ -1441,8 +1447,9 @@ class ArenaGUI : AHGUI::GUI {
                 for( uint i = 0; i < jpage["description"].size(); i++ )
                 {
                     AHGUI::Text bodytext = AHGUI::Text(global_data.resolveString(jpage["description"][i].asString()), query_font, query_font_size, query_color );
+                    AHGUI::Divider@ bodywrapper = descriptiondiv.addDivider( DDTop, DOHorizontal, ivec2( 1200, 0 ) );
                     bodytext.setHorizontalAlignment( BALeft );
-                    descriptiondiv.addElement( bodytext, DDLeft );
+                    bodywrapper.addElement( bodytext, DDLeft );
                 }
                 descriptiondiv.doRelayout();
 
@@ -1517,9 +1524,6 @@ class ArenaGUI : AHGUI::GUI {
             description.clear();
             options.clear();
 
-            description.setSizeX( 1500 );
-            options.setSizeX( 1500 );
-
             int curdivindex = 0;
 
             JSONValue message = global_data.getMessage( global_data.message_id );
@@ -1530,15 +1534,15 @@ class ArenaGUI : AHGUI::GUI {
             {
                 AHGUI::Divider@ descriptionlinewrapper = description.addDivider( DDTop,
                                                                                  DOHorizontal,
-                                                                                 ivec2(1500,UNDEFINEDSIZE ));
-                AHGUI::Text descriptionline(global_data.resolveString(message["description"][j].asString()), body_font, body_font_size, body_color);
+                                                                                 ivec2(1200,UNDEFINEDSIZE ));
+                AHGUI::Text descriptionline(global_data.resolveString(message["description"][j].asString()), query_font, query_font_size, query_color);
                 descriptionlinewrapper.addElement(descriptionline,DDLeft);
             }
 
             AHGUI::Divider@ optionlinewrapper = options.addDivider( DDTop,
                                                                     DOHorizontal,
-                                                                    ivec2( 1500, UNDEFINEDSIZE ));
-            AHGUI::Text optionline( "Continue", body_font, body_font_size, body_color);
+                                                                    ivec2( 1200, UNDEFINEDSIZE ));
+            AHGUI::Text optionline( "Continue", query_font, query_font_size, query_color);
             optionline.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
             optionline.addMouseOverBehavior(buttonHover);
             optionlinewrapper.addElement(optionline,DDLeft);
@@ -1837,6 +1841,7 @@ class ArenaGUI : AHGUI::GUI {
                         node_marker.addMouseOverBehavior( MouseOverImage( GetWorldMapNodeMarkerImage(inst), GetWorldMapNodeMarkerImage(inst,true) ));
                         node_marker.addLeftMouseClickBehavior( MouseClickWorldNode( this, node["id"].asString() ) );
                         node_marker.addMouseOverBehavior( buttonHover );
+                        node_marker.addUpdateBehavior( AHGUI::PulseAlpha( 0.5, 1.0, 0.75 ) );
                     }
 
                     node_marker.setName("world_map_node_image_" + node["id"].asString());
