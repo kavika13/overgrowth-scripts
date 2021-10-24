@@ -118,6 +118,9 @@ void Update() {
 
             target_velocity = normalize(target_velocity);
             target_velocity *= sqrt(speed) * _base_speed;
+            if(GetInputDown(controller_id, "space")){
+                target_velocity *= 0.1f;   
+            }
             co.velocity = co.velocity * _camera_inertia + target_velocity * (1.0f - _camera_inertia);
             co.position += co.velocity * time_step;
 

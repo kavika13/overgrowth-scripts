@@ -608,6 +608,8 @@ class ChallengeEndGUI {
                 display_str += "no kills";
             } else if(achievement == "no_injuries"){
                 display_str = "never hurt";
+            } else if(achievement == "no_alert"){
+                display_str = "never seen";
             }
             gui.Execute(gui_id,"addElement('', '"+color_str+"', '"+display_str+"', 'extra')");
         }
