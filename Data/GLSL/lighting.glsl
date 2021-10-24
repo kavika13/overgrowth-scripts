@@ -1,7 +1,9 @@
 #ifndef LIGHTING_GLSL
 #define LIGHTING_GLSL
 
-#extension GL_ARB_shader_texture_lod : require
+float rand(vec2 co){
+    return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
+}
 
 float GetDirectContribSimple( float amount ) {
     return amount * gl_LightSource[0].diffuse.a;
@@ -32,11 +34,9 @@ void SetCascadeShadowCoords(vec4 vert, inout vec4 sc[4]) {
     sc[3] = gl_TextureMatrix[3] * gl_ModelViewMatrix * vert;
 }
 
-float rand(vec2 co){
-    return fract(sin(dot(vec2(floor(co.x),floor(co.y)) ,vec2(12.9898,78.233))) * 43758.5453);
-}
-
+#ifdef FRAGMENT_SHADER
 float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
+    float rand_a = rand(gl_FragCoord.xy);
     vec3 shadow_tex = vec3(1.0);
     /*float shadow_amount = 0.0;
     float offset = 0.0007;
@@ -57,13 +57,13 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     if(dist > 250.0/2.8284){
         index = 3;
     }*/
-    if(length(sc[0].xy-vec2(0.5)) > 0.5){
+    if(length(sc[0].xy-vec2(0.5)) > 0.49 - rand_a * 0.05){
         index = 1;
     }    
-    if(length(sc[1].xy-vec2(0.5)) > 0.5){
+    if(length(sc[1].xy-vec2(0.5)) > 0.49 - rand_a * 0.05){
         index = 2;
     }    
-    if(length(sc[2].xy-vec2(0.5)) > 0.5){
+    if(length(sc[2].xy-vec2(0.5)) > 0.49 - rand_a * 0.05){
         index = 3;
     }
     vec4 shadow_coord = sc[index];
@@ -87,15 +87,24 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
         return 1.0;
     }
     float shadow_amount = 0.0;
-    float offset = 0.0002;
-    shadow_amount += shadow2DProj(tex5,shadow_coord).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(offset,-offset*0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(-offset,offset*0.2,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(offset*0.2,offset,0.0,0.0)).r * 0.2;
-    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(-offset*0.2,-offset,0.0,0.0)).r * 0.2;
+    float offset = 1.5/2048.0;
+    float offset_angle =  rand_a * 6.28;
+    vec2 offset_dir;
+    offset_dir.x = sin(offset_angle) * offset;
+    offset_dir.y = cos(offset_angle) * offset;
+
+    vec4 offset_shadow_coord = shadow_coord;
+    offset_shadow_coord.x += (rand_a - 0.5) * offset;
+    offset_shadow_coord.y += (rand(gl_FragCoord.xy + vec2(500.0,500.0)) - 0.5) * offset;
+
+    shadow_amount += shadow2DProj(tex5,offset_shadow_coord).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(offset_dir.x, offset_dir.y, 0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(-offset_dir.x, -offset_dir.y,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(-offset_dir.y, offset_dir.x,0.0,0.0)).r * 0.2;
+    shadow_amount += shadow2DProj(tex5,shadow_coord+vec4(offset_dir.y, -offset_dir.x,0.0,0.0)).r * 0.2;
     return shadow_amount;
 }
-
+#endif
 vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, float plant_shake) {
     vec3 vertex_offset = vec3(0.0);
 

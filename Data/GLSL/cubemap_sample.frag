@@ -1,5 +1,3 @@
-#extension GL_ARB_shader_texture_lod : require
-
 uniform vec3 sample_dir;
 uniform samplerCube tex0;
 

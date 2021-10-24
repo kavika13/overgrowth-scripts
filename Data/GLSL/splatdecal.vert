@@ -1,28 +1,21 @@
-uniform vec3 cam_pos;
+#include "object_shared.glsl"
+#include "object_vert.glsl"
 
-varying mat3 tangent_to_world;
-varying vec3 vertex_pos;
-varying vec3 light_pos;
-varying vec3 ws_vertex;
+UNIFORM_REL_POS
 
-#include "transposemat3.glsl"
+VARYING_REL_POS
+VARYING_SHADOW
+varying vec3 tangent;
+varying vec3 normal;
 
 void main()
 {    
-    vec3 normal = normalize(gl_Normal);
-    vec3 temp_tangent = normalize(gl_MultiTexCoord1.xyz);
-    vec3 bitangent = normalize(gl_MultiTexCoord2.xyz);
+    tangent = gl_MultiTexCoord1.xyz;
+    normal = normalize(gl_Normal);
+    CALC_TRANSFORMED_VERTEX
+    CALC_REL_POS
     
-    tangent_to_world = mat3(temp_tangent, bitangent, normal);
-    
-    vec3 eyeSpaceVert = (gl_ModelViewMatrix * gl_Vertex).xyz;
-    vertex_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * eyeSpaceVert;
-    
-    light_pos = transposeMat3(gl_NormalMatrix * tangent_to_world) * gl_LightSource[0].position.xyz;
-  
-    ws_vertex = gl_Vertex.xyz - cam_pos;
-
-    gl_Position = ftransform();
     gl_TexCoord[0] = gl_MultiTexCoord0;
     gl_TexCoord[1] = gl_MultiTexCoord3;
+    CALC_CASCADE_TEX_COORDS
 } 

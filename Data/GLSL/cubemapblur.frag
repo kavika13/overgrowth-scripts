@@ -1,5 +1,3 @@
-#extension GL_ARB_shader_texture_lod : require
-
 uniform samplerCube tex0;
 uniform mat4 rotate;
 uniform float max_angle;

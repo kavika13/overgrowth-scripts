@@ -188,7 +188,9 @@ void Update() {
                 break;
             }
             if(callback == "mainmenu"){
-                level.SendMessage("go_to_main_menu");
+                if(CheckSaveLevelChanges()){
+                    level.SendMessage("go_to_main_menu");
+                }
                 break;
             }
             if(callback == "settings"){

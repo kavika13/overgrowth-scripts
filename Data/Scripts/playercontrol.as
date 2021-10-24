@@ -134,12 +134,6 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-    if(weapon_slots[primary_weapon_slot] != -1){
-        ItemObject@ item_obj = ReadItemID(weapon_slots[primary_weapon_slot]);
-        if(item_obj.GetMass() > 1.0f){
-            return false;
-        }
-    }
     return GetInputDown(this_mo.controller_id, "grab");
 }
 
@@ -289,8 +283,8 @@ void ChooseAttack(bool front) {
     }
 }
 
-bool WantsToWalkBackwards() {
-    return false;
+WalkDir WantsToWalkBackwards() {
+    return FORWARDS;
 }
 
 bool WantsReadyStance() {

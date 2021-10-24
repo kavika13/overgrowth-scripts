@@ -1,5 +1,3 @@
-#extension GL_ARB_shader_texture_lod : require
-
 #include "object_shared.glsl"
 #include "object_frag.glsl"
 

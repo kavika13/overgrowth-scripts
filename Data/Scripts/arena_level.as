@@ -18,6 +18,8 @@ float crowd_cheer_vel;
 // Persistent info
 int fan_base;
 float player_skill;
+const float MIN_PLAYER_SKILL = 0.5f;
+const float MAX_PLAYER_SKILL = 1.9f;
 array<vec3> player_colors;
 
 // Level state
@@ -126,7 +128,7 @@ void ReadPersistentInfo() {
     }
     string player_skill_str = saved_level.GetValue("player_skill");
     if(player_skill_str == ""){
-        player_skill = 0.5f;
+        player_skill = MIN_PLAYER_SKILL;
     } else {
         player_skill = atof(player_skill_str);
     }   
@@ -366,7 +368,6 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
         params.SetString("Unarmed Stance Override", level.GetPath("alt_stance_anim"));
     }
     char_obj.UpdateScriptParams();
-
 }
 
 // Spawn all of the objects that we'll need in the level of given total difficulty
@@ -548,7 +549,6 @@ void SetUpLevel(float initial_difficulty){
     }
     
     SetAllHostile(false);
-    SendMessageToAllCharacters("in_arena true");
     
     ClearMeta();
     AddMetaEvent(kMessage, "set_meta_state 0 pre_intro");
@@ -751,9 +751,7 @@ float ProbabilityOfWin(float a, float b){
 
 float GetRandomDifficultyNearPlayerSkill() {
     float var = player_skill * RangedRandomFloat(0.5f,1.5f);
-    if(var < 0.5f){
-        var = 0.5f;
-    }
+    var = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
     return var;
 }
 
@@ -772,19 +770,17 @@ void EndMatch(bool victory){
         int new_fans = audience_size * audience_fan_ratio;
         fan_base += new_fans;
         player_skill -= player_skill * win_prob * kMatchImportance;
-        if(player_skill < 0.5f){
-            player_skill = 0.5f;
-        }         
         SetLoseText(new_fans, excitement_level);
     } else if(victory){ // Increase difficulty on win
         level_outcome = kVictory;
-        player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;                
+        player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;        
         float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
         audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
         int new_fans = audience_size * audience_fan_ratio;
         fan_base += new_fans;
         SetWinText(new_fans, fan_base, excitement_level);
     }
+    player_skill = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
 
     WritePersistentInfo();
                

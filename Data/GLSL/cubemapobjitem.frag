@@ -1,9 +1,9 @@
-#include "object_shared.glsl"
-#include "object_frag.glsl"
-
 #ifdef ARB_sample_shading_available
 #extension GL_ARB_sample_shading: enable
 #endif
+
+#include "object_shared.glsl"
+#include "object_frag.glsl"
 
 UNIFORM_COMMON_TEXTURES
 UNIFORM_BLOOD_TEXTURE

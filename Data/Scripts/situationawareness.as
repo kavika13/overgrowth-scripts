@@ -18,41 +18,90 @@ class KnownChar {
     int id;
     bool friendly;
     float interest;
+    int knocked_out;
+    vec3 last_known_position;
+};
+
+class KnownItem {
+    int id;
+    vec3 last_known_position;
 };
 
 const float _interest_inertia = 0.96f;
 
 class Situation {
     array<KnownChar> known_chars;
+    array<KnownItem> known_items;
     array<LookTarget> look_targets;
 
     void clear() {
         known_chars.resize(0);
+        known_items.resize(0);
         look_targets.resize(0);
     }
 
     void Notice(int id) {
         int already_known = -1;
-        for(uint i=0; i<known_chars.size(); ++i){
-            if(known_chars[i].id == id){
-                already_known = i;
-                break;
+        Object@ obj = ReadObjectFromID(id);
+        EntityType type = obj.GetType();
+        if(type == _movement_object){
+            for(uint i=0; i<known_chars.size(); ++i){
+                if(known_chars[i].id == id){
+                    already_known = i;
+                    break;
+                }
+            }
+            if(already_known == -1){
+                KnownChar kc;
+                kc.id = id;
+                kc.interest = 1.0f;
+                MovementObject@ char = ReadCharacterID(id);
+                kc.friendly = this_mo.OnSameTeam(char);
+                kc.knocked_out = char.GetIntVar("knocked_out");
+                known_chars.push_back(kc);
+                //Print("New char seen\n");
+            } else {
+                //Print("Char already seen\n");
+            }
+        } else if(type == _item_object){
+            for(uint i=0; i<known_items.size(); ++i){
+                if(known_items[i].id == id){
+                    already_known = i;
+                    break;
+                }
+            }   
+            if(already_known == -1){
+                KnownItem ki;
+                ki.id = id;
+                ki.last_known_position = ReadItemID(id).GetPhysicsPosition();
+                known_items.push_back(ki);
+                //Print("New item seen\n");
+            } else {
+                known_items[already_known].last_known_position = ReadItemID(id).GetPhysicsPosition();
+                //Print("Item already seen\n");
             }
         }
-        if(already_known == -1){
-            KnownChar kc;
-            kc.id = id;
-            kc.interest = 1.0f;
-            MovementObject@ char = ReadCharacterID(id);
-            kc.friendly = this_mo.OnSameTeam(char);
-            known_chars.push_back(kc);
-            //Print("New char seen\n");
-        } else {
-            //Print("Char already seen\n");
-        }
+        
     }
 
+    bool KnowsAbout(int id) {
+        for(uint i=0; i<known_chars.size(); ++i){
+            if(known_chars[i].id == id){
+                return true;
+            }
+        }
+        return false;
+    }
     
+    int KnownID(int id) {
+        for(uint i=0; i<known_chars.size(); ++i){
+            if(known_chars[i].id == id){
+                return i;
+            }
+        }
+        return -1;
+    }
+
     void MovementObjectDeleted(int id) {
         for(uint i=0; i<known_chars.size(); ++i){
             if(known_chars[i].id == id){
@@ -63,25 +112,6 @@ class Situation {
     }
 
     void Update() {
-    }
-
-    bool NeedsCombatPose() {
-        const float _combat_pose_dist_threshold = 5.0f;
-        const float _combat_pose_dist_threshold_2 = 
-            _combat_pose_dist_threshold * _combat_pose_dist_threshold;
-
-        for(uint i=0; i<known_chars.size(); ++i){
-            if(!known_chars[i].friendly){
-                MovementObject@ char = ReadCharacterID(known_chars[i].id);
-                if((char.GetIntVar("knocked_out") == _awake ||
-                    char.GetFloatVar("knocked_out_time") > the_time - 2.0f)/* &&
-                   distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2*/){
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     void GetLookTarget(LookTarget& lt){
