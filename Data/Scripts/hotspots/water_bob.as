@@ -1,8 +1,19 @@
+float translation_scale;
+float rotation_scale;
+float time_scale;
+
 void Init() {
 }
 
 void SetParameters() {
     params.AddString("Objects","");
+    params.AddFloatSlider("translation_scale",4.0,"min:0,max:5,step:0.001");
+    params.AddFloatSlider("rotation_scale",2.0,"min:0,max:5,step:0.001");
+    params.AddFloatSlider("time_scale",0.2,"min:0,max:2,step:0.001");
+
+    translation_scale = params.GetFloat("translation_scale");
+    rotation_scale = params.GetFloat("rotation_scale");
+    time_scale = params.GetFloat("time_scale");
 }
 
 void Reset(){
@@ -58,9 +69,6 @@ void Update(){
             obj.SetEnabled(false);
           }*/
           vec3 pos = orig_translation;
-          float translation_scale = 4.0;
-          float rotation_scale = 2.0;
-          float time_scale = 0.2;
           pos[1] += (sin(the_time*time_scale) * 0.01 + sin(the_time * 2.7*time_scale) * 0.015 + sin(the_time * 4.3*time_scale) * 0.008)*translation_scale;
           obj.SetTranslation(pos);
           quaternion rot;

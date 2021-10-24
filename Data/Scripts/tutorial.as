@@ -227,23 +227,27 @@ class LugaruGUI : AHGUI::GUI {
         header.clear();
         header.clearUpdateBehaviors();
         header.setDisplacement();
-        DisplayText(DDTop, header, 8, assignments[lastAssignment].text, assignmentTextSize, vec4(1,1,1,1), assignments[lastAssignment].extraText, footerTextSize);
+        if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()){
+            DisplayText(DDTop, header, 8, assignments[lastAssignment].text, assignmentTextSize, vec4(1,1,1,1), assignments[lastAssignment].extraText, footerTextSize);
+        }
     }
 
     void HandleAssignmentChange(){
         if(currentAssignment == lastAssignment || uint(currentAssignment) == assignments.size()){
             return;
         }
-		if(lastAssignment != -1){
+        if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()) {
 			assignments[lastAssignment].callback.OnCompleted();
 		}
         //Print("INITIALIZED THE NEXT ASSIGNMENT!----------\n");
         lastAssignment = currentAssignment;
         //UpdateFooter();
         UpdateInstruction();
-        assignments[lastAssignment].callback.Init();
-        if(assignments[lastAssignment].origText == ""){
-            assignments[lastAssignment].origText = assignments[lastAssignment].text;
+        if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()) {
+            assignments[lastAssignment].callback.Init();
+            if(assignments[lastAssignment].origText == ""){
+                assignments[lastAssignment].origText = assignments[lastAssignment].text;
+            }
         }
     }
     void Update(){
@@ -374,8 +378,8 @@ void ReceiveMessage(string msg) {
         return;
     }
     string token = token_iter.GetToken(msg);
-    Print("Token: " + token + "\n");
-    Print("Full: " + msg + "\n");
+    //Log(info,"Token: " + token);
+    //Log(info,"Full: " + msg);
     if( token == "hotspot_announce_items" ) {
         //If one of the player knifes leaves the knife area, respawn a new knife
         token_iter.FindNextToken(msg); 
@@ -411,8 +415,10 @@ void ReceiveMessage(string msg) {
     } else if(token == "achievement_event") {
         token_iter.FindNextToken(msg);
         string achievement = token_iter.GetToken(msg);
-        Print("achievement: " + achievement + "\n");
-        assignments[lastAssignment].callback.ReceiveAchievementEvent(achievement);
+        Log(info,"achievement: " + achievement);
+        if( lastAssignment >= 0 && lastAssignment < int(assignments.size()) ) {
+            assignments[lastAssignment].callback.ReceiveAchievementEvent(achievement);
+        }
         if(achievement == "ai_attacked"){
             if(!enemyAttacking){
                 enemyAttacking = true;
@@ -424,8 +430,10 @@ void ReceiveMessage(string msg) {
         Print("achievement: " + achievement + "\n");
         token_iter.FindNextToken(msg);
         string value = token_iter.GetToken(msg);
-        Print("value: " + value + "\n");
-        assignments[lastAssignment].callback.ReceiveAchievementEventFloat(achievement, atof(value));
+        Log(info, "value: " + value);
+        if( lastAssignment >= 0 && lastAssignment < int(assignments.size()) ) {
+            assignments[lastAssignment].callback.ReceiveAchievementEventFloat(achievement, atof(value));
+        }
     } else if(token == "send_in_enemy") {
         if( token_iter.FindNextToken(msg) ) {
             SendInEnemyChar( token_iter.GetToken(msg) );
@@ -492,9 +500,11 @@ void ReceiveMessage(string msg) {
     } else if(token == "enemy_execute"){
         token_iter.FindNextToken(msg);
         string command = token_iter.GetToken(msg);
-        MovementObject@ enemy = ReadCharacterID(enemyID);
-        //Print("Command: " + command + "\n");
-        enemy.Execute(command);
+		if(enemyID != -1){
+            MovementObject@ enemy = ReadCharacterID(enemyID);
+            //Print("Command: " + command + "\n");
+            enemy.Execute(command);
+        }
     }else if(token == "update_text_variables"){
         array<string> values;
         string lastVariable = "";
@@ -569,7 +579,10 @@ void Update() {
 }
 
 void UpdateTextVariables(array<string> new_variables){
-    string currentText = assignments[lastAssignment].origText;
+    string currentText = "";
+    if( lastAssignment >= 0 && lastAssignment < int(assignments.size()) ) {
+        currentText = assignments[lastAssignment].origText;
+    }
     //Don't do anything if the string is empty. This is because it's not been assigned yet.
     if(currentText == ""){
         return;
@@ -577,13 +590,17 @@ void UpdateTextVariables(array<string> new_variables){
     for(uint i = 0; i<new_variables.size(); i++){
         currentText = join(currentText.split("%variable" + i + "%"), new_variables[i]);
     }
-    assignments[lastAssignment].text = currentText;
+    if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()) {
+        assignments[lastAssignment].text = currentText;
+    }
     //Print("New text " + currentText + "\n");
     lugaruGUI.UpdateInstruction();
 }
 
 void AddExtraAssignmentText(string extra_text){
-    assignments[lastAssignment].extraText = extra_text;
+    if(lastAssignment != -1 && uint(lastAssignment) < assignments.size()) {
+        assignments[lastAssignment].extraText = extra_text;
+    }
     lugaruGUI.UpdateInstruction();
 }
 
@@ -644,11 +661,13 @@ void SendInEnemyChar(string type){
                        allow_active_block = false;");
     }
 
-    MovementObject@ enemy = ReadCharacterID(enemyID);
-    if( type == "wolf" ) {
-        enemy.Execute("max_ko_shield = 3; ko_shield = max_ko_shield;");
-    } else {
-        enemy.Execute("p_block_skill = 0.5;");
+    if(enemyID != -1){
+        MovementObject@ enemy = ReadCharacterID(enemyID);
+        if( type == "wolf" ) {
+            enemy.Execute("max_ko_shield = 3; ko_shield = max_ko_shield;");
+        } else {
+            enemy.Execute("p_block_skill = 0.5;");
+        }
     }
 }
 
@@ -735,14 +754,16 @@ int GetCharPrimarySheathedWeapon(MovementObject@ mo) {
 void ReviveCharacters() {
     for( uint i = 0; i < knockout_countdown.length(); i++ ) {
         if( knockout_countdown[i].countdown < 0.0f ) {
-            MovementObject@ char = ReadCharacterID(knockout_countdown[i].character_id);
-            if( char !is null ) {
-                if(char.GetIntVar("knocked_out") != _awake){
-                    char.Execute("Recover();");
-                    if(!char.controlled) {
-                        int playerID = GetPlayerID();
-                        if(playerID != -1) {
-                            char.Execute("situation.Notice(" + playerID + ");");
+            if( knockout_countdown[i].character_id != -1 ){
+                MovementObject@ char = ReadCharacterID(knockout_countdown[i].character_id);
+                if( char !is null ) {
+                    if(char.GetIntVar("knocked_out") != _awake){
+                        char.Execute("Recover();");
+                        if(!char.controlled) {
+                            int playerID = GetPlayerID();
+                            if(playerID != -1) {
+                                char.Execute("situation.Notice(" + playerID + ");");
+                            }
                         }
                     }
                 }

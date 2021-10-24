@@ -202,7 +202,10 @@ float BalanceAmbient ( const float direct_contrib ) {
     return 1.0-direct_contrib*0.2;
 }
 
-float GetHazeAmount( in vec3 relative_position ) { 
+float GetHazeAmount( in vec3 relative_position ) {
+    #ifdef DISABLE_FOG
+    return 0.0f;
+    #endif 
     float near = 0.1;
     float far = 1000.0;
     float fog_opac = min(1.0,length(relative_position)/far);

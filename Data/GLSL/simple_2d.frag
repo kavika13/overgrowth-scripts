@@ -27,6 +27,15 @@ void main() {
         }
         vec4 tex_color = texture(tex0,var_tex_coord.xy);
         out_color = vec4(color[0] * tex_color[0], color[2], 0.0, min(1.0,color[3] * tex_color[0] * 10.0));
+    #elif defined(LEVEL_SCREENSHOT)
+        out_color = color * vec4(texture(tex0,var_tex_coord.xy)) * 
+        pow(min(1.0, min(var_tex_coord.x, 1.0-var_tex_coord.x) * 10.0), 1.0/2.2) *
+        pow(min(1.0, min(var_tex_coord.y, 1.0-var_tex_coord.y) * 10.0), 1.0/2.2) * 0.5;
+        out_color.a = color.a;
+    #elif defined(LOADING_LOGO)
+        vec4 tex_sample = texture(tex0,var_tex_coord.xy);
+        out_color = color * (vec4(1.0)-tex_sample);
+        out_color.a = tex_sample.a;
     #else
         out_color = color * vec4(texture(tex0,var_tex_coord.xy));
     #endif

@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/lugaru_new.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 array<LevelInfo@> custom_levels;
 LevelSearch search;
 
@@ -15,7 +15,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("lugaru_menu");
     // We're going to want a 100 'gui space' pixel header/footer

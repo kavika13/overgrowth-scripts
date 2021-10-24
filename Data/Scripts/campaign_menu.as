@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 array<LevelInfo@> campaign_levels = {};
 
@@ -12,6 +12,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("overgrowth_main");
 

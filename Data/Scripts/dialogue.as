@@ -8,6 +8,8 @@ enum ProcessStringType { kInGame, kInEditor };
 enum ObjCommands {
     kUnknown,
     kCamera,
+    kDialogueColor,
+    kDialogueVoice,
     kHeadTarget,
     kEyeTarget,
     kChestTarget,
@@ -57,6 +59,8 @@ class CharRecord {
 enum SayParseState {kStart, kInBracket, kContinue};
 
 const int kMaxParticipants = 16;
+const float kTextLeftMargin = 100;
+const float kTextRightMargin = 100;
 
 class Dialogue {
     // Contains information from undo/redo
@@ -66,6 +70,8 @@ class Dialogue {
     array<ScriptElement> strings;
     array<ScriptElement> sub_strings;
     array<int> connected_char_ids;
+    array<vec3> dialogue_colors;
+    array<int> dialogue_voices;
 
     int index; // which dialogue element is being executed
     int sub_index;
@@ -82,6 +88,8 @@ class Dialogue {
     float dialogue_text_disp_chars;
     float line_start_time;
     int old_font_size;
+    float speak_sound_time;
+    int active_char;
 
     vec3 cam_pos;
     vec3 cam_rot;
@@ -127,6 +135,8 @@ class Dialogue {
                 clear_on_complete = true;
             }
         }
+        speak_sound_time = 0.0;
+        camera.SetDOF(0,0,0, 0,0,0);
     }
 
     void NotifyDeleted(int id){
@@ -250,6 +260,9 @@ class Dialogue {
         strings.resize(0);
         clear_on_complete = false;
         connected_char_ids.resize(0);
+        dialogue_colors.resize(0);
+        dialogue_voices.resize(0);
+        active_char = 0;
         
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
@@ -283,6 +296,62 @@ class Dialogue {
         show_dialogue = false;
         show_editor_info = true;
         waiting_for_dialogue = false;
+    }
+
+    int GetActiveVoice() {
+        int voice = 0;
+        if(int(dialogue_voices.size()) > active_char){
+            voice = dialogue_voices[active_char];
+        }
+        return voice;
+    }
+
+    void PlayLineStartSound() {
+        switch(GetActiveVoice()){
+            case 0: PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml"); break;
+            case 1: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_light_drygrass_walk.xml"); break;
+            case 2: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_fabric_choke_move.xml"); break;
+            case 3: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_light_dirtyrock_run.xml"); break;
+            case 4: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_leather_choke_move.xml"); break;
+            case 5: PlaySoundGroup("Data/Sounds/grass_foley/bf_grass_medium.xml"); break;
+            case 6: PlaySoundGroup("Data/Sounds/gravel_foley/fs_light_gravel_run.xml"); break;
+            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_run.xml"); break;
+            case 8: PlaySoundGroup("Data/Sounds/snow_foley/bf_snow_light.xml"); break;
+            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_run.xml"); break;
+            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_run.xml"); break;
+            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_run.xml"); break;
+            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_run.xml"); break;
+            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_run.xml"); break;
+            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_run.xml"); break;
+            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_run.xml"); break;
+            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_jump.xml"); break;
+            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_jump.xml"); break;
+            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_run.xml"); break;
+        }
+    }
+
+    void PlayLineContinueSound() {
+        switch(GetActiveVoice()){
+            case 0: PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_edgecrawl.xml"); break;
+            case 1: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_light_drygrass_crouchwalk.xml"); break;
+            case 2: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_fabric_crouchwalk.xml"); break;
+            case 3: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_light_dirtyrock_crouchwalk.xml"); break;
+            case 4: PlaySoundGroup("Data/Sounds/cloth_foley/cloth_leather_crouchwalk.xml"); break;
+            case 5: PlaySoundGroup("Data/Sounds/grass_foley/fs_light_grass_run.xml"); break;
+            case 6: PlaySoundGroup("Data/Sounds/gravel_foley/fs_light_gravel_crouchwalk.xml"); break;
+            case 7: PlaySoundGroup("Data/Sounds/sand_foley/fs_light_sand_crouchwalk.xml"); break;
+            case 8: PlaySoundGroup("Data/Sounds/snow_foley/fs_light_snow_run.xml"); break;
+            case 9: PlaySoundGroup("Data/Sounds/wood_foley/fs_light_wood_crouchwalk.xml"); break;
+            case 10: PlaySoundGroup("Data/Sounds/water_foley/mud_fs_walk.xml"); break;
+            case 11: PlaySoundGroup("Data/Sounds/concrete_foley/fs_heavy_concrete_walk.xml"); break;
+            case 12: PlaySoundGroup("Data/Sounds/drygrass_foley/fs_heavy_drygrass_walk.xml"); break;
+            case 13: PlaySoundGroup("Data/Sounds/dirtyrock_foley/fs_heavy_dirtyrock_walk.xml"); break;
+            case 14: PlaySoundGroup("Data/Sounds/grass_foley/fs_heavy_grass_walk.xml"); break;
+            case 15: PlaySoundGroup("Data/Sounds/gravel_foley/fs_heavy_gravel_walk.xml"); break;
+            case 16: PlaySoundGroup("Data/Sounds/sand_foley/fs_heavy_sand_run.xml"); break;
+            case 17: PlaySoundGroup("Data/Sounds/snow_foley/fs_heavy_snow_crouchwalk.xml"); break;
+            case 18: PlaySoundGroup("Data/Sounds/wood_foley/fs_heavy_wood_walk.xml"); break;
+        }
     }
 
     string CreateStringFromParams(ObjCommands command, array<string> &in params){
@@ -629,6 +698,11 @@ class Dialogue {
     void Play() {
         bool stop = false;
 
+        bool first = false;
+        if(index == 0){
+            first = true;
+        }
+
         int last_wait = -1;
         int prev_last_wait = -1;
         for(int i=0, len=strings.size(); i<len; ++i){
@@ -662,6 +736,17 @@ class Dialogue {
                 index = 0;
             }
         }
+
+        if(first){
+            for(int i=0, len=connected_char_ids.size(); i<len; ++i){
+                if(connected_char_ids[i] != -1 && ObjectExists(connected_char_ids[i])){
+                    MovementObject@ char = ReadCharacterID(connected_char_ids[i]);
+                    char.Execute("FixDiscontinuity();");
+                }
+            }
+            camera.FixDiscontinuity();
+        }
+
         skip_dialogue = false;
     }
 
@@ -735,6 +820,7 @@ class Dialogue {
             camera.SetFlags(kEditorCamera);
             if(clear_on_complete){
                 ClearEditor();
+                UpdatedQueue();
             }
         }
         
@@ -765,6 +851,10 @@ class Dialogue {
                 waiting_for_dialogue = false;
                 Play();   
             }
+            if(speak_sound_time < the_time && has_cam_control){
+                PlayLineContinueSound();
+                speak_sound_time = the_time + 0.1;
+            }
         }
 
         // Continue dialogue script if waiting time has completed
@@ -781,7 +871,7 @@ class Dialogue {
 
         if(SkipKeyDown() && dialogue_obj_id != -1){
             Play();   
-            PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml");
+            PlayLineStartSound();
         }
         if(GetInputPressed(controller_id, "attack") && start_time != the_time){
             if(index != 0){
@@ -798,7 +888,7 @@ class Dialogue {
                 }  else {
                     line_start_time = -1.0;
                 }
-                PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml");
+                PlayLineStartSound();
             }
         }
         
@@ -1074,6 +1164,21 @@ class Dialogue {
             se.params.resize(1);
             token_iter.FindNextToken(msg);
             se.params[0] = token_iter.GetToken(msg);            
+        } else if(token == "set_dialogue_color"){
+            se.obj_command = kDialogueColor;
+            const int kNumParams = 4;
+            se.params.resize(kNumParams);
+            for(int i=0; i<kNumParams; ++i){
+                token_iter.FindNextToken(msg);
+                se.params[i] = token_iter.GetToken(msg);
+            }                 
+        } else if(token == "set_dialogue_voice"){
+            se.obj_command = kDialogueVoice;
+            se.params.resize(2);
+            token_iter.FindNextToken(msg);
+            se.params[0] = token_iter.GetToken(msg);        
+            token_iter.FindNextToken(msg);
+            se.params[1] = token_iter.GetToken(msg);         
         } else if(token == "set_dialogue_text"){
             se.obj_command = kSetDialogueText;
             se.params.resize(1);
@@ -1279,6 +1384,32 @@ class Dialogue {
         }
     }
 
+    void AnalyzeForLineBreaks(string &inout str){
+        TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", GetFontSize(), 0, dialogue_text);
+        int font_size = GetFontSize();
+        float threshold = GetScreenWidth() - kTextLeftMargin - font_size - kTextRightMargin;
+        string final;
+        string first_line = dialogue_text;
+        string second_line;
+        while(first_line.length() > 0){
+            while(metrics.bounds_x > threshold){
+                int last_space = first_line.findLastOf(" ");
+                second_line.insert(0, first_line.substr(last_space));
+                first_line.resize(last_space);
+                metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+            }
+            final += first_line + "\n";
+            if(second_line.length() > 0){
+                first_line = second_line.substr(1);
+                second_line = "";
+            } else {
+                first_line = "";
+            }
+            metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", font_size, 0, first_line);
+        }
+        dialogue_text = final.substr(0, final.length()-1);
+    }
+
     void ParseSayText(int player_id, const string &in str, ProcessStringType type){
         sub_strings.resize(0);
         SayParseState state = kContinue;
@@ -1396,8 +1527,30 @@ class Dialogue {
                 dialogue_text_disp_chars = dialogue_text.length();
             }
             return true;
+        case kDialogueColor: {
+            int id = atoi(script_element.params[0])-1;
+            if(id >= 0){
+                if(id >= int(dialogue_colors.size())){
+                    dialogue_colors.resize(id+1);
+                }
+                dialogue_colors[id] = vec3(
+                    atof(script_element.params[1]),
+                    atof(script_element.params[2]),
+                    atof(script_element.params[3]));
+            } }
+            break;
+        case kDialogueVoice: {
+            int id = atoi(script_element.params[0])-1;
+            if(id >= 0){
+                if(id >= int(dialogue_voices.size())){
+                    dialogue_voices.resize(id+1);
+                }
+                dialogue_voices[id] = atoi(script_element.params[1]);
+            } }
+            break;
         case kSay:
             if(sub_index == -1 || type == kInEditor){
+                active_char = atoi(script_element.params[0]) - 1;
                 show_dialogue = true;
                 dialogue_name = script_element.params[1];
                 ParseSayText(atoi(script_element.params[0]), script_element.params[2], type);
@@ -1418,6 +1571,7 @@ class Dialogue {
             break;
         case kAddDialogueText:
             dialogue_text += script_element.params[0];
+            AnalyzeForLineBreaks(dialogue_text);
             if(type == kInGame){
                 waiting_for_dialogue = true;
             } else { 
@@ -1606,6 +1760,16 @@ class Dialogue {
         UpdateDialogueObjectConnectors(id);
     }
 
+    void UpdatedQueue(){
+        if(dialogue_queue.size() > 0 && dialogue_obj_id == -1){
+            string str = dialogue_queue[0];
+            dialogue_queue.removeAt(0);
+            StartDialogue(str);
+            Update();
+            camera.FixDiscontinuity();
+        }
+    }
+
     void ReceiveMessage(const string &in msg) {
         TokenIterator token_iter;
         token_iter.Init();
@@ -1686,6 +1850,7 @@ class Dialogue {
                     ParseLine(strings[last_set_animation]);
                     strings[last_set_animation].visible = true;
                 }
+                UpdateScriptFromStrings();
             
                 ExecutePreviousCommands(selected_line);
             }
@@ -1701,14 +1866,71 @@ class Dialogue {
             return;
         }
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
+            int font_size = GetFontSize();
             EnterTelemetryZone("Draw text background");
-            HUDImage @blackout_image = hud.AddImage();
-            blackout_image.SetImageFromPath("Data/Textures/diffuse_hud.tga");
-            blackout_image.position.y = 0;
-            blackout_image.position.x = 0.0f;
-            blackout_image.position.z = -2.0f;
-            blackout_image.scale = vec3(GetScreenWidth()/16.0f, GetScreenHeight()/4.0f/16.0f, 1.0f);
-            blackout_image.color = vec4(0.0f,0.0f,0.0f,0.7f);
+            {
+                HUDImage @blackout_image = hud.AddImage();
+                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg.png");
+                float height_scale = 1.0/75.0;
+                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                blackout_image.position.x = GetScreenWidth()*0.2;
+                blackout_image.position.z = -2.0f;
+                blackout_image.scale = vec3(GetScreenWidth()/32.0f*0.6, font_size * height_scale, 1.0f);
+                vec3 color = vec3(1.0);
+                if(int(dialogue_colors.size()) > active_char){
+                    color = dialogue_colors[active_char];
+                }
+                blackout_image.color = vec4(color,0.7f);
+            }
+
+            {
+                HUDImage @blackout_image = hud.AddImage();
+                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade.png");
+                float height_scale = 1.0/75.0;
+                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                blackout_image.position.z = -2.0f;
+                blackout_image.scale = vec3(GetScreenWidth()/32.0f*0.6, font_size * height_scale, 1.0f);
+                float width_scale = GetScreenWidth()/2500.0;
+                blackout_image.position.x = GetScreenWidth()*0.2-512*width_scale;
+                blackout_image.scale = vec3(width_scale, font_size * height_scale, 1.0f);
+                vec3 color = vec3(1.0);
+                if(int(dialogue_colors.size()) > active_char){
+                    color = dialogue_colors[active_char];
+                }
+                blackout_image.color = vec4(color,0.7f);
+            }
+
+            {
+                HUDImage @blackout_image = hud.AddImage();
+                blackout_image.SetImageFromPath("Data/Textures/ui/dialogue/dialogue_bg-fade_reverse.png");
+                float height_scale = 1.0/75.0;
+                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * height_scale * 510.0;
+                blackout_image.position.z = -2.0f;
+                float width_scale = GetScreenWidth()/2500.0;
+                blackout_image.position.x = GetScreenWidth()*0.8;
+                blackout_image.scale = vec3(width_scale, font_size * height_scale, 1.0f);
+                vec3 color = vec3(1.0);
+                if(int(dialogue_colors.size()) > active_char){
+                    color = dialogue_colors[active_char];
+                }
+                blackout_image.color = vec4(color,0.7f);
+            }
+
+            {
+                HUDImage @blackout_image = hud.AddImage();
+                TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/edosz.ttf", int(GetFontSize()*1.8), kSmallLowercase, dialogue_name);
+        
+                blackout_image.SetImageFromPath("Data/Textures/ui/menus/main/brushStroke.png");
+                blackout_image.position.y = GetScreenHeight() * 0.25 - font_size * 1.5;
+                blackout_image.position.x = kTextLeftMargin - font_size * 2;
+                blackout_image.position.z = -2.0f;
+                blackout_image.scale = vec3((metrics.bounds_x+font_size*4)/768.0, font_size/40.0, 1.0f);
+                vec3 color = vec3(0.15);
+                /*if(int(dialogue_colors.size()) > active_char){
+                    color = dialogue_colors[active_char];
+                }*/
+                blackout_image.color = vec4(color,1.0f);
+            }
             LeaveTelemetryZone();
         }
 
@@ -1786,6 +2008,10 @@ class Dialogue {
         }
     }
 
+    int GetFontSize() {
+        return int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
+    }
+
     void Display2() {
         if(MediaMode()){
             return;
@@ -1794,17 +2020,27 @@ class Dialogue {
         // Draw actual dialogue text
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             EnterTelemetryZone("Draw actual dialogue text");
-            int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
+            int font_size = GetFontSize();
             if(font_size != old_font_size){
                 DisposeTextAtlases();
                 old_font_size = font_size;
             }
 
-            vec2 pos(100, GetScreenHeight() *0.75 + font_size * 1.2);
-            DrawTextAtlas("Data/Fonts/arial.ttf", font_size, 0, dialogue_name+":", 
-                          int(pos.x), int(pos.y), vec4(vec3(1.0f), 0.65f));
-            DrawTextAtlas("Data/Fonts/arial.ttf", font_size, 0, dialogue_text.substr(0, int(dialogue_text_disp_chars)), 
+            vec2 pos(kTextLeftMargin, GetScreenHeight() *0.75 + font_size * 1.2);
+            vec3 color = vec3(1.0);
+            if(int(dialogue_colors.size()) > active_char){
+                color = dialogue_colors[active_char];
+            }
+            DrawTextAtlas("Data/Fonts/edosz.ttf", int(font_size*1.8), kSmallLowercase, dialogue_name, 
+                          int(pos.x), int(pos.y)-int(font_size*0.8), vec4(color, 1.0f));
+            string display_text = dialogue_text.substr(0, int(dialogue_text_disp_chars));
+            DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, display_text, 
                           int(pos.x)+font_size, int(pos.y)+font_size, vec4(vec3(1.0f), 1.0f));
+            if(!waiting_for_dialogue && !is_waiting_time){
+                TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/Cella.ttf", GetFontSize(), 0, "(click to continue)\n(enter to skip)");
+                DrawTextAtlas("Data/Fonts/Cella.ttf", font_size, 0, "(click to continue)\n(enter to skip)", 
+                               GetScreenWidth() - int(kTextRightMargin) - metrics.bounds_x, int(pos.y)+font_size*4, vec4(vec3(1.0f), 0.5f));
+            }
             LeaveTelemetryZone();
         }
     }

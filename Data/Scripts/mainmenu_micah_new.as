@@ -64,7 +64,7 @@ class BackgroundObject {
 
 }
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 array<BackgroundObject@> bgobjects;
 
 bool HasFocus() {
@@ -83,7 +83,7 @@ void setBackGround() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("menu-lugaru"); 
 

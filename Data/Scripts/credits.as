@@ -36,10 +36,10 @@ void addToTextScroll( string text, bool isHeaer = false ) {
 }
 
 // The actual GUI object 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
 	// Kick off some music
 	PlaySong("menu-lugaru");
 

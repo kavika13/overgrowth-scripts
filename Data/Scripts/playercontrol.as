@@ -5,6 +5,10 @@ float grab_key_time;
 bool listening = false;
 bool delay_jump;
 
+// For pressing crouch to drop off ledges
+bool crouch_pressed_on_ledge = false;
+bool crouch_pressable_on_ledge = false;
+
 Situation situation;
 
 int IsUnaware() {
@@ -49,6 +53,17 @@ void UpdateBrain(const Timestep &in ts){
     } else {
         grab_key_time = 0.0f;
     }
+
+    if(ledge_info.on_ledge && !GetInputDown(this_mo.controller_id, "crouch")){
+        crouch_pressable_on_ledge = true;
+    } else if(!ledge_info.on_ledge){
+        crouch_pressable_on_ledge = false;
+        crouch_pressed_on_ledge = false;
+    }
+    if(GetInputDown(this_mo.controller_id, "crouch") && crouch_pressable_on_ledge){
+        crouch_pressed_on_ledge = true;
+    }
+
 
     if(time > last_noticed_time + 0.2f){
         array<int> characters;
@@ -188,9 +203,8 @@ bool WantsToFlip() {
 
 bool WantsToGrabLedge() {
     if(!this_mo.controlled) return false;
-
     if(GetConfigValueBool("auto_ledge_grab")){
-        return !GetInputDown(this_mo.controller_id, "crouch");
+        return !crouch_pressed_on_ledge;
     } else {
         return GetInputDown(this_mo.controller_id, "grab");
     }

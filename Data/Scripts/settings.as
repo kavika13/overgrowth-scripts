@@ -173,8 +173,10 @@ void AddGraphicsScreen(){
 	
 	AddCheckBox("VSync", settings_content, "vsync");
 	AddCheckBox("Simple Shadows", settings_content, "simple_shadows");
-	AddCheckBox("Use tet mesh lighting", settings_content, "tet_mesh_lighting");
-	AddCheckBox("Use ambient light volumes", settings_content, "light_volume_lighting");
+	//AddCheckBox("Use tet mesh lighting", settings_content, "tet_mesh_lighting");
+	//AddCheckBox("Use ambient light volumes", settings_content, "light_volume_lighting");
+	AddCheckBox("GPU Particle Field", settings_content, "particle_field");
+	AddCheckBox("Enable Custom Shaders", settings_content, "custom_level_shaders");
 	AddCheckBox("Detail objects", settings_content, "detail_objects");
 	AddCheckBox("No reflection capture", settings_content, "no_reflection_capture");
 	
@@ -303,7 +305,7 @@ void UpdateKeyRebinding(){
 				if(last_pressed.keycode == 27){
 					Print("Skipping key rebinding because esc.\n");
 				}else{
-					gui_elements[active_rebind].SwitchOption(last_pressed.keycode);
+					gui_elements[active_rebind].SwitchOption(last_pressed.scancode);
 				}
 				active_rebind = -1;
 			}

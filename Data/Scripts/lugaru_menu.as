@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/lugaru_new.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 const int item_per_screen = 4;
 const int rows_per_screen = 3;
@@ -36,7 +36,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("lugaru_menu");
 

@@ -3,14 +3,14 @@
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 
 bool HasFocus() {
     return false;
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("overgrowth_main");
 

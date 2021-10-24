@@ -50,6 +50,7 @@ uniform float far_sharp_dist;
 uniform float near_blur_transition_size;
 uniform float far_blur_transition_size;
 
+uniform float saturation;
 uniform float motion_blur_mult;
 
 const float near = 0.1;
@@ -243,14 +244,21 @@ void main(void)
 #elif defined(TONE_MAP)
     //float temp_wp = 0.3;
     //float temp_bp = 0.002;
+
     float temp_wp = white_point;
     float temp_bp = black_point;
     float contrast = 1.0 / (temp_wp - temp_bp);
     vec4 src_color = textureLod(tex0, tex, 0.0);
 
+
     for(int i=0; i<3; ++i){
         src_color[i] = pow(src_color[i], 1.0/2.2);
     }
+    
+    // Luminosity grayscale method
+    float avg = 0.21*src_color[0] + 0.72*src_color[1] + 0.07*src_color[2];
+    src_color.xyz = mix(vec3(avg), src_color.xyz, saturation);
+
     color.w = 1.0;
     color.xyz = max(vec3(0.0), (src_color.xyz - vec3(temp_bp)) * contrast);  
     for(int i=0; i<3; ++i){
@@ -430,18 +438,6 @@ void main(void)
     color = textureLod( tex0, tex, 0.0 );
 #endif
     
-    //#define DARK_WORLD_TEST
-    #ifdef DARK_WORLD_TEST
-        // Average grayscale method
-        //float avg = (color[0] + color[1] + color[2]) / 3.0;
-        //color.xyz = mix(color.xyz, vec3(avg), sin(time)*0.5+0.5);
-        
-        float dark_world_amount = sin(time)*0.5+0.5;
-        // Luminosity grayscale method
-        float avg = 0.21*color[0] + 0.72*color[1] + 0.07*color[2];
-        color.xyz = mix(color.xyz, vec3(avg), dark_world_amount);
-
-    #endif
 
     //vec2 buf = vec2(screen_width, screen_height);
     //color = FXAA(tex0, tex, buf);

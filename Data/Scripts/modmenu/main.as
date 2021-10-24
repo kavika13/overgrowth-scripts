@@ -3,7 +3,7 @@
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 int inspected = 0;
 int num_mods = 0;
 int show_nr_mods = 8;
@@ -149,7 +149,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
 	PlaySong("overgrowth_main");
 
@@ -169,13 +169,20 @@ array<ModID> SortAlphabetically(array<ModID> input_mods){
 	array<ModID> return_mods;
 	for(uint i = 32; i <= 126; i++){
 		for(uint p = 0; p < input_mods.size(); p++){
-			uint first_letter = ModGetName(input_mods[p])[0];
-			if(first_letter >= 65 && first_letter <= 90){
-				first_letter += 32;
-			}
-			if(i == first_letter){
-				return_mods.insertLast(input_mods[p]);
-			}
+            string modname = ModGetName(input_mods[p]);
+            if(modname.length() > 0 ) {
+                uint first_letter = modname[0];
+                if(first_letter >= 65 && first_letter <= 90){
+                    first_letter += 32;
+                }
+                if(i == first_letter){
+                    return_mods.insertLast(input_mods[p]);
+                }
+            } else {
+                if( i == 0 ) {
+                    return_mods.insertLast(input_mods[p]);
+                }
+            }
 		}
 	}
 	return return_mods;

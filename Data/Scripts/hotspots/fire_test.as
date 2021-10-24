@@ -126,7 +126,7 @@ void OnEnter(MovementObject @mo) {
         ignite = false;
     }
     if(ignite){
-        mo.ReceiveScriptMessage("ignite");
+        mo.ReceiveScriptMessage("entered_fire");
     }
 }
 

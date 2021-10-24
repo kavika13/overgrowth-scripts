@@ -19,6 +19,18 @@ uniform vec3 cam_pos;
 const float kBeachLevel = 17.1;
 #endif
 
+#ifdef CAVE_ARENA
+const float kBeachLevel = 101.31;
+#endif
+
+#ifdef SWAMP2
+#ifdef MORE_REFLECT
+const float kBeachLevel = -2.2;
+#else
+const float kBeachLevel = 83;
+#endif
+#endif
+
 #ifdef WATER_HORIZON
     #ifdef ALT
     const float kBeachLevel = 22.0;
@@ -30,7 +42,6 @@ const float kBeachLevel = 17.1;
 #ifdef SNOW_EVERYWHERE
 const float kBeachLevel = -3.3;
 #endif
-
 
 #ifdef SKY_ARK
 const float kBeachLevel = 75.4;
@@ -59,7 +70,12 @@ const float kBeachLevel = 75.4;
         #endif
         uniform vec2 viewport_dims;
         uniform sampler3D tex16;
-        uniform sampler2DArray tex19;
+        #ifdef NO_REFLECTION_CAPTURE 
+            #define ref_cap_cubemap tex0
+        #else
+            uniform sampler2DArray tex19;
+            #define ref_cap_cubemap tex19
+        #endif
 
         uniform mat4 reflection_capture_matrix[10];
         uniform mat4 reflection_capture_matrix_inverse[10];
@@ -81,6 +97,8 @@ const float kBeachLevel = 75.4;
     #endif
 #elif defined(GPU_PARTICLE_FIELD)
     UNIFORM_SHADOW_TEXTURE
+    uniform samplerCube tex3;
+    uniform vec3 ws_light;
 #elif defined(SKY)
     uniform samplerCube tex0;
     uniform samplerCube tex1;
@@ -148,7 +166,12 @@ const float kBeachLevel = 75.4;
     uniform sampler3D tex16;
     uniform sampler2D tex17;
     uniform sampler2D tex18;
-    uniform sampler2DArray tex19;
+        #ifdef NO_REFLECTION_CAPTURE 
+            #define ref_cap_cubemap tex0
+        #else 
+            uniform sampler2DArray tex19;
+            #define ref_cap_cubemap tex19
+        #endif
 
     uniform mat4 reflection_capture_matrix[10];
     uniform mat4 reflection_capture_matrix_inverse[10];
@@ -724,8 +747,14 @@ bool sphere_collision(vec3 s, vec3 c, vec3 d, float r, out vec3 intersection, ou
 #if !defined(GPU_PARTICLE_FIELD)
 vec3 GetFogColorMult(){
     #ifdef RAINY
+    #ifdef NO_SKY_HIGHLIGHT
+    return vec3(1.0);
+    #else
     return vec3(1.0) + primary_light_color.xyz * pow((dot(normalize(world_vert-cam_pos), ws_light) + 1.0)*0.5, 4.0);
-    #elif defined(SWAMP) || defined(WATERFALL_ARENA)
+    #endif
+    #elif defined(VOLCANO)
+    return mix(vec3(1.0), vec3(0.2, 1.6, 3.6), max(0.0, normalize(world_vert-cam_pos).y));
+    #elif defined(SWAMP) || (defined(WATERFALL_ARENA) && !defined(CAVE))
     // Rainbow should be from 40.89–42 degrees, with red on the outside
     // Double rainbow should be at angles 50-53, with blue on the outside
     vec3 dir = normalize(world_vert-cam_pos);
@@ -750,9 +779,12 @@ vec3 GetFogColorMult(){
         rainbow *=  max(0.0, dir.y) * 1.5;
     }
 
-    vec3 col = vec3(dot + 2.0) + rainbow;     
     #ifdef WATERFALL_ARENA
-    col *= 0.5;
+    rainbow *= 0.5;
+    #endif
+    vec3 col = vec3(mix(dot + 2.0, 1.0, 0.5)) + rainbow;     
+    #if defined(WATERFALL_ARENA) && !defined(CAVE)
+    col *= 0.15;
     #endif
     return col;   
     #elif defined(WATER_HORIZON)
@@ -926,18 +958,24 @@ void main() {
     #ifdef GPU_PARTICLE_FIELD
         //#define ASH
         //#define RAIN
-        #ifdef ASH
+        #if defined(ASH) || (defined(SNOW) && defined(MED))
             int type = instance_id%83;
         #else
         #endif
         float disp_alpha = max(0.0, 0.5-distance(tex_coord, vec2(0.5)))*2.0;
         float fade_dist = 2.0;
         out_color = vec4(1.0,1.0,1.0,alpha);
+        float dist = distance(world_vert, cam_pos);
         #ifdef ASH
             if(type >= 1 && type < 3){
                 out_color.xyz = vec3(0.0);
+                out_color.a = min(1.0, out_color.a);
             } else if (type == 0){
                 out_color.xyz = vec3(2.0,0.0,0.0);
+                if(out_color.a > 1.0){
+                    out_color.xyz *= out_color.a;
+                    out_color.a = 1.0;
+                }
             } else {
                 out_color.xyz = vec3(0.0,0.0,0.0);
                 float height = world_vert.y + 22;
@@ -951,7 +989,14 @@ void main() {
             float lit = max(0.0, sin(time*(0.5+instance_id%89*0.01) + instance_id)*40.0-39);
             out_color.xyz = mix(vec3(0.0), vec3(2.0, 1.0, 0.0), lit);        
         #else
-            if(alpha != 0.001){
+            #if defined(SNOW) && defined(MED)
+                if(type == 10){
+                    out_color.a = mix(out_color.a, 0.0, min(1.0, (dist-10)/6.0));
+                } else 
+            #else
+                if(true)
+            #endif
+            {
                 vec4 shadow_coords[4];
                 shadow_coords[0] = shadow_matrix[0] * vec4(world_vert, 1.0);
                 shadow_coords[1] = shadow_matrix[1] * vec4(world_vert, 1.0);
@@ -965,9 +1010,19 @@ void main() {
                 out_color.xyz *= mix(0.05,0.2,(instance_id%83)/83.0);
             #endif
         #endif
-        if(distance(world_vert, cam_pos) < fade_dist){
-            disp_alpha *= distance(world_vert, cam_pos)/fade_dist;
+        if(dist < fade_dist){
+            disp_alpha *= dist/fade_dist;
         }
+        #ifdef RAIN
+            vec3 up = vec3(0,1,0);
+            vec3 dir = (world_vert.xyz - cam_pos) / dist;
+            vec3 right = cross(dir, up);
+            up = cross(dir, right);
+            out_color.xyz = LookupCubemapSimpleLod(normalize(world_vert.xyz - cam_pos)+right*(tex_coord[0]-0.5)*2.0+up*(tex_coord[1]-0.5)*2.0, tex3, 0.0).xyz;
+            out_color.xyz *= 1.0 + primary_light_color.x * 2.0 * max(0.0, (dot(dir, ws_light)*0.5+0.5))*max(0.0, dir.y+0.1);
+        #endif
+        //out_color.xyz = vec3(tex_coord[0]-0.5);
+        //out_color.a = 1.0;
         out_color.a *= disp_alpha;
         return;
     #elif defined(SKY)
@@ -990,12 +1045,11 @@ void main() {
         #if !defined(MISTY) && !defined(MISTY2) && !defined(SKY_ARK) && !defined(WATERFALL_ARENA)
         float blur = max(0.0, min(1.0, (1.0-abs(normal.y)+fogness)));
         color = mix(color, textureLod(tex1,normal, mix(pow(blur, 2.0), 1.0, fogness*0.5+0.5) * 5.0).xyz, min(1.0, blur * 4.0));
-        #endif
+         #endif
         color.xyz *= tint;
         //vec3 tint = vec3(1.0, 0.0, 0.0);
         //color *= tint;
         out_color = vec4(color,1.0);
-
         #ifdef ADD_STARS
             float star = star_noise(normal.xz/(normal.y+2.0) * 200.0+ vec2(time*0.05,0.0));
             star = max(0.0, star - 0.7);
@@ -1016,7 +1070,7 @@ void main() {
             float volcano_amount = max(0.0, 1.0 - normal.y);
             out_color.xyz = mix(out_color.xyz, textureLod(tex2,normal,5.0).xyz, volcano_amount);
         #endif
-        #if defined(MISTY) || defined(MISTY2) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+        #if defined(MISTY) || defined(MISTY2) || defined(SKY_ARK) || defined(CAVE)
             float haze_amount = GetHazeAmount(normal * 1000.0, haze_mult);
             vec3 fog_color;
             fog_color = textureLod(tex2, normal, 3.0).xyz * GetFogColorMult();
@@ -1117,6 +1171,10 @@ void main() {
             
             float mix_amount = max(normalized.y, 0.0);
             out_color = mix(out_color, vec4( result * 0.5, 1.0 ), mix_amount);
+        #endif
+
+        #if defined(WATERFALL_ARENA) && !defined(CAVE)
+        out_color.xyz = textureLod(tex2,normal,3.0).xyz * GetFogColorMult();
         #endif
 
     #else
@@ -1262,7 +1320,7 @@ void main() {
 
             vec3 spec_color = vec3(0.0);
             
-            #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO)
+            #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA)
                 ambient_mult *= env_ambient_mult;
             #endif
 
@@ -1273,6 +1331,26 @@ void main() {
             float overbright_adjusted = dist_fade * overbright;
             colormap.xyz = mix(base_color, mix(colormap.xyz, base_color * colormap.xyz / avg_color, tint_weight), dist_fade);
             colormap.xyz *= 1.0 + overbright_adjusted;
+
+
+            #if defined(SWAMP) || defined(SWAMP2) || defined(CAVE_ARENA)
+            float opac = 0.0;
+            if(world_vert.y < kBeachLevel ){
+                #if defined(CAVE_ARENA)
+                float mult = 10.0;
+                #else
+                float mult = 5.0;
+                #endif
+                opac = max(0.0, (kBeachLevel - world_vert.y)*mult);
+                opac = min(1.0, opac);
+            }
+            colormap.xyz *= mix(1.0, 0.3, opac);
+            #ifndef TERRAIN
+                opac = max(opac, 0.7);
+            #endif
+            roughness *= mix(1.0, 0.0, opac);
+            #endif
+
             vec3 color = diffuse_color * colormap.xyz;
         #ifdef ALBEDO_ONLY
             out_color = colormap;
@@ -1319,8 +1397,8 @@ void main() {
             float flame_final_contrib = 0.0;
             vec3 ws_normal = vec3(1.0, 0.0, 0.0);
             float roughness = 0.0;
-            float ambient_mult = 0.0;
-            float env_ambient_mult = 0.0;
+            float ambient_mult = 1.0;
+            float env_ambient_mult = 1.0;
             #ifndef NO_DECALS
             CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, env_ambient_mult, world_vert, time, decal_val, flame_final_color, flame_final_contrib);
             if(ws_normal == vec3(-1.0)){
@@ -1394,7 +1472,7 @@ void main() {
                 vec3 ambient_color = GetAmbientColor(world_vert, cam_pos - world_vert);
             #endif
 
-            diffuse_color += ambient_color * GetAmbientContrib(1.0);
+            diffuse_color += ambient_color * GetAmbientContrib(1.0) * env_ambient_mult;
 
             CalculateLightContribParticle(diffuse_color, world_vert, light_val);
 
@@ -1404,18 +1482,28 @@ void main() {
                 vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
                 blood_spec *= 10.0;
                 vec3 spec_map_vec = reflect(ws_vertex, mix(tangent_to_world3, ws_normal, 0.5));
-                vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
+                #ifdef NO_REFLECTION_CAPTURE
+                    vec3 reflection_color = vec3(0.0);
+                #else
+                    vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, normalize(spec_map_vec), 0.0);
+                #endif
                 color = mix(color, (blood_spec + reflection_color), 0.1);
             #elif defined(WATER)
                 vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
                 blood_spec *= 10.0;
                 vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
-                vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
+                #ifdef NO_REFLECTION_CAPTURE
+                    vec3 reflection_color = vec3(0.0);
+                #else
+                    vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, normalize(spec_map_vec), 0.0);
+                #endif
                 float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
                 float fresnel = pow(glancing, 6.0);
                 fresnel = mix(fresnel, 1.0, 0.05);
                 //color = pow(max(0.0, dot(ws_light, mix(normalize(ws_vertex), -ws_normal, 0.2))), 5.0) * (1.0-shadowed) * 2.0 * primary_light_color.a * primary_light_color.xyz;
-                color = LookUpReflectionShapes(tex19, world_vert, normalize(mix(normalize(ws_vertex), -ws_normal, 0.5)), 0.0);
+                #ifndef NO_REFLECTION_CAPTURE
+                    color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, normalize(mix(normalize(ws_vertex), -ws_normal, 0.5)), 0.0);
+                #endif
                 color = mix(color, (blood_spec + reflection_color), fresnel);
                 color = mix(color, diffuse_color, 0.3);
                 colormap.a *= 0.5;
@@ -1877,7 +1965,9 @@ void main() {
                     proj_test_point /= proj_test_point.w;
                     proj_test_point.xy += vec2(1.0);
                     proj_test_point.xy *= 0.5;
+                    #ifndef SIMPLE_WATER
                     float old_depth = LinearizeDepth(textureLod(tex18, proj_test_point.xy, 0.0).r);
+                    #endif
                     sample_height[0] = GetWaterHeight(water_uv, tint);
                     sample_height[1] = GetWaterHeight(water_uv + vec2(eps, 0.0), tint);
                     sample_height[2] = GetWaterHeight(water_uv + vec2(0.0, eps), tint);
@@ -1886,15 +1976,17 @@ void main() {
                     unpacked_normal.z = eps;
 
                     base_water_offset = normalize(unpacked_normal);
+                    #ifndef SIMPLE_WATER
                     if(gl_FrontFacing){
                         water_depth += abs(base_water_offset.y)/(1.0+abs(normalize(ws_vertex).y));
-                        #if defined(SWAMP) || defined(RAINY)
+                        #if defined(SWAMP) || defined(RAINY) || defined(SWAMP2)
                         water_depth += noise(world_vert.xz*20)*0.02;
                         #endif
                         if(water_depth > old_depth){
                             discard;
                         }
                     }
+                    #endif
 
                     #ifdef ALBEDO_ONLY
                         if(base_water_offset[0] < 0.0 || base_water_offset[1] < 0.0){
@@ -1933,6 +2025,7 @@ void main() {
 #endif
 
 #endif
+
     /*
     {
         vec3 world_dx = dFdx(world_vert);
@@ -1967,6 +2060,8 @@ void main() {
             if(val == 6){
                 out_color.xyz += vec3(0.0,0.0,0.5);
             }
+        } else if(val==9){
+            out_color.xyz = vec3(0.5);
         } else {
             out_color.xyz = vec3(0,0,1);
         }
@@ -2068,6 +2163,11 @@ void main() {
             #elif defined(SNOW_EVERYWHERE3)
                 float snow_cover = (ws_normal.y+max(0.0, abs(ws_normal.x)*0.65+0.25)) - 0.95;
             #endif
+        #ifdef INSTANCED_MESH
+                if(instance_color_tint[3] == -1.0){
+                    snow_cover = 0.0;
+                }
+            #endif
             if(snow_cover > 0.0){
                 snow_blend = min(1.0, snow_cover * 20.0);
             }
@@ -2078,6 +2178,7 @@ void main() {
         #endif
     #else
         snow_blend = (max(0.0, ws_normal.y - 0.3) * 1.0) * roughness;
+        snow_blend = mix(snow_blend, 0.0, blood_amount);
     #endif
     if(snow_blend > 0.0){
         colormap.xyz = mix(colormap.xyz, vec3(0.55), snow_blend);
@@ -2106,7 +2207,8 @@ void main() {
 
 #if !defined(NO_DECALS)
     #ifdef INSTANCED_MESH
-        if(instance_color_tint[3] != -1.0)
+        vec4 old_colormap = colormap;
+        float old_spec_amount = spec_amount;
     #endif
     #ifdef WATER
     roughness = 0.0;
@@ -2116,6 +2218,12 @@ void main() {
     }
     #ifdef WATER
     extra_froth = roughness;
+    #endif
+    #ifdef INSTANCED_MESH
+        if(instance_color_tint[3] == -1.0){
+            colormap = old_colormap;
+            ambient_mult = 1.0;
+        }
     #endif
 #endif
 
@@ -2140,6 +2248,10 @@ void main() {
     #endif
 
     shadow_tex.r *= CloudShadow(world_vert);
+
+#if defined(WATERFALL)
+    ws_normal = vec3(0,0.5,0);
+#endif
 
     CALC_DIRECT_DIFFUSE_COLOR
 
@@ -2215,8 +2327,11 @@ void main() {
     float direct_light = max(0.0, dot(normalize(center - world_vert), ws_normal)); 
     direct_light = mix(direct_light, 1.0, min(1.0, 1.0/pow(height, 0.7)));
     //ambient_color = vec3(direct_light);
-
+    #ifdef LESS_GLOW
+    ambient_color += direct_light * vec3(1,0.1,0) / max(1.0, pow(height, 1.8)) * 10.0;
+    #else
     ambient_color += direct_light * vec3(1,0.1,0) / max(1.0, pow(height, 1.0)) * 10.0;
+    #endif
 }
 #endif
 
@@ -2237,7 +2352,9 @@ void main() {
 #endif
 
 // Screen space reflection test
+#ifndef SIMPLE_WATER
 #define SCREEN_SPACE_REFLECTION
+#endif
 #if defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY)
    #if defined(WATER)
     vec3 screen_space_reflect;
@@ -2339,9 +2456,11 @@ void main() {
         //screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.x-0.5))*2.0, 1.0))*8.0);
         screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.y-0.5))*2.0, 1.0))*8.0);
     }
-    reflect_color = mix(reflect_color,
-                        LookUpReflectionShapes(tex19, world_vert, spec_map_vec, 0.0/*roughness * 3.0*/) * ambient_mult * env_ambient_mult,
+    #ifndef NO_REFLECTION_CAPTURE
+        reflect_color = mix(reflect_color,
+                        LookUpReflectionShapes(ref_cap_cubemap, world_vert, spec_map_vec, 0.0/*roughness * 3.0*/) * ambient_mult * env_ambient_mult,
                         1.0 - screen_space_amount);
+    #endif
 
     screen_space_reflect = reflect_color;
     out_color.xyz = mix(out_color.xyz, reflect_color, reflect_amount);
@@ -2381,8 +2500,11 @@ void main() {
         spec_color = primary_light_color.xyz * vec3(spec);
         vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
 
-
-        vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
+        #ifdef NO_REFLECTION_CAPTURE
+            vec3 reflection_color = vec3(0.0);
+        #else
+            vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, spec_map_vec, reflection_roughness * 3.0);
+        #endif
         spec_color += reflection_color;
 
         float spec_amount = 0.0;
@@ -2407,7 +2529,7 @@ void main() {
         diffuse_color *= colormap.xyz;
         diffuse_color += translucent_lighting * translucent_map;
         diffuse_color *= instance_color_tint.xyz;
-        #if defined(WATER_HORIZON) || defined(SNOW_EVERYWHERE) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+        #if defined(WATER_HORIZON) || defined(SNOW_EVERYWHERE) || defined(MORE_REFLECT) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
             Caustics(kBeachLevel, ws_normal, diffuse_color);
         #endif
 
@@ -2417,12 +2539,10 @@ void main() {
         vec3 spec_color = vec3(0.0);
 
         CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult * env_ambient_mult);
-        #if defined(WATER_HORIZON) || defined(SNOW_EVERYWHERE) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+        #if defined(WATER_HORIZON) || defined(SNOW_EVERYWHERE) || defined(MORE_REFLECT) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
             Caustics(kBeachLevel, ws_normal, diffuse_color);
         #endif
         vec3 color = diffuse_color;
-        diffuse_color = GetDirectColor(shadow_tex.r) + GetAmbientColor(world_vert, normalize(-ws_vertex)) * ambient_mult * env_ambient_mult;
-        color = diffuse_color * 0.5;
     #else
         vec3 spec_color = vec3(0.0);
         #ifdef CHARACTER
@@ -2436,8 +2556,17 @@ void main() {
 
             vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), reflection_roughness*3.0);
+            #ifdef NO_REFLECTION_CAPTURE
+                vec3 reflection_color = vec3(0.0);
+            #else
+                vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, normalize(spec_map_vec), reflection_roughness*3.0);
+            #endif
+            
+            #ifdef VOLCANO
+            spec_color += reflection_color;
+            #else
             spec_color += reflection_color * ambient_mult * env_ambient_mult;
+            #endif
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = mix(spec_amount * 0.1, 0.03, wet);
@@ -2447,6 +2576,7 @@ void main() {
 
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;
+
 
             /*if(!use_amb_cube && !use_3d_tex){
                 CALC_BLOODY_CHARACTER_SPEC
@@ -2467,14 +2597,18 @@ void main() {
             spec_color = primary_light_color.xyz * vec3(spec);
             vec3 spec_map_vec = reflect(ws_vertex,ws_normal);
 
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
+            #ifdef NO_REFLECTION_CAPTURE
+                vec3 reflection_color = vec3(0.0);
+            #else
+                vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, spec_map_vec, reflection_roughness * 3.0);
+            #endif
             spec_color += reflection_color;
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
             float fresnel = pow(glancing, 6.0) * mix(0.7, 1.0, blood_amount);
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;*/
-        #elif defined(METALNESS_PBR) || defined(ITEM) || defined(KEEP_SPEC) || defined(TERRAIN) || ((defined(RAINY) || defined(SWAMP) || defined(BEACH) || defined(WATER_HORIZON) || defined(WATERFALL_ARENA) || defined(VOLCANO) || defined(SKY_ARK) || defined(SNOW_EVERYWHERE) || defined(SNOW_EVERYWHERE2) || defined(SNOW_EVERYWHERE3) || defined(DAMP_FOG)) && !defined(WATER))
+        #elif defined(METALNESS_PBR) || defined(ITEM) || defined(KEEP_SPEC) || defined(TERRAIN) || ((defined(RAINY) || defined(SWAMP) || defined(BEACH) || defined(WATER_HORIZON) || defined(WATERFALL_ARENA) || defined(VOLCANO) || defined(SKY_ARK) || defined(SNOW_EVERYWHERE) || defined(SNOW_EVERYWHERE2) || defined(SNOW_EVERYWHERE3) || defined(DAMP_FOG) || defined(SWAMP2)) && !defined(WATER))
             #if defined(RAINY)
                 #ifndef TERRAIN
                     roughness *= 0.3;
@@ -2497,10 +2631,19 @@ void main() {
                 colormap.xyz *= mix(1.0, 0.5, opac);
             }
             #endif
-            #ifdef SWAMP
+
+            #ifdef CAVE_ARENA
+            spec_amount += 0.2 / (1.0 + length(ws_vertex) * 0.2);
+            #endif
+
+            #if defined(SWAMP) || defined(SWAMP2) || defined(CAVE_ARENA)
             float opac = 0.0;
             if(world_vert.y < kBeachLevel ){
+                #if defined(CAVE_ARENA)
+                float mult = 10.0;
+                #else
                 float mult = 5.0;
+                #endif
                 opac = max(0.0, (kBeachLevel - world_vert.y)*mult);
                 opac = min(1.0, opac);
             }
@@ -2564,6 +2707,9 @@ void main() {
                 spec_amount = mix(spec_amount, 0.0, blood_amount);
                 roughness = mix(roughness, 0.0, blood_amount * 0.2);
             #endif
+            #ifdef VOLCANO
+            roughness = max(0.0, 1.0 - colormap.x * 2.0);
+            #endif
             float reflection_roughness = roughness;
             roughness = mix(0.00001, 0.9, roughness);
             float metalness = pow(spec_amount, 0.3);
@@ -2579,18 +2725,30 @@ void main() {
             #endif
             vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
 
-
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, min(2.5, reflection_roughness * 5.0));
+            #ifdef NO_REFLECTION_CAPTURE
+                vec3 reflection_color = vec3(0.0);
+            #else
+                vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, spec_map_vec, min(2.5, reflection_roughness * 5.0));
+            #endif
             // Disabled in case ambient_cube_color is not initialized
             //reflection_color = mix(reflection_color, SampleAmbientCube(ambient_cube_color, spec_map_vec), max(0.0, reflection_roughness * 2.0 - 1.0));
+            
+            #ifdef VOLCANO
+            spec_color += reflection_color * ambient_mult;
+            #else
             spec_color += reflection_color * ambient_mult * env_ambient_mult;
+            #endif
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
             float fresnel = pow(glancing, 4.0) * (1.0 - roughness) * mix(0.5, 1.0, metalness);
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;
+            #ifdef VOLCANO
+            spec_amount *= ambient_mult;
+            #else
             spec_amount *= ambient_mult * env_ambient_mult;
+            #endif
             //out_color.xyz = vec3(colormap.xyz);
             //out_color.a = 1.0;
             //return;
@@ -2624,7 +2782,11 @@ void main() {
             #if defined(SCREEN_SPACE_REFLECTION) && defined(WATER)
             vec3 reflection_color = screen_space_reflect;
             #else
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0) * ambient_mult * env_ambient_mult;
+                #ifdef NO_REFLECTION_CAPTURE
+                    vec3 reflection_color = vec3(1.0);
+                #else
+                    vec3 reflection_color = LookUpReflectionShapes(ref_cap_cubemap, world_vert, spec_map_vec, reflection_roughness * 3.0) * ambient_mult * env_ambient_mult;
+                #endif
             #endif
             spec_color += reflection_color;
 
@@ -2636,6 +2798,12 @@ void main() {
                     fresnel = pow(glancing, 0.2);
                 } else {
                     fresnel = 0.8 * pow(max(0.0, 1.0 + dot(normalize(ws_vertex), ws_normal)), 5.0);
+                    #ifdef MORE_REFLECT
+                    fresnel = pow(1.0 + dot(normalize(ws_vertex), ws_normal), 2.0);
+                    #endif
+                    #ifdef CAVE_ARENA
+                    fresnel = pow(1.0 + dot(normalize(ws_vertex), ws_normal), 3.0);
+                    #endif
                 }
                 float spec_val = mix(base_reflectivity, 1.0, fresnel);
                 spec_amount = 1.0;
@@ -2655,17 +2823,23 @@ void main() {
             #endif
         #endif
 
-        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO)
+        #if defined(DAMP_FOG) || defined(RAINY) || defined(MISTY) || defined(VOLCANO) || defined(WATERFALL_ARENA)
         ambient_mult *= env_ambient_mult;
         #endif
         CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness, light_val, ambient_mult);
-        #if defined(WATER_HORIZON) || defined(SNOW_EVERYWHERE) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+        #if defined(WATER_HORIZON) || defined(MORE_REFLECT) || defined(SNOW_EVERYWHERE) || defined(BEACH) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
             Caustics(kBeachLevel, ws_normal, diffuse_color);
         #endif
         #if defined(METALNESS_PBR) || defined(ITEM)
             spec_color = mix(spec_color, spec_color * colormap.xyz, metalness);
         #endif
+
         vec3 color = mix(diffuse_color * colormap.xyz, spec_color, spec_amount);
+    #if defined(INSTANCED_MESH) && defined(WATERFALL)
+        if(instance_color_tint[3] == -1.0){
+            color *= 2.0; // Make armor twice as bright on waterfall level, not sure why it's too dark otherwise
+        }
+    #endif
     #endif
     #ifdef CHARACTER
         // Add rim highlight
@@ -2697,7 +2871,8 @@ void main() {
    // out_color.xyz = spec_color.xyz;
 #endif
 
-#ifdef WATER // Handle water transparency, refraction, fog
+#if defined(WATER) // Handle water transparency, refraction, fog
+    #if !defined(SIMPLE_WATER)
     vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
     proj_test_point /= proj_test_point.w;
     proj_test_point.xy += vec2(1.0);
@@ -2728,6 +2903,8 @@ void main() {
         //#if !defined(NO_DECALS)
         #ifdef SWAMP
             under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 2.0 * instance_color_tint[2], 0.2)))); // Add fog
+        #elif defined(CAVE_ARENA)
+            under_water = mix(under_water, diffuse_color * colormap.xyz * 3.0, max(0.0, min(1.0, pow(depth * 8.0 * instance_color_tint[2], 0.2)))); // Add fog
         #else
             under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3 * instance_color_tint[2], 0.2)))); // Add fog
         #endif
@@ -2755,7 +2932,11 @@ void main() {
             float b = dFdy(depth);
             float meniscus = max(0.0, 1.0 - depth / length(vec3(a,b,0)) * 0.5);
             //meniscus *= max(0.0, 1.0 - abs(a) * 1000);
+            #ifdef CAVE_ARENA
+            color.xyz *= 1.0 + meniscus * 0.75;
+            #else
             color.xyz += diffuse_color * meniscus * 0.05;
+            #endif
         }
 
         {
@@ -2780,6 +2961,25 @@ void main() {
         color.xyz *= 0.1;
         color.xyz = mix(under_water, color.xyz, spec_val);
     }
+    #else
+        color.xyz = mix(diffuse_color * colormap.xyz, color.xyz, spec_val);
+        {
+            vec2 temp_tex_coords = world_vert.xz * 0.1;
+            temp_tex_coords.x += sin(world_vert.x*4.0 + time * 2.0) * 0.004;
+            temp_tex_coords.y += sin(world_vert.z*4.0 + time * 2.6) * 0.004;
+            temp_tex_coords.x += ws_normal.x * 0.02;
+            temp_tex_coords.y += ws_normal.z * 0.02;
+
+            #ifdef WATERFALL_ARENA
+            temp_tex_coords.y += time * 0.4;
+            #endif
+
+            vec3 temp_color = texture(tex1, temp_tex_coords).xyz;
+
+            color.xyz = mix(color.xyz, diffuse_color * temp_color, pow((extra_froth * temp_color.r), 1.5));
+        }
+
+    #endif
 
 #endif  // WATER
 
@@ -2848,6 +3048,7 @@ void main() {
         vec3 temp_color = mix(texture(tex0, temp_tex_coords + vec2(offset*0.2)).xyz, texture(tex0, temp_tex_coords.yx*0.8+vec2(0.5,0.5)-vec2(offset*0.2)).xyz, vec);
         
         color.xyz = temp_color * 16.0 * mix(1.0, texture(tex1, frag_tex_coordsB).a, pow(temp_color.r,0.2));
+        color.xyz *= max(0.0, fractal(world_vert.xz*0.5)+0.5);
     #endif
     #ifdef MAGMA_FLOW
         vec2 frag_tex_coordsB = frag_tex_coords;                            //copy the variable
@@ -2859,19 +3060,9 @@ void main() {
         color.xyz = temp_color * 2.0;
     #endif
 
+
     #ifdef VOLUME_SHADOWS
         fog_color *= mix(VolumeShadow(world_vert), 1.0, 0.3);
-    #endif
-
-    color = mix(color, fog_color, haze_amount);
-
-
-    #ifdef ALPHA
-        out_color = vec4(color,colormap.a);
-    #elif defined(WATER)
-        out_color = vec4(color,spec_val);
-    #else
-        out_color = vec4(color,1.0);
     #endif
 
    #ifndef NO_VELOCITY_BUF
@@ -2888,17 +3079,9 @@ void main() {
 
    #endif  // NO_VELOCITY_BUF
 
-/*
-    vec3 avg;
-    for(int i=0; i<6; ++i){
-        avg += ambient_cube_color[i];
-    }
-    avg /= 6.0;
-    out_color.xyz = avg;
-    out_color.xyz = ambient_color;*/
 
     #if defined(FIRE_DECAL_ENABLED) && !defined(NO_DECALS)
-        out_color.xyz = mix(out_color.xyz, flame_final_color, flame_final_contrib);
+        color.xyz = mix(color.xyz, flame_final_color, flame_final_contrib);
     #endif // FIRE_DECAL_ENABLED
 
     #ifdef CHARACTER
@@ -2921,7 +3104,7 @@ void main() {
                 //fade = pow(abs(fractal(temp.xz*3.0+time)+fractal(temp.xy*2.0-time)+fractal(temp.yz*3.0-time))*0.9, 4.0);
                 flame_amount += pow(max(0.0, 0.7-fire), 2.0);
                 float opac = mix(pow(1.0-abs(dot(ws_normal, -normalize(ws_vertex))), 12.0), 1.0, pow((ws_normal.y+1.0)/2.0, 20.0));
-                out_color.xyz = mix(out_color.xyz,
+                color.xyz = mix(color.xyz,
                                 vec3(1.5 * pow(flame_amount, 0.7), 0.5 * flame_amount, 0.1 * pow(flame_amount, 2.0)),
                                 opac);
 
@@ -2934,12 +3117,41 @@ void main() {
             }
         }
     #endif
+
+
+    #if defined(WATERFALL_ARENA) && !defined(CAVE)
+    haze_amount = max(haze_amount, min(1.0, length(ws_vertex) * 0.01));
+    #endif
+
+    color = mix(color, fog_color, haze_amount);
+
+
+    #ifdef ALPHA
+        out_color = vec4(color,colormap.a);
+    #elif defined(WATER)
+        out_color = vec4(color,spec_val);
+    #else
+        out_color = vec4(color,1.0);
+    #endif
+
+
+/*
+    vec3 avg;
+    for(int i=0; i<6; ++i){
+        avg += ambient_cube_color[i];
+    }
+    avg /= 6.0;
+    out_color.xyz = avg;
+    out_color.xyz = ambient_color;
+*/
+
 /*
     #ifdef CHARACTER
         float dark_world_amount = sin(time)*0.5+0.5;
         out_color.xyz = mix(out_color.xyz, vec3(mix(1.0,0.8, dark_world_amount) - dot(ws_normal, -normalize(ws_vertex))),dark_world_amount);
         out_color.a = 1.0;
-    #endif*/
+    #endif
+*/
 
     #ifdef CHARACTER
         out_color.a = alpha;
@@ -2956,8 +3168,13 @@ void main() {
 /*
     #if !defined(DEPTH_ONLY) && !defined(PLANT)
       //out_color.xyz = vec3(blood_texel.b);
-      out_color.xyz = LookUpReflectionShapes(tex19, world_vert, normalize(ws_vertex), 0.0);
-    #endif*/
+      #ifdef NO_REFLECTION_CAPTURE
+          out_color.xyz = vec3(0.0);
+      #else 
+          out_color.xyz = LookUpReflectionShapes(ref_cap_cubemap, world_vert, normalize(ws_vertex), 0.0);
+      #endif
+    #endif
+*/
 
     //out_color.xyz = colormap.xyz; // albedo
     //out_color.xyz = vec3(colormap.a); // metalness

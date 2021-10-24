@@ -20,5 +20,10 @@ void OnEnter(MovementObject @mo) {
                 ReadCharacterID(id).Execute("static_char = false;");
             }
         }    
+
+        if(params.HasParam("music_layer_override")){
+            int override = params.GetInt("music_layer_override");
+            level.SendMessage("music_layer_override "+override);
+        }
     }
 }

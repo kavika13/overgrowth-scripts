@@ -272,6 +272,8 @@ void Update() {
     camera.SetDistance(0);
     camera.SetVelocity(co.velocity); 
     camera.SetFOV(current_fov);
+    camera.SetDOF(0,0,0,0,0,0);    
+        
 
     camera.CalcFacing();
     camera.CalcUp();

@@ -81,6 +81,9 @@ void Update() {
         if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
             MovementObject@ mo = ReadCharacterID(id);
             mo.Execute("WaterIntersect("+hotspot.GetID()+");");
+            if(params.HasParam("Lethal")){
+              mo.Execute("zone_killed=1;TakeDamage(1.0f);");
+            }
         }
     }
     LeaveTelemetryZone();

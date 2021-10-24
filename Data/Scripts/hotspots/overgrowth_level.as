@@ -10,8 +10,22 @@ float win_time = -1.0;
 int win_target = 0;
 bool sent_level_complete_message = false;
 int curr_music_layer = 0;
+float music_sting_end = 0.0;
+const bool kDebugText = true;
+int sting_handle = -1;
 
 string music_prefix;
+string success_sting = "Data/Music/slaver_loop/the_slavers_success.wav";
+string defeat_sting = "Data/Music/slaver_loop/the_slavers_defeat.wav";
+
+// Audience info
+float audience_excitement;
+float total_excitement;
+int audience_size;
+int audience_sound_handle;
+float crowd_cheer_amount;
+float crowd_cheer_vel;
+float boo_amount = 0.0;
 
 void SetParameters() {
     params.AddString("music", "slaver");
@@ -20,22 +34,38 @@ void SetParameters() {
         AddMusic("Data/Music/slaver_loop/layers.xml");
         PlaySong("slavers1");
         music_prefix = "slavers_";
+        success_sting = "Data/Music/slaver_loop/the_slavers_success.wav";
+        defeat_sting = "Data/Music/slaver_loop/the_slavers_defeat.wav";
     } else if(params.GetString("music") == "swamp"){
         AddMusic("Data/Music/swamp_loop/swamp_layer.xml");
         PlaySong("swamp1");
         music_prefix = "swamp_";
+        success_sting = "Data/Music/swamp_loop/swamp_success.wav";
+        defeat_sting = "Data/Music/swamp_loop/swamp_defeat.wav";
     } else if(params.GetString("music") == "cats"){
         AddMusic("Data/Music/cats_loop/layers.xml");
         PlaySong("cats1");
-        music_prefix = "crete_";
+        music_prefix = "cats_";
+        success_sting = "Data/Music/cats_loop/cats_success.wav";
+        defeat_sting = "Data/Music/cats_loop/cats_defeat.wav";
     } else if(params.GetString("music") == "crete"){
         AddMusic("Data/Music/crete_loop/layers.xml");
         PlaySong("crete1");
         music_prefix = "crete_";
+        success_sting = "Data/Music/crete_loop/crete_success.wav";
+        defeat_sting = "Data/Music/crete_loop/crete_defeat.wav";
     } else if(params.GetString("music") == "rescue"){
         AddMusic("Data/Music/rescue_loop/layers.xml");
         PlaySong("rescue1");
         music_prefix = "rescue_";
+        success_sting = "Data/Music/rescue_loop/rescue_success.wav";
+        defeat_sting = "Data/Music/rescue_loop/rescue_defeat.wav";
+    } else if(params.GetString("music") == "arena"){
+        AddMusic("Data/Music/SubArena/layers.xml");
+        PlaySong("sub_arena");
+        music_prefix = "arena_";
+        success_sting = "Data/Sounds/versus/fight_win1_1.wav";
+        defeat_sting = "Data/Sounds/versus/fight_lose1_1.wav";
     } else {
         params.SetString("music", "slaver");
         SetParameters();
@@ -47,6 +77,7 @@ void Init() {
     curr_music_layer = 0;
     level.ReceiveLevelEvents(hotspot.GetID());
     hotspot.SetCollisionEnabled(false);
+    audience_sound_handle = -1;
 }
 
 void Dispose() {
@@ -54,6 +85,7 @@ void Dispose() {
 }
 
 void TriggerGoalString(const string &in goal_str){
+    Print("Triggering goal string: "+goal_str+"\n");
     TokenIterator token_iter;
     token_iter.Init();
     while(token_iter.FindNextToken(goal_str)){
@@ -68,6 +100,15 @@ void TriggerGoalString(const string &in goal_str){
                 if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
                     ReadCharacterID(id).Execute("static_char = false;");
                 }
+                if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _hotspot_object){
+                    ReadObjectFromID(id).ReceiveScriptMessage("activate");
+                }
+            }
+        }
+        if(token_iter.GetToken(goal_str) == "music_layer_override" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str)){
+                int id = atoi(token_iter.GetToken(goal_str));
+                music_layer_override = id;
             }
         }
     }    
@@ -75,18 +116,43 @@ void TriggerGoalString(const string &in goal_str){
 
 void TriggerGoalPre() {
     if(params.HasParam("goal_"+progress+"_pre")){
+        Print("Triggering "+"goal_"+progress+"_pre"+"\n");
         TriggerGoalString(params.GetString("goal_"+progress+"_pre"));
     }
 }
 
 void TriggerGoalPost() {
     if(params.HasParam("goal_"+progress+"_post")){
+        Print("Triggering "+"goal_"+progress+"_post"+"\n");
         TriggerGoalString(params.GetString("goal_"+progress+"_post"));
     }
 }
 
+void PlaySuccessSting() {
+    if(sting_handle != -1){
+        StopSound(sting_handle);
+        sting_handle = -1;
+    }
+    sting_handle = PlaySound(success_sting);
+    SetSoundGain(sting_handle, GetConfigValueFloat("music_volume"));
+    music_sting_end = the_time + 5.0;
+    SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);
+}
+
+void PlayDeathSting() {
+    if(sting_handle != -1){
+        StopSound(sting_handle);
+        sting_handle = -1;
+    }
+    sting_handle = PlaySound(defeat_sting);
+    SetSoundGain(sting_handle, GetConfigValueFloat("music_volume"));
+    music_sting_end = the_time + 5.0;
+    SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);    
+}
+
 void IncrementProgress() {
     EnterTelemetryZone("IncrementProgress()");
+    Print("IncrementProgress: "+progress+" to "+(progress+1)+"\n");
     TriggerGoalPost();
     ++progress;
     win_time = -1.0;
@@ -171,7 +237,7 @@ void CheckReset() {
             string goal_str = params.GetString("goal_"+i);
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
-                if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat"){
+                if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat" || token_iter.GetToken(goal_str) == "defeat_optional"){
                     while(token_iter.FindNextToken(goal_str) && token_iter.GetToken(goal_str) != ""){
                         int id = atoi(token_iter.GetToken(goal_str));
                         if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
@@ -224,7 +290,7 @@ void CheckReset() {
                 if(obj.GetType() == _placeholder_object){
                     mo.position = obj.GetTranslation();
                     mo.SetRotationFromFacing(obj.GetRotation() * vec3(0,0,1));
-                    mo.Execute("SetCameraFromFacing(); SetOnGround(true);");
+                    mo.Execute("SetCameraFromFacing(); SetOnGround(true); FixDiscontinuity();");
                 }
             }
         }
@@ -240,20 +306,27 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
         Print("Player entered checkpoint: "+val+"\n");
         if(params.HasParam("goal_"+goal_check)){
             string goal_str = params.GetString("goal_"+goal_check);
+            Print("Looking at goal: "+goal_str+"\n");
             TokenIterator token_iter;
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
                 string goal_type = token_iter.GetToken(goal_str);
+                Print("goal_type: "+goal_type+"\n");
                 if(goal_type == "reach" || goal_type == "reach_skippable"){
                     if(token_iter.FindNextToken(goal_str)){
                         int id = atoi(token_iter.GetToken(goal_str));
+                        Print("id: "+id+"\n");
                         if(id == val){
                             win_time = the_time + 1.0;
                             win_target = goal_check+1;
                         } else if(goal_type == "reach_skippable") {
+                            Print("Checking next\n");
                             PossibleWinEvent(event, val, goal_check+1);
                         }
                     }
+                }
+                if(goal_type == "defeat_optional"){
+                    PossibleWinEvent(event, val, goal_check+1);
                 }
             }
         }
@@ -265,7 +338,7 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
             TokenIterator token_iter;
             token_iter.Init();
             if(token_iter.FindNextToken(goal_str)){
-                if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat"){
+                if(token_iter.GetToken(goal_str) == "defeat" || token_iter.GetToken(goal_str) == "spawn_defeat" || token_iter.GetToken(goal_str) == "defeat_optional"){
                     Print("Checking defeat conditions\n");
                     bool success = true;
                     while(token_iter.FindNextToken(goal_str) && token_iter.GetToken(goal_str) != ""){
@@ -277,7 +350,6 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
                         }
                     }
                     if(success){
-                        win_time = the_time + 3.0;
                         int player_id = GetPlayerCharacterID();
                         if(player_id != -1){
                             EnterTelemetryZone("Restore player health");
@@ -285,6 +357,8 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
                             mo.ReceiveScriptMessage("restore_health");
                             LeaveTelemetryZone();
                         }
+                        PlaySuccessSting();
+                        win_time = the_time + 5.0;
                         win_target = goal_check+1;
                     }
                 }
@@ -293,19 +367,148 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
     }
 }
 
+enum MessageParseType {
+    kSimple = 0,
+    kOneInt = 1,
+    kTwoInt = 2
+}
+
+int music_layer_override = -1;
+bool crowd_override = false;
+float crowd_gain_override;
+float crowd_pitch_override;
+array<float> dof_params;
+
 void ReceiveMessage(string msg) {
-    //Print("Received message: "+msg+"\n");
     TokenIterator token_iter;
     token_iter.Init();
     if(!token_iter.FindNextToken(msg)){
         return;
     }
+
     string msg_start = token_iter.GetToken(msg);
     if(msg_start == "reset"){
         queued_goal_check = true;
         ko_time = -1.0;
         win_time = -1.0;
+        music_layer_override = -1;
     }
+
+    if(msg_start == "level_event" &&
+       token_iter.FindNextToken(msg))
+    {
+        string sub_msg = token_iter.GetToken(msg);
+        if(sub_msg == "music_layer_override"){
+            if(token_iter.FindNextToken(msg)){
+                Print("Set music_layer_override to "+atoi(token_iter.GetToken(msg))+"\n");
+                music_layer_override = atoi(token_iter.GetToken(msg));
+            }
+        } else if(sub_msg == "crowd_override"){
+            crowd_override = false;
+            if(token_iter.FindNextToken(msg)){
+                crowd_gain_override = atof(token_iter.GetToken(msg));
+                if(token_iter.FindNextToken(msg)){
+                    crowd_override = true;
+                    crowd_pitch_override = atof(token_iter.GetToken(msg));
+                }
+            }
+        } else if(sub_msg == "set_camera_dof"){
+            dof_params.resize(0);
+            while(token_iter.FindNextToken(msg)){
+                dof_params.push_back(atof(token_iter.GetToken(msg)));
+            }
+            if(dof_params.size() == 6){
+                camera.SetDOF(dof_params[0], dof_params[1], dof_params[2], dof_params[3], dof_params[4], dof_params[5]);
+            }
+        } else if(sub_msg == "character_knocked_out" || sub_msg == "character_died") {
+             if(win_time == -1.0){
+                PossibleWinEvent("character_defeated", -1, progress);
+            }
+        }
+    }
+
+
+    // Handle simple tokens, or mark as requiring extra parameters
+    MessageParseType type = kSimple;
+    string token = token_iter.GetToken(msg);
+   if(token == "knocked_over" ||
+              token == "passive_blocked" ||
+              token == "active_blocked" ||
+              token == "dodged" ||
+              token == "character_attack_feint" ||
+              token == "character_attack_missed" ||
+              token == "character_throw_escape" ||
+              token == "character_thrown" ||
+              token == "cut")
+    {
+        type = kTwoInt;
+    } else if(token == "character_died" ||
+              token == "character_knocked_out" ||
+              token == "character_start_flip" ||
+              token == "character_start_roll" ||
+              token == "character_failed_flip"||
+              token == "item_hit")
+    {
+        type = kOneInt;
+    }
+
+    if(type == kOneInt){
+        token_iter.FindNextToken(msg);
+        int char_a = atoi(token_iter.GetToken(msg));
+        if(token == "character_died"){
+            Print("Player "+char_a+" was killed\n");
+            audience_excitement += 4.0f;
+        } else if(token == "character_knocked_out"){
+            Print("Player "+char_a+" was knocked out\n");
+            audience_excitement += 3.0f;
+        } else if(token == "character_start_flip"){
+            Print("Player "+char_a+" started a flip\n");
+            audience_excitement += 0.4f;
+        } else if(token == "character_start_roll"){
+            Print("Player "+char_a+" started a roll\n");
+            audience_excitement += 0.4f;
+        } else if(token == "character_failed_flip"){
+            Print("Player "+char_a+" failed a flip\n");
+            audience_excitement += 1.0f;
+        } else if(token == "item_hit"){
+            Print("Player "+char_a+" was hit by an item\n");
+            audience_excitement += 1.5f;
+        }
+    } else if(type == kTwoInt){
+        token_iter.FindNextToken(msg);
+        int char_a = atoi(token_iter.GetToken(msg));
+        token_iter.FindNextToken(msg);
+        int char_b = atoi(token_iter.GetToken(msg));
+        if(token == "knocked_over"){
+            Print("Player "+char_a+" was knocked over by player "+char_b+"\n");
+            audience_excitement += 1.5f;
+        } else if(token == "passive_blocked"){
+            Print("Player "+char_a+" passive-blocked an attack by player "+char_b+"\n");
+            audience_excitement += 0.5f;
+        } else if(token == "active_blocked"){
+            Print("Player "+char_a+" active-blocked an attack by player "+char_b+"\n");
+            audience_excitement += 0.7f;
+        } else if(token == "dodged"){
+            Print("Player "+char_a+" dodged an attack by player "+char_b+"\n");
+            audience_excitement += 0.7f;
+        } else if(token == "character_attack_feint"){
+            Print("Player "+char_a+" feinted an attack aimed at "+char_b+"\n");
+            audience_excitement += 0.4f;
+        } else if(token == "character_attack_missed"){
+            Print("Player "+char_a+" missed an attack aimed at "+char_b+"\n");
+            audience_excitement += 0.4f;    
+        } else if(token == "character_throw_escape"){
+            Print("Player "+char_a+" escaped a throw attempt by "+char_b+"\n");
+            audience_excitement += 0.7f;        
+        } else if(token == "character_thrown"){
+            Print("Player "+char_a+" was thrown by "+char_b+"\n");
+            audience_excitement += 1.5f;
+        } else if(token == "cut"){
+            Print("Player "+char_a+" was cut by "+char_b+"\n");
+            audience_excitement += 2.0f;
+        }
+    }
+    
 
     if(win_time == -1.0){
         if(msg_start == "player_entered_checkpoint"){
@@ -313,18 +516,16 @@ void ReceiveMessage(string msg) {
                 int checkpoint_id = atoi(token_iter.GetToken(msg));
                 PossibleWinEvent("checkpoint", checkpoint_id, progress);
             }
-        }
-        if(msg_start == "level_event" &&
-           token_iter.FindNextToken(msg) &&
-           (token_iter.GetToken(msg) == "character_knocked_out" || token_iter.GetToken(msg) == "character_died"))
-        {
-            PossibleWinEvent("character_defeated", -1, progress);
-        }
+        }        
     }
 }
 
 void SetMusicLayer(int layer){
-    //DebugText("music_layer", "music_layer: "+layer, 0.5);
+    if(kDebugText){
+        DebugText("music_layer", "music_layer: "+layer, 0.5);
+        DebugText("music_layer_override", "music_layer_override: "+music_layer_override, 0.5);
+        DebugText("music_prefix", "music_prefix: "+music_prefix, 0.5);
+    }
     if(layer != curr_music_layer){
         SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);
         SetLayerGain(music_prefix+"layer_"+layer, 1.0);
@@ -342,26 +543,87 @@ void Update() {
         }
     }
     LeaveTelemetryZone();
+
+    if(audience_sound_handle == -1 && music_prefix == "arena_"){
+        audience_sound_handle = PlaySoundLoop("Data/Sounds/crowd/crowd_arena_general_1.wav",0.0f);
+    } else if(audience_sound_handle != -1 && music_prefix != "arena_"){
+        StopSound(audience_sound_handle);
+        audience_sound_handle = -1;
+    }
+
+    // Get total amount of character movement
+    float total_char_speed = 0.0f;
+    int num = GetNumCharacters();
+    for(int i=0; i<num; ++i){
+        MovementObject@ char = ReadCharacter(i);
+        if(char.GetIntVar("knocked_out") == _awake){
+            total_char_speed += length(char.velocity);
+        }
+    }
+    // Decay excitement based on total character movement
+    float excitement_decay_rate = 1.0f / (1.0f + total_char_speed / 14.0f);
+    excitement_decay_rate *= 3.0f;
+    audience_excitement *= pow(0.05f, 0.001f*excitement_decay_rate);
+    total_excitement += audience_excitement * time_step;
+    // Update crowd sound effect volume and pitch based on excitement
+    float target_crowd_cheer_amount = audience_excitement * 0.1f + 0.15f;
+
+    float target_boo_amount = 0.0;
+    if(crowd_override){
+        target_crowd_cheer_amount = crowd_gain_override;
+        target_boo_amount = crowd_pitch_override;
+    }
+    boo_amount = mix(target_boo_amount, boo_amount, 0.98);
+    crowd_cheer_vel += (target_crowd_cheer_amount - crowd_cheer_amount) * time_step * 10.0f;
+    if(crowd_cheer_vel > 0.0f){
+        crowd_cheer_vel *= 0.99f;
+    } else {
+        crowd_cheer_vel *= 0.95f;
+    }
+    crowd_cheer_amount += crowd_cheer_vel * time_step;
+    crowd_cheer_amount = max(crowd_cheer_amount, 0.1f);
+
+
+    SetSoundGain(audience_sound_handle, crowd_cheer_amount*2.0f);
+    SetSoundPitch(audience_sound_handle, mix(min(0.8f + crowd_cheer_amount * 0.5f,1.2f), 0.7, boo_amount));
 }
+
+bool can_press_attack = false;
 
 void PreDraw(float curr_game_time) {
     EnterTelemetryZone("Overgrowth Level PreDraw");
     camera.SetTint(camera.GetTint() * (1.0 - blackout_amount));
     
+    if(kDebugText){
+        DebugText("progress", "progress: "+progress, 0.5);
+    }
     if(queued_goal_check){
         CheckReset();
         queued_goal_check = false;
     }
 
     int player_id = GetPlayerCharacterID();
-    if(player_id == -1){
-        SetMusicLayer(-1);
-    } else if(ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
-        SetMusicLayer(0);
-    } else if(ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1){
-        SetMusicLayer(3);
-    } else if(params.HasParam("music")){
-        SetMusicLayer(1);
+    if(music_layer_override == -1){
+        if(player_id == -1){
+            SetMusicLayer(-1);
+        } else if(ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
+            SetMusicLayer(0);
+        } else if(ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1){
+            SetMusicLayer(3);
+        } else if(params.HasParam("music")){
+            SetMusicLayer(1);
+        }
+    } else {
+        SetMusicLayer(music_layer_override);
+    }
+
+    if(the_time >= music_sting_end ){
+        if(music_sting_end != 0.0){
+            music_sting_end = 0.0;
+            SetLayerGain(music_prefix+"layer_"+curr_music_layer, 1.0);
+        }
+    } else {
+        SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);
     }
 
     blackout_amount = 0.0;
@@ -370,9 +632,21 @@ void PreDraw(float curr_game_time) {
         if(char.GetIntVar("knocked_out") != _awake){
             if(ko_time == -1.0f){
                 ko_time = the_time;
+                PlayDeathSting();
+                can_press_attack = false;
             }
             if(ko_time < the_time - 1.0){
-                if(GetInputPressed(0, "attack") || ko_time < the_time - 5.0){
+                if(!GetInputDown(0, "attack")){
+                    can_press_attack = true;
+                }
+                if((GetInputDown(0, "attack") && can_press_attack) || GetInputDown(0, "keypadenter") || 
+                   GetInputDown(0, "return"))// ||  ko_time < the_time - 5.0)
+                {
+                    if(sting_handle != -1){
+                        music_sting_end = the_time;
+                        StopSound(sting_handle);
+                        sting_handle = -1;
+                    }
                     level.SendMessage("reset");                 
                     level.SendMessage("skip_dialogue");                 
                 }

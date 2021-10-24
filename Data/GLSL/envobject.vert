@@ -57,6 +57,7 @@ in vec2 tex_coord_attrib;
     uniform float time;
     uniform vec2 viewport_dims;
     uniform vec3 cam_dir;
+    uniform float time_scale;
 #elif defined(PARTICLE)
     uniform mat4 mvp;
     const int kMaxInstances = 100;
@@ -515,9 +516,10 @@ void main() {
                 size = 0.0;
             }
         #elif defined(RAIN)
+            float rain_stretch = max(1.0, 20.0 * time_scale);
             float size_mult = max(1.0, dist*0.5 - 1.0);
             size *= size_mult;
-            alpha = 0.07/pow(size_mult,1.6);
+            alpha = min(0.2, 0.07/pow(size_mult,1.6)*20.0/rain_stretch)*3.0;
         #elif defined(FIREFLY)
             float size_mult = max(1.0, dist*0.7 - 1.0);
             size *= size_mult;
@@ -539,7 +541,7 @@ void main() {
         #endif
         tex_coord = tex_coord_attrib;   
         #ifdef RAIN
-        vec3 transformed_vertex = size*(inverse(view_matrix) * vec4(vertex_attrib, 0.0)).xyz * vec3(1,20,1) + pos;
+        vec3 transformed_vertex = size*(inverse(view_matrix) * vec4(vertex_attrib, 0.0)).xyz * vec3(1,rain_stretch,1) + pos;
         #else
         vec3 transformed_vertex = size*(inverse(view_matrix) * vec4(vertex_attrib, 0.0)).xyz + pos;
         #endif

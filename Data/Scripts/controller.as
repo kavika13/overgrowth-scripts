@@ -13,7 +13,7 @@ bool first_run = true;
 int old_controller_index = -1;
 
 class ControllerItem
-  {
+{
     vec2 position;
 	IMElement@ element;
 	IMMessage@ message = null;
@@ -26,16 +26,27 @@ class ControllerItem
 	bool skip_show_border = false;
 
 	ControllerItem(){}
-	
 };
+
+const int kMainController = 1;
+const int kSubmenuControllerItems = 2;
 
 array<ControllerItem@> main_controller_items;
 array<ControllerItem@> submenu_controller_items;
 ControllerItem@ submenu_current_item;
 ControllerItem@ main_current_item;
 
-array<ControllerItem@>@ current_controller_items = @main_controller_items;
+int current_controller_item_state = kMainController;
+
 ControllerItem@ current_item = @main_current_item;
+
+array<ControllerItem@>@ GetCurrentControllerItems() {
+    if( kMainController == current_controller_item_state ) {
+        return @main_controller_items;
+    } else {
+        return @submenu_controller_items;
+    }
+}
 
 bool list_created = false;
 
@@ -46,14 +57,14 @@ bool GetControllerActive(){
 void EnableControllerSubmenu(){
 	DeactivateCurrentItem();
 	@main_current_item = @current_item;
-	@current_controller_items = @submenu_controller_items;
+    current_controller_item_state = kSubmenuControllerItems;
 	@current_item = @submenu_current_item;
 }
 
 void DisableControllerSubmenu(){
 	DeactivateCurrentItem();
-	current_controller_items.resize(0);
-	@current_controller_items = @main_controller_items;
+	GetCurrentControllerItems().resize(0);
+    current_controller_item_state = kMainController;
 	@current_item = @main_current_item;
 	if(controller_active){
 		SetItemActive(current_item);
@@ -74,7 +85,7 @@ void AddControllerItem(IMElement@ item, IMMessage@ message){
 	ControllerItem new_item();
 	@new_item.element = item;
 	@new_item.message = message;
-	current_controller_items.insertLast(@new_item);
+	GetCurrentControllerItems().insertLast(@new_item);
 	
 }
 
@@ -88,16 +99,16 @@ void AddControllerItem(IMElement@ item, IMMessage@ message_enter, IMMessage@ mes
 	@new_item.message_up = message_up;
 	@new_item.message_down = message_down;
 
-	current_controller_items.insertLast(@new_item);
+	GetCurrentControllerItems().insertLast(@new_item);
 	
 }
 
 void AddControllerItem(ControllerItem @item){
-	current_controller_items.insertLast(item);
+	GetCurrentControllerItems().insertLast(item);
 }
 
 void ClearControllerItems(int start_at = 0){
-	current_controller_items.removeRange(start_at, current_controller_items.size());
+	GetCurrentControllerItems().removeRange(start_at, GetCurrentControllerItems().size());
 }
 
 void SetControllerItemBeforeShift(){
@@ -125,12 +136,12 @@ void SetControllerItemAfterShift(int direction){
 void SetCurrentControllerItem(uint index){
     list_created = false;
 	//If the index is out of bound just select the last one.
-	if(index >= current_controller_items.size()){
-		index = current_controller_items.size() - 1;
+	if(index >= GetCurrentControllerItems().size()){
+		index = GetCurrentControllerItems().size() - 1;
 	}else if(index < 0){
         index = 0;
     }
-	@current_item = @current_controller_items[index];
+	@current_item = @GetCurrentControllerItems()[index];
 	if(controller_active){
 		SetItemActive(@current_item);
 	}
@@ -138,17 +149,17 @@ void SetCurrentControllerItem(uint index){
 
 void SetCurrentControllerItem(string name){
 	list_created = false;
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		if(current_controller_items[i].element.getName() == name){
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		if( GetCurrentControllerItems()[i].element.getName() == name){
 			//Found it
-			@current_item = @current_controller_items[i];
+			@current_item = @GetCurrentControllerItems()[i];
 			if(controller_active){
 				SetItemActive(@current_item);
 			}
 			return;
 		}
 	}
-	@current_item = @current_controller_items[0];
+	@current_item = @GetCurrentControllerItems()[0];
 	if(controller_active){
 		SetItemActive(@current_item);
 	}
@@ -156,8 +167,8 @@ void SetCurrentControllerItem(string name){
 
 int GetCurrentControllerItemIndex(){
 	int index = -1;
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		if(current_item is current_controller_items[i]){
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		if(current_item is GetCurrentControllerItems()[i]){
 			index = i;
 			break;
 		}
@@ -167,8 +178,8 @@ int GetCurrentControllerItemIndex(){
 
 string GetCurrentControllerItemName(){
 	string name = "";
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		if(current_item is current_controller_items[i]){
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		if(current_item is GetCurrentControllerItems()[i]){
 			name = current_item.element.getName();
 			break;
 		}
@@ -177,24 +188,24 @@ string GetCurrentControllerItemName(){
 }
 
 void UpdateItemPositions(){
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		vec2 new_position = current_controller_items[i].element.getScreenPosition();
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		vec2 new_position = GetCurrentControllerItems()[i].element.getScreenPosition();
 		float scaling_x = screenMetrics.GUIToScreen(vec2(1)).x;
 		float scaling_y = screenMetrics.GUIToScreen(vec2(1)).y;
-		current_controller_items[i].position = vec2(new_position.x + (current_controller_items[i].element.getSizeX() / 2.0f * scaling_x), new_position.y + (current_controller_items[i].element.getSizeY() / 2.0f * scaling_y));
+		GetCurrentControllerItems()[i].position = vec2(new_position.x + (GetCurrentControllerItems()[i].element.getSizeX() / 2.0f * scaling_x), new_position.y + (GetCurrentControllerItems()[i].element.getSizeY() / 2.0f * scaling_y));
 	}
 }
 
 void PrintPositions(){
-	for(uint i = 0; i < current_controller_items.size(); i++){
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
 		//Print("Position " + controller_items[i].position.x + " " + current_controller_items[i].position.y + "\n");
-		Print("default size " + current_controller_items[i].element.getSize().x + "\n" );
+		Print("default size " + GetCurrentControllerItems()[i].element.getSize().x + "\n" );
 	}
 }
 
 void DrawBoxes(){
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		vec2 new_position = current_controller_items[i].position;
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		vec2 new_position = GetCurrentControllerItems()[i].position;
 		imGUI.drawBox(new_position, vec2(100.0f), vec4(1,0,0,1), 9);
 		//current_controller_items[i].position = vec2(new_position.x + (current_controller_items[i].element.getSizeX() / 2.0f), new_position.y + (current_controller_items[i].element.getSizeY() / 2.0f));
 	}
@@ -215,10 +226,10 @@ void DeactivateCurrentItem(){
 }
 
 void UpdateController(){
-	if(current_controller_items.size() < 1)return;
+	if(GetCurrentControllerItems().size() < 1)return;
 	if(!list_created){
 		if(current_item is null){
-			@current_item = @current_controller_items[0];
+			@current_item = @GetCurrentControllerItems()[0];
 		}
 		if(controller_active && first_run){
 			first_run = false;
@@ -339,8 +350,8 @@ void GetClosestItem(vec2 direction){
 	bool horiz = (direction.y == 0);
 	float scaling_x = screenMetrics.GUIToScreen(vec2(1)).x;
 	float scaling_y = screenMetrics.GUIToScreen(vec2(1)).y;
-	for(uint i = 0; i < current_controller_items.size(); i++){
-		ControllerItem@ possible_closest = current_controller_items[i];		
+	for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+		ControllerItem@ possible_closest = GetCurrentControllerItems()[i];		
 		if(	possible_closest.position == current_item.position){continue;}
 		
 		if(direction.x == 1 || direction.x == -1){
@@ -364,8 +375,8 @@ void GetClosestItem(vec2 direction){
 			//Get all the items in the opposite direction
 			direction *= -1;
 			closest_furthest = false;
-			for(uint i = 0; i < current_controller_items.size(); i++){
-				ControllerItem@ possible_closest = current_controller_items[i];
+			for(uint i = 0; i < GetCurrentControllerItems().size(); i++){
+				ControllerItem@ possible_closest = GetCurrentControllerItems()[i];
 				if(	possible_closest.position == current_item.position){continue;}
 				if( (direction.x == -1) == (possible_closest.position.x > current_item.position.x + (direction.x * (current_item.element.getSizeX() / 2.0f) * scaling_x)) ){	//Right and Left
 					items_in_direction.insertLast(@possible_closest);

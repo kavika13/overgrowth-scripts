@@ -7,7 +7,7 @@ float menu_item_spacing = 40;
 
 MusicLoad ml("Data/Music/menu.xml");
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 RibbonEffect ribbonEffect( imGUI ); 
 
 bool HasFocus() {
@@ -15,7 +15,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     /**
      * Setup the GUI 
      **/

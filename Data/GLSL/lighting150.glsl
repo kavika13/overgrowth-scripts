@@ -316,11 +316,10 @@ float GetSpecContrib ( const vec3 light_pos,
     return min(1.0, pow(max(0.0,dot(normal,H)),pow_val)*1.0)*unshadowed*primary_light_color.a;
 }
 
-float GetHazeAmount( in vec3 relative_position ) { 
-    /*float near = 0.1;
-    float far = 1000.0;
-    float fog_opac = min(1.0,length(relative_position)/far);
-    */
+float GetHazeAmount( in vec3 relative_position ) {     
+    #ifdef DISABLE_FOG
+    return 0.0f;
+    #endif 
     float haze_mult = 0.0008;
     float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
     return fog_opac;
@@ -356,6 +355,9 @@ float fractal_3d(in vec3 x){
 
 
 float GetHazeAmount( in vec3 relative_position, float haze_mult) { 
+    #ifdef DISABLE_FOG
+    return 0.0f;
+    #endif 
     /*float near = 0.1;
     float far = 100.0;
     float fog_opac = min(1.0,length(relative_position)/far);

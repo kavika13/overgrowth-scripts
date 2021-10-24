@@ -6,17 +6,17 @@ MusicLoad ml("Data/Music/menu.xml");
 const int item_per_screen = 4;
 const int rows_per_screen = 3;
 
-IMGUI imGUI;
+IMGUI@ imGUI;
 array<LevelInfo@> play_menu = {	LevelInfo("tutorial.xml",		"Tutorial",			"Textures/ui/menus/main/tutorial.jpg"),
-								LevelInfo("campaign_menu.as",	"Main Campaign",	"Textures/ui/menus/main/main_campaign.jpg", true),
-								LevelInfo("lugaru_menu.as",		"Lugaru Campaign",	"Textures/lugarumenu/smallest_Village_2.jpg")};
+								LevelInfo("campaign_menu.as",	"Overgrowth Story",	"Textures/ui/menus/main/main_campaign.jpg", true),
+								LevelInfo("lugaru_menu.as",		"Lugaru Story",	"Textures/lugarumenu/smallest_Village_2.jpg")};
 
 bool HasFocus() {
     return false;
 }
 
 void Initialize() {
-
+    @imGUI = CreateIMGUI();
     // Start playing some music
     PlaySong("overgrowth_main");
 
