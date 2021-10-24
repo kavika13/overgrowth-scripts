@@ -107,6 +107,52 @@ class GlobalArenaData {
 
     }
 
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the JSON object representing the current arena session
+     *  
+     */
+    JSONValue getSessionParameters() {
+        SavedLevel @saved_level = save_file.GetSavedLevel("arena_progress");
+        
+        // read in the text for the session object
+        string arena_session_str = saved_level.GetValue("arena_session");
+
+        // sanity check 
+        if( arena_session_str == "" ) {
+            arena_session_str = "{}";
+        }
+
+        JSON sessionJSON;             
+
+        // sanity check
+        if( !sessionJSON.parseString( arena_session_str ) ) {
+            DisplayError("Persistence Error", "Unable to parse session information");
+        }
+
+        return sessionJSON.getRoot();
+
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Stores the JSON representation for the current session
+     *  
+     */
+    void setSessionParameters( JSONValue session ) {
+        SavedLevel @saved_level = save_file.GetSavedLevel("arena_progress");
+        
+        // set the value to the stringified JSON
+        JSON sessionJSON;
+        sessionJSON.getRoot() = session;
+        string arena_session_str = sessionJSON.writeString(false);
+        saved_level.SetValue("arena_session", arena_session_str );
+
+        // write out the changes
+        save_file.WriteInPlace();
+
+    }
+
 }
 
-GlobalArenaData global_data;
+GlobalArenaData global_data; 

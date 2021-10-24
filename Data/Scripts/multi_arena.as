@@ -337,8 +337,21 @@ void ReceiveMessage(string msg) {
         }
     } else if(token == "new_match") {
         Print("new_match received\n");
-        curr_difficulty = GetRandomDifficultyNearPlayerSkill();
-        SetUpLevel(curr_difficulty);    
+
+        // Load the session data to see if we're in an arena series
+        JSONValue arenaSession = global_data.getSessionParameters();
+        
+        // If we have some values -- we're in an arena series
+        if( arenaSession.size() != 0 ) {
+            // Go back to the arena menu
+            LoadLevel("arena");
+        }
+        else {
+            // Proceed to a new battle in this arena
+            curr_difficulty = GetRandomDifficultyNearPlayerSkill();
+            SetUpLevel(curr_difficulty);    
+        }
+        
     } else if(token == "set_all_hostile") {
         token_iter.FindNextToken(msg);
         string param = token_iter.GetToken(msg);
@@ -511,6 +524,8 @@ void EndMatch(bool victory) {
     AddMetaEvent(kMessage, "wait_for_click");
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "new_match");
+
+    
 }
 
 // Check if level should be reset

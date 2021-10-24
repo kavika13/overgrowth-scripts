@@ -81,7 +81,7 @@ class ArenaMeta {
     void DrawConfirmation() {
         hud.Draw();
 
-        DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 36, kSmallLowercase, "Arena Mode (v1)", 
+        DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 18, kSmallLowercase, "Arena Mode (v1.5)", 
                       int(GetScreenWidth() * 0.5 - 300), int(GetScreenHeight() * 0.5 - 238), vec4(vec3(1.0f), 0.7f));
         
         DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 24, kSmallLowercase, "Are you sure you want to erase current progress?", 
@@ -103,7 +103,7 @@ class ArenaMeta {
         
         hud.Draw();
 
-        DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 36, kSmallLowercase, "Arena Mode (v1)", 
+        DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 18, kSmallLowercase, "Arena Mode (v1.5)", 
                       int(GetScreenWidth() * 0.5 - 300), int(GetScreenHeight() * 0.5 - 238), vec4(vec3(1.0f), 0.7f));
         
         if(Button(0, "New Campaign", true)) {
@@ -119,6 +119,16 @@ class ArenaMeta {
 
         if( Button(1, "Continue Campaign", global_data.campaign_started)){
             StartArena();
+        }
+
+        if( global_data.campaign_started ) {
+
+            DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 28, kSmallLowercase, "Fan Base: " + global_data.fan_base, 
+                      int(GetScreenWidth() * 0.5 - 130), int(GetScreenHeight() * 0.5 + 65), vec4(0.0, 0.7, 0.7, 0.7f));
+
+            DrawTextAtlas("Data/Fonts/OpenSans-Regular.ttf", 28, kSmallLowercase, "Player Skill: " + global_data.player_skill, 
+                      int(GetScreenWidth() * 0.5 - 130), int(GetScreenHeight() * 0.5 + 95), vec4(0.0, 0.7, 0.7, 0.7f));
+
         }
 
         UIState state;
@@ -157,7 +167,31 @@ class ArenaMeta {
     void StartArena() {
         global_data.campaign_started = true;
         global_data.WritePersistentInfo();
-        this_ui.SendCallback("arenas/multirena_dev_copy.xml");
+
+        // array<string> arenaNames = {"cage_arena.xml", "Cave_Arena.xml", "courtyard_cage_arena.xml", 
+        //                             "crevice_arena.xml", "great_wall_arena.xml", "Magma_Arena.xml", 
+        //                             "mountainside_crater.xml", "multirena_dev_copy.xml", "risingwater_arena.xml", 
+        //                             "subterranean_arena.xml", "tower_summit_arena.xml", "waterfall_arena_v2.xml", 
+        //                             "waterfall_arena.xml"};
+        
+        //array<string> arenaNames = {"Cave_Arena.xml", "stucco_courtyard_arena.xml", "waterfall_arena.xml", "Magma_Arena.xml"};
+
+        array<string> arenaNames = {"Cave_Arena.xml", "waterfall_arena.xml", "Magma_Arena.xml"};
+
+        //array<string> arenaNames = {"Cave_Arena.xml", "Magma_Arena.xml"};
+        
+        uint arenaChoice = rand()%arenaNames.length();                                  
+
+        string nextArena = arenaNames[ arenaChoice ];
+
+        // Write to the session that we're in an arena series
+        JSONValue arenaSession = global_data.getSessionParameters();        
+        arenaSession["arena_series"] = JSONValue("true");
+        global_data.setSessionParameters( arenaSession );
+
+        // Tell the energy to load switch to this level
+        this_ui.SendCallback("arenas/" + nextArena );
+
     }
 
     void DrawGUI() {

@@ -11,7 +11,7 @@ UNIFORM_DETAIL4_TEXTURES
 UNIFORM_AVG_COLOR4
 UNIFORM_LIGHT_DIR
 UNIFORM_EXTRA_AO
-uniform usamplerBuffer tex31;
+uniform usamplerBuffer ambient_color_buffer;
 uniform int num_light_probes;
 uniform int num_tetrahedra;
 #define warp_tex tex14
@@ -27,7 +27,7 @@ out vec4 out_color;
 
 void main() {     
     vec3 ambient_cube_color[6];
-    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, tex31, ambient_cube_color, 0u);
+    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, 0u);
 
     vec2 tc0 = frag_tex_coords.xy;
     vec2 tc1 = frag_tex_coords.zw;   
@@ -47,10 +47,10 @@ void main() {
                            base_bitangent,
                            base_normal);
 
-    vec4 normalmap = (texture(detail_normal_0,tc1) * weight_map[0] +
-                      texture(detail_normal_1,tc1) * weight_map[1] +
-                      texture(detail_normal_2,tc1) * weight_map[2] +
-                      texture(detail_normal_3,tc1) * weight_map[3]);
+    vec4 normalmap = (texture(detail_normal, vec3(tc1, 0)) * weight_map[0] +
+                      texture(detail_normal, vec3(tc1, 1)) * weight_map[1] +
+                      texture(detail_normal, vec3(tc1, 2)) * weight_map[2] +
+                      texture(detail_normal, vec3(tc1, 3)) * weight_map[3]);
     normalmap.xyz = UnpackTanNormal(normalmap);
     normalmap.xyz = mix(normalmap.xyz,vec3(0.0,0.0,1.0),detail_fade);
     
@@ -93,10 +93,10 @@ void main() {
     vec3 tint = terrain_color / average_color;
 
     // Get colormap
-    vec4 colormap = texture(detail_color_0,tc1) * weight_map[0] +
-                    texture(detail_color_1,tc1) * weight_map[1] +
-                    texture(detail_color_2,tc1) * weight_map[2] +
-                    texture(detail_color_3,tc1) * weight_map[3];
+    vec4 colormap = texture(detail_color, vec3(tc1, detail_color_indices.x)) * weight_map[0] +
+                    texture(detail_color, vec3(tc1, detail_color_indices.y)) * weight_map[1] +
+                    texture(detail_color, vec3(tc1, detail_color_indices.z)) * weight_map[2] +
+                    texture(detail_color, vec3(tc1, detail_color_indices.w)) * weight_map[3];
     colormap.xyz = mix(colormap.xyz,average_color,detail_fade) * tint;
     colormap.a = max(0.0,colormap.a);
 
