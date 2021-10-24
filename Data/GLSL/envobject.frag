@@ -2,6 +2,7 @@
 #include "object_frag150.glsl"
 #include "object_shared150.glsl"
 #include "ambient_tet_mesh.glsl"
+#include "decals.glsl"
 
 UNIFORM_COMMON_TEXTURES
 #ifdef PLANT
@@ -14,17 +15,6 @@ UNIFORM_DETAIL4_TEXTURES
 UNIFORM_AVG_COLOR4
 #endif
 
-#ifdef DECAL
-const int kMaxDecals = 100;
-
-uniform DecalInfo {
-    mat4 decal_transform[kMaxDecals];
-    vec4 decal_tint[kMaxDecals];
-    vec2 decal_uv_start[kMaxDecals];
-    vec2 decal_uv_size[kMaxDecals];
-};
-#endif
-
 const int kMaxInstances = 100;
 
 uniform InstanceInfo {
@@ -34,17 +24,10 @@ uniform InstanceInfo {
     vec4 detail_scale[kMaxInstances];
 };
 
-#ifdef DECAL
-uniform int num_decals;
-//Disabled because we've run out of texture sampler.
-//uniform sampler2D tex28; // decal normal texture
-uniform sampler2D tex29; // decal color texture
-#endif
 uniform usamplerBuffer tex30;
 uniform usamplerBuffer tex31;
 uniform int num_light_probes;
 uniform int num_tetrahedra;
-uniform mat4 decal_mat;
 
 uniform vec3 grid_bounds_min;
 uniform vec3 grid_bounds_max;
@@ -82,30 +65,6 @@ void main() {
     #ifdef NO_INSTANCE_ID
         int instance_id = 0;
     #endif
-    uint guess = 0u;
-    int grid_coord[3];
-    bool in_grid = true;
-    for(int i=0; i<3; ++i){            
-        if(world_vert[i] > grid_bounds_max[i] || world_vert[i] < grid_bounds_min[i]){
-            in_grid = false;
-            break;
-        }
-    }
-    bool use_amb_cube = false;
-    vec3 ambient_cube_color[6];
-    if(in_grid){
-        grid_coord[0] = int((world_vert[0] - grid_bounds_min[0]) / (grid_bounds_max[0] - grid_bounds_min[0]) * float(subdivisions_x));
-        grid_coord[1] = int((world_vert[1] - grid_bounds_min[1]) / (grid_bounds_max[1] - grid_bounds_min[1]) * float(subdivisions_y));
-        grid_coord[2] = int((world_vert[2] - grid_bounds_min[2]) / (grid_bounds_max[2] - grid_bounds_min[2]) * float(subdivisions_z));
-        int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
-        uvec4 data = texelFetch(tex30, cell_id/4);
-        guess = data[cell_id%4];
-        use_amb_cube = GetAmbientCube(world_vert, num_light_probes, tex31, ambient_cube_color, guess);
-    } else {
-        for(int i=0; i<3; ++i){
-            ambient_cube_color[i] = vec3(0.0);
-        }
-    }
     #ifdef DETAILMAP4
         vec4 weight_map = GetWeightMap(weight_tex, frag_tex_coords);
         float total = weight_map[0] + weight_map[1] + weight_map[2] + weight_map[3];
@@ -180,37 +139,34 @@ void main() {
         #endif
     #endif
 
-    #ifdef DECAL
-    for(int decal_index=0; decal_index<num_decals; ++decal_index){
-        mat4 test = inverse(decal_transform[decal_index]);
-        vec2 start_uv = decal_uv_start[decal_index];
-        vec2 size_uv = decal_uv_size[decal_index];
+    CalculateDecals(colormap, ws_normal, world_vert);
 
-        //test = inverse(model_mat[0]);
-        vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
-        if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-            
-        } else {
-            vec4 decal_color = texture(tex29, start_uv + size_uv * vec2(temp[0]+0.5, temp[2]+0.5));
-            colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal_tint[decal_index].xyz, decal_color.a);
-            //vec4 decal_normal = texture(tex28, start_uv + size_uv * vec2(temp[0]+0.5, temp[2]+0.5));
-            //Setting it to the object normal because we're out of texture samplers for now, no normals on decals.
-            /*
-            vec4 decal_normal = vec4(ws_normal,0.0);
-
-            vec3 decal_tan = normalize(cross(ws_normal, (decal_transform[decal_index] * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
-            vec3 decal_bitan = cross(ws_normal, decal_tan);
-            vec3 new_normal = vec3(0);
-            new_normal += ws_normal * (decal_normal.b*2.0-1.0);
-            new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
-            new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
-            ws_normal = normalize(new_normal);
-            */
-        }
-    }
-    #endif
     CALC_SHADOWED
     CALC_DIRECT_DIFFUSE_COLOR
+    uint guess = 0u;
+    int grid_coord[3];
+    bool in_grid = true;
+    for(int i=0; i<3; ++i){            
+        if(world_vert[i] > grid_bounds_max[i] || world_vert[i] < grid_bounds_min[i]){
+            in_grid = false;
+            break;
+        }
+    }
+    bool use_amb_cube = false;
+    vec3 ambient_cube_color[6];
+    if(in_grid){
+        grid_coord[0] = int((world_vert[0] - grid_bounds_min[0]) / (grid_bounds_max[0] - grid_bounds_min[0]) * float(subdivisions_x));
+        grid_coord[1] = int((world_vert[1] - grid_bounds_min[1]) / (grid_bounds_max[1] - grid_bounds_min[1]) * float(subdivisions_y));
+        grid_coord[2] = int((world_vert[2] - grid_bounds_min[2]) / (grid_bounds_max[2] - grid_bounds_min[2]) * float(subdivisions_z));
+        int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
+        uvec4 data = texelFetch(tex30, cell_id/4);
+        guess = data[cell_id%4];
+        use_amb_cube = GetAmbientCube(world_vert, num_light_probes, tex31, ambient_cube_color, guess);
+    } else {
+        for(int i=0; i<3; ++i){
+            ambient_cube_color[i] = vec3(0.0);
+        }
+    }
     vec3 ambient_color;
     if(!use_amb_cube){
         ambient_color = LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0);
@@ -259,17 +215,4 @@ void main() {
     #else
         out_color = vec4(color,1.0);
     #endif
-/*
-    #ifdef DECAL
-        vec3 temp = (inverse(decal_mat) * vec4(world_vert, 1.0)).xyz;
-        if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-            discard;
-        }
-        out_color = vec4(diffuse_color, 1.0);
-    #endif*/
 }
-
-
-
-
-
