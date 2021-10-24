@@ -33,6 +33,9 @@ bool throw_after_active_block;
 enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
+enum AISubGoal {_punish_fall, _provoke_attack, _avoid_jump_kick, _wait_and_attack, _rush_and_attack, _defend, _surround_target, _escape_surround};
+AISubGoal sub_goal = _wait_and_attack; 
+
 vec3 nav_target;
 int ally_id = -1;
 int escort_id = -1;
@@ -72,6 +75,63 @@ int IsIdle() {
 int IsAggressive() {
     return (knocked_out == _awake && (goal == _attack || goal == _get_help))?1:0;
 }
+
+class TargetHistoryElement {
+    vec3 position;
+    vec3 velocity;
+    float time_elapsed;
+}
+
+const int kTargetHistorySize = 16;
+class TargetHistory {
+    TargetHistoryElement[] elements;
+    int index;
+    bool first_update;
+    void Initialize() {
+        elements.resize(kTargetHistorySize);
+        index = 0;
+        first_update = true;
+        for(int i=0; i<kTargetHistorySize; ++i){
+            elements[i].time_elapsed += time_step * num_frames;
+        }
+    }
+    void Update(const vec3 &in pos, const vec3 &in vel){
+        for(int i=0; i<kTargetHistorySize; ++i){
+            elements[i].time_elapsed += time_step * num_frames;
+        }
+        if(first_update){
+            for(int i=0; i<kTargetHistorySize; ++i){
+                elements[i].position = pos;
+                elements[i].velocity = vel;
+                elements[i].time_elapsed = 0.0f;
+            }
+            first_update = false;
+        }
+        elements[index].position = pos;
+        elements[index].velocity = vel;
+        elements[index].time_elapsed = 0.0f;
+        index = (index + 1)%kTargetHistorySize;
+        /*for(int i=0; i<kTargetHistorySize; ++i){
+            DebugDrawWireSphere(elements[i].position, 0.1f, vec3(1.0f), _delete_on_update);
+        }*/
+    }
+    vec3 GetPos(float delay){
+        int temp_index = index;
+        for(int i=0; i<kTargetHistorySize; ++i){
+            temp_index = (temp_index + kTargetHistorySize - 1)%kTargetHistorySize;
+            if(elements[temp_index].time_elapsed > delay){
+                break;
+            }
+        }
+        vec3 pos = elements[temp_index].position + elements[temp_index].velocity * elements[temp_index].time_elapsed;
+        //DebugDrawWireSphere(pos, 0.1f, vec3(1.0f,0.0f,0.0f), _fade);
+        return pos;
+    }
+}
+
+TargetHistory target_history;
+vec3 last_seen_target_position;
+vec3 last_seen_target_velocity;
 
 void Notice(int character_id){
     situation.Notice(character_id);
@@ -142,13 +202,14 @@ void HandleAIEvent(AIEvent event){
     }
     if(event == _activeblocked){
         float temp_block_followup = p_block_followup;
-        if(notice_target_aggression_delay > 0.2f){
-            temp_block_followup = 1.0 - pow(temp_block_followup, 2.0);
+        if(sub_goal == _provoke_attack){
+            temp_block_followup = 1.0 - (pow(1.0 - temp_block_followup, 2.0));
         }
-        if(RangedRandomFloat(0.0f, 1.0f) < p_block_followup){
-            throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.5f;
+        if(RangedRandomFloat(0.0f, 1.0f) < temp_block_followup){
+            throw_after_active_block = RangedRandomFloat(0.0f,1.0f) > 0.7f;
             if(!throw_after_active_block){
-                ai_attacking = true;
+                throw_after_active_block = false;
+                sub_goal = _rush_and_attack;
             }
         }
     }
@@ -162,11 +223,12 @@ void HandleAIEvent(AIEvent event){
     }
 }
 
-void SetGoal(AIGoal _goal){
-    if(_goal == _attack && goal != _attack){
+void SetGoal(AIGoal new_goal){
+    if(new_goal == _attack && goal != _attack){
         notice_target_aggression_delay = 0.0f;
+        target_history.Initialize();
     } 
-    goal = _goal;
+    goal = new_goal;
 }
 
 float move_delay = 0.0f;
@@ -191,6 +253,21 @@ void ReceiveMessage(int source_id, int _msg_type){
     if(type == _excuse_me && (goal == _patrol || goal == _investigate)){
         //Print("\"Ok, I'll wait a second before continuing my goal.\"\n");
         move_delay = 1.0f;
+    }
+}
+
+void PickAttackSubGoal() {
+    if(RangedRandomFloat(0.0f,1.0f) < p_aggression){
+        if(RangedRandomFloat(0.0f,1.0f) < 0.5f){
+            sub_goal = _wait_and_attack;
+        } else {
+            sub_goal = _rush_and_attack;
+        }
+    } else {
+        sub_goal = _defend;
+    }
+    if(notice_target_aggression_delay > 0.2f){
+        sub_goal = _provoke_attack;
     }
 }
 
@@ -299,16 +376,52 @@ void UpdateBrain(){
                 if(target.GetIntVar("knocked_out") != _awake){
                     SetGoal(_patrol);
                 }
+                
                 if(rand()%(150/num_frames)==0){
-                    float rand_val = RangedRandomFloat(0.0f,1.0f);
-                    //Print(rand_val + " < " + p_aggression + "?\n");
-                    ai_attacking = (RangedRandomFloat(0.0f,1.0f) < p_aggression);
-                    if(notice_target_aggression_delay > 0.2f){
-                        ai_attacking = (RangedRandomFloat(0.0f,1.0f) < p_aggression * p_aggression * p_aggression);
+                    switch(sub_goal){
+                        case _wait_and_attack:
+                        case _rush_and_attack:
+                        case _defend:
+                        case _provoke_attack:
+                            PickAttackSubGoal();
+                            break;
                     }
                 }
-                if(rand()%(150/num_frames)==0){
-                    target_attack_range = RangedRandomFloat(0.0f, 3.0f);
+                if(target.GetIntVar("state") == _ragdoll_state){
+                    sub_goal = _punish_fall;
+                } else {
+                    if(sub_goal == _punish_fall){
+                        PickAttackSubGoal();
+                    }
+                }
+                
+                if(!target.GetBoolVar("on_ground")){
+                   sub_goal = _avoid_jump_kick;
+                } else if(sub_goal == _avoid_jump_kick){
+                    PickAttackSubGoal();
+                } 
+                switch(sub_goal){
+                    case _wait_and_attack:
+                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        ai_attacking = true;
+                        break;
+                    case _punish_fall:
+                    case _rush_and_attack:
+                        target_attack_range = 0.0f;
+                        ai_attacking = true;
+                        break;
+                    case _defend:
+                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                        ai_attacking = false;
+                        break;
+                    case _provoke_attack:
+                        target_attack_range = 0.0f;
+                        ai_attacking = false;
+                        break;
+                    case _avoid_jump_kick:
+                        target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+                        ai_attacking = false;
+                        break;
                 }
                 if(rand()%(150/num_frames)==0){
                     strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
@@ -516,9 +629,13 @@ bool WantsToStartActiveBlock(){
             going_to_block = true;
         }
         float temp_block_skill = p_block_skill;
-        if(notice_target_aggression_delay > 0.2f){
-            temp_block_skill = 1.0 - (1.0 - temp_block_skill)*(1.0 - temp_block_skill);
+        float temp_block_skill_power = 0.5 * pow(4.0, char.GetFloatVar("attack_predictability"));
+        //DebugText("temp_block_skill_power", "temp_block_skill_power: "+temp_block_skill_power, 2.0f);
+        if(sub_goal == _provoke_attack){
+            temp_block_skill_power += 1.0;
         }
+        temp_block_skill = 1.0 - pow((1.0 - temp_block_skill),temp_block_skill_power);
+        //DebugText("temp_block_skill", "temp_block_skill: "+temp_block_skill, 2.0f);
         if(RangedRandomFloat(0.0f,1.0f) > temp_block_skill){
             block_delay += 0.4f;
         }
@@ -900,8 +1017,10 @@ vec3 GetAttackMovement() {
         last_seen_target_position = real_target_pos;
         last_seen_target_velocity = ReadCharacterID(target_id).velocity;
     }
-
-    vec3 move_vel = GetMovementToPoint(last_seen_target_position, max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
+    
+    target_history.Update(last_seen_target_position, last_seen_target_velocity);
+    
+    vec3 move_vel = GetMovementToPoint(target_history.GetPos(0.3), max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
     
     //CheckJumpTarget(last_seen_target_position);
 
