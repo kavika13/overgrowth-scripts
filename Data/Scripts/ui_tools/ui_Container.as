@@ -18,11 +18,88 @@ namespace AHGUI {
  * @brief  Hold the information for the contained element
  *
  */
- class ContainerElement {
+class ContainerElement {
     ivec2 relativePos;  // Where is this element offset from the upper/right of this container
     Element@ element;   // Handle to the element itself
+}
 
- }
+class ContainerElementInstance {
+    ContainerElementInstance() {
+        key = "";
+    }
+
+    ContainerElementInstance( string _key, ContainerElement _elem ) {
+        key = _key;
+        elem = _elem; 
+    }
+
+    string key;
+    ContainerElement elem;
+}
+
+class ContainerElements {
+    array<ContainerElementInstance> elems;
+
+    void deleteAll() {
+        elems.removeRange(0,elems.length());
+    }
+
+    bool exists( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    array<string> getKeys() {
+        array<string> keys;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            keys.insertLast(elems[i].key);
+        }
+        return keys;
+    }
+
+    ContainerElement@ Get( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return elems[i].elem;
+            }
+        }
+        return ContainerElement();
+    }
+
+    void Set( string key, ContainerElement elem ) {
+        bool found = false;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                found = true;
+                elems[i].elem = elem;
+            }
+        }
+        if( found == false ) {
+            elems.insertLast(ContainerElementInstance(key,elem));
+        }
+    }
+
+    void Remove( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                elems.removeAt(i);
+                i--;
+            } 
+        }
+    }
+
+    ContainerElement@ GetI( int i ) {
+        return elems[i].elem;
+    }
+
+    uint Count() {
+        return elems.length();
+    }
+}
 
 /*******************************************************************************************/
 /**
@@ -31,7 +108,7 @@ namespace AHGUI {
  */
 class Container : Element {
     
-    dictionary floatingContents; // elements in this container
+    ContainerElements floatingContents; // elements in this container
     Image@ backgroundImage = null;
     
 
@@ -97,14 +174,11 @@ class Container : Element {
      *
      */
     void update( uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
-
         // Do whatever the superclass wants
         Element::update( delta, drawOffset, guistate );
 
-        // Simply pass this on to the children
-        array<string>@ keys = floatingContents.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            ContainerElement@ element = cast<ContainerElement>(floatingContents[keys[k]]);
+        for( uint k = 0; k < floatingContents.Count(); k++ ) {
+            ContainerElement@ element = cast<ContainerElement>(floatingContents.GetI(k));
             element.element.update( delta, drawOffset + boundaryOffset + drawDisplacement + element.relativePos, guistate );
         }
     }
@@ -138,9 +212,8 @@ class Container : Element {
         }
 
         // Simply pass this on to the children
-        array<string>@ keys = floatingContents.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            ContainerElement@ element = cast<ContainerElement>(floatingContents[keys[k]]);
+        for( uint k = 0; k < floatingContents.Count(); k++ ) {
+            ContainerElement@ element = cast<ContainerElement>(floatingContents.GetI(k));
             element.element.render( drawOffset + boundaryOffset + drawDisplacement + element.relativePos, currentClipPos, currentClipSize );
         }
 
@@ -167,9 +240,8 @@ class Container : Element {
         }
         
         // Now trigger the children
-        array<string>@ keys = floatingContents.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            ContainerElement@ element = cast<ContainerElement>(floatingContents[keys[k]]);
+        for( uint k = 0; k < floatingContents.Count(); k++ ) {
+            ContainerElement@ element = cast<ContainerElement>(floatingContents.GetI(k));
             element.element.doRelayout();
         }
 
@@ -186,9 +258,8 @@ class Container : Element {
         Element::doScreenResize();
         
         // Now trigger the children
-        array<string>@ keys = floatingContents.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            ContainerElement@ element = cast<ContainerElement>(floatingContents[keys[k]]);
+        for( uint k = 0; k < floatingContents.Count(); k++ ) {
+            ContainerElement@ element = cast<ContainerElement>(floatingContents.GetI(k));
             element.element.doScreenResize();
         }
      }
@@ -214,7 +285,7 @@ class Container : Element {
         containerElement.relativePos = position;
         @containerElement.element = element;
 
-        floatingContents[ name ] = containerElement;
+        floatingContents.Set(name, containerElement);
         
         // Link to this element/owning GUI
         @element.owner = @owner;
@@ -247,8 +318,8 @@ class Container : Element {
         // make sure it exists
         if( floatingContents.exists(name) ) {
             // and delete it
-            ContainerElement@ element = cast<ContainerElement>(floatingContents[name]);
-            floatingContents.delete( name );
+            ContainerElement@ element = floatingContents.Get(name);
+            floatingContents.Remove( name );
 
             // Signal that something new has changed
             onRelayout();
@@ -274,7 +345,7 @@ class Container : Element {
         // make sure it exists
         if( floatingContents.exists(name) ) {
             // Change it
-            ContainerElement@ elementContainer = cast<ContainerElement>(floatingContents[name]);
+            ContainerElement@ elementContainer = floatingContents.Get(name);
             elementContainer.relativePos = newPos;
         }
         else {
@@ -295,7 +366,7 @@ class Container : Element {
         // make sure it exists
         if( floatingContents.exists(name) ) {
             // Change it
-            ContainerElement@ elementContainer = cast<ContainerElement>(floatingContents[name]);
+            ContainerElement@ elementContainer = floatingContents.Get(name);
             elementContainer.relativePos += posChange;
         }
         else {
@@ -320,7 +391,7 @@ class Container : Element {
             // If not, look at the children
             if( floatingContents.exists(elementName) ) {
     
-                Element@ element = cast<ContainerElement>(floatingContents[elementName]).element;
+                Element@ element = floatingContents.Get(elementName).element;
             
                 return element;
             }

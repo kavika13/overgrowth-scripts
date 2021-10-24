@@ -89,7 +89,7 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     return shadow_amount;
 }
 #endif
-vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, float plant_shake) {
+vec3 CalcVertexOffset (const vec3 world_pos, float wind_amount, float time, float plant_shake) {
     vec3 vertex_offset = vec3(0.0);
 
     float wind_shake_amount = 0.02;

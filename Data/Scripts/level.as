@@ -3,12 +3,14 @@
 
 int controller_id = 0;
 bool has_gui = false;
-uint32 gui_id;
+bool draw_settings = false;
 bool has_display_text = false;
+string display_text = "";
 uint32 display_text_id;
 string hotspot_image_string;
 bool menu_paused = false;
 bool allow_retry = true;
+int hotspot_message_text_id = -1;
 
 Dialogue dialogue;
 
@@ -96,21 +98,24 @@ void Init(string p_level_name) {
         text.AddText(new_string, small_style,UINT32MAX);
         text.UploadTextCanvasToTexture();
     }
+
+    if( hotspot_message_text_id == -1 ) {
+        hotspot_message_text_id = level.CreateTextElement();
+        TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
+        text.Create(GetScreenWidth()-(GetScreenWidth()/16)*2, 200);
+    }
 }
 
 int HasCameraControl() {
     return dialogue.HasCameraControl()?1:0;
 }
-
+/*
 void GUIDeleted(uint32 id){
     if(id == gui_id){
         has_gui = false;
     }
-    if(id == display_text_id){
-        has_display_text = false;
-    }
 }
-
+*/
 bool HasFocus(){
     return has_gui;
 }
@@ -137,17 +142,12 @@ void ReceiveMessage(string msg) {
     }
     string token = token_iter.GetToken(msg);
     if(token == "cleartext"){
-        if(has_display_text){
-            gui.RemoveGUI(display_text_id);
-            has_display_text = false;
-        }
+        has_display_text = false;
     } else if(token == "dispose_level"){
-        gui.RemoveAll();
         has_gui = false;
     } else if(token == "disable_retry"){
         allow_retry = false;
     } else if(token == "go_to_main_menu"){
-        level.SendMessage("dispose_level");
         LoadLevel("back");
     } else if(token == "clearhud"){
 	    hotspot_image_string.resize(0);
@@ -157,31 +157,37 @@ void ReceiveMessage(string msg) {
         dialogue.Init();
         ResetLevel();
     } else if(token == "displaytext"){
-        if(has_display_text){
-            gui.RemoveGUI(display_text_id);
-        }
-        display_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
-        token_iter.FindNextToken(msg);
-        gui.Execute(display_text_id,"SetText(\""+token_iter.GetToken(msg)+"\")");
+        //if(has_display_text){
+        //    gui.RemoveGUI(display_hotspot_message_text_id);
+        //}
+        //display_hotspot_message_text_id = gui.AddGUI("text2","script_text.html",400,200, _GG_IGNORES_MOUSE);
+        //token_iter.FindNextToken(msg);
+        //gui.Execute(display_hotspot_message_text_id,"SetText(\""+token_iter.GetToken(msg)+"\")");
+        
         has_display_text = true;
-    }else if(token == "displayvideo"){
-		token_iter.FindNextToken(msg);
-		DebugText("awe", "" + msg, _fade);
-        gui_id = gui.AddGUI("video",token_iter.GetToken(msg),GetScreenWidth() - 200,GetScreenHeight() - 200,0);
-    } else if(token == "removevideo"){
-		gui.RemoveGUI(gui_id);
-    }else if(token == "displaygui"){
         token_iter.FindNextToken(msg);
+        display_text = token_iter.GetToken(msg);
+
+    }else if(token == "displayvideo"){
+		//token_iter.FindNextToken(msg);
+		//DebugText("awe", "" + msg, _fade);
+        //gui_id = gui.AddGUI("video",token_iter.GetToken(msg),GetScreenWidth() - 200,GetScreenHeight() - 200,0);
+        Log( error, "No Support for display video" );
+    } else if(token == "removevideo"){
+		//gui.RemoveGUI(gui_id);
+        Log( error, "No Support for remove video" );
+    }else if(token == "displaygui"){
+        /*token_iter.FindNextToken(msg);
         gui_id = gui.AddGUI("displaygui_call",token_iter.GetToken(msg),220,250,0);
-        has_gui = true;
+        has_gui = true;*/
     } else if(token == "displayhud"){
 		if(hotspot_image_string.length() == 0){
 		    token_iter.FindNextToken(msg);
             hotspot_image_string = token_iter.GetToken(msg);
 		}
     } else if(token == "loadlevel"){
-        level.SendMessage("dispose_level");
 		token_iter.FindNextToken(msg);
+        Print("Received loadlevel message: "+token_iter.GetToken(msg)+"\n");
         LoadLevel(token_iter.GetToken(msg));
     } else if(token == "make_all_aware"){
         CharactersNoticeEachOther();
@@ -190,7 +196,7 @@ void ReceiveMessage(string msg) {
         dialogue.StartDialogue(token_iter.GetToken(msg));
     } else if(token == "open_menu") {
         if(!level.HasFocus()){
-            if(EditorEnabled()){
+            /*if(EditorEnabled()){
                 gui_id = gui.AddGUI("gamemenu","dialogs\\editorgamemenu.html",220,290,0);
             } else {
                 if(allow_retry){
@@ -198,7 +204,7 @@ void ReceiveMessage(string msg) {
                 } else {
                     gui_id = gui.AddGUI("gamemenu","dialogs\\arenagamemenu.html",220,230,0);                     
                 }
-            }
+            }*/
             SetPaused(true);
             menu_paused = true;
             has_gui = true;
@@ -209,15 +215,99 @@ void ReceiveMessage(string msg) {
 }
 
 void DrawGUI() {
+    if(has_gui){
+        ImGui_Begin("Menu");
+        if(ImGui_Button("Continue")){
+            has_gui = false;
+        }
+        if(allow_retry){
+            if(ImGui_Button("Reset Level")){
+                has_gui = false;
+                level.SendMessage("reset");
+            }
+        }
+        if(ImGui_Button("Settings")){
+            draw_settings = true;
+        }
+        if(EditorEnabled()){
+            if(ImGui_Button("Media Mode")){
+                SetMediaMode(true);
+                has_gui = false;
+            }
+        }
+        if(ImGui_Button("Main Menu")){
+            level.SendMessage("go_to_main_menu");
+        }
+        ImGui_End();
+        if(draw_settings){
+            ImGui_Begin("Settings", draw_settings);
+            ImGui_DrawSettings();
+            ImGui_End();
+        }
+    } else {
+        draw_settings = false;
+    }
     if(hotspot_image_string.length() != 0){
         HUDImage@ image = hud.AddImage();
         image.SetImageFromPath(hotspot_image_string);
         image.position = vec3(700,200,0);
     }
     dialogue.Display();
+
+    /************************************/
+    if( has_display_text ) {
+        HUDImage @blackout_image = hud.AddImage();
+        blackout_image.SetImageFromPath("Data/Textures/diffuse_hud.tga");
+        blackout_image.position.y = GetScreenHeight()/2.0f-GetScreenHeight()/4.0f/2.0f;
+        blackout_image.position.x = 0.0f;
+        blackout_image.position.z = -2.0f;
+        blackout_image.scale = vec3(GetScreenWidth()/16.0f, GetScreenHeight()/16.0f/4.0f, 1.0f);
+        blackout_image.color = vec4(0.0f,0.0f,0.0f,0.4f);
+
+        int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
+    
+        TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
+        text.ClearTextCanvas();
+        string font_str = "Data/Fonts/arial.ttf";
+        TextStyle small_style;
+        small_style.SetAlignment(1);
+        small_style.font_face_id = GetFontFaceID(font_str, font_size);
+
+        // Draw speaker name to canvas
+        vec2 pen_pos = vec2(0,font_size);
+        text.SetPenPosition(pen_pos);
+        text.SetPenColor(255,255,255,160);
+        text.SetPenRotation(0.0f);
+    
+        // Draw dialogue text to canvas
+        text.SetPenColor(255,255,255,255);
+        text.SetPenPosition(pen_pos);
+
+        //uint len_in_bytes = GetLengthInBytesForNCodepoints(dialogue_text,uint(dialogue_text_disp_chars));
+        //string display_dialogue_text = dialogue_text.substr(0,int(len_in_bytes));
+        
+        text.AddTextMultiline(display_text, small_style, UINT32MAX);
+
+        // Draw text canvas to screen
+        text.UploadTextCanvasToTexture();
+
+       // TextMetrics metrics;
+
+       // text.GetTextMetrics(display_text, small_style, metrics, UINT32MAX);
+
+        HUDImage @text_image = hud.AddImage();
+        text_image.SetImageFromText(level.GetTextElement(hotspot_message_text_id)); 
+        text_image.position.x = GetScreenWidth()/16;//GetScreenWidth()/2.0f - (display_text.length()/2.0f)*8.0f;
+        text_image.position.y = GetScreenHeight()/2.0f-100;
+        text_image.position.z = 4;
+        text_image.color = vec4(1,1,1,1);
+
+    }
+    /**********************************/
 }
 
 void Update(int paused) {  
+
     if(level.HasFocus()){
         SetGrabMouse(false);
     } else {
@@ -237,43 +327,6 @@ void Update(int paused) {
     SetSunColor(vec3(0.0f));
     SetSkyTint(vec3(0.0f));
     SetSunAmbient(3.0);*/
-    if(has_gui){
-        EnterTelemetryZone("Update gui");
-        string callback = gui.GetCallback(gui_id);
-        while(callback != ""){
-            Print("AS Callback: "+callback+"\n");
-            if(callback == "retry"){
-                gui.RemoveGUI(gui_id);
-                has_gui = false;
-                level.SendMessage("reset");
-                break;
-            }
-            if(callback == "continue"){
-                gui.RemoveGUI(gui_id);
-                has_gui = false;
-                break;
-            }
-            if(callback == "mainmenu"){
-                if(CheckSaveLevelChanges()){
-                    level.SendMessage("go_to_main_menu");
-                }
-                break;
-            }
-            if(callback == "media_mode"){
-                SetMediaMode(true);
-                gui.RemoveGUI(gui_id);
-                has_gui = false;
-            }
-            if(callback == "settings"){
-                gui.RemoveGUI(gui_id);
-                OpenSettings(context);
-                has_gui = false;
-                break;
-            }
-            callback = gui.GetCallback(gui_id);
-        }
-        LeaveTelemetryZone();
-    }
 
     if(paused == 0){
         if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
@@ -358,8 +411,6 @@ void HotspotEnter(string str, MovementObject @mo) {
 void HotspotExit(string str, MovementObject @mo) {
 }
 
-
-
 JSON getArenaSpawns() {
     JSON testValue;
 
@@ -397,27 +448,9 @@ JSON getArenaSpawns() {
 
 }
 
-void TextInput( string text )
-{
-    dialogue.TextInput(text);
-}
-
-void KeyPressed( string command, bool repeated )
-{
-    dialogue.KeyPressed(command,repeated);
-}
-
-void KeyReleased( string command )
-{
-    dialogue.KeyReleased(command);
-}
-
-uint PollKeyboardFocus()
-{
-    return dialogue.PollKeyboardFocus();
-}
-
 void SetWindowDimensions(int w, int h)
 {
     dialogue.ResizeUpdate(w,h);
+    TextCanvasTexture @text = level.GetTextElement(hotspot_message_text_id);
+    text.Create(w-(w/16)*2, 200);
 }

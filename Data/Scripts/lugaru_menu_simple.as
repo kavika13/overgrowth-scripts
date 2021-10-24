@@ -1,4 +1,3 @@
-
 #include "ui_tools.as"
 #include "arena_meta_persistence.as"
 #include "music_load.as"
@@ -387,7 +386,7 @@ class LugaruMenuSimpleGUI : AHGUI::GUI {
 
 }
 
-LugaruMenuSimpleGUI lugaru_menu_simple_gui;
+LugaruMenuSimpleGUI@ lugaru_menu_simple_gui = @LugaruMenuSimpleGUI();
 
 bool HasFocus() {
     return false;

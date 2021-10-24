@@ -164,8 +164,7 @@ class Image : Element
 	                                        (float(currentClipSize.y)*screenMetrics.GUItoScreenYScale)) );
         	}
 
-			AHGUI_IMUIContext.queueImage( imuiImage );
-
+			AHGUI_IMUIContext.Get().queueImage( imuiImage );
     	}
 
      	// Call the superclass to make sure any element specific rendering is done

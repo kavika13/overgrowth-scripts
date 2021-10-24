@@ -17,7 +17,7 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     Print("Entering start.as hotspot\n");
-    if(mo.controlled)
+    if(mo.controlled) {
         level.SendMessage("displaytext \"Display Text\"");
     }
 }

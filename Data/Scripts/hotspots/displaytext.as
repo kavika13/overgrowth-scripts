@@ -40,6 +40,7 @@ void HandleEvent(string event, MovementObject @mo) {
         }
 
         if(show_text && safe_to_create_text) {
+            Log( info, params.GetString("Display Text"));
             level.SendMessage("displaytext \""+params.GetString("Display Text")+"\"");
         } else {
             level.SendMessage("cleartext");

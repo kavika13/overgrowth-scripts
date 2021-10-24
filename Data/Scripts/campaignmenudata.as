@@ -1,4 +1,5 @@
 #include "ui_effects.as"
+#include "ui_tools.as"
 
 enum CampaignMode {
     kCampaignList,
@@ -18,19 +19,25 @@ class CampaignMenuData {
     RibbonBackground ribbon_background;
     float visible;
     float target_visible;
-    IMUIContext imui_context;
+    IMUIContextWrapper imuicontext;
 
     array<LevelInfo> challenge_levels;
+
+    CampaignMenuData() {
+    }
+
+    ~CampaignMenuData() {
+    }
 
     void Initialize(){
         gui_id = -1;
         visible = 0.0f;
         target_visible = 1.0f;
         ribbon_background.Init();
-        imui_context.Init();
     }
 
     void Update(){
+        IMUIContext@ imui_context = imuicontext.Get();
         visible = UpdateVisible(visible, target_visible);
         switch(campaign_mode) {
         case kCampaignList:    
@@ -50,6 +57,7 @@ class CampaignMenuData {
     }
 
     bool Button(int i, string str) {
+        IMUIContext@ imui_context = imuicontext.Get();
         int column = i/12;
         int row = i%12;
         UIState state;
@@ -89,6 +97,7 @@ class CampaignMenuData {
     }
 
     void DrawGUI(){
+        IMUIContext@ imui_context = imuicontext.Get();
         imui_context.UpdateControls();
         ribbon_background.DrawGUI(visible);
         {   HUDImage @image = hud.AddImage();

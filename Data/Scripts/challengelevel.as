@@ -1,6 +1,8 @@
 #include "ui_effects.as"
+#include "ui_tools.as"
 #include "threatcheck.as"
 #include "music_load.as"
+#include "arena_meta_persistence.as"
 
 bool reset_allowed = true;
 float time = 0.0f;
@@ -10,10 +12,21 @@ int in_victory_trigger = 0;
 const float _reset_delay = 4.0f;
 float reset_timer = _reset_delay;
 
+AHGUI::FontSetup titleFont("edosz", 120,HexColor("#fff"));
+AHGUI::FontSetup subTitleFont("edosz", 65, HexColor("#fff"));
+AHGUI::FontSetup greenValueFont("edosz", 65, HexColor("#0f0"));
+AHGUI::FontSetup redValueFont("edosz", 65, HexColor("#f00"));
+AHGUI::FontSetup tealValueFont("edosz", 65, HexColor("#028482"));
+
 MusicLoad ml("Data/Music/challengelevel.xml");
 
+int menu_item_spacing = 20;
+
+AHGUI::MouseOverPulseColor buttonHover(
+                                        HexColor("#ffde00"),
+                                        HexColor("#ffe956"), .25 );
+
 void Init(string p_level_name) {
-    challenge_end_gui.Init();
     level_name = p_level_name;
 }
 
@@ -141,8 +154,6 @@ void ReceiveMessage(string msg) {
     string token = token_iter.GetToken(msg);
     if(token == "reset"){
         Reset();
-    } else if(token == "dispose_level"){
-        gui.RemoveAll();
     } else if(token == "achievement_event"){
         token_iter.FindNextToken(msg);
         AchievementEvent(token_iter.GetToken(msg));
@@ -204,52 +215,64 @@ string StringFromFloatTime(float time){
     return time_str;
 }
 
-class ChallengeEndGUI {
+class ChallengeEndGUI : AHGUI::GUI{
     float visible;
     float target_visible;
-    int gui_id;
-    IMUIContext imui_context;
     RibbonBackground ribbon_background;
 
-    void Init(){
-        visible = 0.0;
-        target_visible = 0.0;
-        gui_id = -1;
+    ChallengeEndGUI() {
+        restrict16x9(false);
+
+        super();
+
+        ribbon_background.Init();
+
+        Init();
     }
 
-    ChallengeEndGUI() {
-        imui_context.Init();
-        ribbon_background.Init();
+    ~ChallengeEndGUI() {
+        
+    }
+
+    void RegenerateGUI()  {
+
+
+    }
+
+    void Init() {
+        visible = 0.0;
+        target_visible = 0.0;
+
+        //setGuides(true);
     }
 
     void Update(){
         visible = UpdateVisible(visible, target_visible);
-        if(gui_id != -1){
-            gui.MoveTo(gui_id,GetScreenWidth()/2-400,GetScreenHeight()/2-300);
-        }
-        if(target_visible == 1.0f){
-            if(gui_id == -1){
+
+        if( visible > 0.1 ) {
+            if( isVisible == false) {
                 CreateGUI();
             }
+            setVisible(true); 
         } else {
-            if(gui_id != -1){
-                gui.RemoveGUI(gui_id);
-                gui_id = -1;
-            }
+            setVisible(false);
         }
+
+        AHGUI::GUI::update();
+
         ribbon_background.Update();
         UpdateMusic();
     }
 
     void CreateGUI() {
-        gui_id = gui.AddGUI("text2","challengelevel/challenge.html",800,600, _GG_IGNORES_MOUSE);   
-
-        string mission_objective;
-        string mission_objective_color;
+        array<string> mission_objectives;
+        array<string> mission_objective_colors;
         bool success = true;
 
         for(int i=0; i<level.GetNumObjectives(); ++i){
             string objective = level.GetObjective(i);
+            string mission_objective;
+            string mission_objective_color;
             if(objective == "destroy_all"){
                 int threats_possible = ThreatsPossible();
                 int threats_remaining = ThreatsRemaining();
@@ -317,35 +340,87 @@ class ChallengeEndGUI {
                 }
                 mission_objective += "Collect items";
             }
+
+            mission_objectives.insertLast(mission_objective);
+            mission_objective_colors.insertLast(mission_objective_color);
         }
 
-        string title = success?'challenge complete':'challenge incomplete';
-        gui.Execute(gui_id,"addElement('', 'title', '"+title+"')");
-        gui.Execute(gui_id,"addElement('', 'hr', '')");
-        gui.Execute(gui_id,"addElement('', 'spacer', '')");
-        gui.Execute(gui_id,"addElement('objectives', 'heading', 'objectives:')");
+        string title = success ? 'challenge complete' : 'challenge incomplete';
 
-        gui.Execute(gui_id,"addElement('', '"+mission_objective_color+
-            "', '"+mission_objective+"', 'objectives')");
-        gui.Execute(gui_id,"addElement('time', 'heading', 'time:')");
-        string time_color;
+        root.clear(); 
+
+        AHGUI::Divider@ horiz_root = root.addDivider( DDTop,
+                                                    DOHorizontal,
+                                                    ivec2( UNDEFINEDSIZEI, 2000 ) );
+        
+        horiz_root.addSpacer(200);
+
+        AHGUI::Divider@ mainpane = horiz_root.addDivider( DDLeft,
+                                                    DOVertical,
+                                                    ivec2( UNDEFINEDSIZEI, 2000 ) );
+
+
+        mainpane.addSpacer(300,DDTop);
+
+        AHGUI::Text titleText = AHGUI::Text(title, titleFont);
+
+        AHGUI::Image titleUnderline = AHGUI::Image("Textures/ui/challenge_mode/divider_strip_c.tga");
+        titleUnderline.scaleToSizeY(40);
+
+        mainpane.addElement(titleText, DDTop);
+        mainpane.addElement(titleUnderline, DDTop);
+
+        AHGUI::Text titleObjectives = AHGUI::Text("Objectives", subTitleFont);
+
+        mainpane.addElement( titleObjectives, DDTop ); 
+
+        for( uint i = 0; i < mission_objectives.size(); i++ ) {
+            AHGUI::FontSetup fs;
+
+            if(mission_objective_colors[i] == "red") {
+                fs = redValueFont;
+            } else {
+                fs = greenValueFont;
+            }
+
+            AHGUI::Text objective = AHGUI::Text("  " + mission_objectives[i], fs);
+            mainpane.addElement(objective,DDTop);
+        }
+
+
+        AHGUI::Text titleTime = AHGUI::Text("Time", subTitleFont);
+
+        mainpane.addElement( titleTime, DDTop ); 
+
+        AHGUI::FontSetup timefont;
         if(success){
-            time_color = "green time";
+            timefont = greenValueFont;
         } else {
-            time_color = "red time";
+            timefont = redValueFont;
         }
-        gui.Execute(gui_id,"addElement('', '"+time_color+"', '"+StringFromFloatTime(no_win_time)+"', 'time')");
+
+        AHGUI::Text time1Text = AHGUI::Text("  " + StringFromFloatTime(no_win_time),timefont);
+        mainpane.addElement( time1Text, DDTop ); 
+       
         SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
         float best_time = atof(saved_level.GetValue("time"));
         if(best_time > 0.0f){
-            gui.Execute(gui_id,"addElement('', 'teal time', '"+StringFromFloatTime(best_time)+"', 'time')");
+            AHGUI::Text time2Text = AHGUI::Text("  " + StringFromFloatTime(no_win_time),tealValueFont);
+            mainpane.addElement( time2Text, DDTop );
         }
+
         int player_id = GetPlayerCharacterID();
         if(player_id != -1){
             for(int i=0; i<level.GetNumObjectives(); ++i){
                 string objective = level.GetObjective(i);
                 if(objective == "destroy_all"){
-                    gui.Execute(gui_id,"addElement('enemies', 'heading', 'enemies:')");
+                    AHGUI::Text titleEnemies = AHGUI::Text("Enemies", subTitleFont);
+
+                    mainpane.addElement( titleEnemies, DDTop ); 
+
+                    AHGUI::Divider@ kills = mainpane.addDivider( DDTop, 
+                                                                 DOHorizontal, 
+                                                                 ivec2( UNDEFINEDSIZEI, 100 ) );
                     MovementObject@ player_char = ReadCharacter(player_id);
                     int num = GetNumCharacters();
                     for(int j=0; j<num; ++j){
@@ -355,32 +430,44 @@ class ChallengeEndGUI {
                             if(knocked_out == 1 && char.GetFloatVar("blood_health") <= 0.0f){
                                 knocked_out = 2;
                             }
+                            AHGUI::Image img;
                             switch(knocked_out){
                             case 0:    
-                                gui.Execute(gui_id,"addElement('', 'ok', '', 'enemies')"); break;
+                                img = AHGUI::Image("Textures/ui/challenge_mode/ok.png");
+                                break;
                             case 1:    
-                                gui.Execute(gui_id,"addElement('', 'ko', '', 'enemies')"); break;
+                                img = AHGUI::Image("Textures/ui/challenge_mode/ko.png");
+                                break;
                             case 2:    
-                                gui.Execute(gui_id,"addElement('', 'dead', '', 'enemies')"); break;
+                                img = AHGUI::Image("Textures/ui/challenge_mode/dead.png");
+                                break;
                             }
+                            img.scaleToSizeY(70);
+                            kills.addElement(img,DDLeft);
                         }
                     }
                 }
             }
         }
-        gui.Execute(gui_id,"addElement('extra', 'heading', 'extra:')");
+
+        AHGUI::Text titleExtra = AHGUI::Text("Extra", subTitleFont);
+
+        mainpane.addElement( titleExtra, DDTop ); 
 
         int num_achievements = level.GetNumAchievements();
         for(int i=0; i<num_achievements; ++i){
             string achievement = level.GetAchievement(i);
             string display_str;
-            string color_str = "red";
+
+            AHGUI::FontSetup extraFont = redValueFont;
+
             if(saved_level.GetValue(achievement) == "true"){
-                color_str = "teal";
+                extraFont = tealValueFont;
             }
             if(achievements.GetValue(achievement)){
-                color_str = "green";
+                extraFont = greenValueFont;
             }
+
             if(achievement == "flawless"){
                 display_str += "flawless";
             } else if(achievement == "no_kills"){
@@ -390,72 +477,54 @@ class ChallengeEndGUI {
             } else if(achievement == "no_alert"){
                 display_str = "never seen";
             }
-            gui.Execute(gui_id,"addElement('', '"+color_str+"', '"+display_str+"', 'extra')");
+            AHGUI::Text extra_val = AHGUI::Text(display_str, extraFont);
+            mainpane.addElement( extra_val, DDTop );
         }
+
+        AHGUI::Divider@ buttonpane = mainpane.addDivider( DDTop,
+                                                      DOHorizontal,
+                                                      ivec2(1000, 400) );
+
+        AHGUI::Image quitButton = AHGUI::Image("Textures/ui/challenge_mode/quit_icon_c.tga");
+        quitButton.scaleToSizeX(250);
+        quitButton.addMouseOverBehavior( buttonHover );
+        quitButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("quit"));
+        buttonpane.addElement(quitButton,DDLeft);
+
+        AHGUI::Image retryButton = AHGUI::Image("Textures/ui/challenge_mode/retry_icon_c.tga");
+        retryButton.scaleToSizeX(250);
+        retryButton.addMouseOverBehavior( buttonHover );
+        retryButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("retry"));
+        buttonpane.addElement(retryButton,DDLeft);
+
+        AHGUI::Image continueButton = AHGUI::Image("Textures/ui/challenge_mode/continue_icon_c.tga");
+        continueButton.scaleToSizeX(250); 
+        continueButton.addMouseOverBehavior( buttonHover );
+        continueButton.addLeftMouseClickBehavior(AHGUI::FixedMessageOnClick("continue"));
+        buttonpane.addElement(continueButton,DDLeft);
     }
 
     ~ChallengeEndGUI() {
     }
 
-    bool DrawButton(const string &in path, const vec2 &in pos, float ui_scale, int widget_id) {
-        HUDImage @image = hud.AddImage();
-        image.SetImageFromPath(path);
-        float scale = ui_scale * 0.5f;
-        image.position.x = pos.x;
-        image.position.y = pos.y;
-        image.position.z = 4;
-        image.color.a = visible;
-        image.scale = vec3(scale);
-        UIState state;
-        bool button_pressed = imui_context.DoButton(widget_id, 
-            vec2(image.position.x,
-            image.position.y),
-            vec2(image.position.x+image.GetWidth() * image.scale.x,
-            image.position.y+image.GetHeight() * image.scale.y),
-            state);
-        if(state == kActive){
-            vec3 old_scale = image.scale;
-            image.scale.x *= 0.9;
-            image.scale.y *= 0.9;
-            image.position.x += image.GetWidth() * (old_scale.x - image.scale.x) * 0.5f;
-            image.position.y += image.GetHeight() * (old_scale.y - image.scale.y) * 0.5f;
-        } else if(state == kHot){
-            vec3 old_scale = image.scale;
-            image.scale.x *= 1.1f;
-            image.scale.y *= 1.1f;
-            image.position.x += image.GetWidth() * (old_scale.x - image.scale.x) * 0.5f;
-            image.position.y += image.GetHeight() * (old_scale.y - image.scale.y) * 0.5f;
-        }
-        return button_pressed;
-    }
-
     void DrawGUI(){
-        imui_context.UpdateControls();
-        if(visible < 0.01){
-            return;
-        }
         float ui_scale = 0.5f;
 
-        if(DrawButton("Data/Textures/ui/challenge_mode/quit_icon_c.tga",
-            vec2(GetScreenWidth() - 256 * ui_scale * 1, 0), 
-            ui_scale, 0))
-        {
+        ribbon_background.DrawGUI(visible);
+
+        hud.Draw();
+
+        AHGUI::GUI::render(); 
+    }
+
+    void processMessage( AHGUI::Message@ message ) {
+        if( message.name == "quit" ) {
             level.SendMessage("go_to_main_menu");
-        }
-        if(DrawButton("Data/Textures/ui/challenge_mode/retry_icon_c.tga",
-            vec2(GetScreenWidth() - 256 * ui_scale * 2, 0), 
-            ui_scale, 1))
-        {
+        } else if( message.name == "retry" ) {
             level.SendMessage("reset"); 
-        }
-        if(DrawButton("Data/Textures/ui/challenge_mode/continue_icon_c.tga",
-            //if(DrawButton("Data/Textures/ui/challenge_mode/fast_forward_icon.tga",
-                vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
-                ui_scale, 2))
-        {
+        } else if( message.name == "continue" ) {
             target_visible = 0.0f;
         }
-        ribbon_background.DrawGUI(visible);
     }
 }
 

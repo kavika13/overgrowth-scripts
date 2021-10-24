@@ -186,7 +186,7 @@ class Text : Element
         GUIfontSize = _fontSize;
         screenFontSize = int(screenMetrics.GUItoScreenY() * float(_fontSize));
 
-        imuiText = AHGUI_IMUIContext.makeText( "Data/Fonts/" + fontName + ".ttf", 
+        imuiText = AHGUI_IMUIContext.Get().makeText( "Data/Fonts/" + fontName + ".ttf", 
                                                screenFontSize, kSmallLowercase );
 
         if( text != "" ) {
@@ -285,7 +285,7 @@ class Text : Element
                imuiText.setRenderFlags( kTextShadow );
             }
 
-            AHGUI_IMUIContext.queueText( imuiText );
+            AHGUI_IMUIContext.Get().queueText( imuiText );
 
         }
 

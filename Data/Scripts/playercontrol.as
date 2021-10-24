@@ -202,11 +202,17 @@ bool WantsToDragBody() {
 
 bool WantsToPickUpItem() {
     if(!this_mo.controlled) return false;
+    if(species == _wolf){
+        return false;
+    }
     return drop_key_state == _dks_pick_up;
 }
 
 bool WantsToDropItem() {
     if(!this_mo.controlled) return false;
+    if(species == _wolf){
+        return true;
+    }
     return drop_key_state == _dks_drop;
 }
 
@@ -252,7 +258,7 @@ bool WantsToFeint(){
 
 bool WantsToCounterThrow(){
     if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "grab");
+    return GetInputDown(this_mo.controller_id, "grab") && !GetInputDown(this_mo.controller_id, "attack");
 }
 
 bool WantsToJumpOffWall() {

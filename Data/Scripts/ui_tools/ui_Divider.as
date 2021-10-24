@@ -169,7 +169,7 @@ class Divider : Container {
 
     /*******************************************************************************************/
     /**
-     * @brief  Rather counter-intuitively, this draws this object on the screen
+     * @brief This draws this object on the screen
      *
      * @param drawOffset Absolute offset from the upper lefthand corner (GUI space)
      * @param clipPos pixel location of upper lefthand corner of clipping region
@@ -820,9 +820,6 @@ class Divider : Container {
         bottomRightContents.resize(0);
         @centeredElement = null;
     }
-
 }
-
-
 } // namespace AHGUI
 

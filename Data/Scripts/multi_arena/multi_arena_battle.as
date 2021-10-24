@@ -10,6 +10,59 @@
 #include "multi_arena/multi_arena_enemy_spawn.as"
 #include "multi_arena/multi_arena_weapon_spawn.as"
 
+class SpawnLocation {
+    SpawnLocation() {
+        name = "";
+        id = -1;
+    }
+
+    SpawnLocation( string _name, int _id ) {
+        name = _name;
+        id = _id;
+    }
+
+    string name;
+    int id;
+}
+
+class SpawnLocations {
+    array<SpawnLocation> locations;
+     
+    void deleteAll() {
+        locations.removeRange(0,locations.length());
+    }
+
+    bool exists(string name) {
+        for( uint i = 0; i < locations.length(); i++ ) {
+            if( locations[i].name == name ) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    int Get(string name) {
+        for( uint i = 0; i < locations.length(); i++ ) {
+            if( locations[i].name == name ) {
+                return locations[i].id;
+            }
+        }
+        return 0;
+    }
+
+    void Set(string name, int val) {
+        bool found = false;
+        for( uint i = 0; i < locations.length(); i++ ) {
+            if( locations[i].name == name ) {
+                locations[i].id = val;
+                found = true;
+            }
+        }
+        if( found == false ) {
+            locations.insertLast( SpawnLocation(name,val) );
+        }
+    }
+}
 
 /**
  * All the necessary bookkeeping for a battle in the arena 
@@ -26,7 +79,7 @@ class BattleInstance {
 
     uint numTeams; // How many teams are there?
 
-    dictionary spawnLocations; // All the spawn locations map from name to object id
+    SpawnLocations spawnLocations; // All the spawn locations map from name to object id
 
     float battleDifficulty; // Difficulty rating for this battle
 
@@ -67,7 +120,7 @@ class BattleInstance {
                             DisplayError("Error", "Duplicate spawn location " + LocName );
                         }
                         else {
-                            spawnLocations[ LocName ] = allObjectIds[ objectIndex ];
+                            spawnLocations.Set(LocName, allObjectIds[ objectIndex ]);
                         }
                     }
                 }
@@ -209,7 +262,7 @@ class BattleInstance {
         if( !spawnLocations.exists( name ) ) {
             DisplayError("error", "Location name " + name + " not found in level");
         }
-        return int( spawnLocations[ name ] ); 
+        return spawnLocations.Get( name ); 
     }
 
 

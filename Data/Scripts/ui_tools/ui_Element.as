@@ -17,6 +17,7 @@ namespace AHGUI {
  * 
  */
 class UpdateBehavior {
+    string key;
 
     bool initialized = false;   // Has this update been run once?
 
@@ -197,6 +198,251 @@ class MouseClickBehavior {
 
 }
 
+class UpdateBehaviorInstance { 
+    UpdateBehaviorInstance() {
+        key = "";
+    }
+
+    UpdateBehaviorInstance( string _key, UpdateBehavior@ _elem ) {
+        key = _key;
+        @elem = @_elem; 
+    }
+
+    string key;
+    UpdateBehavior@ elem;
+}
+
+class UpdateBehaviors {
+    array<UpdateBehaviorInstance@> elems;
+
+    void deleteAll() {
+        elems.removeRange(0,elems.length());
+    }
+
+    bool exists( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    array<string> getKeys() {
+        array<string> keys;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            keys.insertLast(elems[i].key);
+        }
+        return keys;
+    }
+
+    UpdateBehavior@ Get( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return elems[i].elem;
+            }
+        }
+        return null;
+    }
+
+    void Set( string key, UpdateBehavior@ elem ) {
+        bool found = false;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                found = true;
+                elems[i].elem = elem;
+            }
+        }
+        if( found == false ) {
+            elems.insertLast(UpdateBehaviorInstance(key,elem));
+        }
+    }
+
+    void Remove( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                elems.removeAt(i);
+                i--;
+            } 
+        }
+    }
+
+    UpdateBehavior@ GetI( int i ) {
+        return elems[i].elem;
+    }
+
+    string GetKeyI( int i ) {
+        return elems[i].key;
+    }
+
+    uint Count() {
+        return elems.length();
+    }
+}
+
+class MouseOverBehaviorInstance { 
+    MouseOverBehaviorInstance() {
+        key = "";
+    }
+    
+    MouseOverBehaviorInstance(string _key, MouseOverBehavior@ _elem) {
+        key = _key;
+        @elem = @_elem; 
+    }
+
+    string key;
+    MouseOverBehavior@ elem;
+}
+
+class MouseOverBehaviors {
+    array<MouseOverBehaviorInstance@> elems;
+
+    void deleteAll() {
+        elems.removeRange(0,elems.length());
+    }
+
+    bool exists( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    array<string> getKeys() {
+        array<string> keys;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            keys.insertLast(elems[i].key);
+        }
+        return keys;
+    }
+
+    MouseOverBehavior@ Get( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return elems[i].elem;
+            }
+        }
+        return null;
+    }
+
+    void Set( string key, MouseOverBehavior@ elem ) {
+        bool found = false;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                found = true;
+                elems[i].elem = elem;
+            }
+        }
+        if( found == false ) {
+            elems.insertLast(MouseOverBehaviorInstance(key,elem));
+        }
+    }
+
+    void Remove( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                elems.removeAt(i);
+                i--;
+            } 
+        }
+    }
+
+    MouseOverBehavior@ GetI( int i ) {
+        return elems[i].elem;
+    }
+
+    string GetKeyI( int i ) {
+        return elems[i].key;
+    }
+
+    uint Count() {
+        return elems.length();
+    }
+}
+
+class MouseClickBehaviorInstance { 
+    MouseClickBehaviorInstance() { 
+        key = "";
+    }
+
+    MouseClickBehaviorInstance( string _key, MouseClickBehavior@ _elem ) { 
+        key = _key;
+        @elem = @_elem;
+    }
+
+    string key;
+    MouseClickBehavior@ elem;
+}
+
+class LeftMouseClickBehaviors {
+    array<MouseClickBehaviorInstance@> elems;
+
+    void deleteAll() {
+        elems.removeRange(0,elems.length());
+    }
+
+    bool exists( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    array<string> getKeys() {
+        array<string> keys;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            keys.insertLast(elems[i].key);
+        }
+        return keys;
+    }
+
+    MouseClickBehavior@ Get( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                return elems[i].elem;
+            }
+        }
+        return null;
+    }
+
+    void Set( string key, MouseClickBehavior@ elem ) {
+        bool found = false;
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                found = true;
+                elems[i].elem = elem;
+            }
+        }
+        if( found == false ) {
+            elems.insertLast(MouseClickBehaviorInstance(key,elem));
+        }
+    }
+
+    void Remove( string key ) {
+        for( uint i = 0; i < elems.length(); i++ ) {
+            if( elems[i].key == key ) {
+                elems.removeAt(i);
+                i--;
+            } 
+        }
+    }
+
+    MouseClickBehavior@ GetI( int i ) {
+        return elems[i].elem;
+    }
+
+    string GetKeyI( int i ) {
+        return elems[i].key;
+    }
+
+    uint Count() {
+        return elems.length();
+    }
+}
 
 /*******************************************************************************************/
 /**
@@ -226,9 +472,9 @@ class Element {
 
     int numBehaviors = 0; // Counter for unique behavior names
 
-    dictionary updateBehaviors;         // update behaviors
-    dictionary mouseOverBehaviors;   // mouse over behaviors
-    dictionary leftMouseClickBehaviors;        // mouse up behaviors
+    UpdateBehaviors                  updateBehaviors;            // update behaviors
+    MouseOverBehaviors               mouseOverBehaviors;         // mouse over behaviors
+    LeftMouseClickBehaviors          leftMouseClickBehaviors;    // mouse up behaviors
 
     bool show;              // should this element be rendered?
     vec4 color;             // if this element is colored, what color is it? -- other elements may define further colors
@@ -909,8 +1155,7 @@ class Element {
                                   vec2( float(screenClipSize.x), float(screenClipSize.y) ) );
         }
 
-        AHGUI_IMUIContext.queueImage( boxImage );
-
+        AHGUI_IMUIContext.Get().queueImage( boxImage );
     }
 
 
@@ -1018,7 +1263,7 @@ class Element {
             removeUpdateBehavior( behaviorName );
         }
 
-        @updateBehaviors[behaviorName] = @behavior;
+        updateBehaviors.Set(behaviorName, @behavior);
      }
 
     /*******************************************************************************************/
@@ -1035,14 +1280,14 @@ class Element {
         if( updateBehaviors.exists(behaviorName) ) {
             // if so clean it up if its been initialized 
 
-            UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[behaviorName]);
+            UpdateBehavior@ updater = updateBehaviors.Get(behaviorName);
             
             if( updater.initialized ) {
                 updater.cleanUp( this );
             }
 
             // and delete it
-            updateBehaviors.delete( behaviorName );
+            updateBehaviors.Remove( behaviorName );
 
             return true;
         }
@@ -1076,9 +1321,8 @@ class Element {
      void clearUpdateBehaviors() {
 
         // iterate through all the behaviors and clean them up
-        array<string>@  keys = updateBehaviors.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[keys[k]]);
+        for( uint k = 0; k < updateBehaviors.Count(); k++ ) {
+            UpdateBehavior@ updater = updateBehaviors.GetI(k);
             updater.cleanUp( this );
         }
 
@@ -1105,8 +1349,7 @@ class Element {
             removeMouseOverBehavior( behaviorName );
         }
 
-        @mouseOverBehaviors[behaviorName] = @behavior;
-
+        mouseOverBehaviors.Set(behaviorName, @behavior);
      }
 
     /*******************************************************************************************/
@@ -1122,11 +1365,11 @@ class Element {
         // see if there is already a behavior with this name
         if( mouseOverBehaviors.exists(behaviorName) ) {
             // if so clean it up 
-            MouseOverBehavior@ updater = cast<MouseOverBehavior>(mouseOverBehaviors[behaviorName]);
+            MouseOverBehavior@ updater = mouseOverBehaviors.Get(behaviorName);
             updater.cleanUp( this );
 
             // and delete it
-            mouseOverBehaviors.delete( behaviorName );
+            mouseOverBehaviors.Remove( behaviorName );
 
             return true;
         }
@@ -1134,7 +1377,6 @@ class Element {
             // Let the caller know
             return false;
         }
-
      }
 
     /*******************************************************************************************/
@@ -1145,9 +1387,8 @@ class Element {
      void clearMouseOverBehaviors() {
 
         // iterate through all the behaviors and clean them up
-        array<string>@  keys = mouseOverBehaviors.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            MouseOverBehavior@ updater = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+        for( uint k = 0; k < mouseOverBehaviors.Count(); k++ ) {
+            MouseOverBehavior@ updater = mouseOverBehaviors.GetI(k);
             updater.cleanUp( this );
         }
 
@@ -1174,7 +1415,7 @@ class Element {
             removeLeftMouseClickBehavior( behaviorName );
         }
 
-        @leftMouseClickBehaviors[behaviorName] = @behavior;
+        leftMouseClickBehaviors.Set(behaviorName, @behavior);
         
     }
 
@@ -1193,11 +1434,11 @@ class Element {
         // see if there is already a behavior with this name
         if( leftMouseClickBehaviors.exists(behaviorName) ) {
             // if so clean it up 
-            MouseClickBehavior@ updater = cast<MouseClickBehavior>(leftMouseClickBehaviors[behaviorName]);
+            MouseClickBehavior@ updater = leftMouseClickBehaviors.Get(behaviorName);
             updater.cleanUp( this );
 
             // and delete it
-            leftMouseClickBehaviors.delete( behaviorName );
+            leftMouseClickBehaviors.Remove( behaviorName );
 
             return true;
         }
@@ -1214,16 +1455,11 @@ class Element {
      *
      */
      void clearLeftMouseClickBehaviors() {
-
-        // iterate through all the behaviors and clean them up
-        array<string>@  keys = leftMouseClickBehaviors.getKeys();
-        for( uint k = 0; k < keys.length(); k++ ) {
-            MouseClickBehavior@ updater = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+        for( uint k = 0; k < leftMouseClickBehaviors.Count(); k++ ) {
+            MouseClickBehavior@ updater = leftMouseClickBehaviors.GetI(k);
             updater.cleanUp( this );
         }
-
-        leftMouseClickBehaviors.deleteAll();
-
+        leftMouseClickBehaviors.deleteAll(); 
      }
 
     /*******************************************************************************************/
@@ -1238,16 +1474,15 @@ class Element {
     void update( uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
         // Update behaviors
         {
-            array<string>@ keys = updateBehaviors.getKeys();
-            for( uint k = 0; k < keys.length(); k++ ) {
-                UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[keys[k]]);
+            for( uint k = 0; k < updateBehaviors.Count(); k++ ) {
+                UpdateBehavior@ updater = updateBehaviors.GetI(k);
                 
                 // See if this behavior has been initialized
                 if( !updater.initialized ) {
 
                     if( !updater.initialize( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it should not begin remove it
-                        removeUpdateBehavior( keys[k] );    
+                        removeUpdateBehavior( updateBehaviors.GetKeyI(k) );    
                         continue;
                     }
                     else {
@@ -1257,7 +1492,7 @@ class Element {
 
                 if( !updater.update( this, delta, drawOffset, guistate ) ) {
                     // If the behavior has indicated it is done
-                    removeUpdateBehavior( keys[k] );
+                    removeUpdateBehavior( updateBehaviors.GetKeyI(k) );
                 }
             }
         }
@@ -1271,74 +1506,63 @@ class Element {
                 mouseOver = true;
 
                 // Update behaviors 
-                array<string>@ keys = mouseOverBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+                for( uint k = 0; k < mouseOverBehaviors.Count(); k++ ) {
+                    MouseOverBehavior@ behavior = mouseOverBehaviors.GetI(k);
                     behavior.onStart( this, delta, drawOffset, guistate );
                 }
-            }
-            else {
-
-                array<string>@ keys = mouseOverBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+            } else {
+                for( uint k = 0; k < mouseOverBehaviors.Count(); k++ ) {
+                    MouseOverBehavior@ behavior = mouseOverBehaviors.GetI(k);
                     behavior.onContinue( this, delta, drawOffset, guistate );
                 }
-            }   
+            }
 
             // Mouse click status
             switch( guistate.leftMouseState ) {
             
             case kMouseDown: {
-
-                array<string>@ keys = leftMouseClickBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+                for( uint k = 0; k < leftMouseClickBehaviors.Count(); k++ ) {
+                    MouseClickBehavior@ behavior = leftMouseClickBehaviors.GetI(k);
 
                     if( !behavior.onDown( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        removeLeftMouseClickBehavior( keys[k] );
+                        removeLeftMouseClickBehavior( leftMouseClickBehaviors.GetKeyI(k) );
                     }
                 }
             }
             break; 
             
             case kMouseStillDown: {
-
-                array<string>@ keys = leftMouseClickBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+                for( uint k = 0; k < leftMouseClickBehaviors.Count(); k++ ) {
+                    MouseClickBehavior@ behavior = leftMouseClickBehaviors.GetI(k);
 
                     if( !behavior.onStillDown( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        removeLeftMouseClickBehavior( keys[k] );
+                        removeLeftMouseClickBehavior( leftMouseClickBehaviors.GetKeyI(k) );
                     }
                 }
             }
             break;
 
             case kMouseUp: {
-
-                array<string>@ keys = leftMouseClickBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+                for( uint k = 0; k < leftMouseClickBehaviors.Count(); k++ ) {
+                    MouseClickBehavior@ behavior = leftMouseClickBehaviors.GetI(k);
 
                     if( !behavior.onUp( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        removeLeftMouseClickBehavior( keys[k] );
+                        removeLeftMouseClickBehavior( leftMouseClickBehaviors.GetKeyI(k) );
                     }
                 }
 
                 // Consider this no longer hovering
                 mouseOver = false;
                 {
-                    array<string>@ mokeys = mouseOverBehaviors.getKeys();
-                    for( uint k = 0; k < mokeys.length(); k++ ) {
-                        MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[mokeys[k]]);
+                    for( uint k = 0; k < mouseOverBehaviors.Count(); k++ ) {
+                        MouseOverBehavior@ behavior = mouseOverBehaviors.GetI(k);
 
                         if( !behavior.onFinish( this, delta, drawOffset, guistate ) ) {
                             // If the behavior has indicated it is done
-                            removeMouseOverBehavior( mokeys[k] );
+                            removeMouseOverBehavior( mouseOverBehaviors.GetKeyI(k) );
                         }
                     }
                 }
@@ -1357,13 +1581,12 @@ class Element {
             // See if this is an 'exit'
             if( mouseOver )
             {
-                array<string>@ keys = mouseOverBehaviors.getKeys();
-                for( uint k = 0; k < keys.length(); k++ ) {
-                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+                for( uint k = 0; k < mouseOverBehaviors.Count(); k++ ) {
+                    MouseOverBehavior@ behavior = mouseOverBehaviors.GetI(k);
 
                     if( !behavior.onFinish( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        removeMouseOverBehavior( keys[k] );
+                        removeMouseOverBehavior( mouseOverBehaviors.GetKeyI(k) );
                     }
                 }
                 mouseOver = false;

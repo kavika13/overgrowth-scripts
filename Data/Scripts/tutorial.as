@@ -408,8 +408,6 @@ void ReceiveMessage(string msg) {
         }
     } else if(token == "reset") {
         Reset();
-    } else if(token == "dispose_level") {
-        gui.RemoveAll();
     } else if(token == "achievement_event") {
         token_iter.FindNextToken(msg);
         string achievement = token_iter.GetToken(msg);

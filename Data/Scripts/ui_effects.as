@@ -1,8 +1,13 @@
-float UpdateVisible(float visible, float target_visible){
+#include "ui_tools.as"
+
+float UpdateVisible(float visible, float target_visible) {
     return mix(visible, target_visible, 0.1f);
 }
 
+
+
 class RibbonBackground {
+    IMUIContextWrapper imuicontext;
     int gui_id;
     float display_time;
 
@@ -13,18 +18,17 @@ class RibbonBackground {
 
     RibbonBackground() {
     }
+
+    ~RibbonBackground() {
+    }
     
     void Update(){
         display_time += time_step;
     }
     
-    void MoveGUI(int gui_id){
-        if(gui_id != -1){
-            gui.MoveTo(gui_id,GetScreenWidth()/2-400,GetScreenHeight()/2-300);
-        }    
-    } 
-    
     void DrawGUI(float visible){
+        IMUIContext@ imui_context = imuicontext.Get();
+        imui_context.UpdateControls();
         if(visible < 0.01){
             return;
         }

@@ -2,6 +2,7 @@
 #include "ui_tools/ui_Message.as"
 #include "ui_tools/ui_support.as"
 #include "ui_tools/ui_Container.as"
+#include "ui_tools/ui_IMUIContext.as"
 
 /*******
  *  
@@ -14,7 +15,7 @@
 namespace AHGUI {
 
 // Make this global to avoid duplicate resource use 
-IMUIContext AHGUI_IMUIContext; // UI features from the engine
+IMUIContextWrapper AHGUI_IMUIContext; // UI features from the engine
 /*******************************************************************************************/
 /**
  * @brief One thing to rule them all
@@ -27,6 +28,7 @@ class GUI {
     uint elementCount; // Counter for naming unnamed elements
     bool needsRelayout; // has a relayout signal been fired?
     bool showGuides; // overlay some extra lines to aid layout
+    bool isVisible;
     
     ivec2 mousePosition; // Where is the mouse?
     UIMouseState leftMouseState;    // What's the state of the left mouse button?
@@ -53,9 +55,7 @@ class GUI {
 
         needsRelayout = false;
         showGuides = false;
-
-        AHGUI_IMUIContext.Init();
-
+        isVisible = true;
     }
 
     /*******************************************************************************************/
@@ -124,6 +124,10 @@ class GUI {
      void setGuides( bool setting ) {
         showGuides = setting;
      }
+
+    void setVisible( bool v ) {
+        isVisible = v;
+    }
 
     /*******************************************************************************************/
     /**
@@ -232,7 +236,8 @@ class GUI {
      * 
      */
     void update() {
-
+        if( !isVisible )
+            return;
 
         // If we haven't updated yet, set the time
         if( lastUpdateTime == 0 ) {
@@ -246,14 +251,14 @@ class GUI {
         lastUpdateTime = uint64( ui_time * 1000 );
 
         // Get the input from the engine
-        AHGUI_IMUIContext.UpdateControls();
+        AHGUI_IMUIContext.Get().UpdateControls();
 
-        vec2 engineMousePos = AHGUI_IMUIContext.getMousePosition();
+        vec2 engineMousePos = AHGUI_IMUIContext.Get().getMousePosition();
 
         // Translate to GUISpace
         mousePosition.x = int( (engineMousePos.x - screenMetrics.renderOffset.x ) / screenMetrics.GUItoScreenXScale );
         mousePosition.y = int(float( GetScreenHeight() - int( engineMousePos.y + screenMetrics.renderOffset.y ) ) / screenMetrics.GUItoScreenYScale);  
-        leftMouseState = AHGUI_IMUIContext.getLeftMouseState();
+        leftMouseState = AHGUI_IMUIContext.Get().getLeftMouseState();
 
         // Do relayout as necessary 
         while( needsRelayout ) {
@@ -303,12 +308,13 @@ class GUI {
      *
      */
      void render() {
+        if( !isVisible ) return;
 
         // Check to see if the screen size has changed
         if( screenMetrics.checkMetrics() ) {
                 
             // All the font sizes will likely have changed
-            AHGUI_IMUIContext.clearTextAtlases();
+            AHGUI_IMUIContext.Get().clearTextAtlases();
             // We need to inform the elements
             root.doScreenResize();
             root.doRelayout();
@@ -322,17 +328,17 @@ class GUI {
         // render the backgrounds
         for( int layer = int(backgrounds.length())-1; layer >= 0; --layer ) {
             backgrounds[ layer ].render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
-            AHGUI_IMUIContext.render();
+            AHGUI_IMUIContext.Get().render();
         }
 
         // render the main content
         root.render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
-        AHGUI_IMUIContext.render();
+        AHGUI_IMUIContext.Get().render();
 
         // render the foregrounds
         for( uint layer = 0; layer < foregrounds.length(); ++layer ) {
             foregrounds[ layer ].render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
-            AHGUI_IMUIContext.render();
+            AHGUI_IMUIContext.Get().render();
         }
 
         if( showGuides ) {
@@ -460,7 +466,7 @@ class GUI {
         }
 
         hud.Draw();
-        AHGUI_IMUIContext.render();
+        AHGUI_IMUIContext.Get().render();
      }
 
     /*******************************************************************************************/

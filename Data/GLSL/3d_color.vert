@@ -11,14 +11,20 @@ in vec3 vert_attrib;
 #endif
 
 out vec4 color;
-out vec3 world_vert;
 
-void main() {    
-    world_vert = vert_attrib;
 #ifdef FIRE
-    world_vert += normalize(cam_pos - world_vert) * 0.1;
+    out vec3 world_vert;
 #endif
+
+void main() {
+#ifdef FIRE
+    world_vert = vert_attrib;
+    world_vert = world_vert + normalize(cam_pos - world_vert) * 0.1;
     gl_Position = mvp * vec4(world_vert, 1.0);
+#else
+    gl_Position = mvp * vec4(vert_attrib, 1.0);
+#endif
+
 #ifdef COLOR_ATTRIB
     color = color_attrib;
 #elif defined(COLOR_UNIFORM)

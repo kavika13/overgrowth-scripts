@@ -82,7 +82,7 @@ in vec2 tex_coord_attrib;
     uniform mat4 shadow_matrix[4];
 #elif defined(TERRAIN)
     uniform vec3 cam_pos;
-    uniform mat4 mvp;
+    uniform mat4 projection_view_mat;
     uniform vec3 ws_light;
     uniform mat4 shadow_matrix[4];
 #elif defined(CHARACTER)
@@ -118,14 +118,32 @@ in vec2 tex_coord_attrib;
     uniform float time;
     #endif
 
+    #ifdef MEGASCAN_TEST
+        uniform sampler2D tex0;
+    #endif
+
     #if defined(SCROLL_FAST) || defined(SCROLL_SLOW) || defined(SCROLL_VERY_SLOW) || defined(SCROLL_MEDIUM)
     uniform float time;
     #endif
 #endif
 
+
+#ifdef SHADOW_CASCADE
+#define frag_tex_coords geom_tex_coords
+#define world_vert      geom_world_vert
+
+#ifdef CHARACTER
+#define fur_tex_coord   geom_fur_tex_coord
+#endif  // CHARACTER
+
+#endif  // SHADOW_CASCADE
+
+
+out vec3 world_vert;
+
+
 #ifdef PARTICLE
     out vec2 tex_coord;
-    out vec3 world_vert;
     #if defined(NORMAL_MAP_TRANSLUCENT) || defined(WATER) || defined(SPLAT)
         out vec3 tangent_to_world1;
         out vec3 tangent_to_world2;
@@ -136,25 +154,23 @@ in vec2 tex_coord_attrib;
     out vec2 frag_tex_coords;
     out vec2 base_tex_coord;
     out mat3 tangent_to_world;
-    out vec3 ws_vertex;
-    out vec4 shadow_coords[4];
-    out vec3 world_vert;
     #define TERRAIN_LIGHT_OFFSET vec2(0.0);//vec2(0.0005)+ws_light.xz*0.0005
 #elif defined(ITEM)    
     #ifndef DEPTH_ONLY
-    out vec3 ws_vertex;
-    out vec3 world_vert;
-    out vec3 vel;
+        #ifndef NO_VELOCITY_BUF
+            out vec3 vel;
+        #endif
     #ifdef TANGENT
         out vec3 frag_normal;
     #endif
     #endif
     out vec2 frag_tex_coords;
 #elif defined(TERRAIN)
-    out vec3 world_vert;
-    out vec3 frag_tangent;
+    #if defined(DETAILMAP4)
+        out vec3 frag_tangent;
+    #endif
     #if !defined(SIMPLE_SHADOW)
-        out float alpha;
+        //out float alpha;
     #endif
     out vec4 frag_tex_coords;
 
@@ -170,15 +186,15 @@ in vec2 tex_coord_attrib;
     out vec3 concat_bone2;
     out vec2 tex_coord;
     out vec2 morphed_tex_coord;
-    out vec3 world_vert;
     out vec3 orig_vert;
-    out vec3 vel;
+    #ifndef NO_VELOCITY_BUF
+        out vec3 vel;
+    #endif
     #endif
 #else
     #ifdef TANGENT
     out mat3 tan_to_obj;
     #endif
-    out vec3 world_vert;
     out vec2 frag_tex_coords;
     #ifndef NO_INSTANCE_ID
     flat out int instance_id;
@@ -220,15 +236,14 @@ void main() {
             #endif
         #endif
         ApplyWaterRefraction(transformed_vertex);
-        gl_Position = mvp * vec4(transformed_vertex, 1.0);    
-        world_vert = transformed_vertex;
+        mat4 projection_view_mat = mvp;
         tex_coord = tex_coord_attrib;    
         #ifdef INSTANCED
             instance_id = gl_InstanceID;
         #endif
     #elif defined(DETAIL_OBJECT)
         mat4 obj2world = transforms[gl_InstanceID];
-        vec4 transformed_vertex = obj2world*vec4(vertex_attrib, 1.0);
+        vec3 transformed_vertex = (obj2world*vec4(vertex_attrib, 1.0)).xyz;
         #ifdef PLANT
             float plant_shake = 0.0;
             vec3 vertex_offset = CalcVertexOffset(transformed_vertex, vertex_attrib.y*2.0, time, plant_shake);
@@ -248,34 +263,25 @@ void main() {
         float height_scale = aux.a;
         transformed_vertex.y -= max(embed,length(transformed_vertex.xyz - cam_pos)/max_distance)*height*height_scale;
         #ifdef PLANT
-            transformed_vertex += obj2world * vec4(vertex_offset,0.0);
+            transformed_vertex += (obj2world * vec4(vertex_offset,0.0)).xyz;
         #endif
         vec3 temp = transformed_vertex.xyz;
         ApplyWaterRefraction(temp);
         transformed_vertex.xyz = temp;
-        world_vert = transformed_vertex.xyz;
-        ws_vertex = transformed_vertex.xyz - cam_pos;
-        gl_Position = projection_view_mat * transformed_vertex;
 
         frag_tex_coords = tex_coord_attrib;
         base_tex_coord = aux.xy+TERRAIN_LIGHT_OFFSET;
         
-        shadow_coords[0] = shadow_matrix[0] * vec4(transformed_vertex);
-        shadow_coords[1] = shadow_matrix[1] * vec4(transformed_vertex);
-        shadow_coords[2] = shadow_matrix[2] * vec4(transformed_vertex);
-        shadow_coords[3] = shadow_matrix[3] * vec4(transformed_vertex);
     #elif defined(ITEM)
-        vec4 transformed_vertex = model_mat * vec4(vertex_attrib, 1.0);
-        gl_Position = projection_view_mat * transformed_vertex;
+        vec3 transformed_vertex = (model_mat * vec4(vertex_attrib, 1.0)).xyz;
         
         frag_tex_coords = tex_coord_attrib;
         #ifndef DEPTH_ONLY
-            ws_vertex = transformed_vertex.xyz - cam_pos;
-            world_vert = transformed_vertex.xyz;
-
-            vec4 old_vel = old_vel_mat * vec4(vertex_attrib, 1.0);
-            vec4 new_vel = new_vel_mat * vec4(vertex_attrib, 1.0);
-            vel = (new_vel - old_vel).xyz;
+                #ifndef NO_VELOCITY_BUF
+                    vec4 old_vel = old_vel_mat * vec4(vertex_attrib, 1.0);
+                    vec4 new_vel = new_vel_mat * vec4(vertex_attrib, 1.0);
+                    vel = (new_vel - old_vel).xyz;
+                #endif
             #ifdef TANGENT
                 frag_normal = normal_attrib;
             #endif
@@ -284,19 +290,19 @@ void main() {
         vec3 transformed_vertex = vertex_attrib;
         ApplyWaterRefraction(transformed_vertex);
 
-        frag_tangent = tangent_attrib;    
-        world_vert = transformed_vertex;      
+        #if defined(DETAILMAP4)
+            frag_tangent = tangent_attrib;    
+        #endif
+        
         #if !defined(SIMPLE_SHADOW)
-            alpha = min(1.0,(terrain_size-vertex_attrib.x)*fade_mult)*
-                min(1.0,(vertex_attrib.x+500.0)*fade_mult)*
-                min(1.0,(terrain_size-vertex_attrib.z)*fade_mult)*
-                min(1.0,(vertex_attrib.z+500.0)*fade_mult);
-            alpha = max(0.0,alpha);
+            //alpha = min(1.0,(terrain_size-vertex_attrib.x)*fade_mult)*
+            //    min(1.0,(vertex_attrib.x+500.0)*fade_mult)*
+            //    min(1.0,(terrain_size-vertex_attrib.z)*fade_mult)*
+            //    min(1.0,(vertex_attrib.z+500.0)*fade_mult);
+            //alpha = max(0.0,alpha);
         #endif
         frag_tex_coords.xy = tex_coord_attrib+TERRAIN_LIGHT_OFFSET;    
         frag_tex_coords.zw = detail_tex_coord*0.1;
-
-        gl_Position = mvp * vec4(transformed_vertex, 1.0);
     #elif defined(CHARACTER)    
 
 #if defined(GPU_SKINNING)
@@ -323,18 +329,19 @@ void main() {
         vec3 transformed_vertex = (concat_bone * vec4(vertex_attrib, 1.0)).xyz;
         ApplyWaterRefraction(transformed_vertex);
 
-        gl_Position = mvp * vec4(transformed_vertex, 1.0);
+        mat4 projection_view_mat = mvp;
 
         // Set up varyings to pass bone matrix to fragment shader
         #ifndef DEPTH_ONLY
             orig_vert = vertex_attrib;
-            world_vert = transformed_vertex;
             concat_bone1 = concat_bone[0].xyz;
             concat_bone2 = concat_bone[1].xyz;
 
             tex_coord = tex_coord_attrib;
             morphed_tex_coord = tex_coord_attrib + morph_tex_offset_attrib;
-            vel = vel_attrib;
+            #ifndef NO_VELOCITY_BUF
+                vel = vel_attrib;
+            #endif
         #endif
         fur_tex_coord = fur_tex_coord_attrib;
     #else
@@ -345,17 +352,47 @@ void main() {
         #if defined(TANGENT) && !defined(DEPTH_ONLY)
             tan_to_obj = mat3(tangent_attrib, bitangent_attrib, normal_attrib);
         #endif
-        vec4 transformed_vertex = model_mat[instance_id] * vec4(vertex_attrib, 1.0);
+        vec3 transformed_vertex = (model_mat[instance_id] * vec4(vertex_attrib, 1.0)).xyz;
         #ifdef PLANT
-            float plant_shake = 0.0;//color_tint[instance_id][3];
+            float plant_shake = max(0.0, color_tint[instance_id][3]);
             vec3 vertex_offset = CalcVertexOffset(transformed_vertex, plant_stability_attrib.r, time, plant_shake);
             transformed_vertex.xyz += model_rotation_mat[instance_id] * vertex_offset;
         #endif
+        #ifdef WATERFALL
+            transformed_vertex.xyz += CalcVertexOffset(transformed_vertex, 0.1, time, 1.0);
+        #endif
+
+
+        #ifdef MEGASCAN_TEST
+            vec3 temp_scale;
+            {
+                mat3 temp_mat = mat3(model_mat[instance_id][0].xyz, model_mat[instance_id][1].xyz, model_mat[instance_id][2].xyz);
+                temp_mat = inverse(model_rotation_mat[instance_id]) * temp_mat;
+                temp_scale = vec3(temp_mat[0][0], temp_mat[1][1], temp_mat[2][2]);
+            }
+            float tile_scale = 2.0;
+            float displacement_scale = 0.25;
+            vec2 temp_uv;
+            #ifdef AXIS_UV
+                temp_uv = tex_coord_attrib * tile_scale;
+                temp_uv.x *= abs(dot(temp_scale, tangent_attrib));
+                temp_uv.y *= abs(dot(temp_scale, bitangent_attrib));
+            #else
+                temp_uv = tex_coord_attrib;
+            #endif
+            #ifdef DISPLACE
+                transformed_vertex.xyz += model_rotation_mat[instance_id] * normal_attrib * (texture(tex0, temp_uv).a - 0.5) * displacement_scale;//CalcVertexOffset(transformed_vertex, 0.1, 0.0, 1.0);
+            #endif
+        #endif
+
         vec3 temp = transformed_vertex.xyz;
         ApplyWaterRefraction(temp);
         transformed_vertex.xyz = temp;
-        gl_Position = projection_view_mat * transformed_vertex;    
-        frag_tex_coords = tex_coord_attrib;
+        #ifdef MEGASCAN_TEST
+            frag_tex_coords = temp_uv;
+        #else
+            frag_tex_coords = tex_coord_attrib;
+        #endif
         #ifdef SCROLL_MEDIUM
         frag_tex_coords.y -= time;
         #endif
@@ -368,8 +405,10 @@ void main() {
         #ifdef SCROLL_VERY_SLOW
         frag_tex_coords.y -= time * 0.2;
         #endif
-        #ifndef DEPTH_ONLY
-            world_vert = transformed_vertex.xyz;
-        #endif
     #endif
+
+    world_vert = transformed_vertex;
+#ifndef SHADOW_CASCADE
+	gl_Position = projection_view_mat * vec4(transformed_vertex, 1.0);
+#endif  // SHADOW_CASCADE
 } 

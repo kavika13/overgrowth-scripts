@@ -26,7 +26,8 @@ void HandleEvent(string event, MovementObject @mo){
 }
 
 void OnEnter(MovementObject @mo) {
-    mo.ReceiveMessage("extinguish");
+    //mo.ReceiveMessage("extinguish");
+    //mo.Execute("TakeBloodDamage(1.0f);Ragdoll(_RGDL_FALL);zone_killed=1;");
 }
 
 void OnExit(MovementObject @mo) {
@@ -38,13 +39,13 @@ void PreDraw(float curr_game_time) {
 
 void Update() {
     Object@ obj = ReadObjectFromID(hotspot.GetID());
-    array<int> nearby_characters;
+    /*array<int> nearby_characters;
     GetCharacters(nearby_characters);
     int num_chars = nearby_characters.size();
     for(int i=0; i<num_chars; ++i){
         MovementObject@ mo = ReadCharacterID(nearby_characters[i]);
         mo.rigged_object().AddWaterCube(obj.GetTransform());
-    }    
+    }    */
     if(water_surface_id == -1){
         water_surface_id = CreateObject("Data/Objects/water_test.xml", true);
     }
@@ -52,6 +53,7 @@ void Update() {
     water_surface_obj.SetTranslation(obj.GetTranslation());
     water_surface_obj.SetRotation(obj.GetRotation());
     water_surface_obj.SetScale(obj.GetScale() * 2.0f);
+    water_surface_obj.SetTint(vec3(0.5,0.25,0.5));
     if(water_decal_id == -1){
         water_decal_id = CreateObject("Data/Objects/Decals/water_fog.xml", true);
     }
@@ -59,4 +61,15 @@ void Update() {
     water_decal_obj.SetTranslation(obj.GetTranslation() + vec3(0.0, 0.01, 0.0)); // To avoid z-fighting
     water_decal_obj.SetRotation(obj.GetRotation());
     water_decal_obj.SetScale(obj.GetScale() * 4.00f);
+
+
+    array<int> collides_with;
+    level.GetCollidingObjects(hotspot.GetID(), collides_with);
+    for(int i=0, len=collides_with.size(); i<len; ++i){
+        int id = collides_with[i];
+        if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+            MovementObject@ mo = ReadCharacterID(id);
+            mo.Execute("WaterIntersect("+hotspot.GetID()+");");
+        }
+    }
 }

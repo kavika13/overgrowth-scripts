@@ -153,7 +153,7 @@ class JumpInfo {
 
     void UpdateWallRun(const Timestep &in ts) {
         wall_hit_time += ts.step();
-        if(wall_hit_time > 0.1f && this_mo.velocity.y < -1.0f && !ledge_info.on_ledge){
+        if(wall_hit_time > 0.1f && this_mo.velocity.y < -4.0f && !ledge_info.on_ledge){
             LostWallContact();
         }
 

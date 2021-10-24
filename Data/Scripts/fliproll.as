@@ -133,7 +133,7 @@ class FlipInfo {
     }
 
     void StartFlip(vec3 dir){
-        if(allow_rolling){
+        if(allow_rolling && (species == _rabbit || species == _cat)){
             level.SendMessage("character_start_flip "+this_mo.getID());
             AchievementEvent("character_start_flip");
             rolling = false;
