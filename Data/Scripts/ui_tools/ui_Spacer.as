@@ -28,6 +28,17 @@ class Spacer : Element
         super();
     }
 
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the name of the type of this element — for autonaming and debugging
+     * 
+     * @returns name of the element type as a string
+     *
+     */
+    string getElementTypeName() {
+        return "Spacer";
+    }
+
 
 }
 

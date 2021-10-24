@@ -72,7 +72,7 @@ class GUI {
      * @param mainOrientation The orientation of the container
      *
      */
-     void clear( DividerOrientation mainOrientation = AHGUI::DividerOrientation::DOVertical ) {
+     void clear( DividerOrientation mainOrientation = DividerOrientation::DOVertical ) {
         Divider newRoot( "root", mainOrientation );
         newRoot.setSize( GUISpaceX, GUISpaceY );
 
@@ -124,19 +124,7 @@ class GUI {
      *
      */
      void processMessage( Message@ message ) {
-        // Print("Got a message: " + message.name + "\n");
-
-        // for( uint i = 0; i < message.intParams.length(); i++ ) {
-        //     Print("Int parameter " + i + ": " + message.intParams[ i ] + "\n" );
-        // }
-
-        // for( uint i = 0; i < message.stringParams.length(); i++ ) {
-        //     Print("String parameter " + i + ": " + message.stringParams[ i ] + "\n" );
-        // }
-
-        // for( uint i = 0; i < message.floatParams.length(); i++ ) {
-        //     Print("Float parameter " + i + ": " + message.floatParams[ i ] + "\n" );
-        // }
+        
      }
 
     /*******************************************************************************************/
@@ -144,8 +132,6 @@ class GUI {
      * @brief  Updates the gui  
      * 
      */
-    int count = 0;
-
     void update() {
 
 
@@ -157,6 +143,10 @@ class GUI {
         // Calculate the delta time 
         uint64 delta = uint64( the_time * 1000 ) - lastUpdateTime;
 
+        // Update the time
+        lastUpdateTime = uint64( the_time * 1000 );
+
+        // Get the input from the engine
         imui_context.UpdateControls();
 
         vec2 engineMousePos = imui_context.getMousePosition();
@@ -266,8 +256,7 @@ class GUI {
             // if so
         }
 
-        ivec2 origin(0,0);
-
+        
         // Now pass this on to the children
 
         GUIState guistate;
@@ -275,9 +264,8 @@ class GUI {
         guistate.mousePosition = mousePosition;
         guistate.leftMouseState = leftMouseState;
 
+        ivec2 origin(0,0);
         root.update( delta, origin, guistate );
-
-        hud.Draw();
 
         while( needsRelayout ) {
             needsRelayout = false;
@@ -295,14 +283,38 @@ class GUI {
 
     /*******************************************************************************************/
     /**
+     * @brief  Render the GUI
+     *
+     */
+     void render() {
+        ivec2 origin(0,0);
+        root.render( origin );
+        hud.Draw();
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Finds an element in the gui by a given name
+     * 
+     * @param elementName the name of the element
+     *
+     * @returns handle to the element (null if not found)  
+     *
+     */
+    Element@ findElement( string elementName ) {
+        return root.findElement( elementName );
+    }
+
+    /*******************************************************************************************/
+    /**
      * @brief  Gets a unique name for assigning to unnamed elements (used internally)
      * 
      * @returns Unique name as string
      *
      */
-    string getUniqueName() {
+    string getUniqueName( string type = "Unkowntype") {
         elementCount += 1;
-        return "element" + elementCount;
+        return type + elementCount;
     }
 
 }

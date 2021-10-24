@@ -80,11 +80,12 @@ class ivec2 {
     }
 }
 
+const int UNDEFINEDSIZE = -1;
+
 namespace AHGUI {
 
 const int GUISpaceX = 2560;
 const int GUISpaceY = 1440;
-const int UNDEFINEDSIZE = -1;
 
 
 
@@ -174,6 +175,7 @@ void drawDebugBox( bool GUISpace, ivec2 pos, ivec2 size, float R = 1.0f, float G
 
 }
 
+
 } // namespace AHGUI
 
 
@@ -191,8 +193,22 @@ enum DividerOrientation {
 // When placing an element in a divider, which direction is it coming from
 //  right now a container can only have one centered element
 enum DividerDirection {
-    DDTopLeft,
-    DDBottomRight,
-    DDCenter
+    DDTopLeft = 0,
+    DDTop = 0,
+    DDLeft = 0,
+    DDCenter = 1,
+    DDBottomRight = 2,
+    DDBottom = 2,
+    DDRight = 2
+}
+
+// When the boundary of an element is bigger than itself, how should it align itself
+enum BoundaryAlignment {
+    BATop = 0,
+    BALeft = 0,
+    BACenter = 1,
+    BARight = 2,
+    BABottom = 2
+
 }
 

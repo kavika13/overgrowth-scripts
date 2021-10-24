@@ -522,6 +522,8 @@ void CheckForNearbyWeapons() {
 float next_vision_check_time;
 
 void UpdateBrain(const Timestep &in ts){    
+    UpdateDebugSettings();
+
     if(knocked_out != _awake){
         return;
     }
@@ -702,11 +704,10 @@ void UpdateBrain(const Timestep &in ts){
                     investigate_points.removeAt(i);
                 }
             }
-            const bool debug_draw_investigate = false;
             float closest_dist = 0.0f;
             int closest_point_id = -1;
             for(int i=0, len=investigate_points.size(); i<len; ++i){
-                if(debug_draw_investigate){
+                if(_debug_draw_investigate){
                     DebugDrawWireSphere(investigate_points[i].pos, 1.0f, vec3(1.0f), _fade);
                 }
                 NavPath path = GetPath(this_mo.position, investigate_points[i].pos);
@@ -721,7 +722,7 @@ void UpdateBrain(const Timestep &in ts){
             }
             if(closest_point_id != -1){
                 nav_target = investigate_points[closest_point_id].pos;
-                if(debug_draw_investigate){
+                if(_debug_draw_investigate){
                     DebugDrawLine(this_mo.position, nav_target, vec3(1.0f), _fade);
                     NavPath path = GetPath(this_mo.position, nav_target);
                     if(path.success){
@@ -923,7 +924,10 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-    //MouseControlPathTest();
+    if( _debug_mouse_path_test )
+    {
+        MouseControlPathTest();
+    }
     //HandleDebugRayDraw();
 
     if(hostile){
@@ -933,7 +937,9 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-    DebugDraw();
+    DebugDrawAIState();
+    DebugDrawAIPath();
+   
 }
 
 bool IsAware(){
@@ -1346,8 +1352,6 @@ vec3 GetPatrolMovement(){
 vec3 GetMovementToPoint(vec3 point, float slow_radius){
     return GetMovementToPoint(point, slow_radius, 0.0f, 0.0f);
 }
-
-const bool _debug_draw_jump_path = false;
 
 bool JumpToTarget(vec3 jump_target, vec3 &out vel){
     vec3 start_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, time);
@@ -1784,7 +1788,6 @@ bool WantsReadyStance() {
     return (goal != _patrol);
 }
 
-bool _debug_draw_jump = false;
 
 void CheckJumpTarget(vec3 target) {
     NavPath old_path;

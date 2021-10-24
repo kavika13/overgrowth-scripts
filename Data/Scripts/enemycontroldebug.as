@@ -1,3 +1,28 @@
+bool _debug_draw_ai_state = false;
+
+bool _debug_draw_ai_path = false;
+
+bool _debug_draw_jump_path = false;
+bool _debug_draw_jump = false;
+
+bool _debug_draw_investigate = false;
+
+bool _debug_mouse_path_test = false;
+
+void UpdateDebugSettings()
+{
+    _debug_draw_ai_state = GetConfigValueBool( "debug_show_ai_state" );
+
+    _debug_draw_ai_path = GetConfigValueBool( "debug_show_ai_path" );
+
+    _debug_draw_jump_path = GetConfigValueBool( "debug_show_ai_jump" );
+    _debug_draw_jump = GetConfigValueBool( "debug_show_ai_jump" );
+
+    _debug_draw_investigate = GetConfigValueBool( "debug_show_ai_investigate" );
+    
+    _debug_mouse_path_test = GetConfigValueBool( "debug_mouse_path_test" );
+}
+
 class DebugTextWrapper
 {
     int debugId = -1;  
@@ -153,11 +178,6 @@ class DebugInvestigatePoints
     }
 }
 
-void DebugDraw()
-{
-    DebugDrawAIState();
-    DebugDrawAIPath();
-}
 
 DebugTextWrapper ai_state_debug;
 void DebugDrawAIState()
@@ -167,7 +187,7 @@ void DebugDrawAIState()
     head_pos += vec3(0,0.5f,0);
 
     //Log( warning, "" + head_pos )
-    if( GetConfigValueBool( "debug_show_ai_state" ))
+    if( _debug_draw_ai_state )
     {
         ai_state_debug.SetActive( true  );
         ai_state_debug.SetText("Player "+this_mo.GetID() + "\n" + GetAIGoalString(goal) + "\n" + GetAISubGoalString(sub_goal), head_pos );
@@ -187,7 +207,7 @@ DebugPath debug_path;
 DebugInvestigatePoints debug_investigate_points;
 void DebugDrawAIPath()
 {
-    if( GetConfigValueBool( "debug_show_ai_path" ) )
+    if( _debug_draw_ai_path )
     {
         debug_path.UpdatePath();
         debug_investigate_points.UpdatePath();

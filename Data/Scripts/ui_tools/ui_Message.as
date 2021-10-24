@@ -10,6 +10,8 @@
 
 namespace AHGUI {
 
+
+
 /*******************************************************************************************/
 /**
  * @brief A container for messages and its parameters
@@ -17,6 +19,7 @@ namespace AHGUI {
  */
 class Message
 {
+	Element@ sender;
 	string name;
 	array<string> stringParams;
 	array<int> intParams;
@@ -37,6 +40,7 @@ class Message
      * 
      */
 	Message( const Message &in other ) {
+        @sender = null;
         name = other.name;
         stringParams = other.stringParams;
         intParams = other.intParams;
@@ -50,6 +54,7 @@ class Message
      */
     Message@ opAssign(const Message &in other)
 	{
+		sender = other.sender;
 		name = other.name;
         stringParams = other.stringParams;
         intParams = other.intParams;

@@ -592,7 +592,7 @@ class LedgeInfo {
                     if(ledge_height_info.success == false) {
                         if(!pure_check){
                             if(on_ledge){
-                                Print("Letting go because of GetLedgeHeightInfo\n");
+                                Log(warning,"Letting go because of GetLedgeHeightInfo\n");
                             }
                             on_ledge = false;
                         }
@@ -604,7 +604,7 @@ class LedgeInfo {
             } else {
                 if(!pure_check){
                     if(on_ledge){
-                        Print("Letting go because of GetLedgeHeightInfo\n");
+                        Log(warning,"Letting go because of GetLedgeHeightInfo\n");
                     }
                     on_ledge = false;
                 }
@@ -616,7 +616,7 @@ class LedgeInfo {
         if(on_ledge && ledge_height_info.edge_height > ledge_height + 0.5f){
             if(!pure_check){
                 if(on_ledge){
-                    Print("Letting go because of edge_height\n");
+                    Log(warning, "Letting go because of edge_height\n");
                 }
                 on_ledge = false;
             }
@@ -636,7 +636,7 @@ class LedgeInfo {
                                         _leg_sphere_size);
             if(sphere_col.NumContacts() > 0) {
                 if(!pure_check && on_ledge){
-                    Print("Letting go because nearest surface is downwards\n");
+                    Log(warning, "Letting go because nearest surface is downwards\n");
                     on_ledge = false;
                 }
                 return false;

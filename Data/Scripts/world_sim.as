@@ -166,7 +166,7 @@ void SetupSim(){
     for(int i=0; i<num_city_markers; ++i){
         int city_marker_id = city_markers[i];
         Object@ city_marker = ReadObjectFromID(city_marker_id);
-        int new_city_id = CreateObject("Data/Objects/world_map/city_prefab.xml");
+        int new_city_id = CreateObject("Data/Objects/world_map/city_prefab.xml", true);
         Object@ new_city = ReadObjectFromID(new_city_id);
         new_city.SetTranslation(city_marker.GetTranslation());
 
@@ -195,7 +195,7 @@ void SetupSim(){
     
 
     caravans.resize(1);
-    caravans[0].vis_id = CreateObject("Data/Objects/world_map/caravan.xml");
+    caravans[0].vis_id = CreateObject("Data/Objects/world_map/caravan.xml", true);
     Object@ new_obj = ReadObjectFromID(caravans[0].vis_id);
     vec3 town_pos = ReadObjectFromID(towns[0].vis_id).GetTranslation();
     new_obj.SetTranslation(vec3(town_pos.x,new_obj.GetTranslation().y,town_pos.z));

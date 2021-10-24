@@ -61,7 +61,7 @@ void main() {
     #ifdef DEPTH_ONLY
         out_color = vec4(vec3(1.0), colormap.a);
         return;
-    #endif
+    #else
     #ifdef NO_INSTANCE_ID
         int instance_id = 0;
     #endif
@@ -215,4 +215,5 @@ void main() {
     #else
         out_color = vec4(color,1.0);
     #endif
+    #endif // DEPTH_ONLY
 }

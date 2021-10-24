@@ -21,11 +21,6 @@ class Image : Element
 
 	HUDImage@ imageHandle;	//Handle to the 'HUD' image
 	string imageFileName; 	//Filename for the image
-	
-	float R;    // Red 
-    float G;    // Green 
-    float B;    // Blue
-    float A;    // Alpha
 
     ivec2 originalImageSize;
 
@@ -43,12 +38,24 @@ class Image : Element
     /**
      * @brief  Constructor
      * 
-     * @param _name Name for this object (incumbent on the programmer to make sure they're unique)
+     * @param imageName Filename for the image
      *
      */
-    Image(string _name) {
-        super(name);
+    Image(string imageName) {
+        super();
+        setImageFile( imageName );
         setColor( 1.0, 1.0, 1.0, 1.0 );
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the name of the type of this element — for autonaming and debugging
+     * 
+     * @returns name of the element type as a string
+     *
+     */
+    string getElementTypeName() {
+        return "Image";
     }
 
     /*******************************************************************************************/
@@ -69,6 +76,9 @@ class Image : Element
         					       int(tempHandle.GetHeight() ) );
 
         setSize( originalImageSize );
+        
+        // Reset the boundary to the size
+        //setBoundarySize();
     }
 
     /*******************************************************************************************/
@@ -95,111 +105,6 @@ class Image : Element
      	setSize( newXSize, newSize );
     }
 
-   	/*******************************************************************************************/
-    /**
-     * @brief  Set the color for the image
-     *  
-     * @param _R Red 
-     * @param _G Green
-     * @param _B Blue
-     * @param _A Alpha
-     *
-     */
-    void setColor( float _R, float _G, float _B, float _A = 1.0f ) {
-        R = _R;
-        G = _G;
-        B = _B;
-        A = _A;
-    } 
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Sets the red value
-     * 
-     * @param value Color value  
-     *
-     */
-     void setR( float value ) {
-        R = value;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Gets the red value
-     * 
-     * @returns Color value
-     *
-     */
-     float getR() {
-        return R;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Sets the green value
-     * 
-     * @param value Color value  
-     *
-     */
-     void setG( float value ) {
-        G = value;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Gets the green value
-     * 
-     * @returns Color value
-     *
-     */
-     float getG() {
-        return G;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Sets the blue value
-     * 
-     * @param value Color value  
-     *
-     */
-     void setB( float value ) {
-        B = value;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Gets the blue value
-     * 
-     * @returns Color value
-     *
-     */
-     float getB() {
-        return B;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Sets the alpha value
-     * 
-     * @param value Color value  
-     *
-     */
-     void setAlpha( float value ) {
-        A = value;
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Gets the alpha value
-     * 
-     * @returns Color value
-     *
-     */
-     float getAlpha() {
-        return A;
-     }
-
     /*******************************************************************************************/
     /**
      * @brief  Rather counter-intuitively, this draws this object on the screen
@@ -209,25 +114,33 @@ class Image : Element
      */
     void render( ivec2 drawOffset ) {
 
-    	// Make sure we have an an image
-    	if( imageFileName == "" ) return;
+    	// Make sure we have an an image and we're supposed draw it
+    	if( imageFileName != "" && show ) {
+	    	
+	    	@imageHandle = hud.AddImage();
+	        imageHandle.SetImageFromPath( imageFileName );
 
-    	@imageHandle = hud.AddImage();
-        imageHandle.SetImageFromPath( imageFileName );
+	        ivec2 GUIRenderPos = drawOffset + boundaryOffset + drawDisplacement;
 
-        ivec2 GUIRenderPos = drawOffset + boundaryOffset;
+			ivec2 screenRenderPos = GUIToScreen( GUIRenderPos );
 
-		ivec2 screenRenderPos = GUIToScreen( GUIRenderPos );
+			imageHandle.scale = 1;
+	     	imageHandle.scale.x *= (float(getSizeX())*GUItoScreenXScale)/float(originalImageSize.x);
+	    	imageHandle.scale.y *= (float(getSizeY())*GUItoScreenYScale)/float(originalImageSize.y);
 
-		imageHandle.scale = 1;
-     	imageHandle.scale.x *= (float(getSizeX())*GUItoScreenXScale)/float(originalImageSize.x);
-    	imageHandle.scale.y *= (float(getSizeY())*GUItoScreenYScale)/float(originalImageSize.y);
+	     	imageHandle.position.x = screenRenderPos.x;
+	     	imageHandle.position.y = GetScreenHeight() - screenRenderPos.y - (originalImageSize.x * imageHandle.scale.y );
+	     	imageHandle.position.z = 0.0;
+	     	
+	     	imageHandle.color = color;
 
-     	imageHandle.position.x = screenRenderPos.x;
-     	imageHandle.position.y = GetScreenHeight() - screenRenderPos.y - (originalImageSize.x * imageHandle.scale.y );
-     	imageHandle.position.z = 0.0;
-     	
-     	imageHandle.color = vec4( R, G, B, A );
+	     	hud.Draw();
+
+    	}
+
+     	// Call the superclass to make sure any element specific rendering is done
+        Element::render( drawOffset );
+
 
     }
 

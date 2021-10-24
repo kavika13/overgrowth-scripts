@@ -351,7 +351,6 @@ void ReceiveMessage(string msg) {
             curr_difficulty = GetRandomDifficultyNearPlayerSkill();
             SetUpLevel(curr_difficulty);    
         }
-        
     } else if(token == "set_all_hostile") {
         token_iter.FindNextToken(msg);
         string param = token_iter.GetToken(msg);
@@ -501,6 +500,7 @@ void EndMatch(bool victory) {
         global_data.fan_base += new_fans;
         global_data.player_skill -= global_data.player_skill * win_prob * kMatchImportance;
         global_data.player_skill = min(max(global_data.player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
+        global_data.player_loses++;
         SetLoseText(new_fans, excitement_level);
     } else if(victory) { // Increase difficulty on win
         level_outcome = kVictory;
@@ -510,6 +510,7 @@ void EndMatch(bool victory) {
         audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
         int new_fans = int(audience_size * audience_fan_ratio);
         global_data.fan_base += new_fans;
+        global_data.player_wins++;
         SetWinText(new_fans, global_data.fan_base, excitement_level);
     }
 

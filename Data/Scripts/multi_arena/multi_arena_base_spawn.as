@@ -49,7 +49,7 @@ class BattleEntitySpawn {
     Object@ spawnObjectAtSpawnPoint() {
         
         // Create the new object
-        spawnedObjectId = CreateObject( entityPath );
+        spawnedObjectId = CreateObject( entityPath, true );
         Object @new_obj = ReadObjectFromID( spawnedObjectId );
         
         // Find the spawn point 
@@ -79,7 +79,7 @@ class BattleEntitySpawn {
         Object@ charObj = ReadObjectFromID( spawnedObjectId );
 
         // Create the new item
-        attachedObjectId = CreateObject( weaponPath );
+        attachedObjectId = CreateObject( weaponPath, true );
         Object @itemObject = ReadObjectFromID( attachedObjectId );
         
         // Find the spawn point 

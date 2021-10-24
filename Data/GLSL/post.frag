@@ -16,6 +16,7 @@ uniform int screen_height;
 uniform int screen_width;
 uniform float black_point;
 uniform float white_point;
+uniform float bloom_mult;
 
 void main(void)
 {
@@ -46,7 +47,7 @@ void main(void)
     }
     color = FragmentColor;
 #elif defined(OVERBRIGHT)
-    color = max(vec4(0.0), texture( tex0, tex ) - vec4(1.0));
+    color = max(vec4(0.0), texture( tex0, tex ) - vec4(1.0)) * bloom_mult;
 #elif defined(DOWNSAMPLE)
     float pixel_width = 1.0 / float(screen_width);
     float pixel_height = 1.0 / float(screen_height);
@@ -56,8 +57,10 @@ void main(void)
                    texture( tex0, tex + vec2(-pixel_width, -pixel_height));
    color *= 0.25;
 #elif defined(TONE_MAP)
-    float temp_wp = 0.7;
-    float temp_bp = 0.005;
+    //float temp_wp = 0.3;
+    //float temp_bp = 0.002;
+    float temp_wp = white_point;
+    float temp_bp = black_point;
     float contrast = 1.0 / (temp_wp - temp_bp);
     color = max(vec4(0.0), (texture(tex0, tex) - vec4(temp_bp)) * contrast);    
 #elif defined(ADD)
