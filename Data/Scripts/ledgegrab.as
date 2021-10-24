@@ -149,7 +149,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         ledge_dir = dir;                                                        // Update ledge direction
     }
 
-    void UpdateIKTargets(const PassLedgeState &in pls) {
+    void GetIKOffsets(const PassLedgeState &in pls, vec3 &out body, vec3 &out left_hand, vec3 &out right_hand, vec3 &out left_foot, vec3 &out right_foot) {
         const float _dist_limit = 0.4f;
         const float _dist_limit_squared = _dist_limit*_dist_limit;
 
@@ -159,6 +159,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         offset[1] = hand_pos[1].GetPos() - this_mo.position;
         offset[2] = foot_pos[0].GetPos() - this_mo.position;
         offset[3] = foot_pos[1].GetPos() - this_mo.position;
+
 
         offset[2].y *= pls.leg_ik_mult;                                             // Flatten out foot positions if needed
         offset[3].y *= pls.leg_ik_mult;
@@ -216,7 +217,6 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
         offset[0] += foot_pos[0].GetOffset();
         offset[1] += foot_pos[1].GetOffset();
 
-
         float[] weight(4);
         weight[0] = hand_pos[0].GetWeight();                                    // Get weight bearing for each gripper
         weight[1] = hand_pos[1].GetWeight();
@@ -245,8 +245,7 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
 
         weight_offset *= pls.ik_mult;     
         weight_offset.y += pls.height_offset * (1.0f-pls.ik_mult);
-        this_mo.rigged_object().SetIKTargetOffset("full_body",mix(transition_offset,weight_offset,pls.transition_progress)); // Apply weight offset to torso
-
+        
         for(int i=0; i<4; i++){
             offset[i] -= weight_offset;
             if(length_squared(offset[i]) > _dist_limit_squared){
@@ -260,12 +259,11 @@ class ShimmyAnimation {     // Shimmy animation is composed of a MovingGrip for 
             offset[i].y += pls.height_offset * (1.0f-pls.ik_mult);
         }
 
-        //Print("IK mult: " + ik_mult + "\n"); 
-
-        this_mo.rigged_object().SetIKTargetOffset("leftarm",mix(transition_offset,offset[0],pls.transition_progress));  // Set IK target offsets
-        this_mo.rigged_object().SetIKTargetOffset("rightarm",mix(transition_offset,offset[1],pls.transition_progress));
-        this_mo.rigged_object().SetIKTargetOffset("left_leg",mix(transition_offset,offset[2],pls.transition_progress));
-        this_mo.rigged_object().SetIKTargetOffset("right_leg",mix(transition_offset,offset[3],pls.transition_progress));
+        body = mix(transition_offset,weight_offset,pls.transition_progress);
+        left_hand = mix(transition_offset,offset[0],pls.transition_progress);
+        right_hand = mix(transition_offset,offset[1],pls.transition_progress);
+        left_foot = mix(transition_offset,offset[2],pls.transition_progress);
+        right_foot = mix(transition_offset,offset[3],pls.transition_progress);
     }
 }
 
@@ -486,19 +484,6 @@ class LedgeInfo {
         if(!playing_animation){     // If not playing a special animation, adopt ledge pose
             this_mo.SetCharAnimation("ledge",5.0f);
         }
-    }
-
-    void UpdateIKTargets() {
-        /*if(playing_animation){
-            vec3 offset = (ledge_grab_origin - this_mo.position)*(1.0f-transition_progress);
-            this_mo.rigged_object().SetIKTargetOffset("leftarm",offset);
-            this_mo.rigged_object().SetIKTargetOffset("rightarm",offset);
-            this_mo.rigged_object().SetIKTargetOffset("left_leg",offset);
-            this_mo.rigged_object().SetIKTargetOffset("right_leg",offset);
-            this_mo.rigged_object().SetIKTargetOffset("full_body",offset);
-            return;
-        }*/
-        shimmy_anim.UpdateIKTargets(pls);
     }
 
     vec3 WallRight() {              // Get the vector that points right when facing the ledge
@@ -748,7 +733,7 @@ class LedgeInfo {
         if(playing_animation){
             this_mo.position.y += pls.height_offset * 0.02f * ts.frames();
             pls.height_offset *= pow(0.98f, ts.frames());
-            allow_ik = false;
+            //allow_ik = true;
             target_duck_amount = 1.0f;
         }
 

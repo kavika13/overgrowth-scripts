@@ -206,11 +206,11 @@ void Update() {
         gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,270,0);
         has_gui = true;
     }
-    if(GetInputPressed(controller_id, "l")){
+    if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
         level.SendMessage("manual_reset");
     }
 
-    if(GetInputDown(controller_id, "x")){  
+    if(DebugKeysEnabled() && GetInputDown(controller_id, "x")){  
         int num_items = GetNumItems();
         for(int i=0; i<num_items; i++){
             ItemObject@ item_obj = ReadItem(i);
@@ -234,11 +234,12 @@ void SetAnimUpdateFreqs() {
             continue;
         }
         float dist = distance(char.position, cam_pos);
-        framerate_request[i] = 120.0f/max(4.0f,min(dist*0.5f,32.0f));
+        framerate_request[i] = 120.0f/max(2.0f,min(dist*0.5f,32.0f));
+        framerate_request[i] = max(15.0f,framerate_request[i]);
         total_framerate_request += framerate_request[i];
     }
     float scale = 1.0f;
-    if(total_framerate_request > _max_anim_frames_per_second){
+    if(total_framerate_request != 0.0f){
         scale *= _max_anim_frames_per_second/total_framerate_request;
     }
     for(int i=0; i<num; ++i){
@@ -247,6 +248,7 @@ void SetAnimUpdateFreqs() {
             continue;
         }
         int period = 120.0f/(framerate_request[i]*scale);
+        period = min(10,max(4, period));
         if(char.GetIntVar("tether_id") != -1){
             char.rigged_object().SetAnimUpdatePeriod(2);
             char.SetScriptUpdatePeriod(2);

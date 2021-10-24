@@ -166,7 +166,7 @@ class FlipInfo {
         flip_angle = 1.0f;
         flip_vel = 0.0f;
         flip_progress = 0.0f;
-        this_mo.SetFlip(vec3(0.0f), 0.0f, 0.0f);
+        flip_modifier_rotation = 0.0f;
     }
 
     void RotateTowardsTarget(const Timestep &in ts) {
@@ -205,7 +205,8 @@ class FlipInfo {
                                      flip_axis,
                                      pow(_flip_axis_inertia,ts.frames()));
 
-        this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
+        flip_modifier_axis = flip_axis;
+        flip_modifier_rotation = flip_angle*6.2832f;
 
         if(wall_flip_protection > 0.0f){
             wall_flip_protection -= time_step;
@@ -221,7 +222,8 @@ class FlipInfo {
             flipped = false;
             flip_angle = 1.0f;
             flip_tuck = 0.0f;
-            this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
+            flip_modifier_axis = flip_axis;
+            flip_modifier_rotation = flip_angle*6.2832f;
         } else {
             target_flip_angle = 1.0f;
         }
@@ -233,7 +235,12 @@ class FlipInfo {
 
     void StartRoll(vec3 target_velocity) {
         level.SendMessage("character_start_roll "+this_mo.getID());
-        this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
+        } else {
+            this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+            AISound(this_mo.position, QUIET_SOUND_AI);
+        }
 
         flipping = true;
         flip_progress = 0.0f;
@@ -282,6 +289,7 @@ class FlipInfo {
         if(flip_progress < 0.95f){
             duck_vel = 2.5f;
         }
+        duck_amount = min(1.25f, duck_amount);
     }
 
     void UpdateRollAngle(const Timestep &in ts) {
@@ -302,7 +310,8 @@ class FlipInfo {
 
         UpdateRollAngle(ts);        
 
-        this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
+        flip_modifier_axis = flip_axis;
+        flip_modifier_rotation = flip_angle*6.2832f;
     }
 
     bool HasControl() {
@@ -324,7 +333,8 @@ class FlipInfo {
     void Land() {
         flip_angle = 1.0f;
         flip_vel = 0.0f;
-        this_mo.SetFlip(flip_axis, flip_angle*6.2832f, 0.0f);
+        flip_modifier_axis = flip_axis;
+        flip_modifier_rotation = flip_angle*6.2832f;
         flipping = false;
     }
 

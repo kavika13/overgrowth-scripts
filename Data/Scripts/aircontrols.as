@@ -62,7 +62,11 @@ class JumpInfo {
             return;
         }
         if(!ledge_info.on_ledge){
-            this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size);
+            if(character_getter.GetTag("species") == "cat"){
+                this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size, 0.5f);
+            } else {
+                this_mo.MaterialEvent("leftwallstep", this_mo.position+dir*_leg_sphere_size);                
+            }
         }
 
         hit_wall = true;
@@ -126,19 +130,6 @@ class JumpInfo {
 
     void UpdateLedgeAnimation() {
         ApplyIdle(5.0f, true);
-    }
-
-    void UpdateIKTargets() {
-        if(ledge_info.on_ledge){
-            ledge_info.UpdateIKTargets();
-        } else {            
-            vec3 no_offset(0.0f);
-            this_mo.rigged_object().SetIKTargetOffset("leftarm",no_offset);
-            this_mo.rigged_object().SetIKTargetOffset("rightarm",no_offset);
-            this_mo.rigged_object().SetIKTargetOffset("left_leg",no_offset);
-            this_mo.rigged_object().SetIKTargetOffset("right_leg",no_offset);
-            this_mo.rigged_object().SetIKTargetOffset("full_body",no_offset);
-        }
     }
 
     void UpdateAirAnimation() {
@@ -277,7 +268,12 @@ class JumpInfo {
         jump_launch = 1.0f;
         down_jetpack_fuel = _jump_fuel * 0.5f;
         
-        this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size);
+
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size, 0.5f);
+        } else {
+            this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size);
+        }
         AISound(this_mo.position, QUIET_SOUND_AI);
         this_mo.velocity += old_vel_flat;
         tilt = this_mo.velocity * 5.0f;
@@ -307,7 +303,11 @@ class JumpInfo {
         jump_launch = 1.0f;
         down_jetpack_fuel = _jump_fuel*0.5f;
         
-        this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+        if(character_getter.GetTag("species") == "cat"){
+            this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
+        } else {
+            this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+        }
         AISound(this_mo.position, QUIET_SOUND_AI);
         
         if(length(target_velocity)>0.4f){
