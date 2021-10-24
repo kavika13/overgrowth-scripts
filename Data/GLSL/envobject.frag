@@ -14,6 +14,15 @@ UNIFORM_DETAIL4_TEXTURES
 UNIFORM_AVG_COLOR4
 #endif
 
+const int kMaxDecals = 100;
+
+uniform DecalInfo {
+    mat4 decal_transform[kMaxDecals];
+    vec4 decal_tint[kMaxDecals];
+    vec2 decal_uv_start[kMaxDecals];
+    vec2 decal_uv_size[kMaxDecals];
+};
+
 const int kMaxInstances = 100;
 
 uniform InstanceInfo {
@@ -23,6 +32,10 @@ uniform InstanceInfo {
     vec4 detail_scale[kMaxInstances];
 };
 
+uniform int num_decals;
+//Disabled because we've run out of texture sampler.
+//uniform sampler2D tex28; // decal normal texture
+uniform sampler2D tex29; // decal color texture
 uniform usamplerBuffer tex30;
 uniform usamplerBuffer tex31;
 uniform int num_light_probes;
@@ -162,6 +175,31 @@ void main() {
             vec3 ws_normal = model_rotation_mat[instance_id] * os_normal;
         #endif
     #endif
+    for(int decal_index=0; decal_index<num_decals; ++decal_index){
+        mat4 test = inverse(decal_transform[decal_index]);
+        vec2 start_uv = decal_uv_start[decal_index];
+        vec2 size_uv = decal_uv_size[decal_index];
+
+        //test = inverse(model_mat[0]);
+        vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
+        if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
+            
+        } else {
+            vec4 decal_color = texture(tex29, start_uv + size_uv * vec2(temp[0]+0.5, temp[2]+0.5));
+            //vec4 decal_normal = texture(tex28, start_uv + size_uv * vec2(temp[0]+0.5, temp[2]+0.5));
+            //Setting it to the object normal because we're out of texture samplers for now, no normals on decals.
+            vec4 decal_normal = vec4(ws_normal,0.0);
+
+            colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal_tint[decal_index].xyz, decal_color.a);
+            vec3 decal_tan = normalize(cross(ws_normal, (decal_transform[decal_index] * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
+            vec3 decal_bitan = cross(ws_normal, decal_tan);
+            vec3 new_normal = vec3(0);
+            new_normal += ws_normal * (decal_normal.b*2.0-1.0);
+            new_normal += (decal_normal.r*2.0-1.0) * decal_tan;
+            new_normal += (decal_normal.g*2.0-1.0) * decal_bitan;
+            ws_normal = normalize(new_normal);
+        }
+    }
     CALC_SHADOWED
     CALC_DIRECT_DIFFUSE_COLOR
     vec3 ambient_color;
@@ -212,14 +250,14 @@ void main() {
     #else
         out_color = vec4(color,1.0);
     #endif
-
+/*
     #ifdef DECAL
         vec3 temp = (inverse(decal_mat) * vec4(world_vert, 1.0)).xyz;
         if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
             discard;
         }
         out_color = vec4(diffuse_color, 1.0);
-    #endif
+    #endif*/
 }
 
 
