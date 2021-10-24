@@ -107,7 +107,7 @@ vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, floa
 }
 
 vec3 UnpackObjNormal(const vec4 normalmap) {
-    return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
+    return normalize(vec3(2.0,2.0,0.0-2.0)*normalmap.xzy + vec3(0.0-1.0,0.0-1.0,1.0));
     /*x = 2.0 * nm.x - 1.0
     y = 2.0 * nm.z - 1.0
     z = -2.0 * nm.y + 1.0    
@@ -118,18 +118,18 @@ vec3 UnpackObjNormal(const vec4 normalmap) {
 }
 
 vec3 UnpackObjNormalV3(const vec3 normalmap) {
-    return normalize(vec3(2.0,2.0,-2.0)*normalmap.xzy + vec3(-1.0,-1.0,1.0));
+    return normalize(vec3(2.0,2.0,0.0-2.0)*normalmap.xzy + vec3(0.0-1.0,0.0-1.0,1.0));
 }
 
 
 
 vec3 PackObjNormal(const vec3 normal) {
-    return vec3(0.5,-0.5,0.5)*normal.xzy + vec3(0.5,0.5,0.5);
+    return vec3(0.5,0.0-0.5,0.5)*normal.xzy + vec3(0.5,0.5,0.5);
     
 }
 
 vec3 UnpackTanNormal(const vec4 normalmap) {
-    return normalize(vec3(vec2(2.0,-2.0)*normalmap.xy + vec2(-1.0,1.0),normalmap.z));
+    return normalize(vec3(vec2(2.0,0.0-2.0)*normalmap.xy + vec2(0.0-1.0,1.0),normalmap.z));
 }
 
 vec3 GetDirectColor(const float intensity) {
@@ -140,7 +140,7 @@ vec3 LookupCubemap(const mat3 obj2world_mat3,
                    const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = obj2world_mat3 * vec;
-    world_space_vec.xy *= -1.0;
+    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
 }
 
@@ -148,14 +148,14 @@ vec3 LookupCubemapMat4(const mat4 obj2world,
                    const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = (obj2world * vec4(vec,0.0)).xyz;
-    world_space_vec.xy *= -1.0;
+    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
 }
 
 vec3 LookupCubemapSimple(const vec3 vec, 
                    const samplerCube cube_map) {
     vec3 world_space_vec = vec;
-    world_space_vec.xy *= -1.0;
+    world_space_vec.xy *= 0.0-1.0;
     return textureCube(cube_map,world_space_vec).xyz;
 }
 
@@ -177,7 +177,7 @@ float GetSpecContrib ( const vec3 light_pos,
                        const vec3 normal,
                        const vec3 vertex_pos,
                        const float unshadowed ) {
-    vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
+    vec3 H = normalize(normalize(vertex_pos*(0.0-1.0)) + normalize(light_pos));
     return min(1.0, pow(max(0.0,dot(normal,H)),10.0)*1.0)*unshadowed*gl_LightSource[0].diffuse.a;
 }
 
@@ -186,7 +186,7 @@ float GetSpecContrib ( const vec3 light_pos,
                        const vec3 vertex_pos,
                        const float unshadowed,
                        const float pow_val) {
-    vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
+    vec3 H = normalize(normalize(vertex_pos*(0.0-1.0)) + normalize(light_pos));
     return min(1.0, pow(max(0.0,dot(normal,H)),pow_val)*1.0)*unshadowed*gl_LightSource[0].diffuse.a;
 }
 

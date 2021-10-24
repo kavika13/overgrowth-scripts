@@ -23,5 +23,8 @@ void main()
     //wind_color = gl_Color.r;
 
     CALC_REL_POS
-    CALC_TEX_COORDS
+    //CALC_TEX_COORDS // This is expanded manually to fix some kind of Intel problem
+	tc0 = gl_MultiTexCoord0.xy;
+	tc1 = GetShadowCoords();
+	CALC_CASCADE_TEX_COORDS
 } 

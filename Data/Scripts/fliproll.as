@@ -131,6 +131,7 @@ class FlipInfo {
     }
 
     void StartFlip(vec3 dir){
+        level.SendMessage("character_start_flip "+this_mo.getID());
         rolling = false;
         flipping = true;
         wall_flip_protection = 0.0f;
@@ -148,9 +149,9 @@ class FlipInfo {
         StartFlip(GetTargetVelocity());
     }
 
-    void UpdateFlipProgress(){
+    void UpdateFlipProgress(const Timestep &in ts){
         if(flipping){
-            flip_progress += time_step * _flip_speed * num_frames;
+            flip_progress += _flip_speed * ts.step();
             if(flip_progress > 0.5f){
                 flipped = true;
             }
@@ -168,11 +169,11 @@ class FlipInfo {
         this_mo.SetFlip(vec3(0.0f), 0.0f, 0.0f);
     }
 
-    void RotateTowardsTarget() {
+    void RotateTowardsTarget(const Timestep &in ts) {
         if(flipping){
             vec3 facing = InterpDirections(FlipFacing(),
                                            this_mo.GetFacing(),
-                                           pow(1.0f-_flip_facing_inertia,num_frames));
+                                           pow(1.0f-_flip_facing_inertia,ts.frames()));
             this_mo.SetRotationFromFacing(facing);
         }
     }
@@ -185,24 +186,24 @@ class FlipInfo {
         flip_tuck = mix(target_flip_tuck,flip_tuck,_flip_tuck_inertia);
     }
 
-    void UpdateFlipAngle() {
-        flip_vel += (target_flip_angle - flip_angle) * time_step * num_frames * _flip_accel;
-        flip_angle += flip_vel * time_step * num_frames ;
-        flip_vel *= pow(_flip_vel_inertia, num_frames);
+    void UpdateFlipAngle(const Timestep &in ts) {
+        flip_vel += (target_flip_angle - flip_angle) * ts.step() * _flip_accel;
+        flip_angle += flip_vel * ts.step() ;
+        flip_vel *= pow(_flip_vel_inertia, ts.frames());
     }
 
-    void UpdateFlip() {
+    void UpdateFlip(const Timestep &in ts) {
         if(!flipping && !flipped){
             return;
         }
-        UpdateFlipProgress();
-        RotateTowardsTarget();
+        UpdateFlipProgress(ts);
+        RotateTowardsTarget(ts);
         UpdateFlipTuckAmount();
-        UpdateFlipAngle();
+        UpdateFlipAngle(ts);
         
         flip_axis = InterpDirections(target_flip_axis,
                                      flip_axis,
-                                     pow(_flip_axis_inertia,num_frames));
+                                     pow(_flip_axis_inertia,ts.frames()));
 
         this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
 
@@ -233,6 +234,7 @@ class FlipInfo {
     }
 
     void StartRoll(vec3 target_velocity) {
+        level.SendMessage("character_start_roll "+this_mo.getID());
         this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
 
         flipping = true;
@@ -251,14 +253,14 @@ class FlipInfo {
         rolling = true;
     }
 
-    void UpdateRollProgress(){
-        flip_progress += time_step * _roll_speed * num_frames;
+    void UpdateRollProgress(const Timestep &in ts){
+        flip_progress += _roll_speed * ts.step();
         if(flip_progress > 1.0f){
             flipping = false;
         }
     }
 
-    void UpdateRollVelocity(){
+    void UpdateRollVelocity(const Timestep &in ts){
         if(flip_progress < 0.95f){
             vec3 adjusted_vel = WorldToGroundSpace(roll_direction);
             vec3 flat_ground_normal = ground_normal;
@@ -270,7 +272,7 @@ class FlipInfo {
             this_mo.SetRotationFromFacing(vec3(cos(angle), 0.0f, sin(angle)));
             this_mo.velocity = mix(adjusted_vel * _roll_ground_speed,
                                 this_mo.velocity, 
-                                pow(0.95f,num_frames));
+                                pow(0.95f,ts.frames()));
         }
     }
 
@@ -283,23 +285,23 @@ class FlipInfo {
         }
     }
 
-    void UpdateRollAngle() {
+    void UpdateRollAngle(const Timestep &in ts) {
         float old_flip_angle = flip_angle;
-        flip_angle = mix(target_flip_angle, flip_angle, pow(0.8f,num_frames));
-        flip_vel = (flip_angle - old_flip_angle)/(time_step*num_frames);
+        flip_angle = mix(target_flip_angle, flip_angle, pow(0.8f,ts.frames()));
+        flip_vel = (flip_angle - old_flip_angle)/(ts.step());
     }
 
-    void UpdateRoll() {
+    void UpdateRoll(const Timestep &in ts) {
         if(flipping){
-            UpdateRollProgress();
-            UpdateRollVelocity();
+            UpdateRollProgress(ts);
+            UpdateRollVelocity(ts);
             UpdateRollDuckAmount();
             target_flip_angle = flip_progress;
         } else {
             target_flip_angle = 1.0f;
         }
 
-        UpdateRollAngle();        
+        UpdateRollAngle(ts);        
 
         this_mo.SetFlip(flip_axis, flip_angle*6.2832f, flip_vel*6.2832f);
     }
