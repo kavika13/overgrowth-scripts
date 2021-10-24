@@ -2377,8 +2377,10 @@ void AchievementEventFloat(string event_str, float val){
 
 void SetKnockedOut(int val) {
     knocked_out = val;
-    if(val == _dead && !this_mo.controlled){
-        AchievementEvent("enemy_died");
+    if(!this_mo.controlled){
+        if(val == _dead || blood_health <= 0.0f ){
+            AchievementEvent("enemy_died");
+        }
     }
 }
 
