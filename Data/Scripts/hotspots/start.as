@@ -17,11 +17,11 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     Print("Entering start.as hotspot\n");
-    if(mo.controlled){
-        level.Execute("ReceiveMessage2(\"displaytext\",\""+params.GetString("Display Text")+"\")");
+    if(mo.controlled)
+        level.SendMessage("displaytext \"Display Text\"");
     }
 }
 
 void OnExit(MovementObject @mo) {
-    level.Execute("ReceiveMessage(\"cleartext\")");
+    level.SendMessage("cleartext");
 }

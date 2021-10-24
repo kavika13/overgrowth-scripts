@@ -19,15 +19,15 @@ void OnEnter(MovementObject @mo) {
     if(mo.controlled){
         string path = params.GetString("Level to load");
         if(path != _default_path){
-            level.Execute("ReceiveMessage2(\"loadlevel\", \""+path+"\")");
+            level.SendMessage("loadlevel \""+path+"\"");
         } else {
-            level.Execute("ReceiveMessage2(\"displaytext\", \"Target level not set\")");
+            level.SendMessage("displaytext \"Target level not set\"");
         }
     }
 }
 
 void OnExit(MovementObject @mo) {
     if(mo.controlled){
-        level.Execute("ReceiveMessage(\"cleartext\")");
+        level.SendMessage("cleartext");
     }
 }

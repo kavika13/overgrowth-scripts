@@ -12,6 +12,6 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {;
     if(mo.controlled){
-        level.Execute("ReceiveMessage(\"reset\")");
+        level.SendMessage("reset");
     }
 }

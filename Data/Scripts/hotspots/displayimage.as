@@ -15,12 +15,12 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
-        level.Execute("ReceiveMessage2(\"displayhud\",\""+params.GetString("Display Image")+"\")");
+        level.SendMessage("displayhud \"Display Image\"");
     }
 }
 
 void OnExit(MovementObject @mo) {
     if(mo.controlled){
-        level.Execute("ReceiveMessage(\"clearhud\")");
+        level.SendMessage("clearhud");
     }
 }

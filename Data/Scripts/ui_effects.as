@@ -2,7 +2,6 @@ float UpdateVisible(float visible, float target_visible){
     return mix(visible, target_visible, 0.1f);
 }
 
-
 class RibbonBackground {
     int gui_id;
     float display_time;
