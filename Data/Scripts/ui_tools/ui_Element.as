@@ -216,6 +216,7 @@ class Element {
     int paddingL;           // (minimum) Padding between the element and the left boundary 
     int paddingR;           // (minimum) Padding between the element and the right boundary 
 
+    int zOrdering = 1;      // At what point in the rendering process does this get drawn in
 
     string name;            // name to refer to this object by -- incumbent on the programmer to make sure they're unique
     
@@ -277,10 +278,8 @@ class Element {
      *
      */
     Element( string _name ) {
-        
         init();
         name = _name;
-
     }
 
     /*******************************************************************************************/
@@ -289,9 +288,7 @@ class Element {
      * 
      */
     Element() {
-        
         init();
-
     }
     
     /*******************************************************************************************/
@@ -579,6 +576,68 @@ class Element {
 
     /*******************************************************************************************/
     /**
+     * @brief  Sets the z ordering (order of drawing, higher is drawing on top of lower)
+     * 
+     * @param z new Z ordering value (expected to be greater then 0 and the parent container)
+     *
+     */
+     void setZOrdering( int z ) {
+        zOrdering = z;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the z ordering (order of drawing - higher is drawing on top of lower)
+     * 
+     * @returns current Z ordering value
+     *
+     */
+     int getZOrdering() {
+        return zOrdering;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Set the z ordering of this element to be higher than the given element
+     *  
+     * @param element Element to be below this one
+     *
+     */
+     void renderAbove( Element@ element ) {
+        setZOrdering( element.getZOrdering() + 1 );
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Set the z ordering of this element to be lower than the given element
+     *  
+     * (note that if the element parameter has a z value within 1 of the parent container
+     *  this element will be assigned to the same value, which may not look nice )
+     *
+     * @param element Element to be below this one
+     *
+     */
+     void renderBelow( Element@ element ) {
+
+        int minZ;
+        // See if we're a root container
+        if( parent !is null ) {
+            // not a root
+            minZ = parent.getZOrdering();
+        }
+        else {
+            // we're a root
+            minZ = 1;            
+        }
+
+        // set the z ordering, respecting the derived minimum
+        setZOrdering( max( minZ, element.getZOrdering() - 1 ) );
+
+     }
+
+
+    /*******************************************************************************************/
+    /**
      * @brief  Show or hide this element
      *  
      * @param _show Show this element or not
@@ -593,20 +652,26 @@ class Element {
      * @brief  Draw a box (in *screen* coordinates) -- used internally
      * 
      */
-    void drawBox( ivec2 boxPos, ivec2 boxSize, vec4 boxColor ) {
+    void drawBox( ivec2 boxPos, ivec2 boxSize, vec4 boxColor, int zOrder, ivec2 currentClipPos, ivec2 currentClipSize ) {
 
-        HUDImage @boximage = hud.AddImage();
-        boximage.SetImageFromPath("Data/Textures/ui/whiteblock.tga");
+        IMUIImage boxImage("Data/Textures/ui/whiteblock.tga");
 
-        boximage.scale = 1;
-        boximage.scale.x *= boxSize.x;
-        boximage.scale.y *= boxSize.y;
+        boxImage.setPosition( vec3( float(boxPos.x), float(boxPos.y), float(zOrder) ) );
+        boxImage.setColor( boxColor );
+        boxImage.setRenderSize( vec2( float(boxSize.x), float(boxSize.y) ) );
 
-        boximage.position.x = boxPos.x;
-        boximage.position.y = GetScreenHeight() - boxPos.y - (boximage.GetWidth() * boximage.scale.y );
-        boximage.position.z = 1.0;
+        if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ){
 
-        boximage.color = boxColor;  
+            ivec2 screenClipPos = screenMetrics.GUIToScreen( currentClipPos );
+
+            ivec2 screenClipSize( (int(float(currentClipSize.x)*screenMetrics.GUItoScreenXScale + 0.5)), 
+                                  (int(float(currentClipSize.y)*screenMetrics.GUItoScreenYScale + 0.5)));
+
+            boxImage.setClipping( vec2( float(screenClipPos.x), float(screenClipPos.y) ), 
+                                  vec2( float(screenClipSize.x), float(screenClipSize.y) ) );
+        }
+
+        AHGUI_IMUIContext.queueImage( boxImage );
 
     }
 
@@ -616,9 +681,11 @@ class Element {
      * @brief  Rather counter-intuitively, this draws this object on the screen
      *
      * @param drawOffset Absolute offset from the upper lefthand corner (GUI space)
+     * @param clipPos pixel location of upper lefthand corner of clipping region
+     * @param clipSize size of clipping region
      *
      */
-    void render( ivec2 drawOffset ) {
+    void render( ivec2 drawOffset, ivec2 currentClipPos, ivec2 currentClipSize ) {
 
         // see if we're visible 
         if( !show ) return;
@@ -627,7 +694,7 @@ class Element {
         if( border ) {
 
             ivec2 borderCornerUL = drawOffset + drawDisplacement + boundaryOffset - ivec2( paddingL, paddingU );
-            ivec2 borderCornerLR = drawOffset + drawDisplacement + boundaryOffset + size + ivec2( paddingR, paddingD );
+            ivec2 borderCornerLR = drawOffset + drawDisplacement + boundaryOffset + size - ivec2(1,1) + ivec2( paddingR, paddingD );
 
             ivec2 screenCornerUL = screenMetrics.GUIToScreen( borderCornerUL );
             ivec2 screenCornerLR = screenMetrics.GUIToScreen( borderCornerLR );
@@ -638,25 +705,33 @@ class Element {
             // top 
             drawBox( screenCornerUL, 
                      ivec2( screenCornerLR.x - screenCornerUL.x, thickness ),
-                     borderColor  );
+                     borderColor,
+                     zOrdering + 1, 
+                     currentClipPos, 
+                     currentClipSize );
 
             // bottom 
             drawBox( ivec2( screenCornerUL.x, screenCornerLR.y - thickness ), 
                      ivec2( screenCornerLR.x - screenCornerUL.x, thickness ),
-                     borderColor );
+                     borderColor,
+                     zOrdering + 1,  
+                     currentClipPos, 
+                     currentClipSize );
 
             // left
             drawBox( ivec2( screenCornerUL.x, screenCornerUL.y + thickness ), 
                      ivec2( thickness, screenCornerLR.y - screenCornerUL.y - (2 * thickness) ),
-                     borderColor );            
-
-            // left
+                     borderColor,
+                     zOrdering + 1,  
+                     currentClipPos, 
+                     currentClipSize );
+            // right
             drawBox( ivec2( screenCornerLR.x - thickness, screenCornerUL.y + thickness ), 
                      ivec2( thickness, screenCornerLR.y - screenCornerUL.y - (2 * thickness) ),
-                     borderColor );  
-
-
-            //hud.Draw();          
+                     borderColor,
+                     zOrdering + 1,  
+                     currentClipPos, 
+                     currentClipSize );       
 
         }
 
@@ -739,6 +814,21 @@ class Element {
         }
 
      }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Indicates if a behavior exists, can be used to see if its finished.
+     * 
+     * @param behaviorName name to identify the behavior
+     *
+     * @returns true if there was a behavior
+     *
+     */
+    bool hasUpdateBehavior(string behaviorName)
+    {
+        return updateBehaviors.exists(behaviorName);
+    }
+    
 
     /*******************************************************************************************/
     /**
@@ -1395,8 +1485,7 @@ class Element {
      */
     void setSizeX( const int x, bool resetBoundarySize = true ) {
     
-        size.x = x;        
-        onRelayout();
+        setSize( ivec2( x, size.y ), resetBoundarySize );
     
     }   
 
@@ -1410,8 +1499,7 @@ class Element {
      */
     void setSizeY( const int y, bool resetBoundarySize = true ) {
             
-        size.y = y;
-        onRelayout();
+        setSize( ivec2( size.x, y ), resetBoundarySize );
 
     }  
 
@@ -1554,7 +1642,7 @@ class Element {
     Element@ findElement( string elementName ) {
         // Check if this is the droid we're looking for
         if( name == elementName ) {
-            return this;
+            return @this;
         }
         else {
             return null;

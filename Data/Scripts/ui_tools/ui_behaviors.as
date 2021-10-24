@@ -448,7 +448,6 @@ class MouseOverShowBorder : MouseOverBehavior {
         element.setColor( originalColor );
         return true;
     }
-
 }
 
  /**

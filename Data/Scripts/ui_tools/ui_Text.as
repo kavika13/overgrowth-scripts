@@ -18,14 +18,14 @@ namespace AHGUI {
  */
 class Text : Element 
 {
-
+    IMUIText imuiText;  // Engine object for the text
     string text;        // Actual text to render
     int GUIfontSize;    // Height of the text (GUI space)
     int screenFontSize; // Height of the text (screen space)
     string fontName;    // Name for the font 
+    float rotation;     // Rotation for the text 
     ivec2 screenSize;   // Bit of a hack as we need the screen height for getting the right metrics
-    float ascenderRatio;// How much of the font is ascender    
-
+    
     /*******************************************************************************************/
     /**
      * @brief  Constructor
@@ -34,6 +34,7 @@ class Text : Element
     Text() {
         super();
         setColor( 1.0, 1.0, 1.0, 1.0 );
+        rotation = 0;
     }
 
     /*******************************************************************************************/
@@ -46,6 +47,7 @@ class Text : Element
     Text(string _name) {
         super(name);
         setColor( 1.0, 1.0, 1.0, 1.0 );
+        rotation = 0;
     }
 
     /*******************************************************************************************/
@@ -80,6 +82,22 @@ class Text : Element
 
     /*******************************************************************************************/
     /**
+     * @brief  Constructor
+     * 
+     * @param _text String for the text
+     * @param _fontName name of the font (assumed to be in Data/Fonts)
+     * @param _fontSize height of the font
+     * @param _color vec4 color rgba
+     *
+     */
+    Text(string _text, string _fontName, int _fontSize, vec4 _color = vec4(1.0f) ) {
+        setText( _text );
+        setFont( _fontName, _fontSize );
+        setColor( _color.x, _color.y, _color.z, _color.a );
+    }
+
+    /*******************************************************************************************/
+    /**
      * @brief  Derives the various metrics for this text element
      * 
      */
@@ -88,18 +106,16 @@ class Text : Element
         // only bother if we have text
         if( text != "" && fontName != "" ) {
 
-            TextMetrics metrics = GetTextAtlasMetrics("Data/Fonts/" + fontName + ".ttf", 
-                                                      screenFontSize, kSmallLowercase, text );
-            screenSize.x = metrics.bounds_x;
-            screenSize.y = metrics.bounds_y;
+            vec2 boundingBox = imuiText.getBoundingBoxDimensions();
+
+            screenSize.x = int(boundingBox.x);
+            screenSize.y = int(boundingBox.y);
 
             setSize( int(float(screenSize.x) / screenMetrics.GUItoScreenX()), 
                      int(float(screenSize.y) / screenMetrics.GUItoScreenX()) );
 
             // Reset the boundary to the size
             setBoundarySize();
-
-            ascenderRatio = metrics.ascenderRatio;
 
         }
 
@@ -129,6 +145,15 @@ class Text : Element
         GUIfontSize = _fontSize;
         screenFontSize = int(screenMetrics.GUItoScreenY() * float(_fontSize));
 
+        imuiText = AHGUI_IMUIContext.makeText( "Data/Fonts/" + fontName + ".ttf", 
+                                               screenFontSize, kSmallLowercase );
+
+        if( text != "" ) {
+            imuiText.setText( text );
+        }
+
+        imuiText.setRotation( rotation );
+
         deriveMetrics();
         onRelayout();
 
@@ -144,6 +169,7 @@ class Text : Element
     void setText( string _text ) {
         
         text = _text;
+        imuiText.setText( text );
         deriveMetrics();
         onRelayout();
 
@@ -165,25 +191,39 @@ class Text : Element
      * @brief  Rather counter-intuitively, this draws this object on the screen
      *
      * @param drawOffset Absolute offset from the upper lefthand corner (GUI space)
+     * @param clipPos pixel location of upper lefthand corner of clipping region
+     * @param clipSize size of clipping region
      *
      */
-    void render( ivec2 drawOffset ) {
+    void render( ivec2 drawOffset, ivec2 currentClipPos, ivec2 currentClipSize ) {
 
         // Make sure we're supposed draw 
         if( show ) {
-        
+
             ivec2 GUIRenderPos = drawOffset + boundaryOffset + ivec2( paddingL, paddingU ) + drawDisplacement;
 
             ivec2 screenRenderPos = screenMetrics.GUIToScreen( GUIRenderPos );
 
-            DrawTextAtlas( "Data/Fonts/" + fontName + ".ttf", screenFontSize, 
-                           kSmallLowercase, text, 
-                           screenRenderPos.x, screenRenderPos.y + int(float(screenSize.y) * ascenderRatio),
-                           color );
+            imuiText.setPosition( vec3( screenRenderPos.x, screenRenderPos.y, getZOrdering() ) );
+            imuiText.setColor( color );
+
+            if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ){
+                
+                ivec2 adjustedClipPos = screenMetrics.GUIToScreen( currentClipPos );
+
+                vec2 screenClipPos( vec2((float(adjustedClipPos.x)), 
+                                     (float(adjustedClipPos.y)) ) );
+                vec2 screenClipSize(vec2((float(currentClipSize.x)*screenMetrics.GUItoScreenXScale), 
+                                     (float(currentClipSize.y)*screenMetrics.GUItoScreenYScale)) );
+
+                imuiText.setClipping( screenClipPos, screenClipSize );
+            }
+
+            AHGUI_IMUIContext.queueText( imuiText );
         }
 
         // Call the superclass to make sure any element specific rendering is done
-        Element::render( drawOffset );
+        Element::render( drawOffset, currentClipPos, currentClipSize );
 
     }
 
@@ -200,6 +240,31 @@ class Text : Element
 
         Element::update( delta, drawOffset, guistate );
     
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Sets the rotation for this image
+     * 
+     * @param Rotation (in degrees)
+     *
+     */
+    void setRotation( float _rotation ) {
+        rotation = _rotation;
+        imuiText.setRotation( rotation );
+        deriveMetrics();
+        onRelayout();
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Gets the rotation for this text
+     * 
+     * @returns current rotation (in degrees)
+     *
+     */
+    float getRotation() {
+        return rotation;
     }
 
 }

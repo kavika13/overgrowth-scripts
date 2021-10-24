@@ -1,12 +1,13 @@
 #include "ui_tools/ui_support.as"
 #include "ui_tools/ui_Element.as"
+#include "ui_tools/ui_Container.as"
 
 
 /*******
  *  
  * ui_Divider.as
  *
- * Container element class for creating adhoc GUIs as part of the UI tools  
+ * Specialized container element class for creating adhoc GUIs as part of the UI tools  
  *
  */
 
@@ -17,7 +18,7 @@ namespace AHGUI {
  * @brief  Basic container class, holds other elements
  *
  */
-class Divider : Element {
+class Divider : Container {
     
     array<Element@> topLeftContents; // elements in this container top/left
     array<Element@> bottomRightContents; // elements in this container topLeft
@@ -25,11 +26,14 @@ class Divider : Element {
 
     int topLeftBoundStart;  // Start coordinate for the top/left container
     int topLeftBoundEnd;    // End coordinate for the top/left container
-    int centerBoundStart;  // Start coordinate for the center element
-    int centerBoundEnd;    // End coordinate for the center element
-    int bottomRightBoundStart; // Start coordinate for the center element
-    int bottomRightBoundEnd;   // End coordinate for the center element
-    
+    int centerBoundStart;   // Start coordinate for the center element
+    int centerBoundEnd;     // End coordinate for the center element
+    int bottomRightBoundStart;  // Start coordinate for the center element
+    int bottomRightBoundEnd;    // End coordinate for the center element
+    int bottomRightSize = 0;    // Size of of the bottom/right elements  
+    int centerSize = 0;         // Size of the center element
+    int topLeftSize = 0;        // Size of the top/left elements
+
     DividerOrientation orientation; // vertical by default
     
     /*******************************************************************************************/
@@ -76,13 +80,15 @@ class Divider : Element {
      * @brief  Clear the contents of this divider, leaving everything else the same
      * 
      */
-
     void clear() {
         topLeftContents.resize(0);
         @centeredElement = null;
         bottomRightContents.resize(0);
         setSize(UNDEFINEDSIZE,UNDEFINEDSIZE);
         boundaryOffset = ivec2(0,0);
+
+        Container::clear();
+
         onRelayout();
     }
 
@@ -97,10 +103,10 @@ class Divider : Element {
      */
     void update( uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
 
-        ivec2 currentDrawOffset = boundaryOffset + drawOffset;
-
         // Do whatever the superclass wants
-        Element::update( delta, currentDrawOffset, guistate );
+        Container::update( delta, drawOffset, guistate );
+
+        ivec2 currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
 
         // Simply pass this on to the children
         for( uint i = 0; i < topLeftContents.length(); i++ ) {
@@ -156,15 +162,31 @@ class Divider : Element {
      * @brief  Rather counter-intuitively, this draws this object on the screen
      *
      * @param drawOffset Absolute offset from the upper lefthand corner (GUI space)
+     * @param clipPos pixel location of upper lefthand corner of clipping region
+     * @param clipSize size of clipping region
      *
      */
-    void render( ivec2 drawOffset ) {
+    void render( ivec2 drawOffset, ivec2 clipPos, ivec2 clipSize ) {
+
+        // See if we need to adjust clip for this container
+        ivec2 currentClipPos = drawOffset + boundaryOffset + drawDisplacement;
+        ivec2 currentClipSize;
+
+        if( getSizeX() == UNDEFINEDSIZE || getSizeY() == UNDEFINEDSIZE ) {
+            currentClipSize = clipSize;
+        }
+        else {
+            currentClipSize = getSize();
+        }
+
+        // See if the superclass wants to do anything
+        Container::render( drawOffset, currentClipPos, currentClipSize );
 
         // Simply pass this on to the children
         ivec2 currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
         for( uint i = 0; i < topLeftContents.length(); i++ ) {
             
-            topLeftContents[i].render( currentDrawOffset );
+            topLeftContents[i].render( currentDrawOffset, currentClipPos, currentClipSize );
             
             if( orientation == DOVertical ) {
                 currentDrawOffset.y += topLeftContents[i].getBoundarySizeY();
@@ -185,7 +207,7 @@ class Divider : Element {
                 currentDrawOffset.x += centerBoundStart;   
             }
 
-            centeredElement.render( currentDrawOffset );
+            centeredElement.render( currentDrawOffset, currentClipPos, currentClipSize );
         }
 
         currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
@@ -199,7 +221,7 @@ class Divider : Element {
 
         for( uint i = 0; i < bottomRightContents.length(); i++ ) {
 
-            bottomRightContents[i].render( currentDrawOffset );
+            bottomRightContents[i].render( currentDrawOffset, currentClipPos, currentClipSize );
 
             if( orientation == DOVertical ) {
                 currentDrawOffset.y += bottomRightContents[i].getBoundarySizeY();
@@ -210,7 +232,7 @@ class Divider : Element {
         }
 
         // Do whatever the superclass wants 
-        Element::render( drawOffset );
+        Element::render( drawOffset, currentClipPos, currentClipSize );
 
     }
 
@@ -224,13 +246,13 @@ class Divider : Element {
         // Reset the region tracking
         topLeftBoundStart = UNDEFINEDSIZE;   
         topLeftBoundEnd = UNDEFINEDSIZE; 
-        int topLeftSize = 0;  
+        topLeftSize = 0;  
         centerBoundStart = UNDEFINEDSIZE;   
         centerBoundEnd = UNDEFINEDSIZE;     
-        int centerSize = 0;
+        centerSize = 0;
         bottomRightBoundStart = UNDEFINEDSIZE;
         bottomRightBoundEnd = UNDEFINEDSIZE;
-        int bottomRightSize = 0;
+        bottomRightSize = 0;
         
         // see which direction we're going
         if( orientation == DOVertical ) {
@@ -248,7 +270,7 @@ class Divider : Element {
                     topLeftSize += topLeftContents[i].getBoundarySizeY();
                     topLeftBoundEnd += topLeftContents[i].getBoundarySizeY() - 1;
 
-                    // // check to see if this element pushes the boundary of the divider
+                    // check to see if this element pushes the boundary of the divider
                     if( topLeftContents[i].getBoundarySizeX() > getBoundarySizeX() ) {
                         setSizeX( topLeftContents[i].getBoundarySizeX() );
                     }
@@ -257,8 +279,8 @@ class Divider : Element {
                     if( topLeftContents[i].getBoundarySizeX() < getBoundarySizeX() ) {
                         topLeftContents[i].setBoundarySizeX( getBoundarySizeX() );   
                     }
-
                 }   
+
             }
 
             // As the center is one element, we just need to calculate from it
@@ -267,7 +289,7 @@ class Divider : Element {
                 int dividerCenter = ((getSizeY() - 1)/2);
 
                 centerBoundStart = dividerCenter - (centeredElement.getBoundarySizeY()/2);
-                centerBoundEnd = centerBoundStart  + ( centeredElement.getBoundarySizeY() - 1 );
+                centerBoundEnd   = centerBoundStart  + ( centeredElement.getBoundarySizeY() - 1 );
 
                 centerSize = centeredElement.getBoundarySizeY();
 
@@ -315,11 +337,13 @@ class Divider : Element {
             if( centeredElement !is null && centerSize > 0  ) {
                 // we have a centered element
                 // figure out how much size we need for this divider
+
                 int halfCenter = centerSize / 2;
                 int topLeftHalf = halfCenter + topLeftSize;
                 int bottomRightHalf = halfCenter + bottomRightSize;
 
                 neededSize = max( topLeftHalf * 2, bottomRightHalf * 2 );
+
             }
             else {
                 // we don't have a centered element
@@ -435,6 +459,8 @@ class Divider : Element {
             }
 
         }
+
+        //Print( "Done checkRegions -- topLeftSize: " + topLeftSize + "\n" );
      }
 
 
@@ -473,7 +499,7 @@ class Divider : Element {
      void doScreenResize()  {
         
         // Invoke the superclass's method
-        Element::doScreenResize();
+        Container::doScreenResize();
         
         // Pass this down to the children
         for( uint i = 0; i < topLeftContents.length(); i++ ) {
@@ -487,6 +513,7 @@ class Divider : Element {
         for( uint i = 0; i < bottomRightContents.length(); i++ ) {
             bottomRightContents[i].doScreenResize();
         }
+
      }
 
 
@@ -533,7 +560,6 @@ class Divider : Element {
      * @returns the space object created, just in case you need it
      *
      */
-
     Divider@ addDivider( DividerDirection direction, DividerOrientation newOrientation, ivec2 size = ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) ) {
         
         // Create a new spacer object
@@ -569,6 +595,56 @@ class Divider : Element {
         return newDivider;
 
     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Fills the center of a divider with another divider 
+     * 
+     *  This is a bit of a hack, but useful for unconstrained mode
+     *  Make sure that you've added all your other fixed size dividers first
+     *   as this will eat up the rest of the space
+     *
+     * @param newOrientation orientation for the new divider
+     *
+     */
+     Divider@ addDividerFillCenter( DividerOrientation newOrientation ) {
+
+        // Check to make sure that there is no center element already
+        if( centeredElement !is null ) {
+            DisplayError("GUI Error", "Cannot fill center element with center element already defined in divider " + getName() );  
+        }
+
+        // Make sure the totals are up to date 
+        checkRegions();
+
+        // Create a new spacer object
+        Divider@ newDivider = Divider(newOrientation); 
+
+        ivec2 size;
+        
+        // Set the coordinates based on the orientation
+        if( orientation == DOVertical ) {
+            
+            size.x = getSizeX();
+            size.y = getSizeY() - ( 2 * max(topLeftSize, bottomRightSize) );
+
+        }
+        else {
+            size.x = getSizeX() - ( 2 * max(topLeftSize, bottomRightSize) );
+            size.y = getSizeY();
+        }
+
+        newDivider.setSize( size );
+
+        // Add this to the divider
+        addElement( newDivider, DDCenter );
+
+        // return a reference to this object in case the
+        //  user needs to reference it (set the name, etc)
+        return newDivider;
+
+     }
+
 
     /*******************************************************************************************/
     /**
@@ -651,15 +727,33 @@ class Divider : Element {
         @newElement.owner = @owner;
         @newElement.parent = @this;
 
+        // Make sure it's in front of us 
+        newElement.setZOrdering( getZOrdering() + 1 );
+
         // Signal that something new has changed
         onRelayout();
 
     }
 
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Find an element by name — called internally
+     *  
+     *
+     */
     Element@ findElement( string elementName ) {
+
+        // See if the superclass owns this
+        Element@ foundElement = Container::findElement( elementName );
+
+        if( foundElement !is null ) {
+            return foundElement;
+        }
+
         // Check if this is the droid we're looking for
         if( name == elementName ) {
-            return this;
+            return @this;
         }
         else {
             // If not, pass the request onto the children

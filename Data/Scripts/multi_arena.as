@@ -58,7 +58,6 @@ array<int> match_score;
 
 string level_name;
 
-
 void AddMetaEvent(MetaEventType type, string data) {
     int next_meta_event_end = (meta_event_end+1)%kMaxMetaEvents;
     if(next_meta_event_end == meta_event_start) {
@@ -225,9 +224,57 @@ void SetUpLevel(float initial_difficulty) {
         //DisplayError("Error", "No battle instances found in arena level" );
     }
     else {
-        // Finally pick one at random
+        // By default, pick one at random
         int battleInstanceIndex = rand() % battleInstanceValues.length();
 
+        //If we are in an active session, get the requested fight
+        if( global_data.getSessionProfile() >= 0 )
+        {
+            JSONValue world_node = global_data.getCurrentWorldNode();  
+            if( world_node.type() != JSONnullValue )
+            {
+                if( world_node["type"].asString() == "arena_instance" )
+                {
+                    JSONValue arena_instance = global_data.getArenaInstance(world_node["target_id"].asString());
+
+                    if(arena_instance.type() != JSONnullValue)
+                    {
+                        bool found_match = false;
+                        for( uint i = 0; i < battleInstanceValues.length(); i++ )
+                        {
+                            if( arena_instance["battle"].asString() == battleInstanceValues[i]["name"].asString() )
+                            {
+                                battleInstanceIndex = i;
+                                found_match = true;
+                                break;
+                            }
+                        } 
+
+                        if( !found_match )
+                        {
+                            Log( error, "Arena " + level_name + " has no battle with the name " + arena_instance["battle"].asString() + ". Requested from the arena_instance " + arena_instance["id"].asString());
+                        }
+                    }
+                    else
+                    {
+                        Log( error, "There is no arena_instance with the name " + world_node["target_id"].asString() + ". As requested from the world_node: " + world_node["id"].asString()); 
+                    }
+                }
+                else
+                {
+                    Log(error, "Running session, but we're not in an arena_instance node. We are in the world_node " + world_node["id"].asString());
+                }
+            }
+            else
+            {
+                Log(error, "There is no valid world_node for session " + global_data.getSessionProfile() );
+            }
+        }
+        else
+        {
+            Log(info, "Running level without active arena session, going into fallback mode");
+        }
+         
         JSONValue thisBattle = battleInstanceValues[ battleInstanceIndex ];
 
         JSONValue battleAttributes = thisBattle["attributes"];
@@ -313,7 +360,6 @@ void AggressionDetected(int attacker_id) {
             EndMatch(false);
         }
     }
-
 }
 
 // Parse string messages and react to them
@@ -431,6 +477,46 @@ void ReceiveMessage(string msg) {
             Print("Player "+char_a+" was hit by an item\n");
             audience_excitement += 1.5f;
         }
+
+        if( token == "character_died" )
+        {
+            if( char_a != battle.playerObjectId )
+            {
+                Object@ player_obj = ReadObjectFromID(battle.playerObjectId);
+                ScriptParams@ player_params = player_obj.GetScriptParams();
+
+                Object@ other_obj = ReadObjectFromID(char_a);
+                ScriptParams@ other_params = other_obj.GetScriptParams();
+        
+                if( player_params.GetString("Teams") != other_params.GetString("Teams") )
+                {
+                    Log(info,"Player got a kill\n");
+                    global_data.player_kills++;
+                }
+            }
+            else
+            {
+                Log(info,"Player got mortally wounded\n");
+                global_data.player_deaths++;
+            }
+        }
+        else if( token == "character_knocked_out" )
+        {
+            if( char_a != battle.playerObjectId )
+            {
+                Object@ player_obj = ReadObjectFromID(battle.playerObjectId);
+                ScriptParams@ player_params = player_obj.GetScriptParams();
+
+                Object@ other_obj = ReadObjectFromID(char_a);
+                ScriptParams@ other_params = other_obj.GetScriptParams();
+        
+                if( player_params.GetString("Teams") != other_params.GetString("Teams") )
+                {
+                    Log(info,"Player got a ko\n");
+                    global_data.player_kos++;
+                }
+            }
+        }
     } else if(type == kTwoInt) {
         token_iter.FindNextToken(msg);
         int char_a = atoi(token_iter.GetToken(msg));
@@ -484,38 +570,47 @@ float GetRandomDifficultyNearPlayerSkill() {
     return var;
 }
 
-void EndMatch(bool victory) {            
-    float win_prob = ProbabilityOfWin(global_data.player_skill, curr_difficulty);
-    float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
-    const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
-    
-    if(!victory) { // Decrease difficulty on failure
-        level_outcome = kFailure;   
-        float audience_fan_ratio = 0.0f;
-        if(win_prob < 0.5f) { // If you were predicted to lose, you still gain some fans
-            audience_fan_ratio += (0.5f - win_prob) * kMatchImportance;
+bool has_ended_match = false;
+void EndMatch(bool victory) {
+        float win_prob = ProbabilityOfWin(global_data.player_skill, curr_difficulty);
+        float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
+        const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
+        
+        if(!victory) { // Decrease difficulty on failure
+            level_outcome = kFailure;   
+            float audience_fan_ratio = 0.0f;
+            if(win_prob < 0.5f) { // If you were predicted to lose, you still gain some fans
+                audience_fan_ratio += (0.5f - win_prob) * kMatchImportance;
+            }
+            audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level * 0.4f;
+            int new_fans = int(audience_size * audience_fan_ratio);
+            global_data.fan_base += new_fans;
+            global_data.player_skill -= global_data.player_skill * win_prob * kMatchImportance;
+            global_data.player_skill = min(max(global_data.player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
+            global_data.player_loses++;
+            SetLoseText(new_fans, excitement_level);
+        } else if(victory) { // Increase difficulty on win
+            level_outcome = kVictory;
+            global_data.player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;        
+            global_data.player_skill = min(max(global_data.player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
+            float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
+            audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
+            int new_fans = int(audience_size * audience_fan_ratio);
+            global_data.fan_base += new_fans;
+            global_data.player_wins++;
+            SetWinText(new_fans, global_data.fan_base, excitement_level);
         }
-        audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level * 0.4f;
-        int new_fans = int(audience_size * audience_fan_ratio);
-        global_data.fan_base += new_fans;
-        global_data.player_skill -= global_data.player_skill * win_prob * kMatchImportance;
-        global_data.player_skill = min(max(global_data.player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
-        global_data.player_loses++;
-        SetLoseText(new_fans, excitement_level);
-    } else if(victory) { // Increase difficulty on win
-        level_outcome = kVictory;
-        global_data.player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;        
-        global_data.player_skill = min(max(global_data.player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
-        float audience_fan_ratio = (1.0f - win_prob) * kMatchImportance;
-        audience_fan_ratio += (1.0f - audience_fan_ratio) * excitement_level;
-        int new_fans = int(audience_size * audience_fan_ratio);
-        global_data.fan_base += new_fans;
-        global_data.player_wins++;
-        SetWinText(new_fans, global_data.fan_base, excitement_level);
-    }
+        
+    if( not has_ended_match )
+    {
+        global_data.done_with_current_node = true;
+        global_data.arena_victory = victory;
+        global_data.ResolveWorldNode();
+        global_data.WritePersistentInfo();
 
-    global_data.WritePersistentInfo();
-               
+        has_ended_match = true;
+    }
+                   
     AddMetaEvent(kMessage, "set_all_hostile false");
     AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
     AddMetaEvent(kDisplay, "The match is over!");
@@ -526,12 +621,11 @@ void EndMatch(bool victory) {
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "new_match");
 
-    
+    Log( error, "Ending match" );
 }
 
 // Check if level should be reset
 void VictoryCheck() {
-    
     if(level_outcome == kUnknown) {
         bool multiple_teams_alive = false;
         bool any_team_alive = false;

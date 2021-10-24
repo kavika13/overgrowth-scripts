@@ -1,6 +1,7 @@
 #include "ui_tools/ui_Element.as"
 #include "ui_tools/ui_Message.as"
 #include "ui_tools/ui_support.as"
+#include "ui_tools/ui_Container.as"
 
 /*******
  *  
@@ -12,6 +13,8 @@
 
 namespace AHGUI {
 
+// Make this global to avoid duplicate resource use 
+IMUIContext AHGUI_IMUIContext; // UI features from the engine
 /*******************************************************************************************/
 /**
  * @brief One thing to rule them all
@@ -24,10 +27,12 @@ class GUI {
     uint elementCount; // Counter for naming unnamed elements
     bool needsRelayout; // has a relayout signal been fired?
     bool showGuides; // overlay some extra lines to aid layout
-    IMUIContext imui_context; // Getting UI information from the engine
+    
     ivec2 mousePosition; // Where is the mouse?
-    UIMouseState leftMouseState; // What's the state of the left mouse button?
-    array<Message@> messageQueue;// Messages waiting to process
+    UIMouseState leftMouseState;    // What's the state of the left mouse button?
+    array<Message@> messageQueue;   // Messages waiting to process
+    array<Container@> backgrounds;  // Containers for background layers, if any
+    array<Container@> foregrounds;  // Containers for foreground layers, if any
 
     /*******************************************************************************************/
     /**
@@ -39,7 +44,7 @@ class GUI {
     GUI( DividerOrientation mainOrientation = DividerOrientation::DOVertical ) {
         
         Divider newRoot( "root", mainOrientation );
-        newRoot.setSize( GUISpaceX, GUISpaceY );
+        newRoot.setSize( screenMetrics.GUISpaceX, screenMetrics.GUISpaceY );
 
         @newRoot.owner = @this;
         @newRoot.parent = null;
@@ -49,7 +54,33 @@ class GUI {
         needsRelayout = false;
         showGuides = false;
 
-        imui_context.Init();
+        AHGUI_IMUIContext.Init();
+
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Should this GUI restrict to 16x9 aspect ratio?
+     * 
+     * (note: this will completely clear the contents of the GUI)
+     *
+     * @param restrict true if 16x9, false otherwise
+     * @param mainOrientation The orientation of the main container 
+     *
+     */
+    void restrict16x9( bool restrict, 
+                       DividerOrientation mainOrientation = DividerOrientation::DOVertical ) {
+
+        screenMetrics.restrict16x9( restrict );
+
+        Divider newRoot( "root", mainOrientation );
+        newRoot.setSize( screenMetrics.GUISpaceX, screenMetrics.GUISpaceY );
+
+        @newRoot.owner = @this;
+        @newRoot.parent = null;
+        @root = @newRoot;
+
+        needsRelayout = false;
 
     }
 
@@ -70,12 +101,17 @@ class GUI {
      *
      */
      void clear( DividerOrientation mainOrientation = DividerOrientation::DOVertical ) {
+        
         Divider newRoot( "root", mainOrientation );
-        newRoot.setSize( GUISpaceX, GUISpaceY );
+        newRoot.setSize( screenMetrics.GUISpaceX, screenMetrics.GUISpaceY );
+
+        backgrounds.resize(0);
+        foregrounds.resize(0);
 
         @newRoot.owner = @this;
         @newRoot.parent = null;
         @root = @newRoot;
+
      }
 
     /*******************************************************************************************/
@@ -126,6 +162,72 @@ class GUI {
 
     /*******************************************************************************************/
     /**
+     * @brief  Set the number and initializes the background layers
+     * 
+     *  NOTE: This will destroy any existing layers
+     *
+     *  Background layers are rendered highest index value first 
+     *
+     * @param numLayers number of layers required
+     *
+     */
+     void setBackgroundLayers( int numLayers ) {
+        for( int i = 0; i < numLayers; ++i ) {
+            Container@ newContainer = Container( ivec2( screenMetrics.GUISpaceX, screenMetrics.GUISpaceY ) );
+            backgrounds.insertLast( newContainer );
+        }
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Set the number and initializes the background layers
+     * 
+     *  NOTE: This will destroy any existing layers
+     *
+     *  Background layers are rendered highest index value first 
+     *
+     * @param numLayers number of layers required
+     *
+     */
+     void setForegroundLayers( int numLayers ) {
+        for( int i = 0; i < numLayers; ++i ) {
+            Container@ newContainer = Container( ivec2( screenMetrics.GUISpaceX, screenMetrics.GUISpaceY ) );
+            foregrounds.insertLast( @newContainer );
+        }
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Retrieves a reference to a specified background layer
+     * 
+     * @param layerNum index of the background layer (starting at 0) 
+     *
+     */
+     Container@ getBackgroundLayer( uint layerNum ) {
+        if( layerNum >= backgrounds.length() ) {
+            DisplayError("GUI Error", "Unknown background layer " + layerNum);
+        }
+        return backgrounds[ layerNum ];
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Retrieves a reference to a specified foreground layer
+     * 
+     * @param layerNum index of the foreground layer (starting at 0) 
+     *
+     */
+     Container@ getForegroundLayer( uint layerNum ) {
+        if( layerNum >= foregrounds.length() ) {
+            DisplayError("GUI Error", "Unknown foreground layer " + layerNum);
+        }
+        return foregrounds[ layerNum ];
+     }
+
+
+
+    /*******************************************************************************************/
+    /**
      * @brief  Updates the gui  
      * 
      */
@@ -144,14 +246,14 @@ class GUI {
         lastUpdateTime = uint64( the_time * 1000 );
 
         // Get the input from the engine
-        imui_context.UpdateControls();
+        AHGUI_IMUIContext.UpdateControls();
 
-        vec2 engineMousePos = imui_context.getMousePosition();
+        vec2 engineMousePos = AHGUI_IMUIContext.getMousePosition();
 
         // Translate to GUISpace
         mousePosition.x = int( (engineMousePos.x - screenMetrics.renderOffset.x ) / screenMetrics.GUItoScreenXScale );
         mousePosition.y = int(float( GetScreenHeight() - int( engineMousePos.y + screenMetrics.renderOffset.y ) ) / screenMetrics.GUItoScreenYScale);  
-        leftMouseState = imui_context.getLeftMouseState();
+        leftMouseState = AHGUI_IMUIContext.getLeftMouseState();
 
         // Do relayout as necessary 
         while( needsRelayout ) {
@@ -206,14 +308,28 @@ class GUI {
         if( screenMetrics.checkMetrics() ) {
                 
             // All the font sizes will likely have changed
-            DisposeTextAtlases();
+            AHGUI_IMUIContext.clearTextAtlases();
             // We need to inform the elements
             root.doScreenResize();
             root.doRelayout();
         }
 
         ivec2 origin(0,0);
-        root.render( origin );
+        // render the backgrounds
+        for( int layer = int(backgrounds.length())-1; layer >= 0; --layer ) {
+            backgrounds[ layer ].render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+            AHGUI_IMUIContext.render();
+        }
+
+        // render the main content
+        root.render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI_IMUIContext.render();
+
+        // render the foregrounds
+        for( uint layer = 0; layer < foregrounds.length(); ++layer ) {
+            foregrounds[ layer ].render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+            AHGUI_IMUIContext.render();
+        }
 
         if( showGuides ) {
 
@@ -340,6 +456,7 @@ class GUI {
         }
 
         hud.Draw();
+        AHGUI_IMUIContext.render();
      }
 
     /*******************************************************************************************/
