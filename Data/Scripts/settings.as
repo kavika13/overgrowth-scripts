@@ -71,7 +71,7 @@ void BuildUI(string landing_screen){
 	AddCategoryButton("Graphics", buttons_holder);
 	AddCategoryButton("Audio", buttons_holder);
 	AddCategoryButton("Game", buttons_holder);
-	AddCategoryButton("Input", buttons_holder);
+	AddCategoryButton("Controls", buttons_holder);
 
 	buttons_holder.append(IMSpacer(DOVertical, 200.0f));
 
@@ -129,7 +129,7 @@ void SwitchSettingsScreen(string screen_name){
 	else if(screen_name == "Game"){
 		AddGameScreen();
 	}
-	else if(screen_name == "Input"){
+	else if(screen_name == "Controls"){
 		AddInputScreen();
 	}
 	list_created = false;
@@ -217,6 +217,7 @@ void AddGraphicsScreen(){
 	AddCheckBox("GPU Particle Field", dual_columns.right, "particle_field", 0.0f);
 	AddCheckBox("Enable Custom Shaders", dual_columns.right, "custom_level_shaders", 0.0f);
 	AddCheckBox("No reflection capture", dual_columns.right, "no_reflection_capture", 0.0f);
+	AddCheckBox("Depth of field", dual_columns.right, "depth_of_field", 0.0f);
 
 	settings_content.append(dual_columns.main);
 	
@@ -253,7 +254,7 @@ void AddGameScreen(){
 }
 
 void AddInputScreen(){
-	current_screen = "Input";
+	current_screen = "Controls";
 
 	DualColumns dual_columns("input_columns", 800);
 

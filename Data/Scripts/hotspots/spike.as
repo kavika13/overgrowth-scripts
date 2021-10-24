@@ -4,8 +4,8 @@ int spike_num = 5;
 int spiked = -1;
 
 int spike_tip_hotspot_id = -1;
-int spike_visible_id = -1;
 int spike_collidable_id = -1;
+int no_grab_id = -1;
 
 int armed = 0;
 
@@ -34,13 +34,13 @@ void Dispose() {
         QueueDeleteObjectID(spike_collidable_id);
         spike_collidable_id = -1;
     }
-    if(spike_visible_id != -1){
-        QueueDeleteObjectID(spike_visible_id);
-        spike_visible_id = -1;
-    }
     if(spike_tip_hotspot_id != -1){
         QueueDeleteObjectID(spike_tip_hotspot_id);
         spike_tip_hotspot_id = -1;
+    }
+    if(no_grab_id != -1) {
+        QueueDeleteObjectID(no_grab_id);
+        no_grab_id = -1;
     }
 }
 
@@ -50,6 +50,7 @@ void Init() {
 void Reset(){
     spike_num = 5;
     spiked = -1;
+    armed = 0;
     UpdateObjects();
 }
 
@@ -76,28 +77,23 @@ void ReceiveMessage(string msg) {
 void UpdateObjects() {
     bool short = params.HasParam("Short");
     if(short){
-        if(spike_visible_id == -1){
-            spike_visible_id = CreateObject("Data/Objects/Environment/camp/sharp_stick_short_nocollide.xml", true);
-            ReadObjectFromID(spike_visible_id).SetEnabled(false);
-        }
         if(spike_collidable_id == -1){
             spike_collidable_id = CreateObject("Data/Objects/Environment/camp/sharp_stick_short.xml", true);
-            ReadObjectFromID(spike_collidable_id).SetEnabled(false);
+            ReadObjectFromID(spike_collidable_id).SetEnabled(true);
         }
     } else {
-        if(spike_visible_id == -1){
-            spike_visible_id = CreateObject("Data/Objects/Environment/camp/sharp_stick_long_nocollide.xml", true);
-            ReadObjectFromID(spike_visible_id).SetEnabled(false);
-        }
         if(spike_collidable_id == -1){
             spike_collidable_id = CreateObject("Data/Objects/Environment/camp/sharp_stick_long.xml", true);
-            ReadObjectFromID(spike_collidable_id).SetEnabled(false);
+            ReadObjectFromID(spike_collidable_id).SetEnabled(true);
         }
         
     }
     if(spike_tip_hotspot_id == -1){
         spike_tip_hotspot_id = CreateObject("Data/Objects/Hotspots/spike_tip.xml", true);
         ReadObjectFromID(spike_tip_hotspot_id).SetEnabled(true);
+    }
+    if(no_grab_id == -1){
+        no_grab_id = CreateObject("Data/Objects/Hotspots/no_grab.xml", true);
     }
     if(spike_tip_hotspot_id != -1){
         Object@ obj = ReadObjectFromID(spike_tip_hotspot_id);
@@ -107,13 +103,6 @@ void UpdateObjects() {
         obj.SetScale(vec3(0.2));
         obj.GetScriptParams().SetInt("Parent", hotspot.GetID());
     }
-    if(spike_visible_id != -1 && armed == 1){
-        Object@ obj = ReadObjectFromID(spike_visible_id);
-        Object@ hotspot_obj = ReadObjectFromID(hotspot.GetID());
-        obj.SetRotation(hotspot_obj.GetRotation());
-        obj.SetTranslation(hotspot_obj.GetTranslation()+hotspot_obj.GetRotation() * vec3(0.03,0,0.0));
-        obj.SetScale(vec3(1,hotspot_obj.GetScale().y*2.0*(short?0.92:0.85),1));
-    }
     if(spike_collidable_id != -1 && armed == 0){
         Object@ obj = ReadObjectFromID(spike_collidable_id);
         Object@ hotspot_obj = ReadObjectFromID(hotspot.GetID());
@@ -121,14 +110,20 @@ void UpdateObjects() {
         obj.SetTranslation(hotspot_obj.GetTranslation()+hotspot_obj.GetRotation() * vec3(0.03,0,0.0));
         obj.SetScale(vec3(1,hotspot_obj.GetScale().y*2.0*(short?0.92:0.85),1));
     }
+    if(no_grab_id != -1){
+        Object@ obj = ReadObjectFromID(no_grab_id);
+        Object@ reference_obj = ReadObjectFromID(spike_collidable_id);
+        Object@ hotspot_obj = ReadObjectFromID(hotspot.GetID());
+        obj.SetRotation(hotspot_obj.GetRotation());
+        obj.SetTranslation(hotspot_obj.GetTranslation());
+        obj.SetScale(vec3(1,hotspot_obj.GetScale().y*0.45f,1) * reference_obj.GetBoundingBox());
+    }
 
     if(armed == 1){
-        ReadObjectFromID(spike_collidable_id).SetEnabled(false);
-        ReadObjectFromID(spike_visible_id).SetEnabled(true);
+        ReadObjectFromID(spike_collidable_id).SetCollisionEnabled(false);
     }
     if(armed == 0){
-        ReadObjectFromID(spike_collidable_id).SetEnabled(true);
-        ReadObjectFromID(spike_visible_id).SetEnabled(false);
+        ReadObjectFromID(spike_collidable_id).SetCollisionEnabled(true);
     }
 }
 

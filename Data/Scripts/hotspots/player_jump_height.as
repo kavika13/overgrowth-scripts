@@ -1,3 +1,13 @@
+bool is_triggered = false;
+
+void Init() {
+    level.ReceiveLevelEvents(hotspot.GetID());
+}
+
+void Dispose() {
+    level.StopReceivingLevelEvents(hotspot.GetID());
+}
+
 string GetTypeString() {
     return "therium2_player_jump_height";
 }
@@ -8,7 +18,15 @@ void SetParameters() {
 }
 
 void ReceiveMessage(string message) {
-    if(message == "therium2_player_jumped") {
+    if(message == "level_event achievement_event player_jumped") {
+        is_triggered = true;
+    }
+}
+
+void Update() {
+    if(is_triggered) {
+        is_triggered = false;
+
         float new_jetpack_fuel = params.GetFloat("Initial Jetpack Fuel");
         float initial_jump_velocity_multiplier = params.GetFloat("Initial Jump Velocity Multiplier");
 

@@ -342,6 +342,7 @@ void DrawGUI3() {
     if(has_gui){
         EnterTelemetryZone("imGUI.render()");
         imGUI.render();
+        LeaveTelemetryZone();
     }
 }
 

@@ -62,7 +62,8 @@ int GetHighestDifficultyFinishedCampaign(string campaign_id ) {
         bool all_ok = true;
         for( uint k = 0; k < levels.length(); k++ ) {
             ModLevel level = levels[k];
-            if(GetHighestDifficultyFinished(campaign_id,level.GetID()) < int(i+1)) {
+
+            if(!level.CompletionOptional() && GetHighestDifficultyFinished(campaign_id,level.GetID()) < int(i+1)) {
                 all_ok = false;
             }
         }

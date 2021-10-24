@@ -703,9 +703,7 @@ void AddModInspector(IMDivider@ parent, ModID mod_id, bool fadein, int index){
 	int max_lines = 6;
 	
 	for(uint i = 0; i < description_divided.size(); i++){
-		current_line.setText( current_line.getText() + description_divided[i] + " ");
-		line_chars += description_divided[i].length();
-		if(line_chars > max_char_per_line){
+		if(line_chars + description_divided[i].length() > max_char_per_line ){
 			num_lines++;
 			if(num_lines > max_lines){
 				break;
@@ -718,6 +716,8 @@ void AddModInspector(IMDivider@ parent, ModID mod_id, bool fadein, int index){
 			@current_line = @new_line;
 			description_divider.append(@current_line);
 		}
+		current_line.setText( current_line.getText() + description_divided[i] + " ");
+		line_chars += description_divided[i].length();
 	}
 	inspector_divider.append(description_container);
 	
