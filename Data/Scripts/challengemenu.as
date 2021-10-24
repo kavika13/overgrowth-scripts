@@ -6,7 +6,7 @@ float visible = 0.0;
 float target_visible = 1.0;
 
 void Initialize(){
-    gui_id = gui.AddGUI( "levelpicker", "challengemenu/challenge.html", 800, 600, 0 );
+    gui_id = gui.AddGUI( "levelpicker", "challengemenu/challenge.html", 800, 800, 0 );
     string name = "Test name";
     string description = "Test description";
     string level_path = "Test level path";

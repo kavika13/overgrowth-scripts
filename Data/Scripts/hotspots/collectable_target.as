@@ -41,5 +41,7 @@ void OnExitItem(ItemObject @obj) {
 }
 
 bool IsConditionSatisfied() {
+    //DebugText("a","Collectables needed: "+collectables_needed, 0.5f);
+    //DebugText("b","Collectables contained: "+collectables_contained, 0.5f);
     return collectables_needed <= collectables_contained;
 }

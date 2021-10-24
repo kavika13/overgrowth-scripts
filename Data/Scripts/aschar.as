@@ -4590,7 +4590,7 @@ void ThrowWeapon() {
             vec3 start = io.GetPhysicsPosition();
             vec3 end = char.GetAvgIKChainPos("torso");
             vec3 launch_vel = CalcLaunchVel(start, end, io.GetMass(), this_mo.velocity, char.velocity, time);
-            io.SetVelocity(launch_vel);
+            io.SetLinearVelocity(launch_vel);
             vec3 ang_vel = io.GetAngularVelocity();
             vec3 dir = normalize(end - start);
             vec3 twist_ang_vel = dir * dot(ang_vel, dir);
