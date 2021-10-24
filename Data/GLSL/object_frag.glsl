@@ -21,10 +21,19 @@ void object_frag(){} // This is just here to make sure it gets added to include 
 #endif
 
 #ifdef BAKED_SHADOWS
-    #define UNIFORM_SHADOW_TEXTURE \
-        uniform sampler2D shadow_sampler;
+    #ifndef ATTACHED
     #define CALC_SHADOWED \
         vec3 shadow_tex = texture2D(shadow_sampler,shadow_tex_coords).rgb;
+    #define UNIFORM_SHADOW_TEXTURE \
+        uniform sampler2D shadow_sampler;
+    #else
+    #define CALC_SHADOWED \
+        vec3 shadow_tex = texture2D(tex14,gl_TexCoord[2].xy).rgb; \
+        shadow_tex.r *= shadow2DProj(shadow_sampler,gl_TexCoord[2]+vec4(0.0,0.0,-0.00001,0.0)).r;
+    #define UNIFORM_SHADOW_TEXTURE \
+        uniform sampler2DShadow shadow_sampler;
+        uniform sampler2D tex14;
+    #endif
     #ifdef SHADOW_CATCHER
         #define CALC_SHADOW_CATCH \
             vec3 shadow_tex = texture2D(shadow_sampler,gl_TexCoord[2].xy).rgb;

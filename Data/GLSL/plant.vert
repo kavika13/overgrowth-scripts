@@ -5,6 +5,9 @@
 UNIFORM_REL_POS
 uniform float time;
 uniform float plant_shake;
+#ifdef ATTACHED
+uniform mat4 shadowmat;
+#endif
 
 VARYING_TAN_TO_WORLD
 VARYING_REL_POS
@@ -27,4 +30,7 @@ void main()
 	tc0 = gl_MultiTexCoord0.xy;
 	tc1 = GetShadowCoords();
 	CALC_CASCADE_TEX_COORDS
+    #ifdef ATTACHED
+    gl_TexCoord[2] = shadowmat * gl_ModelViewMatrix * transformed_vertex;
+    #endif
 } 

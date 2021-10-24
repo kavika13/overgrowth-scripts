@@ -215,9 +215,7 @@ void Update() {
             item_obj.CleanBlood();
         }
     }
-
     dialogue.Update();
-
     SetAnimUpdateFreqs();
 }
 
