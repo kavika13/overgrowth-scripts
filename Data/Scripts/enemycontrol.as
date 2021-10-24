@@ -363,123 +363,117 @@ void UpdateBrain(){
         case _escort:
             ai_attacking = false;
             break;
-        case _investigate:
+        case _investigate:  {
             ai_attacking = false;
-            {
-                GetPath(nav_target);
-                if(path.NumPoints() > 0){
-                    vec3 path_end = path.GetPoint(path.NumPoints()-1);
-                    if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
-                        SetGoal(_patrol);
-                    }      
-                } else {
+            GetPath(nav_target);
+            if(path.NumPoints() > 0){
+                vec3 path_end = path.GetPoint(path.NumPoints()-1);
+                if(distance_squared(NavPoint(this_mo.position), path_end) < 1.0f){
                     SetGoal(_patrol);
-                }
+                }      
+            } else {
+                SetGoal(_patrol);
             }
-            break;
-        case _attack:
-            {
-                MovementObject@ target = ReadCharacterID(target_id);
+            break;}
+        case _attack:{
+            MovementObject@ target = ReadCharacterID(target_id);
                 
-                if(notice_target_aggression_id != target_id){
-                    notice_target_aggression_delay = 0.0f;
-                }
-                notice_target_aggression_id = target_id;
-                float target_threat_amount = target.GetFloatVar("threat_amount");
-                if(target_threat_amount > 0.6f && length_squared(target.velocity) < 1.0){
-                    notice_target_aggression_delay += time_step * num_frames;
-                } else {
-                    notice_target_aggression_delay = 0.0f;   
-                }
+            if(notice_target_aggression_id != target_id){
+                notice_target_aggression_delay = 0.0f;
+            }
+            notice_target_aggression_id = target_id;
+            float target_threat_amount = target.GetFloatVar("threat_amount");
+            if(target_threat_amount > 0.6f && length_squared(target.velocity) < 1.0){
+                notice_target_aggression_delay += time_step * num_frames;
+            } else {
+                notice_target_aggression_delay = 0.0f;   
+            }
                 
-                if(target.GetIntVar("knocked_out") != _awake){
-                    SetGoal(_patrol);
-                }
+            if(target.GetIntVar("knocked_out") != _awake){
+                SetGoal(_patrol);
+            }
                 
-                AISubGoal target_goal = _unknown;
+            AISubGoal target_goal = _unknown;
                 
-                if(rand()%(150/num_frames)==0){
-                    switch(sub_goal){
-                        case _wait_and_attack:
-                        case _rush_and_attack:
-                        case _defend:
-                        case _provoke_attack:
-                            target_goal = PickAttackSubGoal();
-                            break;
-                    }
-                }
-                if(target.GetIntVar("state") == _ragdoll_state){
-                    target_goal = _punish_fall;
-                } else {
-                    if(sub_goal == _punish_fall){
-                        target_goal = PickAttackSubGoal();
-                    }
-                }
-                
-                if(!target.GetBoolVar("on_ground")){
-                   target_goal = _avoid_jump_kick;
-                } else if(sub_goal == _avoid_jump_kick){
-                    target_goal = PickAttackSubGoal();
-                } 
-                               
-                if(target_goal != _unknown){
-                    SetSubGoal(target_goal);
-                }
-                
+            if(rand()%(150/num_frames)==0){
                 switch(sub_goal){
                     case _wait_and_attack:
-                        if(CheckRangeChange()){
-                            target_attack_range = RangedRandomFloat(1.5f, 3.0f);
-                        }
-                        ai_attacking = true;
-                        break;
-                    case _punish_fall:
                     case _rush_and_attack:
-                        if(CheckRangeChange()){
-                            target_attack_range = 0.0f;
-                        }
-                        ai_attacking = true;
-                        break;
                     case _defend:
-                        if(CheckRangeChange()){
-                            target_attack_range = RangedRandomFloat(1.5f, 3.0f);
-                        }
-                        ai_attacking = false;
-                        break;
                     case _provoke_attack:
-                        if(CheckRangeChange()){
-                            target_attack_range = 0.0f;
-                        }
-                        ai_attacking = false;
-                        break;
-                    case _avoid_jump_kick:
-                        if(CheckRangeChange()){
-                            target_attack_range = RangedRandomFloat(3.0f, 4.0f);
-                        }
-                        ai_attacking = false;
+                        target_goal = PickAttackSubGoal();
                         break;
                 }
-                if(rand()%(150/num_frames)==0){
-                    strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
+            }
+            if(target.GetIntVar("state") == _ragdoll_state){
+                target_goal = _punish_fall;
+            } else {
+                if(sub_goal == _punish_fall){
+                    target_goal = PickAttackSubGoal();
                 }
-                if(temp_health < 0.5f){
-                    ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
-                    if(ally_id != -1){
-                        //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
-                        SetGoal(_get_help);
+            }
+                
+            if(!target.GetBoolVar("on_ground")){
+                target_goal = _avoid_jump_kick;
+            } else if(sub_goal == _avoid_jump_kick){
+                target_goal = PickAttackSubGoal();
+            } 
+                               
+            if(target_goal != _unknown){
+                SetSubGoal(target_goal);
+            }
+                
+            switch(sub_goal){
+                case _wait_and_attack:
+                    if(CheckRangeChange()){
+                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
                     }
+                    ai_attacking = true;
+                    break;
+                case _punish_fall:
+                case _rush_and_attack:
+                    if(CheckRangeChange()){
+                        target_attack_range = 0.0f;
+                    }
+                    ai_attacking = true;
+                    break;
+                case _defend:
+                    if(CheckRangeChange()){
+                        target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                    }
+                    ai_attacking = false;
+                    break;
+                case _provoke_attack:
+                    if(CheckRangeChange()){
+                        target_attack_range = 0.0f;
+                    }
+                    ai_attacking = false;
+                    break;
+                case _avoid_jump_kick:
+                    if(CheckRangeChange()){
+                        target_attack_range = RangedRandomFloat(3.0f, 4.0f);
+                    }
+                    ai_attacking = false;
+                    break;
+            }
+            if(rand()%(150/num_frames)==0){
+                strafe_vel = RangedRandomFloat(-0.2f, 0.2f);
+            }
+            if(temp_health < 0.5f){
+                ally_id = GetClosestCharacterID(100.0f, _TC_ALLY | _TC_CONSCIOUS | _TC_IDLE);
+                if(ally_id != -1){
+                    //DebugDrawLine(this_mo.position, ReadCharacterID(ally_id).position, vec3(0.0f,1.0f,0.0f), _fade);
+                    SetGoal(_get_help);
                 }
             }
-            break;
-        case _get_help:
-            {
-                MovementObject@ char = ReadCharacterID(ally_id);
-                if(distance_squared(this_mo.position, char.position) < 5.0f){
-                    SetGoal(_attack);
-                    char.ReceiveMessage(this_mo.getID(), int(_escort_me));
-                }
+            break;}
+        case _get_help: {
+            MovementObject@ char = ReadCharacterID(ally_id);
+            if(distance_squared(this_mo.position, char.position) < 5.0f){
+                SetGoal(_attack);
+                char.ReceiveMessage(this_mo.getID(), int(_escort_me));
             }
-            break;
+            break; }
         case _get_weapon:
             if(weapon_slots[primary_weapon_slot] != -1 || !ObjectExists(weapon_target_id) || ReadItemID(weapon_target_id).IsHeld()){
                 if(target_id == -1){

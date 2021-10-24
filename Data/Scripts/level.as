@@ -975,7 +975,7 @@ void VictoryCheckNormal() {
     if(player_char.GetIntVar("knocked_out") != _awake){
         failure = true;
     }
-    /*if(victory || failure){
+    if(victory || failure){
         reset_timer -= time_step;
         if(reset_timer <= 0.0f){
             if(reset_allowed && !has_gui){
@@ -989,7 +989,7 @@ void VictoryCheckNormal() {
     } else {
         reset_timer = _reset_delay;
         no_win_time = time;
-    }*/
+    }
 }
 
 void ClearVersusScores(){
