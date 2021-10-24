@@ -75,7 +75,7 @@ void Update() {
             if(!GetInputDown(controller_id, "crouch")){
                 target_velocity -= GetMoveYAxis(controller_id)*camera.GetFacing();
             } else {
-                target_velocity.y -= GetMoveYAxis(controller_id);
+                target_velocity -= GetMoveYAxis(controller_id)*camera.GetUpVector();
             }
             if(length_squared(target_velocity) > 0.0f){
                 moving = true;

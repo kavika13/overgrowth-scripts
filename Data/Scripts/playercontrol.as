@@ -22,6 +22,10 @@ ItemKeyState item_key_state = _iks_nothing;
 void AIMovementObjectDeleted(int id) {
 }
 
+string GetIdleOverride(){
+    return "";
+}
+
 float last_noticed_time;
 
 void UpdateBrain(const Timestep &in ts){

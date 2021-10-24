@@ -263,11 +263,8 @@ vec3 color = diffuse_color * colormap.xyz * color_tint + spec_color * GammaCorre
 vec3 color = diffuse_color * colormap.xyz + \
              spec_color * GammaCorrectFloat(colormap.a);
 
-#define CALC_BALANCE_AMBIENT \
-color *= BalanceAmbient(NdotL);
-
 #define CALC_COLOR_ADJUST \
-CALC_BALANCE_AMBIENT \
+color *= BalanceAmbient(NdotL); \
 color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 
 #define CALC_HAZE \

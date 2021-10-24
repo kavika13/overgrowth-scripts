@@ -75,5 +75,6 @@ void main()
     CALC_EXPOSURE
     CALC_FINAL_UNIVERSAL(alpha)
     
+    //gl_FragColor.xyz = ws_normal;
     //gl_FragColor.xyz = LookupCubemapSimple(ws_normal, diffuse_cubemap).xyz;
 }

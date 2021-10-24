@@ -54,14 +54,20 @@ class CharRecord {
 enum SayParseState {kStart, kInBracket, kContinue};
 
 class Dialogue {
-    int dialogue_editor_gui_id;
+    // Contains information from undo/redo
+    string history_str;
+    // This state is important for undo/redo
+    int dialogue_obj_id;
+    int selected_line;
     array<ScriptElement> strings;
     array<ScriptElement> sub_strings;
+    bool recording;
+
+    int dialogue_editor_gui_id;
     array<string> dialogue_poses;
     int index; // which dialogue element is being executed
     int sub_index;
     int text_id; // ID for dialogue text canvas texture
-    bool recording;
     bool has_cam_control;
     bool show_dialogue;
     bool waiting_for_dialogue;
@@ -75,11 +81,9 @@ class Dialogue {
     float cam_zoom;
     float cam_dist;
     int say_char;
-    int dialogue_obj_id;
     bool clear_on_complete;
 
     bool show_editor_info;
-    int selected_line;
     int editor_text_id; // ID of editor text canvas texture
     bool text_dirty;
     int set_animation_char_select;
@@ -94,7 +98,6 @@ class Dialogue {
             HandleSelectedString(selected_line);
             UpdateRecordLocked();
             ClearUnselectedObjects();
-            ClearUndoHistory();
         }
     }
 
@@ -131,19 +134,21 @@ class Dialogue {
             ClearEditor();
         }
         // Delete connectors if dialogue object is deleted
-        Object @obj = ReadObjectFromID(id);
-        ScriptParams@ params = obj.GetScriptParams();
-        if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("NumParticipants")){
-            int num_connectors = params.GetInt("NumParticipants");
-            for(int j=1; j<=num_connectors; ++j){
-                if(params.HasParam("obj_"+j)){
-                    int obj_id = params.GetInt("obj_"+j);
-                    if(ObjectExists(obj_id)){
-                        DeleteObjectID(obj_id);
-                    }
-                }
-            }
-        }
+		if(ObjectExists(id)){
+			Object @obj = ReadObjectFromID(id);
+			ScriptParams@ params = obj.GetScriptParams();
+			if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("NumParticipants")){
+				int num_connectors = params.GetInt("NumParticipants");
+				for(int j=1; j<=num_connectors; ++j){
+					if(params.HasParam("obj_"+j)){
+						int obj_id = params.GetInt("obj_"+j);
+						if(ObjectExists(obj_id)){
+							DeleteObjectID(obj_id);
+						}
+					}
+				}
+			}
+		}
     }
 
     void UpdateRecordLocked() {
@@ -498,8 +503,6 @@ class Dialogue {
         }
 
         AddInvisibleStrings();
-
-        ClearUndoHistory();
         selected_line = 1;
     }
 
@@ -601,7 +604,32 @@ class Dialogue {
         return last_wait;
     }
 
+    void UpdateRibbonButtons() {
+        bool can_edit_selected = false;
+        array<int> @object_ids = GetObjectIDs();
+        int num_objects = object_ids.length();
+        for(int i=0; i<num_objects; ++i){
+            if(!ObjectExists(object_ids[i])){ // This is needed because SetDialogueObjID can delete some objects
+                continue;
+            }
+            Object @obj = ReadObjectFromID(object_ids[i]);
+            ScriptParams@ params = obj.GetScriptParams();
+            if(obj.IsSelected() && obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
+                can_edit_selected = true;
+            }
+        }
+        RibbonItemSetEnabled("edit_selected_dialogue", can_edit_selected);
+        RibbonItemSetEnabled("stop_editing_dialogue", dialogue_obj_id != -1);
+        RibbonItemSetEnabled("preview_dialogue", dialogue_obj_id != -1);
+        RibbonItemSetEnabled("save_dialogue", dialogue_obj_id != -1);
+        RibbonItemSetEnabled("load_dialogue_pose", dialogue_obj_id != -1);
+        RibbonItemSetEnabled("dialogue_recording", dialogue_obj_id != -1);
+    }
+
     void Update() {     
+        if(history_str != ""){
+            LoadHistoryStr();
+        }
         if(index == 0){
             camera.SetFlags(kEditorCamera);
             SetGUIEnabled(true);
@@ -622,6 +650,8 @@ class Dialogue {
                 callback = gui.GetCallback(dialogue_editor_gui_id);
            }
         }
+
+        UpdateRibbonButtons();
 
         int player_id = GetPlayerCharacterID();
 
@@ -754,7 +784,6 @@ class Dialogue {
                     UpdateRecordLocked();
                 }
                 ClearUnselectedObjects();
-                ClearUndoHistory();
             }
             if(GetInputPressed(controller_id, "up") || selected_line >= int(strings.size())){
                 int i = selected_line - 1;
@@ -776,7 +805,6 @@ class Dialogue {
                     UpdateRecordLocked();
                 }
                 ClearUnselectedObjects();
-                ClearUndoHistory();
             }
         }
         // Lock selected dialogue script line
@@ -790,7 +818,6 @@ class Dialogue {
         if(GetInputDown(controller_id, "ctrl") && GetInputPressed(controller_id, "r")){
             SetRecording(!recording);
             UpdateRecordLocked();
-            ClearUndoHistory();
         }
         // Navigate left-right through dialogue script options
         if(GetInputPressed(controller_id, "right")){
@@ -1451,6 +1478,7 @@ class Dialogue {
                 }
             }
         } else if(token == "preview_dialogue"){
+            DebugText("preview_dialogue", "preview_dialogue", 0.5f);
             if(index == 0 && dialogue_obj_id != -1){
                 camera.SetFlags(kPreviewCamera);
                 SetGUIEnabled(false);
@@ -1589,10 +1617,8 @@ class Dialogue {
                     }
                     editor_text.SetPenRotation(0.0f);
                     if(uint(selected_line) == i){
-                        //editor_text.AddText("["+strings[i].spawned_id+"] ", big_style);
                         editor_text.AddText(strings[i].str, big_style);
                     } else {
-                        //editor_text.AddText("["+strings[i].spawned_id+"] ", small_style);
                         editor_text.AddText(strings[i].str, small_style);
                     }
                     pen_pos.y += br_size;
@@ -1612,5 +1638,33 @@ class Dialogue {
                 text_image.color = vec4(1,1,1,1);
             }
         }
+    }
+
+    void SaveHistoryState(SavedChunk@ chunk) {
+        Print("Called Dialogue::SaveHistoryState\n");
+        string str = dialogue_obj_id + " ";
+        str += selected_line + " ";
+        str += recording + " ";
+        chunk.WriteString(str);
+    }
+
+    void ReadChunk(SavedChunk@ chunk) {
+        Print("Called Dialogue::ReadChunk\n");
+        history_str = chunk.ReadString();
+        Print("Read "+history_str+"\n");
+    }
+
+    void LoadHistoryStr(){
+        Print("Loading history str\n");
+        TokenIterator token_iter;
+        token_iter.Init();
+        token_iter.FindNextToken(history_str);
+        SetDialogueObjID(atoi(token_iter.GetToken(history_str)));
+        token_iter.FindNextToken(history_str);
+        selected_line = atoi(token_iter.GetToken(history_str));
+        token_iter.FindNextToken(history_str);
+        SetRecording(token_iter.GetToken(history_str)=="true");
+        HandleSelectedString(selected_line);
+        history_str = "";
     }
 };

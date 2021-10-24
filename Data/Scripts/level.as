@@ -19,6 +19,14 @@ class DialogueTextCanvas {
 array<DialogueTextCanvas> dialogue_text_canvases;
 array<int> number_text_canvases;
 
+void SaveHistoryState(SavedChunk@ chunk) {
+    dialogue.SaveHistoryState(chunk);
+}
+
+void ReadChunk(SavedChunk@ chunk) {
+    dialogue.ReadChunk(chunk);
+}
+
 void DrawDialogueTextCanvas(int obj_id){
     Object @obj = ReadObjectFromID(obj_id);
     ScriptParams@ params = obj.GetScriptParams();

@@ -17,8 +17,8 @@ bool hostile = true;
 bool listening = true;
 bool ai_attacking = false;
 bool hostile_switchable = true;
-int waypoint_target = -1;
-int old_waypoint_target = -1;
+int waypoint_target_id = -1;
+int old_waypoint_target_id = -1;
 const float _throw_counter_probability = 0.2f;
 bool will_throw_counter;
 int ground_punish_decision = -1;
@@ -66,6 +66,7 @@ int chase_target_id = -1;
 int weapon_target_id = -1;
 
 float investigate_body_time;
+float patrol_wait_until = 0.0f;
 
 enum PathFindType {_pft_nav_mesh, _pft_climb, _pft_drop, _pft_jump};
 PathFindType path_find_type = _pft_nav_mesh;
@@ -271,33 +272,34 @@ void NotifySound(int created_by_id, vec3 pos) {
 }
 
 void HandleAIEvent(AIEvent event){
-    if(event == _ragdolled){
+    switch(event){
+    case _ragdolled:    
         roll_after_ragdoll_delay = RangedRandomFloat(0.1f,1.0f);
-    }
-    if(event == _jumped){
+        break;
+    case _jumped:
         has_jump_target = false;
         if(trying_to_climb == _jump){
             trying_to_climb = _wallrun;
         }   
-    }
-    if(event == _grabbed_ledge){
+        break;
+    case _grabbed_ledge:
         if(trying_to_climb == _wallrun){
             trying_to_climb = _climb_up;
         }   
-    }
-    if(event == _climbed_up){
+        break;
+    case _climbed_up:
         if(trying_to_climb == _climb_up){
             trying_to_climb = _nothing;
             path_find_type = _pft_nav_mesh;
         }   
-    }
-    if(event == _thrown){
-        will_throw_counter = RangedRandomFloat(0.0f,1.0f)<_throw_counter_probability;        
-    }
-    if(event == _can_climb){
+        break;
+    case _thrown:
+        will_throw_counter = RangedRandomFloat(0.0f,1.0f)<_throw_counter_probability;   
+        break;
+    case _can_climb:
         trying_to_climb = _jump;
-    }
-    if(event == _activeblocked){
+        break;
+    case _activeblocked: {
         float temp_block_followup = p_block_followup;
         if(sub_goal == _provoke_attack){
             temp_block_followup = 1.0 - (pow(1.0 - temp_block_followup, 2.0));
@@ -309,24 +311,40 @@ void HandleAIEvent(AIEvent event){
                 SetSubGoal(_rush_and_attack);
             }
         }
-    }
-    if(event == _choking){
+        } break;
+    case _choking: {
         MovementObject@ char = ReadCharacterID(tether_id);
         if(GetCharPrimaryWeapon(char) == -1){
             SetGoal(_struggle);
         } else {
             SetGoal(_hold_still);
         }
+        } break;
+    case _damaged:
+        if(goal == _patrol){
+            Print("Damaged!\n");
+            nav_target = this_mo.position;
+            SetGoal(_investigate);
+            SetSubGoal(_investigate_around);
+            investigate_target_id = -1;
+        }
     }
 }
 
 void SetGoal(AIGoal new_goal){
-    if(new_goal == _attack && goal != _attack){
-        notice_target_aggression_delay = 0.0f;
-        target_history.Initialize();
-        SetSubGoal(PickAttackSubGoal());
-    } 
-    goal = new_goal;
+    if(goal != new_goal){
+        switch(new_goal){
+        case _attack:
+            notice_target_aggression_delay = 0.0f;
+            target_history.Initialize();
+            SetSubGoal(PickAttackSubGoal());
+            break;
+        case _patrol:
+            patrol_wait_until = 0.0f;
+            break;
+        }
+        goal = new_goal;
+    }
 }
 
 float move_delay = 0.0f;
@@ -1230,63 +1248,120 @@ class WaypointInfo {
     bool following_friend;
 }
 
+// id could be id of a waypoint or of another character
 WaypointInfo GetWaypointInfo(int id){
     WaypointInfo info;
     info.success = false;
-    if(id != -1){
-        if(ObjectExists(id)){
-            Object@ object = ReadObjectFromID(id);
-            if(object.GetType() == _path_point_object){
-                info.target_point = path_script_reader.GetPointPosition(id);
+    if(id != -1 && ObjectExists(id)){
+        Object@ object = ReadObjectFromID(id);
+        if(object.GetType() == _path_point_object){
+            info.target_point = object.GetTranslation();
+            info.success = true;
+            info.following_friend = false;
+        } else if(object.GetType() == _movement_object){
+            if(situation.KnowsAbout(id)){
+                info.target_point = ReadCharacterID(id).position;
                 info.success = true;
-                info.following_friend = false;
-            } else if(object.GetType() == _movement_object){
-                if(situation.KnowsAbout(id)){
-                    info.target_point = ReadCharacterID(id).position;
-                    info.success = true;
-                    info.following_friend = true;
-                }
+                info.following_friend = true;
             }
         }
     }
     return info;
 }
+
+string patrol_idle_override;
    
-vec3 GetPatrolMovement(){
-    vec3 target_velocity;
-    vec3 target_point = this_mo.position;
-    bool following_friend = false;
-    WaypointInfo waypoint_info = GetWaypointInfo(waypoint_target);
-    if(!waypoint_info.success){
-        old_waypoint_target = -1;
-        waypoint_target = this_mo.GetWaypointTarget();
-        waypoint_info = GetWaypointInfo(waypoint_target);
+string GetIdleOverride(){
+    if(goal == _patrol && time < patrol_wait_until){
+        return patrol_idle_override;
+    } else {
+        return "";
     }
+}
+
+vec3 GetCheckedRepulsorForce() {
+    vec3 repulsor_force = GetRepulsorForce();
+    if(length_squared(repulsor_force) > 0.0f){
+        vec3 raycast_point = NavRaycast(this_mo.position, this_mo.position + repulsor_force);
+        raycast_point.y = this_mo.position.y;
+        repulsor_force *= distance(raycast_point, this_mo.position)/length(repulsor_force);
+    }
+    return repulsor_force;
+}
+
+vec3 GetPatrolMovement(){
+    if(time < patrol_wait_until){
+    	return vec3(0.0f);
+    }
+
+    WaypointInfo waypoint_info = GetWaypointInfo(waypoint_target_id);
+    if(!waypoint_info.success){
+        // current target is invalid, go to waypoint that character
+        // is directly attached to
+        old_waypoint_target_id = -1;
+        waypoint_target_id = this_mo.GetWaypointTarget();
+        waypoint_info = GetWaypointInfo(waypoint_target_id);
+    }
+    bool following_friend = false;
+    vec3 target_point = this_mo.position;
     if(waypoint_info.success){
         target_point = waypoint_info.target_point;
         following_friend = waypoint_info.following_friend;
     }
-    if(xz_distance_squared(this_mo.position, target_point) < 1.0f){
-        if(waypoint_target != -1){
-            if(ObjectExists(waypoint_target)){
-                Object@ object = ReadObjectFromID(waypoint_target);
-                if(object.GetType() == _path_point_object){
-                    int temp = waypoint_target;
 
-                    waypoint_target = path_script_reader.GetOtherConnectedPoint(
-                        waypoint_target, old_waypoint_target);
-                    old_waypoint_target = temp;
-        
-                    if(waypoint_target == -1){
-                        waypoint_target = path_script_reader.GetConnectedPoint(old_waypoint_target);
+    if( xz_distance_squared(this_mo.position, target_point) < 1.0f ){
+        // we have reached target point
+        if(waypoint_target_id != -1 && ObjectExists(waypoint_target_id)){
+            Object@ object = ReadObjectFromID(waypoint_target_id);
+            if(object.GetType() == _path_point_object){
+                // Check for wait command
+                ScriptParams@ script_params = object.GetScriptParams();
+                if(script_params.HasParam("Wait")){
+                    float wait_time = script_params.GetFloat("Wait");
+                    patrol_wait_until = time + wait_time;
+                }
+                if(script_params.HasParam("Type")){
+                    string type = script_params.GetString("Type");
+                    if(type == "Stand"){
+                        patrol_idle_override = "";
+                    } else if(type == "Sit"){
+                        patrol_idle_override = "Data/Animations/r_sit_cross_legged.anm";                        
+                    } else if(type == "Sleep"){
+                        patrol_idle_override = "Data/Animations/r_sleep.anm";                        
+                    }
+                } else {
+                    patrol_idle_override = "";
+                }
+                int temp_waypoint_target_id = waypoint_target_id;
+                PathPointObject@ path_point_object = cast<PathPointObject>(object);
+                int num_connections = path_point_object.NumConnectionIDs();
+                if(num_connections != 0){
+                    waypoint_target_id = path_point_object.GetConnectionID(0);
+                }
+                for(int i=0; i<num_connections; ++i){
+                    if(path_point_object.GetConnectionID(i) != old_waypoint_target_id){
+                        waypoint_target_id = path_point_object.GetConnectionID(i);
+                        break;
                     }
                 }
+                old_waypoint_target_id = temp_waypoint_target_id;
+                // Find next waypoint and set that to be the target
+                /*int temp = waypoint_target_id;
+                waypoint_target_id = path_script_reader.GetOtherConnectedPoint(
+                    waypoint_target_id, old_waypoint_target_id);
+                old_waypoint_target_id = temp; 
+                if(waypoint_target_id == -1){ 
+                    // Double back if we've reached the end of the path
+                    waypoint_target_id = path_script_reader.GetConnectedPoint(old_waypoint_target_id);
+                }*/
             }
         }
     }
+
     if(move_delay > 0.0f){
         target_point = this_mo.position;
     }
+    vec3 target_velocity;
     if(following_friend) {
         target_velocity = GetMovementToPoint(target_point, 1.0f, 1.0f, 0.0f);
     } else {
@@ -1298,6 +1373,9 @@ vec3 GetPatrolMovement(){
             }
         }
     }
+
+    target_velocity += GetCheckedRepulsorForce();
+
     return target_velocity;
 }
 
@@ -1539,13 +1617,7 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     dist = max(0.0, dist-seek_dist);
     target_velocity = normalize(target_vel_direct) * dist + target_vel_indirect;
 
-    vec3 repulsor_force = GetRepulsorForce();
-    if(length_squared(repulsor_force) > 0.0f){
-        vec3 raycast_point = NavRaycast(this_mo.position, this_mo.position + repulsor_force);
-        raycast_point.y = this_mo.position.y;
-        repulsor_force *= distance(raycast_point, this_mo.position)/length(repulsor_force);
-    }
-    target_velocity += repulsor_force;
+    target_velocity += GetCheckedRepulsorForce();
 
     if(length_squared(target_velocity) > 1.0){
         target_velocity = normalize(target_velocity);
@@ -1722,12 +1794,12 @@ void ChooseAttack(bool front) {
 }
 
 void ResetWaypointTarget() {
-    waypoint_target = -1;
-    old_waypoint_target = -1;
+    waypoint_target_id = -1;
+    old_waypoint_target_id = -1;
 }
 
 WalkDir WantsToWalkBackwards() {
-    if(goal == _patrol && waypoint_target == -1){
+    if(goal == _patrol && waypoint_target_id == -1){
         if(repulsor_delay > 0){
             return WALK_BACKWARDS;
         } else {
