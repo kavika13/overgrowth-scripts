@@ -12,5 +12,5 @@ void HandleEvent(string event, MovementObject @mo){
 void OnEnter(MovementObject @mo) {
     //Print("Entered lava\n");
     mo.Execute("zone_killed=1;TakeBloodDamage(1.0f);Ragdoll(_RGDL_INJURED);");
-    mo.ReceiveMessage("ignite");
+    mo.ReceiveScriptMessage("ignite");
 }

@@ -88,7 +88,7 @@ void Init(string p_level_name) {
 }
 
 int HasCameraControl() {
-    return dialogue.HasCameraControl()?1:0;
+    return (dialogue.HasCameraControl() || menu_paused)?1:0;
 }
 
 bool HasFocus(){
@@ -99,12 +99,12 @@ void CharactersNoticeEachOther() {
     int num_chars = GetNumCharacters();
     for(int i=0; i<num_chars; ++i){
          MovementObject@ char = ReadCharacter(i);
-         char.ReceiveMessage("set_omniscient true");
+         char.ReceiveScriptMessage("set_omniscient true");
          for(int j=i+1; j<num_chars; ++j){
              MovementObject@ char2 = ReadCharacter(j);
              //Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
-             char.ReceiveMessage("notice " + char2.GetID());
-             char2.ReceiveMessage("notice " + char.GetID());
+             char.ReceiveScriptMessage("notice " + char2.GetID());
+             char2.ReceiveScriptMessage("notice " + char.GetID());
          }
      }
 }
@@ -179,12 +179,15 @@ void ReceiveMessage(string msg) {
 }
 
 void DrawGUI() {
+    EnterTelemetryZone("level.as DrawGUI()");
     if(hotspot_image_string.length() != 0){
         HUDImage@ image = hud.AddImage();
         image.SetImageFromPath(hotspot_image_string);
         image.position = vec3(700,200,0);
     }
+    EnterTelemetryZone("dialogue.Display()");
     dialogue.Display();
+    LeaveTelemetryZone();
 
     /************************************/
     if( has_display_text ) {
@@ -237,9 +240,19 @@ void DrawGUI() {
     }
     /**********************************/
 	if(has_gui){
+        EnterTelemetryZone("imGUI.render()");
 		imGUI.render();
 	}
+    LeaveTelemetryZone();
 }
+
+
+void DrawGUI2() {
+    EnterTelemetryZone("dialogue.Display2()");
+    dialogue.Display2();
+    LeaveTelemetryZone();
+}
+
 void Update(int paused) {
 	
 	if(!has_gui && toggle_gui){
@@ -284,7 +297,7 @@ void Update(int paused) {
         {
 			draw_settings = true;
 			ResetController();
-			AddSettingsMenu();
+			BuildUI();
         }
 		else if( message.name == "Retry")
 		{
@@ -323,9 +336,9 @@ void Update(int paused) {
         LeaveTelemetryZone();
     }
 	if(has_gui){
-		UpdateController();
 		UpdateSettings();
 		imGUI.update();
+		UpdateController();
 	}
 }
 
@@ -477,7 +490,7 @@ void AddPauseMenu(){
 	buttons_holder.setSizeX(1200);
 	buttons_holder.setBorderColor(vec4(1,0,0,1));
 
-    IMImage header_background( title_background );
+    IMImage header_background( brushstroke_background );
     if(kAnimateMenu){
     	header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
     }

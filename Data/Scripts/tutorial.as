@@ -113,7 +113,7 @@ string InsertKeysToString( string text )
                     string first_half = text.substr(0,i);
                     string second_half = text.substr(j+1);
                     string input = text.substr(i+1,j-i-1);
-                    string middle = GetStringDescriptionForBinding(input);
+                    string middle = GetStringDescriptionForBinding("key", input);
 
                     text = first_half + middle + second_half;
                     i += middle.length();

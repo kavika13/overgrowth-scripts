@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 
 in vec3 vertex_attrib;
 in vec2 tex_coord_attrib;

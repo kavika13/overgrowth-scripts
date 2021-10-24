@@ -81,6 +81,7 @@ class Dialogue {
     string dialogue_text;
     float dialogue_text_disp_chars;
     float line_start_time;
+    int old_font_size;
 
     vec3 cam_pos;
     vec3 cam_rot;
@@ -112,6 +113,8 @@ class Dialogue {
 
     // Play dialogue with given name
     void StartDialogue(const string &in name){
+        index = 0;
+        sub_index = -1;
         start_time = the_time;
         array<int> @object_ids = GetObjectIDs();
         int num_objects = object_ids.length();
@@ -251,7 +254,7 @@ class Dialogue {
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
             MovementObject@ char = ReadCharacter(i);
-            char.ReceiveMessage("set_dialogue_control false");
+            char.ReceiveScriptMessage("set_dialogue_control false");
         }
     }
 
@@ -264,6 +267,7 @@ class Dialogue {
         ClearEditor();
         skip_dialogue = false;
         is_waiting_time = false;
+        old_font_size = -1;
         index = 0;
         sub_index = -1;
         init_time = the_time;
@@ -507,7 +511,7 @@ class Dialogue {
             for(int i=num_participants; i<old_size; ++i){
                 if(connected_char_ids[i] != -1 && ObjectExists(connected_char_ids[i])){
                     MovementObject@ char = ReadCharacterID(connected_char_ids[i]);
-                    char.ReceiveMessage("set_dialogue_control false");
+                    char.ReceiveScriptMessage("set_dialogue_control false");
                     changed = true;
                 }
             }
@@ -524,12 +528,12 @@ class Dialogue {
             if(connected_char_ids[i] != new_id){
                 if(connected_char_ids[i] != -1 && ObjectExists(connected_char_ids[i])){
                     MovementObject@ char = ReadCharacterID(connected_char_ids[i]);
-                    char.ReceiveMessage("set_dialogue_control false");
+                    char.ReceiveScriptMessage("set_dialogue_control false");
                     changed = true;
                 }
                 if(new_id != -1 && ObjectExists(new_id)){
                     //MovementObject@ char = ReadCharacterID(new_id);
-                    //char.ReceiveMessage("set_dialogue_control true");
+                    //char.ReceiveScriptMessage("set_dialogue_control true");
                     changed = true;
                 }
                 connected_char_ids[i] = new_id;
@@ -1126,7 +1130,20 @@ class Dialogue {
         Object@ connector_obj = ReadObjectFromID(connector_id);
         PlaceholderObject@ placeholder_object = cast<PlaceholderObject@>(connector_obj);
         int connect_id = placeholder_object.GetConnectID();
-        return placeholder_object.GetConnectID();
+       
+        if( connect_id == -1 ) {
+            return -1;
+        }
+
+        if(IsGroupDerived(connect_id)) {
+            connect_id = FindFirstCharacterInGroup(connect_id);
+        }
+
+        if( MovementObjectExists( connect_id ) ) {
+            return connect_id;
+        } else {
+            return -1; 
+        }
     }
 
     void CreateEditorObj(ScriptElement@ se){
@@ -1420,8 +1437,8 @@ class Dialogue {
             if(char_id != -1){
                 if(MovementObjectExists(char_id)) {
                     MovementObject@ mo = ReadCharacterID(char_id);
-                    mo.ReceiveMessage("set_rotation "+rot);
-                    mo.ReceiveMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
+                    mo.ReceiveScriptMessage("set_rotation "+rot);
+                    mo.ReceiveScriptMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
                 } else {
                     Log(error, "No movement object for " + char_id);
                 }
@@ -1446,7 +1463,7 @@ class Dialogue {
                         MovementObject@ mo = ReadCharacterID(char_id);
                         token_iter.FindNextToken(script_element.str);
                         token = token_iter.GetToken(script_element.str);
-                        mo.ReceiveMessage(token);
+                        mo.ReceiveScriptMessage(token);
                     } else {
                         Log(error, "No movement object exists with id: " + char_id);
                     }
@@ -1481,8 +1498,8 @@ class Dialogue {
                                     Print("id_b: "+id_b+"\n");
                                     if( MovementObjectExists(id_a) ) {
                                         MovementObject@ mo_b = ReadCharacterID(id_b);
-                                        mo_a.ReceiveMessage("notice "+id_b);
-                                        mo_b.ReceiveMessage("notice "+id_a);
+                                        mo_a.ReceiveScriptMessage("notice "+id_b);
+                                        mo_b.ReceiveScriptMessage("notice "+id_a);
                                     } else {
                                         Log(error, "Unable to handle " + script_element.str + " object id: " + id_b + " is invalid" );
                                     }
@@ -1683,10 +1700,8 @@ class Dialogue {
         if(MediaMode()){
             return;
         }
-
-        // Draw actual dialogue text
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
-            // Draw text background
+            EnterTelemetryZone("Draw text background");
             HUDImage @blackout_image = hud.AddImage();
             blackout_image.SetImageFromPath("Data/Textures/diffuse_hud.tga");
             blackout_image.position.y = 0;
@@ -1694,43 +1709,7 @@ class Dialogue {
             blackout_image.position.z = -2.0f;
             blackout_image.scale = vec3(GetScreenWidth()/16.0f, GetScreenHeight()/4.0f/16.0f, 1.0f);
             blackout_image.color = vec4(0.0f,0.0f,0.0f,0.7f);
-
-            int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
-
-            // Set up font style and canvas
-            TextCanvasTexture @text = level.GetTextElement(text_id);
-            text.ClearTextCanvas();
-            string font_str = "Data/Fonts/arial.ttf";
-            TextStyle small_style, big_style;
-            small_style.font_face_id = GetFontFaceID(font_str, font_size);
-
-            // Draw speaker name to canvas
-            vec2 pen_pos = vec2(0,font_size);
-            text.SetPenPosition(pen_pos);
-            text.SetPenColor(255,255,255,160);
-            text.SetPenRotation(0.0f);
-            text.AddText(dialogue_name+":", small_style, UINT32MAX);
-        
-            // Draw dialogue text to canvas
-            text.SetPenColor(255,255,255,255);
-            int br_size = font_size;
-            pen_pos.x += 40;
-            pen_pos.y += br_size;
-            text.SetPenPosition(pen_pos);
-
-            //uint len_in_bytes = GetLengthInBytesForNCodepoints(dialogue_text,uint(dialogue_text_disp_chars));
-            //string display_dialogue_text = dialogue_text.substr(0,int(len_in_bytes));
-            
-            text.AddTextMultiline(dialogue_text, small_style, uint(dialogue_text_disp_chars));
-
-            // Draw text canvas to screen
-            text.UploadTextCanvasToTexture();
-            HUDImage @text_image = hud.AddImage();
-            text_image.SetImageFromText(level.GetTextElement(text_id)); 
-            text_image.position.x = text_id_position_x;
-            text_image.position.y = GetScreenHeight()/4.0f-210;
-            text_image.position.z = 4;
-            text_image.color = vec4(1,1,1,1);
+            LeaveTelemetryZone();
         }
 
         // Draw editor text
@@ -1804,6 +1783,29 @@ class Dialogue {
                 ImGui_Columns(1);
             }
             ImGui_End();
+        }
+    }
+
+    void Display2() {
+        if(MediaMode()){
+            return;
+        }
+
+        // Draw actual dialogue text
+        if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
+            EnterTelemetryZone("Draw actual dialogue text");
+            int font_size = int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
+            if(font_size != old_font_size){
+                DisposeTextAtlases();
+                old_font_size = font_size;
+            }
+
+            vec2 pos(100, GetScreenHeight() *0.75 + font_size * 1.2);
+            DrawTextAtlas("Data/Fonts/arial.ttf", font_size, 0, dialogue_name+":", 
+                          int(pos.x), int(pos.y), vec4(vec3(1.0f), 0.65f));
+            DrawTextAtlas("Data/Fonts/arial.ttf", font_size, 0, dialogue_text.substr(0, int(dialogue_text_disp_chars)), 
+                          int(pos.x)+font_size, int(pos.y)+font_size, vec4(vec3(1.0f), 1.0f));
+            LeaveTelemetryZone();
         }
     }
 

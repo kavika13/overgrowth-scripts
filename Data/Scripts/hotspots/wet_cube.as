@@ -33,11 +33,12 @@ void HandleEvent(string event, MovementObject @mo){
 }
 
 void OnEnter(MovementObject @mo) {
-    //mo.ReceiveMessage("extinguish");
+    //mo.ReceiveScriptMessage("extinguish");
     //mo.Execute("TakeBloodDamage(1.0f);Ragdoll(_RGDL_FALL);zone_killed=1;");
 }
 
 void OnExit(MovementObject @mo) {
+    mo.Execute("WaterExit("+hotspot.GetID()+");");
 }
 
 
@@ -45,6 +46,7 @@ void PreDraw(float curr_game_time) {
 }
 
 void Update() {
+    EnterTelemetryZone("wet cube update");
     Object@ obj = ReadObjectFromID(hotspot.GetID());
     /*array<int> nearby_characters;
     GetCharacters(nearby_characters);
@@ -72,7 +74,6 @@ void Update() {
     water_decal_obj.SetRotation(obj.GetRotation());
     water_decal_obj.SetScale(obj.GetScale() * 4.00f);
 
-
     array<int> collides_with;
     level.GetCollidingObjects(hotspot.GetID(), collides_with);
     for(int i=0, len=collides_with.size(); i<len; ++i){
@@ -82,4 +83,5 @@ void Update() {
             mo.Execute("WaterIntersect("+hotspot.GetID()+");");
         }
     }
+    LeaveTelemetryZone();
 }

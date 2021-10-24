@@ -16,10 +16,7 @@ void Initialize() {
 
     // Actually setup the GUI -- must do this before we do anything
     imGUI.setup();
-    
-    // setup our background
-	AddSettingsMenu();
-	
+    BuildUI();
 	setBackGround();
 }
 
@@ -32,8 +29,6 @@ bool CanGoBack() {
 }
 
 void Update() {
-
-	UpdateController();
 	UpdateSettings();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
@@ -47,6 +42,7 @@ void Update() {
     }
 	// Do the general GUI updating
 	imGUI.update();
+	UpdateController();
 }
 
 

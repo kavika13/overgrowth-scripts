@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 uniform samplerCube tex0;
 uniform samplerCube tex1;
 uniform float time;
@@ -62,7 +63,7 @@ float fractal( in vec2 uv){
 }
 #endif
 
-#ifdef TEST_CLOUDS_2
+#if defined(TEST_CLOUDS_2)
 const float cloudscale = 1.1;
 const float speed = 0.03;
 const float clouddark = 0.5;
@@ -73,6 +74,8 @@ const float skytint = 0.5;
 const vec3 skycolour1 = vec3(0.2, 0.4, 0.6);
 const vec3 skycolour2 = vec3(0.4, 0.7, 1.0);
 
+#endif
+#if defined(TEST_CLOUDS_2) || defined(ADD_STARS)
 const mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
 
 vec2 hash( vec2 p ) {
@@ -123,6 +126,16 @@ void main() {
     //vec3 tint = vec3(1.0, 0.0, 0.0);
     //color *= tint;
     out_color = vec4(color,1.0);
+
+    #ifdef ADD_STARS
+    float star = noise(normalize(normal).xz/(normalize(normal).y+2.0) * 200.0+ vec2(time*0.05,0.0));
+    star = max(0.0, star - 0.7);
+    star = star * 100.0;
+    star *= max(0.0, 1.0 - abs(noise(normalize(normal).xz/(normalize(normal).y+2.0) * 20.0 + vec2(time,0.0)))*1.0);
+    if(out_color.b < 0.1){
+        out_color.xyz += vec3(star)*0.004;
+    }
+    #endif
 
     #ifdef TEST_CLOUDS
     vec3 normalized = normalize(normal);

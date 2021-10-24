@@ -156,7 +156,7 @@ void Update(){
         }
         if(curVictim.applyDamage){
 			if(params.GetInt("UseFire") == 1){
-                curVictim.char.ReceiveMessage("ignite");
+                curVictim.char.ReceiveScriptMessage("ignite");
 			}
             //Update some stuff that is not time crucial.
             if(time > interval){

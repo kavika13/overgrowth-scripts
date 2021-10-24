@@ -66,3 +66,22 @@ void Draw() {
                            _delete_on_draw);
     }
 }
+
+
+void PreDraw(float curr_game_time) {
+    EnterTelemetryZone("Start_Dialogue hotspot update");
+    if(!played){
+        array<int> collides_with;
+        level.GetCollidingObjects(hotspot.GetID(), collides_with);
+        for(int i=0, len=collides_with.size(); i<len; ++i){
+            int id = collides_with[i];
+            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                MovementObject@ mo = ReadCharacterID(id);
+                if(mo.controlled){
+                    mo.Execute("dialogue_request_time = time;");
+                }
+            }
+        }        
+    }
+    LeaveTelemetryZone();
+}

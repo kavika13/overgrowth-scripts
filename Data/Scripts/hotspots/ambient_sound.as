@@ -1,4 +1,5 @@
 void Init() {
+    hotspot.SetCollisionEnabled(false);
 }
 
 int sound_handle = -1;
@@ -102,27 +103,27 @@ float GetGain() {
     }
 }
 
-void Update(){
+void PreDraw(float curr_game_time) {
+    EnterTelemetryZone("Ambient Sound Update");
     if(sound_handle != -1){
         SetSoundGain(sound_handle, GetGain());
     }
     if(one_shot){
         if(sound_play_time < the_time){
-        PlaySoundGroup(playing_sound_path, ReadObjectFromID(hotspot.GetID()).GetTranslation());   
-        sound_play_time = the_time + RangedRandomFloat(params.GetFloat("Delay Min"), params.GetFloat("Delay Max"));
+            PlaySoundGroup(playing_sound_path, ReadObjectFromID(hotspot.GetID()).GetTranslation());   
+            sound_play_time = the_time + RangedRandomFloat(params.GetFloat("Delay Min"), params.GetFloat("Delay Max"));
         }
         //Print("playing_sound_path: "+playing_sound_path+"\n");     
     }
+    LeaveTelemetryZone();
 }
 
 
-void Draw(){
-    if(EditorModeActive()){
-        Object@ obj = ReadObjectFromID(hotspot.GetID());
-        DebugDrawBillboard("Data/Textures/ui/speaker.png",
-                           obj.GetTranslation(),
-                           obj.GetScale()[1]*2.0,
-                           vec4(vec3(0.5), 1.0),
-                           _delete_on_draw);
-    }
+void DrawEditor(){
+    Object@ obj = ReadObjectFromID(hotspot.GetID());
+    DebugDrawBillboard("Data/Textures/ui/speaker.png",
+                       obj.GetTranslation(),
+                       obj.GetScale()[1]*2.0,
+                       vec4(vec3(0.5), 1.0),
+                       _delete_on_draw);
 }

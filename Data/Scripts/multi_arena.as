@@ -458,8 +458,8 @@ void CharactersNoticeEachOther() {
          for(int j=i+1; j<num_chars; ++j) {
              MovementObject@ char2 = ReadCharacter(j);
              Print("Telling characters " + char.GetID() + " and " + char2.GetID() + " to notice each other.\n");
-             char.ReceiveMessage("notice " + char2.GetID());
-             char2.ReceiveMessage("notice " + char.GetID());
+             char.ReceiveScriptMessage("notice " + char2.GetID());
+             char2.ReceiveScriptMessage("notice " + char.GetID());
          }
      }
 }
@@ -694,7 +694,7 @@ void ReceiveMessage(string msg) {
         for(int i=0; i<num_chars; ++i) {
             MovementObject@ char = ReadCharacter(i);
             if(char.GetIntVar("zone_killed") == 0){
-                char.ReceiveMessage("restore_health");
+                char.ReceiveScriptMessage("restore_health");
             }
         }
     } else if(token == "new_match") {
@@ -1115,13 +1115,13 @@ void SetAllHostile(bool val) {
         msh.StartFight();
         for(int i=0; i<num_chars; ++i) {
              MovementObject@ char = ReadCharacter(i);
-             char.ReceiveMessage("set_combat_allowed true");
+             char.ReceiveScriptMessage("set_combat_allowed true");
          }
          CharactersNoticeEachOther();
     } else {
         for(int i=0; i<num_chars; ++i) {
             MovementObject@ char = ReadCharacter(i);
-            char.ReceiveMessage("set_combat_allowed false");   
+            char.ReceiveScriptMessage("set_combat_allowed false");   
         }
     }
 }
@@ -1130,7 +1130,7 @@ void SendMessageToAllCharacters(const string &in msg) {
     int num_chars = GetNumCharacters();
     for(int i=0; i<num_chars; ++i) {
         MovementObject@ char = ReadCharacter(i);
-        char.ReceiveMessage(msg);   
+        char.ReceiveScriptMessage(msg);   
     }
 }
 

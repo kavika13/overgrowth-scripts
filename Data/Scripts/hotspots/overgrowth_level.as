@@ -11,17 +11,42 @@ int win_target = 0;
 bool sent_level_complete_message = false;
 int curr_music_layer = 0;
 
+string music_prefix;
+
 void SetParameters() {
-    params.AddString("music", "lugaru_ambient_grass");
+    params.AddString("music", "slaver");
     params.AddString("player_spawn", "");
+    if(params.GetString("music") == "slaver"){
+        AddMusic("Data/Music/slaver_loop/layers.xml");
+        PlaySong("slavers1");
+        music_prefix = "slavers_";
+    } else if(params.GetString("music") == "swamp"){
+        AddMusic("Data/Music/swamp_loop/swamp_layer.xml");
+        PlaySong("swamp1");
+        music_prefix = "swamp_";
+    } else if(params.GetString("music") == "cats"){
+        AddMusic("Data/Music/cats_loop/layers.xml");
+        PlaySong("cats1");
+        music_prefix = "crete_";
+    } else if(params.GetString("music") == "crete"){
+        AddMusic("Data/Music/crete_loop/layers.xml");
+        PlaySong("crete1");
+        music_prefix = "crete_";
+    } else if(params.GetString("music") == "rescue"){
+        AddMusic("Data/Music/rescue_loop/layers.xml");
+        PlaySong("rescue1");
+        music_prefix = "rescue_";
+    } else {
+        params.SetString("music", "slaver");
+        SetParameters();
+    }
 }
 
 void Init() {
     save_file.WriteInPlace();
-    AddMusic("Data/Music/swamp_loop/swamp_layer.xml");
-    PlaySong("swamp1");
     curr_music_layer = 0;
     level.ReceiveLevelEvents(hotspot.GetID());
+    hotspot.SetCollisionEnabled(false);
 }
 
 void Dispose() {
@@ -31,10 +56,18 @@ void Dispose() {
 void TriggerGoalString(const string &in goal_str){
     TokenIterator token_iter;
     token_iter.Init();
-    if(token_iter.FindNextToken(goal_str)){
+    while(token_iter.FindNextToken(goal_str)){
         if(token_iter.GetToken(goal_str) == "dialogue" && !EditorModeActive()){
             if(token_iter.FindNextToken(goal_str)){
                 level.SendMessage("start_dialogue \""+token_iter.GetToken(goal_str)+"\"");
+            }
+        }
+        if(token_iter.GetToken(goal_str) == "activate" && !EditorModeActive()){
+            if(token_iter.FindNextToken(goal_str)){
+                int id = atoi(token_iter.GetToken(goal_str));
+                if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                    ReadCharacterID(id).Execute("static_char = false;");
+                }
             }
         }
     }    
@@ -53,6 +86,7 @@ void TriggerGoalPost() {
 }
 
 void IncrementProgress() {
+    EnterTelemetryZone("IncrementProgress()");
     TriggerGoalPost();
     ++progress;
     win_time = -1.0;
@@ -79,9 +113,12 @@ void IncrementProgress() {
     // Place player character at correct spawn point
     int player_id = GetPlayerCharacterID();
     if(player_id != -1){
+        EnterTelemetryZone("Restore player health");
         MovementObject@ mo = ReadCharacter(player_id);
-        mo.ReceiveMessage("restore_health");
+        mo.ReceiveScriptMessage("restore_health");
+        LeaveTelemetryZone();
     }
+    LeaveTelemetryZone();
 }
 
 void SetEnabledCharacterAndItems(int id, bool enabled){
@@ -96,6 +133,7 @@ void SetEnabledCharacterAndItems(int id, bool enabled){
 }
 
 void CheckReset() {
+    EnterTelemetryZone("CheckReset()");
     // Count valid player spawn points, and set their preview viz
     TokenIterator token_iter;
     int num_player_spawn = 0;
@@ -186,7 +224,7 @@ void CheckReset() {
                 if(obj.GetType() == _placeholder_object){
                     mo.position = obj.GetTranslation();
                     mo.SetRotationFromFacing(obj.GetRotation() * vec3(0,0,1));
-                    mo.Execute("SetCameraFromFacing();");
+                    mo.Execute("SetCameraFromFacing(); SetOnGround(true);");
                 }
             }
         }
@@ -194,6 +232,7 @@ void CheckReset() {
 
     // Trigger whatever happens at the start of this goal
     TriggerGoalPre();
+    LeaveTelemetryZone();
 }
 
 void PossibleWinEvent(const string &in event, int val, int goal_check){
@@ -239,6 +278,13 @@ void PossibleWinEvent(const string &in event, int val, int goal_check){
                     }
                     if(success){
                         win_time = the_time + 3.0;
+                        int player_id = GetPlayerCharacterID();
+                        if(player_id != -1){
+                            EnterTelemetryZone("Restore player health");
+                            MovementObject@ mo = ReadCharacter(player_id);
+                            mo.ReceiveScriptMessage("restore_health");
+                            LeaveTelemetryZone();
+                        }
                         win_target = goal_check+1;
                     }
                 }
@@ -278,15 +324,30 @@ void ReceiveMessage(string msg) {
 }
 
 void SetMusicLayer(int layer){
-    DebugText("music_layer", "music_layer: "+layer, 0.5);
+    //DebugText("music_layer", "music_layer: "+layer, 0.5);
     if(layer != curr_music_layer){
-        SetLayerGain("swamp_layer_"+curr_music_layer, 0.0);
-        SetLayerGain("swamp_layer_"+layer, 1.0);
+        SetLayerGain(music_prefix+"layer_"+curr_music_layer, 0.0);
+        SetLayerGain(music_prefix+"layer_"+layer, 1.0);
         curr_music_layer = layer;
     }
 }
 
 void Update() {
+    EnterTelemetryZone("Overgrowth Level Update");
+
+    if(GetInputPressed(0, "k")){
+        ++progress;
+        if(!params.HasParam("goal_"+progress)){
+            progress = 0;
+        }
+    }
+    LeaveTelemetryZone();
+}
+
+void PreDraw(float curr_game_time) {
+    EnterTelemetryZone("Overgrowth Level PreDraw");
+    camera.SetTint(camera.GetTint() * (1.0 - blackout_amount));
+    
     if(queued_goal_check){
         CheckReset();
         queued_goal_check = false;
@@ -303,24 +364,24 @@ void Update() {
         SetMusicLayer(1);
     }
 
-	blackout_amount = 0.0;
-	if(player_id != -1 && ObjectExists(player_id)){
-		MovementObject@ char = ReadCharacter(player_id);
-		if(char.GetIntVar("knocked_out") != _awake){
-			if(ko_time == -1.0f){
-				ko_time = the_time;
-			}
-			if(ko_time < the_time - 1.0){
-				if(GetInputPressed(0, "attack") || ko_time < the_time - 5.0){
-	            	level.SendMessage("reset"); 				
+    blackout_amount = 0.0;
+    if(player_id != -1 && ObjectExists(player_id)){
+        MovementObject@ char = ReadCharacter(player_id);
+        if(char.GetIntVar("knocked_out") != _awake){
+            if(ko_time == -1.0f){
+                ko_time = the_time;
+            }
+            if(ko_time < the_time - 1.0){
+                if(GetInputPressed(0, "attack") || ko_time < the_time - 5.0){
+                    level.SendMessage("reset");                 
                     level.SendMessage("skip_dialogue");                 
-				}
-			}
+                }
+            }
             blackout_amount = 0.2 + 0.6 * (1.0 - pow(0.5, (the_time - ko_time)));
-		} else {
-			ko_time = -1.0f;
-		}
-	} else {
+        } else {
+            ko_time = -1.0f;
+        }
+    } else {
         ko_time = -1.0f;
     }
 
@@ -347,34 +408,14 @@ void Update() {
             }
         }
     }
-
-    if(GetInputPressed(0, "k")){
-        ++progress;
-        if(!params.HasParam("goal_"+progress)){
-            progress = 0;
-        }
-    }
-    /*
-    if(GetInputPressed(0, "i")){
-        ++curr_music_layer;
-        if(curr_music_layer >= int(music_layer.size())){
-            curr_music_layer = 0;
-        }
-    }*/
-    DebugText("Progress", "Progress: "+progress, 2.0f);
+    LeaveTelemetryZone();
 }
 
-void PreDraw(float curr_game_time) {
-    camera.SetTint(camera.GetTint() * (1.0 - blackout_amount));
-}
-
-void Draw(){
-    if(EditorModeActive()){
-        Object@ obj = ReadObjectFromID(hotspot.GetID());
-        DebugDrawBillboard("Data/Textures/ui/ogicon.png",
-                           obj.GetTranslation(),
-                           obj.GetScale()[1]*2.0,
-                           vec4(vec3(0.5), 1.0),
-                           _delete_on_draw);
-    }
+void DrawEditor(){
+    Object@ obj = ReadObjectFromID(hotspot.GetID());
+    DebugDrawBillboard("Data/Textures/ui/ogicon.png",
+                       obj.GetTranslation(),
+                       obj.GetScale()[1]*2.0,
+                       vec4(vec3(0.5), 1.0),
+                       _delete_on_draw);
 }

@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform vec3 light_pos;
 uniform sampler2D tex0; // diffuse color

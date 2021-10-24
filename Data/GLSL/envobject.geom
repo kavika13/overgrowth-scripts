@@ -1,130 +1,50 @@
 #version 400
-#extension GL_ARB_viewport_array : enable
-
-
-#ifndef SHADOW_CASCADE
-#error Geometry shader only when shadow cascade
-#endif  // SHADOW_CASCADE
-
-#define NUM_SHADOW_CASCADES 4
-
-
-// FIXME: this is nasty
-#ifdef PARTICLE
-
-#elif defined(DETAIL_OBJECT)
-
-#define FRAG_TEX_COORDS 2
-
-#elif defined(ITEM)
-
-#define FRAG_TEX_COORDS 2
-
-#elif defined(TERRAIN)
-
-#define FRAG_TEX_COORDS 4
-
-#elif defined(CHARACTER)
-
-#else
-
-#define FRAG_TEX_COORDS 2
-
-#endif
-
-
-layout(invocations = NUM_SHADOW_CASCADES) in;
-
 
 layout(triangles) in;
 layout(triangle_strip) out;
-layout(max_vertices = 12) out;
+layout(max_vertices = 256) out;
 
+uniform float time;
+uniform mat4 projection_view_mat;
 
-layout (std140) uniform ShadowCascades {
-    mat4 proj_view_matrices[NUM_SHADOW_CASCADES];
-    vec4 frustum_planes[NUM_SHADOW_CASCADES * 6];
-    uvec4 viewports[NUM_SHADOW_CASCADES];
-};
+in vec2 frag_tex_coords[];
+in mat3 tan_to_obj[];
+out vec2 frag_tex_coords_fs;
+out mat3 tan_to_obj_fs;
 
+#define USE_GEOM_SHADER
 
-#if (FRAG_TEX_COORDS == 2)
-
-in vec2 geom_tex_coords[];
-
-#elif (FRAG_TEX_COORDS == 4)  // FRAG_TEX_COORDS
-
-in vec4 geom_tex_coords[];
-
-#else  // FRAG_TEX_COORDS
-
-#endif  // FRAG_TEX_COORDS
-
-#ifdef CHARACTER
-in vec2 geom_fur_tex_coord[];
-#endif  // CHARACTER
-
-in vec3 geom_world_vert[];
-
-
-#if (FRAG_TEX_COORDS == 2)
-
-out vec2 frag_tex_coords;
-
-#elif (FRAG_TEX_COORDS == 4)  // FRAG_TEX_COORDS
-
-out vec4 frag_tex_coords;
-
-#else  // FRAG_TEX_COORDS
-
-#endif  // FRAG_TEX_COORDS
-
-#ifdef CHARACTER
-out vec2 fur_tex_coord;
-#endif  // CHARACTER
-
-out vec3 world_vert;
-
+void AddVert(vec3 bary, float height){
+     gl_Position = projection_view_mat * (inverse(projection_view_mat)*(gl_PositionIn[0] * bary[0] + gl_PositionIn[1] * bary[1] + gl_PositionIn[2] * bary[2]) + vec4(tan_to_obj[0]*vec3(0,0,height),0));
+     frag_tex_coords_fs = frag_tex_coords[0] * bary[0] + frag_tex_coords[1] * bary[1] + frag_tex_coords[2] * bary[2];
+     tan_to_obj_fs = tan_to_obj[0] * bary[0] + tan_to_obj[1] * bary[1] + tan_to_obj[2] * bary[2];
+     EmitVertex();
+ }
 
 void main()
 {
-    mat4 proj_view_matrix = proj_view_matrices[gl_InvocationID];
-    vec4 v0 = proj_view_matrix * vec4(geom_world_vert[0], 1.0);
-    vec4 v1 = proj_view_matrix * vec4(geom_world_vert[1], 1.0);
-    vec4 v2 = proj_view_matrix * vec4(geom_world_vert[2], 1.0);
+   for(int i = 0; i < gl_VerticesIn; i++)
+   {
+     gl_Position = gl_PositionIn[i];
+     frag_tex_coords_fs = frag_tex_coords[i];
+     tan_to_obj_fs = tan_to_obj[i];
+     EmitVertex();
+   }
+   EndPrimitive();
 
-    vec3 v0p = v0.xyz / v0.w;
-    vec3 v1p = v1.xyz / v1.w;
-    vec3 v2p = v2.xyz / v2.w;
-
-    // cull back-facing triangles
-    vec3 c = cross(v1p - v0p, v2p - v0p);
-    if (c.z > 0.0f) {
-        for (int j = 0; j < 6; j++) {
-            // if all three points of the triangle are behind this plane, we can cull it
-            // if any are in front we would have to clip and so can't cull
-            vec4 plane = frustum_planes[gl_InvocationID * 6 + j];
-            bvec3 behind = bvec3(dot(plane, vec4(geom_world_vert[0], 1.0)) < 0.0
-                               , dot(plane, vec4(geom_world_vert[1], 1.0)) < 0.0
-                               , dot(plane, vec4(geom_world_vert[2], 1.0)) < 0.0);
-
-            if (all(behind)) {
-                return;
-            }
-        }
-
-    for (int j = 0; j < 3; j++) {
-        gl_ViewportIndex = gl_InvocationID;
-        gl_Position     = proj_view_matrix * vec4(geom_world_vert[j], 1.0);
-#ifdef FRAG_TEX_COORDS
-        frag_tex_coords = geom_tex_coords[j];
-#endif  // FRAG_TEX_COORDS
-        world_vert      = geom_world_vert[j];
-#ifdef CHARACTER
-        fur_tex_coord   = geom_fur_tex_coord[j];
-#endif  // CHARACTER
-        EmitVertex();
+   for(int i=0; i<8; ++i){
+    for(int j=0; j<8; ++j){
+        float x = (i)/8.0;
+        float y = (j)/8.0;
+        vec3 pos;
+        pos = mix(vec3(0,0,1), vec3(1,0,0), x);
+        pos = mix(pos, vec3(0,1,0), y);
+        pos[2] = 1.0 - pos[0] - pos[1];
+        AddVert(pos, 0.0);
+        AddVert(pos+vec3(0.05,0.0,-0.05), 1.0);
+        AddVert(pos+vec3(0.1,0.0,-0.1), 0.0);
+        EndPrimitive();
     }
-    EndPrimitive();
-    }
+   }
+
 }

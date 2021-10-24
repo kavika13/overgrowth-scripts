@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 #include "lighting150.glsl"
 
 #if defined(DRY) || defined(EXPAND) || defined(IGNITE) || defined(EXTINGUISH)

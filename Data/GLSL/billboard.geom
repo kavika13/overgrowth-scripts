@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 
 layout(points) in;
 layout(triangle_strip, max_vertices=4) out;

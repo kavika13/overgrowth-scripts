@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform sampler2D tex0;
 uniform sampler2D tex1;
@@ -11,8 +12,20 @@ in vec2 tex;
 out vec4 color;
 
 // From http://rastergrid.com/blog/2010/09/efficient-gaussian-blur-with-linear-sampling/
-uniform float offset[3] = float[]( 0.0, 1.3846153846, 3.2307692308 );
-uniform float weight[3] = float[]( 0.2270270270, 0.3162162162, 0.0702702703 );
+//uniform float offset[3] = float[]( 0.0, 1.3846153846, 3.2307692308 );
+//uniform float weight[3] = float[]( 0.2270270270, 0.3162162162, 0.0702702703 );
+
+//http://dev.theomader.com/gaussian-kernel-calculator/
+// sigma 1.8
+
+// 0 1 2 3 4 5 6 7 8
+// 0.218818    0.188264    0.119895    0.056512    0.019711    0.005086    0.000971    0.000137    0.000014
+
+// 0 1.39 3.26 5.16 7.09
+// 0.218818 0.308159 0.076223 0.006057 0.000151
+
+uniform float offset[5] = float[]( 0, 1.39, 3.26, 5.16, 7.09 );
+uniform float weight[5] = float[]( 0.218818, 0.308159, 0.076223, 0.006057, 0.000151);
 
 uniform int screen_height;
 uniform int screen_width;
@@ -20,6 +33,7 @@ uniform float black_point;
 uniform float white_point;
 uniform float bloom_mult;
 uniform float time_offset;
+uniform int horz;
 
 uniform mat4 proj_mat;
 uniform mat4 view_mat;
@@ -112,7 +126,7 @@ void main(void)
     vec4 FragmentColor;
     float pixel_height = 1.0 / float(screen_height);
     FragmentColor = textureLod( tex0, tex, src_lod ) * weight[0];
-    for (int i=1; i<3; i++) {
+    for (int i=1; i<5; i++) {
         FragmentColor +=
             textureLod( tex0, tex+vec2(0.0, offset[i]*pixel_height), src_lod )
                 * weight[i];
@@ -125,7 +139,7 @@ void main(void)
     vec4 FragmentColor;
     float pixel_width = 1.0 / float(screen_width);
     FragmentColor = textureLod( tex0, tex, src_lod ) * weight[0];
-    for (int i=1; i<3; i++) {
+    for (int i=1; i<5; i++) {
         FragmentColor +=
             textureLod( tex0, tex+vec2(offset[i]*pixel_width, 0.0), src_lod )
                 * weight[i];
@@ -134,6 +148,34 @@ void main(void)
                 * weight[i];
     }
     color = FragmentColor;
+#elif defined(BLUR_DIR)
+    if(horz == 1){
+        vec4 FragmentColor;
+        float pixel_width = 1.0 / float(screen_width);
+        FragmentColor = textureLod( tex0, tex, src_lod ) * weight[0];
+        for (int i=1; i<5; i++) {
+            FragmentColor +=
+                textureLod( tex0, tex+vec2(offset[i]*pixel_width, 0.0), src_lod )
+                    * weight[i];
+            FragmentColor +=
+                textureLod( tex0, tex-vec2(offset[i]*pixel_width, 0.0), src_lod )
+                    * weight[i];
+        }
+        color = FragmentColor;
+    } else {
+        vec4 FragmentColor;
+        float pixel_height = 1.0 / float(screen_height);
+        FragmentColor = textureLod( tex0, tex, src_lod ) * weight[0];
+        for (int i=1; i<5; i++) {
+            FragmentColor +=
+                textureLod( tex0, tex+vec2(0.0, offset[i]*pixel_height), src_lod )
+                    * weight[i];
+            FragmentColor +=
+                textureLod( tex0, tex-vec2(0.0, offset[i]*pixel_height), src_lod )
+                    * weight[i];
+        }
+        color = FragmentColor;        
+    }
 #elif defined(DOF)
     color = vec4(0.0);
     const int num_samples = 10;
@@ -180,16 +222,17 @@ void main(void)
         }
         color /= total;
     }
-#elif defined(OVERBRIGHT)
-    color = max(vec4(0.0), textureLod( tex0, tex, 0.0 ) - vec4(1.0)) * bloom_mult;
 #elif defined(DOWNSAMPLE)
     float pixel_width = 1.0 / float(screen_width);
     float pixel_height = 1.0 / float(screen_height);
     color = textureLod( tex0, tex + vec2( pixel_width,  pixel_height), src_lod) +
-                   textureLod( tex0, tex + vec2( pixel_width, -pixel_height), src_lod) +
-                   textureLod( tex0, tex + vec2(-pixel_width,  pixel_height), src_lod) +
-                   textureLod( tex0, tex + vec2(-pixel_width, -pixel_height), src_lod);
+           textureLod( tex0, tex + vec2( pixel_width, -pixel_height), src_lod) +
+           textureLod( tex0, tex + vec2(-pixel_width,  pixel_height), src_lod) +
+           textureLod( tex0, tex + vec2(-pixel_width, -pixel_height), src_lod);
    color *= 0.25;
+    #if defined(OVERBRIGHT)
+        color = max(vec4(0.0), color - vec4(1.0)) * bloom_mult;
+    #endif
 #elif defined(DOWNSAMPLE_DEPTH)
     vec2 temp = gl_FragCoord.xy*2.0+vec2(0.5,0.5);
     vec2 dim = vec2(screen_width, screen_height)*2;
@@ -226,7 +269,7 @@ void main(void)
 
     color.a = src_color.a;   
 #elif defined(ADD)
-    vec4 bloom = mix(textureLod(tex2, tex, 2.0) , textureLod(tex2, tex, 4.0), 0.5);
+    vec4 bloom = mix(textureLod(tex3, tex, 2.0) , textureLod(tex3, tex, 4.0), 0.5);
     color = textureLod(tex2, tex, 0.0) + bloom;
     vec3 overbright = max(vec3(0.0), color.xyz - vec3(1.0));
     float avg = (overbright[0] + overbright[1] + overbright[2]) / 3.0;
@@ -255,40 +298,118 @@ void main(void)
     float depth = DistFromDepth(texture( tex1, tex).r);
     vec4 noise = textureLod( tex3, gl_FragCoord.xy / 256.0, 0.0 );
     float dist;
-    vec3 dominant_dir = textureLod( tex2, tex, 4.0).rgb * motion_blur_mult;
-    color = vec4(0.0);
-    float total = 0.0 ;
-    const int num_samples = 5;
-    float max_blur_dist = min(0.01, length(dominant_dir)) * 5.0 / float(num_samples);
-    dominant_dir = normalize(dominant_dir);
+    vec2 dominant_dir = normalize(textureLod( tex2, tex, 4.0).xy);
     if(isnan(dominant_dir[0])){
-        dominant_dir = vec3(0.0);
+        dominant_dir = vec2(0.0);
     }
-    for(int i=0; i<num_samples; ++i){
+    color = vec4(0.0);
+    vec4 base_color = textureLod( tex0, tex, 0.0);
+    float total = 0.0001;
+    color = base_color * 0.0001;
+    const int num_samples = 3;
+    float max_blur_dist = 0.01 / float(num_samples) * motion_blur_mult;
+    float temp_mult = motion_blur_mult * 1.0;
+    float base_speed = dot(textureLod( tex2, tex, 0.0).rg, dominant_dir) * temp_mult;
+    for(int i=-num_samples; i<num_samples; ++i){
         float offset_amount;
-        if( i == num_samples/2){
-            offset_amount = min(0.01, abs(dot(vel, dominant_dir))) * 5.0 / float(num_samples) * float(i-(num_samples / 2.0)+noise.r);
-        } else {
-            offset_amount = max_blur_dist * float(i-(num_samples / 2.0)+noise.r);
-        }
-        vec2 offset = dominant_dir.xy * offset_amount;
+        offset_amount = max_blur_dist * float(i+noise.r);
+        vec2 offset = dominant_dir * offset_amount;
+        offset.y *= screen_width/screen_height;
         vec2 coord = tex + offset;
         float weight = 1.0;
         if(coord[0] >= 0.0 && coord[0] <= 1.0 && coord[1] >= 0.0 && coord[1] <= 1.0){
-        } else {
-            weight *= 0.0001;   
-        }
-        vec3 sample_vel = textureLod( tex2, coord, 0.0).rgb * motion_blur_mult;
-        if(abs(offset_amount) < length(sample_vel) || i == num_samples/2){
-            float sample_depth = DistFromDepth(textureLod( tex1, coord, 0.0).r);
-            if(sample_depth < depth + 0.1 || i == num_samples/2){
+            float sample_speed = dot(textureLod( tex2, coord, 0.0).rg, dominant_dir) * temp_mult;
+            /*float sample_depth = DistFromDepth(textureLod( tex1, coord, 0.0).r);
+            if(sample_depth < depth + 0.1){
+                if(abs(offset_amount) < length(sample_vel)){
+                    color += textureLod( tex0, coord, 0.0) * weight;
+                } else {
+                    color += base_color * weight;
+                }
+                total += weight;
+            }*/
+            if(false){
+
+                float sample_depth = DistFromDepth(textureLod( tex1, coord, 0.0).r);
+                if(sample_depth < depth - 0.05){
+                    if(abs(sample_speed) > abs(offset_amount)){
+                        color += textureLod( tex0, coord, 0.0) * weight;
+                        total += weight;
+                    }  else {
+                        color += base_color * weight;
+                        total += weight;
+                    }
+                } else {
+                    if(abs(base_speed) > abs(offset_amount)){
+                        color += textureLod( tex0, coord, 0.0) * weight;
+                        total += weight;
+                    }/* else {
+                        color += base_color * weight;
+                        total += weight;
+                    }*/
+                }
+            }
+
+            if(abs(sample_speed) > abs(offset_amount) || abs(base_speed) > abs(offset_amount)){
                 color += textureLod( tex0, coord, 0.0) * weight;
+                total += weight;
+            } else {
+                color += base_color * weight;
                 total += weight;
             }
         }
     }
     color /= float(total);
-    //color.xyz = abs(textureLod( tex2, tex, 4.0).rgb) * 10.0;
+
+    // Close stationary, background moving
+    /*color = vec4(0);
+    total = 0.0;
+    for(int i=-num_samples; i<num_samples; ++i){
+        float offset_amount;
+        vec2 coord = tex + vec2(i / float(screen_width), 0.0);
+        float weight = 1.0;
+        if(coord[0] >= 0.0 && coord[0] <= 1.0 && coord[1] >= 0.0 && coord[1] <= 1.0){
+        } else {
+            weight *= 0.0001;   
+        }
+        float sample_depth = DistFromDepth(textureLod( tex1, coord, 0.0).r);
+        if(depth > 1.0){
+            if(sample_depth > 1.0){
+                color += textureLod( tex0, coord, 0.0) * weight;
+                total += weight;
+            }
+        } else {
+            color += base_color;
+            total += weight;
+        }
+    }
+    color /= float(total);
+
+    // Close moving, background stationary
+    color = vec4(0);
+    total = 0.0;
+    float temp = max(0.01, abs(textureLod( tex2, tex, 0.0).r) * 10000.0);
+    for(int i=-num_samples; i<num_samples; ++i){
+        float offset_amount;
+        vec2 coord = tex + vec2(i / float(screen_width), 0.0);
+        float weight = 1.0;
+        if(coord[0] >= 0.0 && coord[0] <= 1.0 && coord[1] >= 0.0 && coord[1] <= 1.0){
+        } else {
+            weight *= 0.0001;   
+        }
+        float sample_depth = DistFromDepth(textureLod( tex1, coord, 0.0).r);
+        if(abs(i) < temp){
+            if(depth < 1.0 || sample_depth < 1.0){
+                color += textureLod( tex0, coord, 0.0) * weight;
+                total += weight;
+            } else {
+                color += base_color * weight;
+                total += weight;
+            }
+        }
+    }
+    color /= float(total);*/
+    //color.xyz = abs(textureLod( tex2, tex, 0.0).rgb) * 10.0;
 #else
 #ifdef VOLCANO
     float depth = DistFromDepth(textureLod( tex1, tex, 0.0).r);

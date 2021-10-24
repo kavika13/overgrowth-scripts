@@ -3,6 +3,7 @@
 #ifdef ARB_sample_shading_available
 #extension GL_ARB_sample_shading: enable
 #endif
+#extension GL_ARB_shading_language_420pack : enable
 
 #include "object_shared150.glsl"
 #include "object_frag150.glsl"

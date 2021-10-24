@@ -29,7 +29,8 @@ void ReceiveMessage(string msg) {
         if(!EditorModeActive()){
             string path = params.GetString("next_level");
             if(path != ""){
-                FinishedLugaruCampaignLevel(GetCurrLevel());
+                Log( info, "Setting " + GetCurrLevel() + " as finished level " );
+                FinishedLugaruCampaignLevel(GetLevelName(GetCurrLevel()));
                 level.SendMessage("loadlevel \""+path+"\"");		
             } else {
                 level.SendMessage("go_to_main_menu");		
@@ -94,13 +95,11 @@ void PreDraw(float curr_game_time) {
     camera.SetTint(camera.GetTint() * (1.0 - blackout_amount));
 }
 
-void Draw(){
-    if(EditorModeActive()){
-        Object@ obj = ReadObjectFromID(hotspot.GetID());
-        DebugDrawBillboard("Data/Textures/ui/lugaru_icns_256x256.png",
-                           obj.GetTranslation(),
-                           obj.GetScale()[1]*2.0,
-                           vec4(vec3(0.5), 1.0),
-                           _delete_on_draw);
-    }
+void DrawEditor(){
+    Object@ obj = ReadObjectFromID(hotspot.GetID());
+    DebugDrawBillboard("Data/Textures/ui/lugaru_icns_256x256.png",
+                       obj.GetTranslation(),
+                       obj.GetScale()[1]*2.0,
+                       vec4(vec3(0.5), 1.0),
+                       _delete_on_draw);
 }

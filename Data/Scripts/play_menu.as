@@ -4,11 +4,12 @@
 MusicLoad ml("Data/Music/menu.xml");
 
 const int item_per_screen = 4;
+const int rows_per_screen = 3;
 
 IMGUI imGUI;
 array<LevelInfo@> play_menu = {	LevelInfo("tutorial.xml",		"Tutorial",			"Textures/ui/menus/main/tutorial.jpg"),
 								LevelInfo("campaign_menu.as",	"Main Campaign",	"Textures/ui/menus/main/main_campaign.jpg", true),
-								LevelInfo("lugaru_menu.as",		"Lugaru Campaign",	"Textures/lugarumenu/Village_2.jpg")};
+								LevelInfo("lugaru_menu.as",		"Lugaru Campaign",	"Textures/lugarumenu/smallest_Village_2.jpg")};
 
 bool HasFocus() {
     return false;
@@ -26,13 +27,13 @@ void Initialize() {
 	imGUI.setFooterPanels(200.0f, 1400.0f);
     // Actually setup the GUI -- must do this before we do anything
     imGUI.setup();
+    SetPlayMenuList();
+    BuildUI();
+	setBackGround();
+	AddVerticalBar();
+}
 
-    IMDivider mainDiv( "mainDiv", DOHorizontal );
-	IMDivider header_divider( "header_div", DOHorizontal );
-	header_divider.setAlignment(CACenter, CACenter);
-	AddTitleHeader("Select Campaign", header_divider);
-	imGUI.getHeader().setElement(header_divider);
-	
+void SetPlayMenuList(){
     array<ModID>@ active_sids = GetActiveModSids();
     for( uint i = 0; i < active_sids.length(); i++ ) {
         array<MenuItem>@ menu_items = ModGetMenuItems(active_sids[i]); 
@@ -42,7 +43,6 @@ void Initialize() {
                 if( thumbnail_path == "" ) {
                     thumbnail_path = "../" + ModGetThumbnail(active_sids[i]);
                 }
-                Log(info, thumbnail_path + "\n");
 				play_menu.insertLast(LevelInfo(menu_items[k].GetPath(), menu_items[k].GetTitle(), thumbnail_path));
             }
         }
@@ -52,17 +52,23 @@ void Initialize() {
             if( camp_thumbnail_path == "" ) {
                 camp_thumbnail_path = "../" + ModGetThumbnail(active_sids[i]);
             }
-            Log(info, camp_thumbnail_path + "\n");
 			play_menu.insertLast(LevelInfo("general_campaign_menu.as", camp.GetTitle(), camp_thumbnail_path, ModGetID(active_sids[i])));
         }
     }
+    AddCustomLevelsMenuItem();
+}
+
+void BuildUI(){
+    IMDivider mainDiv( "mainDiv", DOHorizontal );
+	IMDivider header_divider( "header_div", DOHorizontal );
+	header_divider.setAlignment(CACenter, CACenter);
+	AddTitleHeader("Select Campaign", header_divider);
+	imGUI.getHeader().setElement(header_divider);
 
     int initial_offset = 0;
-
     if( StorageHasInt32("play_menu-shift_offset") ) {
         initial_offset = StorageGetInt32("play_menu-shift_offset");
     }
-
     while( initial_offset >= int(play_menu.length()) ) {
         initial_offset -= item_per_screen;
         if( initial_offset < 0 ) {
@@ -70,16 +76,10 @@ void Initialize() {
             break;
         }
     }
-	AddCustomLevelsMenuItem();
-	CreateMenu(mainDiv, play_menu, "play_menu", initial_offset, item_per_screen, 3, false, false);
-	
+	CreateMenu(mainDiv, play_menu, "play_menu", initial_offset, item_per_screen, rows_per_screen, false, false);
     // Add it to the main panel of the GUI
     imGUI.getMain().setElement( @mainDiv );
-
 	AddBackButton();
-	
-	setBackGround();
-	AddVerticalBar();
 }
 
 void AddCustomLevelsButton(){
@@ -107,7 +107,6 @@ bool CanGoBack() {
 }
 
 void Update() {
-	UpdateController();
 	UpdateKeyboardMouse();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
@@ -159,14 +158,25 @@ void Update() {
             this_ui.SendCallback( "back" );
         }
 		else if( message.name == "shift_menu" ){
-			StorageSetInt32("play_menu-shift_offset",ShiftMenu(message.getInt(0)));
-			ClearControllerItems();
-			ShiftMenu(message.getInt(0));
-			AddBackButton();
+            StorageSetInt32("play_menu-shift_offset", ShiftMenu(message.getInt(0)));
+            SetControllerItemBeforeShift();
+            BuildUI();
+            SetControllerItemAfterShift(message.getInt(0));
+		}
+        else if( message.name == "refresh_menu_by_name" ){
+			string current_controller_item_name = GetCurrentControllerItemName();
+			BuildUI();
+			SetCurrentControllerItem(current_controller_item_name);
+		}
+		else if( message.name == "refresh_menu_by_id" ){
+			int index = GetCurrentControllerItemIndex();
+			BuildUI();
+			SetCurrentControllerItem(index);
 		}
     }
 	// Do the general GUI updating
     imGUI.update();
+	UpdateController();
 }
 
 void Resize() {

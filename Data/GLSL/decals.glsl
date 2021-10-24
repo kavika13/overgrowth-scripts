@@ -81,7 +81,7 @@ mat3 mat_from_quat(vec4 q) {
 void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec_amount, inout float roughness, inout float ambient_mult, inout float env_ambient_mult, in vec3 world_vert, float time, uint decal_val,
     inout vec3 flame_final_color, inout float flame_final_contrib) {
     // number of decals in current cluster
-    uint decal_count = (decal_val >> 24u) & 0x000000FFu;
+    uint decal_count = (decal_val >> COUNT_BITS) & COUNT_MASK;
 
     //colormap.xyz = vec3(decal_count) / 16.0;
     //return;
@@ -91,7 +91,7 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, inout float spec
     //colormap.xyz = vec3(g.z / grid_size.z);
 
     // index into cluster_decals
-    uint first_decal_index = decal_val & 0x00FFFFFFu;
+    uint first_decal_index = decal_val & INDEX_MASK;
 
     // decal list data is immediately after cluster lookup data
     uint num_clusters = grid_size.x * grid_size.y * grid_size.z;

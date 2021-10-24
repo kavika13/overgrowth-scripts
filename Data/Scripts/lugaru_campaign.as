@@ -22,7 +22,21 @@ array<string> lugaru_levels = {"LugaruStory/Village.xml",
                         "LugaruStory/Wolf_den_2.xml",     
                         "LugaruStory/Rocky_hall_4.xml"};  
 
-void FinishedLugaruCampaignLevel( string level_name ) {
+array<string> lugaru_level_names;
+
+void InitializeLugaruLevelNames() {
+    if( lugaru_levels.length() != lugaru_level_names.length() ) {
+        lugaru_level_names.removeRange(0,lugaru_level_names.length());
+        for( uint i = 0; i < lugaru_levels.length(); i++ ) {
+            lugaru_level_names.insertLast(GetLevelName("Data/Levels/" + lugaru_levels[i]));
+        }       
+    }
+}
+
+void FinishedLugaruCampaignLevel(string level_name) {
+
+    InitializeLugaruLevelNames();
+
     Log(info, "Finished Lugaru Level \"" + level_name + "\"" );
     SavedLevel @level = save_file.GetSavedLevel("lugaru_campaign");
 
@@ -37,9 +51,8 @@ void FinishedLugaruCampaignLevel( string level_name ) {
 
     int id_new_level = -1;
     Log( info, "level_name: " + level_name );
-    for( uint i = 0; i < lugaru_levels.length(); i++ ) {
-        string full_lugaru_level = "Data/Levels/" + lugaru_levels[i];
-        if( level_name == full_lugaru_level ) {
+    for( uint i = 0; i < lugaru_level_names.length(); i++ ) {
+        if( level_name == lugaru_level_names[i] ) {
             Log( info, "Matched: " + i );
             id_new_level = i;
         }

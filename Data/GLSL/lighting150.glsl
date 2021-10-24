@@ -182,9 +182,9 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist, float slope
     float rand_a = rand(gl_FragCoord.xy);
     vec3 shadow_tex = vec3(1.0);
     int index = 4;
-    if(length(sc[0].xy-vec2(0.5)) < 0.49 - rand_a * 0.05){
+    if(max(length(sc[0].xy-vec2(0.5)), dist * 0.02) < 0.49 - rand_a * 0.05){
         index = 0;
-    } else if(length(sc[1].xy-vec2(0.5)) < 0.49 - rand_a * 0.05){
+    } else if(max(length(sc[1].xy-vec2(0.5)), dist * 0.011) < 0.49 - rand_a * 0.05){
         index = 1;
     } else if(length(sc[2].xy-vec2(0.5)) < 0.49 - rand_a * 0.05){
         index = 2;
@@ -326,31 +326,145 @@ float GetHazeAmount( in vec3 relative_position ) {
     return fog_opac;
 }
 
-
 #if defined(FRAGMENT_SHADER) && !defined(DEPTH_ONLY)
+#if defined(MISTY) || defined(MISTY2) || defined(SKY_ARK) || defined(DAMP_FOG) || defined(WATERFALL_ARENA)
+float noise_3d( in vec3 x )
+{
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f*f*(3.0-2.0*f);
+    
+    vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
+    vec2 rg;
+    rg[0] = noise(uv);
+    rg[1] = noise(uv + vec2(37.0,17.0));
+    return mix( rg.x, rg.y, f.z );
+}
+
+float fractal_3d(in vec3 x){
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f*f*(3.0-2.0*f);
+    
+    vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
+    vec2 rg;
+    rg[0] = fractal(uv);
+    rg[1] = fractal(uv + vec2(37.0,17.0));
+    return mix( rg.x, rg.y, f.z );
+}
+#endif
+
+
 float GetHazeAmount( in vec3 relative_position, float haze_mult) { 
     /*float near = 0.1;
-    float far = 1000.0;
+    float far = 100.0;
     float fog_opac = min(1.0,length(relative_position)/far);
-    */
+    return fog_opac;*/
     float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
+    #if defined(MISTY) || defined(MISTY2) || defined(DAMP_FOG) || defined(SKY_ARK) || defined(WATERFALL_ARENA)
+    #ifdef MISTY
+        float fog_height = 95.0;
+    #elif defined(MISTY2)
+        float fog_height = 18.0;
+    #elif defined(WATERFALL_ARENA)
+        float fog_height = 90.5;
+    #elif defined(DAMP_FOG)
+        float fog_height = -44.0;
+    #elif defined(SKY_ARK)
+        float fog_height = min(75, 80.0 + (cam_pos+relative_position).z*-0.05);
+    #endif
+    {
+        vec3 dir = normalize(relative_position);
+        float second_layer_opac = 1.0;//pow(min(1.0, dist * 0.025), 0.9);
+        float first_layer_opac = 1.0;//pow(min(1.0, dist * 0.05) - second_layer_opac * 0.5, 0.9);
+        //haze_amount *= 1.0 + sin(dir.y * 10.0 + time * 32.0 + cos(dir.x * 10.0)+ cos(dir.z * 7.0)) * 0.05 * first_layer_opac;
+        float angle = atan(dir.z, -dir.x);
+        float fade = 1.0 - dir.y * dir.y;
+
+        float speed = .4;
+        float active_time = time*speed;
+
+        float old_fog_opac = 0.5 + fractal(vec2(angle * 1.5-active_time*0.2, dir.y * 1.2 - active_time * 0.3))*0.5;
+        old_fog_opac += 0.5 + fractal(vec2(angle * 2.5+active_time*0.2, dir.y * 2.2 + active_time * 0.3))*0.5;
+        float val = abs(angle-3.14) * 5.0;
+        if(val < 1.0){
+            float temp_angle = angle - 6.28;
+            float new_fog_opac = 0.5 + fractal(vec2(temp_angle * 1.5-active_time*0.2, dir.y * 1.2 - active_time * 0.3))*0.5;
+            new_fog_opac += 0.5 + fractal(vec2(temp_angle * 2.5+active_time*0.2, dir.y * 2.2 + active_time * 0.3))*0.5;
+            val = mix(new_fog_opac, old_fog_opac, val);
+        } else {
+            val = old_fog_opac;
+        }
+        val *= 0.5;
+        val = mix(0.5, val, fade);
+
+        fog_height += val - 0.5;
+        vec3 world_vert = (relative_position+cam_pos);
+        #if defined(MISTY2) || defined(SKY_ARK) || defined(DAMP_FOG) || defined(WATERFALL_ARENA)
+        float base_fog_opac = fog_opac * pow(min(1.0, 1.0 - normalize(relative_position).y), 2.0) * val * 1.5;
+        #elif defined(MISTY)
+        float base_fog_opac = 0.0;
+        #endif
+        if(cam_pos.y > fog_height && world_vert.y > fog_height){
+            return base_fog_opac;
+        }
+        vec3 temp_cam_pos = cam_pos;
+        if(world_vert.y > fog_height){
+            float amount = (world_vert.y - fog_height) / (relative_position.y);
+            relative_position = relative_position * (1.0 - amount);
+        } else if(cam_pos.y > fog_height){
+            float amount = (fog_height - world_vert.y) / (-relative_position.y);       
+            relative_position = relative_position * amount;        
+            temp_cam_pos = world_vert - relative_position;
+        }
+        float dist = length(relative_position);
+        float orig_fog_opac = (1.0 - (1.0 / pow(dist * haze_mult + 1.0, 2.0)));
+
+        dist *= 0.5;
+        temp_cam_pos *= 0.5;
+        temp_cam_pos.x += active_time;
+        temp_cam_pos.y += val * 8.0;
+        fog_opac = 0.0;
+        fog_opac += noise_3d(temp_cam_pos+dir)*0.1*min(1.0, max(0.0, dist));
+        fog_opac += noise_3d(temp_cam_pos+dir*2.0)*0.1*min(1.0, max(0.0, dist-1.0));
+        fog_opac += noise_3d(temp_cam_pos+dir*3.0)*0.1*min(1.0, max(0.0, (dist-2.0)*0.5));
+        fog_opac += noise_3d(temp_cam_pos+dir*4.0)*0.1*min(1.0, max(0.0, (dist-4.0)*0.25));
+        //fog_opac *= min(1.0, max(0.0, 8/dist));
+        #if defined(MISTY) || defined(DAMP_FOG) || defined(WATERFALL_ARENA)
+        fog_opac = orig_fog_opac + fog_opac * 0.3;
+        #elif defined(MISTY2) || defined(SKY_ARK)
+        fog_opac = orig_fog_opac + fog_opac;
+        #endif
+        fog_opac = fog_opac + base_fog_opac;
+        fog_opac = min(1.0, max(0.0, fog_opac));
+    }
+    #endif
     #ifdef RAINY
     {
-        float dist = length(relative_position);
+        float dist = length(relative_position)*0.1;
         vec3 dir = normalize(relative_position);
         float second_layer_opac = pow(min(1.0, dist * 0.025), 0.9);
         float first_layer_opac = pow(min(1.0, dist * 0.05) - second_layer_opac * 0.5, 0.9);
         //haze_amount *= 1.0 + sin(dir.y * 10.0 + time * 32.0 + cos(dir.x * 10.0)+ cos(dir.z * 7.0)) * 0.05 * first_layer_opac;
         float angle = atan(dir.z, -dir.x);
         float fade = 1.0 - dir.y * dir.y;
-        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 100, dir.y * 5.0 + time * 16.0)) * 0.2 * first_layer_opac * fade));
-        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y + time * 2.0)) * 0.8 * second_layer_opac * fade));
+        float old_fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 100, dir.y * 5.0 + time * 16.0)) * 0.2 * first_layer_opac * fade));
+        old_fog_opac = 1.0 - ((1.0 - old_fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y + time * 2.0)) * 0.8 * second_layer_opac * fade));
+        float val = abs(angle-3.14) * 5.0;
+        if(val < 1.0){
+            float temp_angle = angle - 6.28;
+            float new_fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(temp_angle * 100, dir.y * 5.0 + time * 16.0)) * 0.2 * first_layer_opac * fade));
+            new_fog_opac = 1.0 - ((1.0 - new_fog_opac) * (1.0 + fractal(vec2(temp_angle * 2, dir.y + time * 2.0)) * 0.8 * second_layer_opac * fade));
+            fog_opac = mix(new_fog_opac, old_fog_opac, val);
+        } else {
+            fog_opac = old_fog_opac;
+        }
+        fog_opac = min(1.0, max(0.0, fog_opac));
         
     }
     #endif
-    #ifdef VOLCANO
+    /*#ifdef VOLCANO
     {
-        fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
         float dist = length(relative_position);
         vec3 dir = normalize(relative_position);
         float second_layer_opac = pow(min(1.0, dist * 0.025), 0.9);
@@ -358,9 +472,26 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
         //haze_amount *= 1.0 + sin(dir.y * 10.0 + time * 32.0 + cos(dir.x * 10.0)+ cos(dir.z * 7.0)) * 0.05 * first_layer_opac;
         float angle = atan(dir.z, -dir.x);
         float fade = 1.0 - dir.y * dir.y;
-        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 3, dir.y * 1.2 - time * 0.3)) * 0.2 * first_layer_opac * fade));
-        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y - time * 0.2)) * 0.8 * second_layer_opac * fade));
+        float old_fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 3, dir.y * 1.2 - time * 0.3)) * 0.2 * first_layer_opac * fade));
+        old_fog_opac = 1.0 - ((1.0 - old_fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y - time * 0.2)) * 0.8 * second_layer_opac * fade));
+        float val = abs(angle-3.14) * 5.0;
+        if(val < 1.0){
+            float temp_angle = angle - 6.28;
+            float new_fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(temp_angle * 3, dir.y * 1.2 - time * 0.3)) * 0.2 * first_layer_opac * fade));
+            new_fog_opac = 1.0 - ((1.0 - new_fog_opac) * (1.0 + fractal(vec2(temp_angle * 2, dir.y - time * 0.2)) * 0.8 * second_layer_opac * fade));
+            fog_opac = mix(new_fog_opac, old_fog_opac, val);
+        } else {
+            fog_opac = old_fog_opac;
+        }
+        fog_opac = min(1.0, max(0.0, fog_opac));
     }
+    #endif*/
+    #if defined(WATER) && defined(WATER_HORIZON)
+    #ifdef ALT
+    fog_opac = min(1.0, max(fog_opac, length((cam_pos+relative_position).xz-vec2(94,144))/1000.0));
+    #else
+    fog_opac = min(1.0, max(fog_opac, length((cam_pos+relative_position).xz)/200.0));
+    #endif
     #endif
     return fog_opac;
 }

@@ -1,4 +1,5 @@
 #version 150
+#extension GL_ARB_shading_language_420pack : enable
 uniform mat4 mvp;
 #ifdef COLOR_UNIFORM
 	uniform vec4 color_uniform;

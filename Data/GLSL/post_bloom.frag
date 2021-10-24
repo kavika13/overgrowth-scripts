@@ -1,5 +1,6 @@
 #include 150
 #extension GL_ARB_texture_rectangle : enable
+#extension GL_ARB_shading_language_420pack : enable
 
 uniform sampler2DRect tex0;
 uniform sampler2DRect tex1;

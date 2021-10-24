@@ -11,14 +11,17 @@ class Particle {
 }
 
 int count = 0;
+int num_ribbons;
 
-class Ribbon {
+class Ribbon : C_ACCEL {
     array<Particle> particles;
     vec3 rel_pos;
     vec3 pos;
     float base_rand;
     float spawn_new_particle_delay;
     void Update(float delta_time, float curr_game_time) {
+        EnterTelemetryZone("Ribbon Update");
+        EnterTelemetryZone("a");
         spawn_new_particle_delay -= delta_time;
         if(spawn_new_particle_delay <= 0.0f){
             Particle particle;
@@ -32,6 +35,8 @@ class Ribbon {
                 spawn_new_particle_delay += 0.1f;
             }
         }
+        LeaveTelemetryZone();
+        EnterTelemetryZone("b");
         Object@ obj = ReadObjectFromID(hotspot.GetID());
         vec3 fire_pos = obj.GetTranslation();
         int max_particles = 5;
@@ -44,6 +49,8 @@ class Ribbon {
             }
             particles.resize(max_particles);
         }
+        LeaveTelemetryZone();
+        EnterTelemetryZone("c");
         for(int i=0, len=particles.size(); i<len; ++i){
             particles[i].vel *= pow(0.2f, delta_time);
             particles[i].pos += particles[i].vel * delta_time;
@@ -59,17 +66,21 @@ class Ribbon {
             particles[i].vel += rel * delta_time * -3.0f * 6.0f;
             particles[i].vel[1] += delta_time * 12.0f;
         }
+        LeaveTelemetryZone();
         /*for(int i=0, len=particles.size()-1; i<len; ++i){
             //DebugDrawLine(particles[i].pos, particles[i+1].pos, ColorFromHeat(particles[i].heat), ColorFromHeat(particles[i+1].heat), _delete_on_update);
             DebugDrawRibbon(particles[i].pos, particles[i+1].pos, ColorFromHeat(particles[i].heat), ColorFromHeat(particles[i+1].heat), flame_width * max(particles[i].heat, 0.0), flame_width * max(particles[i+1].heat, 0.0), _delete_on_update);
         }*/
+        LeaveTelemetryZone();
     }
     void PreDraw(float curr_game_time) {
+        EnterTelemetryZone("Ribbon PreDraw");
         int ribbon_id = DebugDrawRibbon(_delete_on_draw);
         const float flame_width = 0.12f;
         for(int i=0, len=particles.size(); i<len; ++i){
             AddDebugDrawRibbonPoint(ribbon_id, particles[i].pos, vec4(particles[i].heat, particles[i].spawn_time + base_rand, curr_game_time + base_rand, 0.0), flame_width);
         }
+        LeaveTelemetryZone();
     }
 }
 
@@ -87,7 +98,6 @@ vec3 GetWind(vec3 check_where, float curr_game_time, float change_rate) {
     return wind_vel;
 }
 
-const int num_ribbons = 4;
 int fire_object_id = -1;
 int sound_handle = -1;
 
@@ -111,50 +121,27 @@ void HandleEvent(string event, MovementObject @mo){
 }
 
 void OnEnter(MovementObject @mo) {
-    mo.ReceiveMessage("ignite");
+    bool ignite = true;
+    if(params.HasParam("Ignite Characters") && params.GetInt("Ignite Characters") == 0){
+        ignite = false;
+    }
+    if(ignite){
+        mo.ReceiveScriptMessage("ignite");
+    }
 }
 
 void OnExit(MovementObject @mo) {
 }
 
 void PreDraw(float curr_game_time) {
+    EnterTelemetryZone("Fire Hotspot Predraw");
     float delta_time = curr_game_time - last_game_time;
-    if(ribbons.size() == num_ribbons){
-        for(int ribbon_index=0; 
-            ribbon_index < num_ribbons;
-            ++ribbon_index)
-        {   
-            ribbons[ribbon_index].Update(delta_time, curr_game_time);
-            ribbons[ribbon_index].PreDraw(curr_game_time);
-        }
-        if(ribbons[0].particles.size()>3){
-            Object@ fire_obj = ReadObjectFromID(fire_object_id);
-            fire_obj.SetTranslation(mix(ribbons[0].particles[3].pos, ribbons[0].particles[2].pos, ribbons[0].spawn_new_particle_delay / 0.1f));
-            fire_obj.SetTint(0.2 * vec3(2.0,1.0,0.0)*(2.0 + mix(ribbons[0].particles[3].heat, ribbons[0].particles[2].heat, ribbons[0].spawn_new_particle_delay / 0.1f)));
-            fire_obj.SetScale(vec3(10.0f));
-        }
-    }
-    last_game_time = curr_game_time;
-}
 
-vec4 ColorFromHeat(float heat){
-    if(heat < 0.0){
-        return vec4(0.0);
-    } else {
-        if(heat > 0.5){
-            return mix(vec4(2.0, 1.0, 0.0, 1.0), vec4(4.0, 4.0, 0.0, 1.0), (heat-0.5)/0.5);
-        } else {
-            return mix(vec4(0.0, 0.0, 0.0, 0.0), vec4(2.0, 1.0, 0.0, 1.0), (heat)/0.5);            
-        }
-    }
-}
-
-void Update() {
     Object@ obj = ReadObjectFromID(hotspot.GetID());
     vec3 pos = obj.GetTranslation();
     vec3 scale = obj.GetScale();
     quaternion rot = obj.GetRotation();
-    if(ribbons.size() != num_ribbons){
+    if(int(ribbons.size()) != num_ribbons){
         ribbons.resize(num_ribbons);
         for(int i=0; i<num_ribbons; ++i){
             ribbons[i].rel_pos = vec3(RangedRandomFloat(-1.0f, 1.0f), 0.0f, RangedRandomFloat(-1.0f,1.0f));
@@ -172,13 +159,13 @@ void Update() {
     if(count <= 0){
         count = 10;
     }
-    delay -= time_step;
+    delay -= delta_time;
 
     if(delay <= 0.0f){
         for(int i=0; i<1; ++i){
             uint32 id = MakeParticle("Data/Particles/firespark.xml", ribbons[int(RangedRandomFloat(0, num_ribbons-0.01))].pos, vec3(RangedRandomFloat(-2.0f, 2.0f), RangedRandomFloat(5.0f, 10.0f), RangedRandomFloat(-2.0f, 2.0f)), vec3(1.0f));
         }
-        delay += RangedRandomFloat(0.0f, 0.6f);
+        delay = RangedRandomFloat(0.0f, 0.6f);
     }
     if(fire_object_id == -1){
         fire_object_id = CreateObject("Data/Objects/default_light.xml", true);
@@ -188,4 +175,52 @@ void Update() {
     } else {
         SetSoundPosition(sound_handle, pos);
     }
+
+    if(int(ribbons.size()) == num_ribbons){
+        for(int ribbon_index=0; 
+            ribbon_index < num_ribbons;
+            ++ribbon_index)
+        {   
+            //ribbons[ribbon_index].Update(delta_time, curr_game_time);
+            CFireRibbonUpdate(ribbons[ribbon_index], delta_time, curr_game_time, ReadObjectFromID(hotspot.GetID()).GetTranslation()); 
+            //ribbons[ribbon_index].PreDraw(curr_game_time);
+            CFireRibbonPreDraw(ribbons[ribbon_index], curr_game_time); 
+        }
+        float amplify = 1.0f;
+        if(params.HasParam("Light Amplify")){
+            amplify *= params.GetFloat("Light Amplify");
+        }
+        float distance = 10.0f;
+        if(params.HasParam("Light Distance")){
+            distance *= params.GetFloat("Light Distance");
+        }
+        if(ribbons[0].particles.size()>3){
+            Object@ fire_obj = ReadObjectFromID(fire_object_id);
+            fire_obj.SetTranslation(mix(ribbons[0].particles[3].pos, ribbons[0].particles[2].pos, ribbons[0].spawn_new_particle_delay / 0.1f));
+            fire_obj.SetTint(amplify * 0.2 * vec3(2.0,1.0,0.0)*(2.0 + mix(ribbons[0].particles[3].heat, ribbons[0].particles[2].heat, ribbons[0].spawn_new_particle_delay / 0.1f)));
+            fire_obj.SetScale(vec3(distance));
+        }
+    }
+    last_game_time = curr_game_time;
+    LeaveTelemetryZone();
+}
+
+vec4 ColorFromHeat(float heat){
+    if(heat < 0.0){
+        return vec4(0.0);
+    } else {
+        if(heat > 0.5){
+            return mix(vec4(2.0, 1.0, 0.0, 1.0), vec4(4.0, 4.0, 0.0, 1.0), (heat-0.5)/0.5);
+        } else {
+            return mix(vec4(0.0, 0.0, 0.0, 0.0), vec4(2.0, 1.0, 0.0, 1.0), (heat)/0.5);            
+        }
+    }
+}
+
+void SetParameters() {
+    params.AddFloatSlider("Light Amplify",1.0f,"min:0,max:20,step:0.1");
+    params.AddFloatSlider("Light Distance",2.0f,"min:0,max:100,step:0.1");
+    params.AddInt("Fire Ribbons",4);
+    params.AddIntCheckbox("Ignite Characters", true);
+    num_ribbons = max(0, min(500, params.GetInt("Fire Ribbons")));
 }
