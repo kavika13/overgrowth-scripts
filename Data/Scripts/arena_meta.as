@@ -21,11 +21,13 @@ int top_margin = 100;
 int left_margin = 300;
 
 int screen_height = 1400;
-int left_status_pane_height = 1200;
+int left_status_pane_height = 1100;
 int status_pane_column_width = 320;
 int status_pane_column_padding = 25;
 int status_pane_glyph_height = 250;
 
+int node_marker_width = 50;
+int node_marker_height = 50;
 
 int title_font_size = 100;
 int label_font_size = 75;
@@ -65,9 +67,6 @@ array<vec3> furColorChoices = { vec3(1.0,1.0,1.0),
                                 vec3(53.0/255.0,28.0/255.0,10.0/255.0), 
                                 vec3(172.0/255.0,124.0/255.0,62.0/255.0) };
 
-array<string> arenaLevels = {"Cave_Arena.xml", 
-                             "waterfall_arena.xml"};
-                             
 array<string> arenaNames = { "Cave", "Waterfall" };
 array<string> arenaImages = {"Textures/arenamenu/cave_arena.tga", 
                              "Textures/arenamenu/waterfall_arena.tga"};
@@ -82,12 +81,23 @@ float limitDecimalPoints( float n, int points ) {
 
 }                            
 
-class WorldMapNodeMouseOverBehavior: AHGUI::MouseOverBehavior 
+class MouseOverImage : AHGUI::MouseOverBehavior 
 {
+    string normal;
+    string hover;
+
+    MouseOverImage( string _normal, string _hover )
+    {
+        normal = _normal;
+        hover = _hover;
+    }
+
     void onStart( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
-        Log( info, "Enter" );
         AHGUI::Image@ img = cast<AHGUI::Image>( element );
-        img.setImageFile("Textures/world_map/map_marker_hover.png");
+        int width = img.getSizeX(); 
+        int height = img.getSizeY(); 
+        img.setImageFile(hover);
+        img.setSize( width,height );
     }
 
     void onContinue( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
@@ -96,15 +106,69 @@ class WorldMapNodeMouseOverBehavior: AHGUI::MouseOverBehavior
 
     bool onFinish( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
         AHGUI::Image@ img = cast<AHGUI::Image>( element );
-        img.setImageFile("Textures/world_map/map_marker.png");
+        int width = img.getSizeX(); 
+        int height = img.getSizeY(); 
+        img.setImageFile(normal);
+        img.setSize( width,height );
         return true;
     }
 }
 
-WorldMapNodeMouseOverBehavior mouse_world_map_hover_behavior;
+class MouseClickWorldNode : AHGUI::MouseClickBehavior {
+    ArenaGUI@ gui;
+    string node_id;
+
+    MouseClickWorldNode( ArenaGUI@ _gui, string _node_id )
+    {
+        @gui = @_gui;
+        node_id = _node_id;
+    }
+
+    bool onDown( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        global_data.world_map_node_id = node_id;
+        gui.RefreshWorldMap();
+        return true;
+    }
+
+    bool onStillDown( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        return true;
+    }
+
+    bool onUp( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        return true;
+    }
+
+    void cleanUp( AHGUI::Element@ element ) {
+        
+    }
+}
+
+class MouseHoverSetTextValue : AHGUI::MouseOverBehavior {
+    AHGUI::Text@ text;
+    string new_value;
+
+    MouseHoverSetTextValue( AHGUI::Text@ _text, string _new_value ) {
+        @text = _text;
+        new_value = _new_value;
+    }
+
+    void onStart( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        string tt = new_value;
+        text.setVisible(true);
+        text.setText(tt); 
+    }
+
+    void onContinue( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+
+    }
+
+    bool onFinish( AHGUI::Element@ element, uint64 delta, ivec2 drawOffset, AHGUI::GUIState& guistate ) {
+        text.setVisible(false);
+        return true;
+    }
+}
 
 class ArenaGUI : AHGUI::GUI {
-
     bool forceReloadState = false;
     //New profile
     WrappingTicker characterSelection(1);
@@ -172,42 +236,56 @@ class ArenaGUI : AHGUI::GUI {
 
         if( showback )
         {
+            array<string> sub_names = {"backimage", "backtext"};
+            AHGUI::MouseOverPulseColorSubElements buttonHoverSubElements( 
+                                            HexColor("#ffde00"), 
+                                            HexColor("#ffe956"), .25, sub_names );
+
             AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
 
             backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
+            backDivider.addMouseOverBehavior( buttonHoverSubElements, "mouseover" );
+            backDivider.setName("backdivider");
 
             AHGUI::Image backImage("Textures/ui/arena_mode/left_arrow.png");
             backImage.scaleToSizeX(75);
             backImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            backImage.addMouseOverBehavior( buttonHover );
+            backImage.setName("backimage");
 
             backDivider.addElement( backImage, DDLeft);  
             backDivider.addSpacer(30, DDLeft);
 
             AHGUI::Text backText( "Back", title_font, 60, button_color );
             backText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            backText.addMouseOverBehavior( buttonHover );
+            backText.setName("backtext");
             
             backDivider.addElement( backText, DDLeft );
         }
 
         if( showcontinue )
         {
+            array<string> sub_names = {"nextimage", "nexttext"};
+            AHGUI::MouseOverPulseColorSubElements buttonHoverSubElements( 
+                                            HexColor("#ffde00"), 
+                                            HexColor("#ffe956"), .25, sub_names );
+
             AHGUI::Divider@ nextDivider = footer.addDivider( DDRight, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
 
-            nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next") );
+            nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next"), "leftclick" );
+            nextDivider.addMouseOverBehavior( buttonHoverSubElements, "mouseover" );
+            nextDivider.setName("nextdivider");
 
             AHGUI::Image nextImage("Textures/ui/arena_mode/right_arrow.png");
             nextImage.scaleToSizeX(75);
-            nextImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            nextImage.addMouseOverBehavior( buttonHover );
+            nextImage.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ), "update" );
+            nextImage.setName("nextimage");
 
             nextDivider.addElement(nextImage, DDRight);  
             nextDivider.addSpacer(30, DDRight);
 
             AHGUI::Text nextText( "Next", title_font, 60, button_color );
-            nextText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            nextText.addMouseOverBehavior( buttonHover );
+            nextText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ), "update" );
+            nextText.setName("nexttext");
             
             nextDivider.addElement( nextText, DDRight );
         }
@@ -222,22 +300,6 @@ class ArenaGUI : AHGUI::GUI {
      */
     void handleStateChange() 
     {
-        if( IsKeyDown( GetCodeForKey( "f9" ) ) )
-        {
-            currentState = agsMapScreen;
-            global_data.world_map_id = "fighter_map";
-            global_data.states = array<string>();
-            global_data.states.insertLast("rabbit");
-            global_data.states.insertLast("well_nourished");
-            global_data.states.insertLast("contender");
-        }
-
-        if( IsKeyDown( GetCodeForKey("f5") ) ) 
-        {
-            forceReloadState = true;
-            global_data.ReloadJSON();
-        }
-
         //see if anything has changed
         if( not forceReloadState && lastState == currentState ) {
             return;
@@ -534,6 +596,13 @@ class ArenaGUI : AHGUI::GUI {
                                                                     DOHorizontal,
                                                                     ivec2( 0,100 ) );
                 statesdiv.setName( "states" );
+                    
+                infodiv.addSpacer( 25, DDTop );
+
+                AHGUI::Divider@ statesdiv2 = infodiv.addDivider(  DDTop, 
+                                                                    DOHorizontal,
+                                                                    ivec2( 0,100 ) );
+                statesdiv2.setName( "states2" );
 
                 
                 AHGUI::Image rightarrow = AHGUI::Image("Textures/ui/arena_mode/right_arrow.png");
@@ -582,14 +651,13 @@ class ArenaGUI : AHGUI::GUI {
                 subbodydiv.addSpacer( 100, DDTop );
                 AHGUI::Divider@ descriptiondiv = subbodydiv.addDivider( DDTop,
                                                     DOVertical,
-                                                    ivec2(1409, 600));
+                                                    ivec2(1200, 200));
                 descriptiondiv.setName("descriptiondiv");
 
                 subbodydiv.addSpacer( 100, DDBottom );
                 AHGUI::Image glyph = AHGUI::Image("Textures/ui/arena_mode/black_glyphs/two_characters_chained_by_one.png");
                 glyph.setName("glyph");
                 subbodydiv.addElement( glyph, DDBottom );
-            
 
                 mainpane.addSpacer(50, DDTop );
 
@@ -813,7 +881,6 @@ class ArenaGUI : AHGUI::GUI {
                     characterImage.scaleToSizeY(mainInfoDivHeight-200);
                     characterDiv.addElement( characterImage, DDTop );
                 }
-
                 {
                     int spacerHeight = 40;
                     AHGUI::Divider@ killInfoDiv = mainInfoDiv.addDivider( DDCenter, DOVertical, ivec2(tabwidth,mainInfoDivHeight) );
@@ -866,18 +933,29 @@ class ArenaGUI : AHGUI::GUI {
                     AHGUI::Divider@ statediv = mainpane.addDivider( DDTop, DOHorizontal, ivec2(0,100) );
                     statediv.setName( "statediv" );
                 }
+                {
+                    AHGUI::Text state_name = AHGUI::Text("State", label_font, label_font_size, label_color );
+                    state_name.setName( "state" );
+                    state_name.setVisible( false );
+                    mainpane.addElement( state_name, DDTop );
+                }
                 RefreshEndScreen();
             }
             break;
             case agsMapScreen:{
+
+                addFooter(true,true);
+
+                int main_height = left_status_pane_height;
+
                 AHGUI::Divider@ toppadwrapper = root.addDivider( DDTop,
                                                                  DOVertical,
-                                                                 ivec2( UNDEFINEDSIZE, screen_height ) );
+                                                                 ivec2( UNDEFINEDSIZE, main_height) );
                 toppadwrapper.addSpacer( top_margin, DDTop );
 
                 AHGUI::Divider@ wrapperpane = toppadwrapper.addDivider( DDTop,
                                                                DOHorizontal,
-                                                               ivec2( UNDEFINEDSIZE, screen_height-top_margin ) );
+                                                               ivec2( UNDEFINEDSIZE, main_height) );
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Divider@ leftpane = wrapperpane.addDivider( DDLeft, 
@@ -888,13 +966,14 @@ class ArenaGUI : AHGUI::GUI {
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Image verticaldivider("Textures/ui/arena_mode/vertical_divider.png");
+                verticaldivider.scaleToSizeY( main_height - 60 );
                 wrapperpane.addElement(verticaldivider, DDLeft );
 
                 wrapperpane.addSpacer( 30, DDLeft );
 
                 AHGUI::Divider@ mainpane = wrapperpane.addDivider( DDLeft,  
                                                             DOVertical, 
-                                                            ivec2( 1600, screen_height-top_margin ) );
+                                                            ivec2( 1600, main_height-top_margin ) );
 
                 AHGUI::Text title = AHGUI::Text("Title", title_font, title_font_size, title_color );
                 title.setName( "title" );
@@ -904,16 +983,16 @@ class ArenaGUI : AHGUI::GUI {
 
                 mainpane.addElement(titleUnderline, DDTop); 
         
-                mainpane.addSpacer( 100, DDTop );
+                mainpane.addSpacer( 50, DDTop );
 
                 AHGUI::Divider@ bodydiv = mainpane.addDivider( DDTop,
                                              DOHorizontal,
-                                             ivec2(UNDEFINEDSIZE, 961) ); 
+                                             ivec2(UNDEFINEDSIZE, main_height - 150) ); 
                 bodydiv.addSpacer(100, DDLeft);
 
                 AHGUI::Divider@ subbodydiv = bodydiv.addDivider( DDLeft,
                                              DOVertical,
-                                             ivec2(1500, 700) ); 
+                                             ivec2(1500, main_height - 350) ); 
                 //subbodydiv.setBackgroundImage( "Textures/world_map/arena_world_map.png" );
                 subbodydiv.addSpacer(100,DDTop);
                 subbodydiv.setPadding(100,100,100,100);
@@ -939,6 +1018,7 @@ class ArenaGUI : AHGUI::GUI {
         if( message.name == "mainmenu" ) {
             global_data.WritePersistentInfo( false );
             global_data.clearSessionProfile();
+            global_data.clearArenaSession();
             this_ui.SendCallback("back");
         }
 
@@ -989,14 +1069,12 @@ class ArenaGUI : AHGUI::GUI {
 
                     newCharacter["character_id"]    = cur_character["id"];
                     newCharacter["states"]          = cur_character["states"];
-                    newCharacter["world_map_id"]    = cur_character["world_map_id"];
 
                     global_data.addProfile( newCharacter );
                     global_data.setDataFrom( newCharacter["id"].asInt() );
 
                     global_data.queued_world_node_id = cur_character["world_node_id"].asString();
                     global_data.ResolveWorldNode();
-                    global_data.WritePersistentInfo( false );
 
                     currentProfile.setMax( global_data.getProfiles().size() );
                     currentProfile = global_data.getProfileIndexFromId(newCharacter["id"].asInt());
@@ -1018,7 +1096,6 @@ class ArenaGUI : AHGUI::GUI {
                     if( global_data.getProfiles().size() > 0 )
                     {
                         global_data.removeProfile( global_data.getProfiles()[int(currentProfile)]["id"].asInt() );
-                        global_data.WritePersistentInfo( false );
                     }
                 
                     if( global_data.getProfiles().size() == 0 )
@@ -1078,7 +1155,6 @@ class ArenaGUI : AHGUI::GUI {
                     global_data.meta_choice_option = option;
                     global_data.done_with_current_node = true;
                     global_data.ResolveWorldNode();
-                    global_data.WritePersistentInfo();
 
                     UpdateStateBasedOnCurrentWorldNode();
                 }
@@ -1089,7 +1165,6 @@ class ArenaGUI : AHGUI::GUI {
                 if( message.name == "continue" ) {
                     global_data.done_with_current_node = true;
                     global_data.ResolveWorldNode();
-                    global_data.WritePersistentInfo();
                     UpdateStateBasedOnCurrentWorldNode();
                 } 
             }
@@ -1106,32 +1181,66 @@ class ArenaGUI : AHGUI::GUI {
                 if( message.name == "back" ) {
                     currentState = agsMainMenu;
                 }
+                else if( message.name == "next" ) {
+                    global_data.done_with_current_node = true;
+                    global_data.ResolveWorldNode();
+                    UpdateStateBasedOnCurrentWorldNode();
+                }
             }
             break;
         }
     }
 
     bool prev_state = true;
-
     /*******************************************************************************************/
     /**
      * @brief  Update the menu
      *
      */
     void update() {
-        
-        // Do state machine stuff
-        if(IsKeyDown(GetCodeForKey("esc")) && prev_state == false) {
-            processMessage(AHGUI::Message("back"));
+        if( IsKeyDown( GetCodeForKey( "f9" ) ) ) 
+        {
+            currentState = agsMapScreen;
+            global_data.world_map_id = "fighter_map";
+            global_data.world_map_node_id = "cave_arena";
+
+            global_data.states = array<string>();
+            global_data.states.insertLast("rabbit");
+            global_data.states.insertLast("well_nourished");
+            global_data.states.insertLast("contender");
+
+            global_data.world_map_nodes.resize(0);
+            global_data.world_map_nodes.insertLast(WorldMapNodeInstance("something_else",false,true));
+            global_data.world_map_nodes.insertLast(WorldMapNodeInstance("cave_arena",false,true));
+            global_data.world_map_nodes.insertLast(WorldMapNodeInstance("waterfall_arena",true,false));
+            global_data.world_map_nodes.insertLast(WorldMapNodeInstance("slave_camp",false,false));
+            global_data.world_map_nodes.insertLast(WorldMapNodeInstance("magma_arena",false,false));
+
+            global_data.world_map_connections.resize(0);
+            global_data.world_map_connections.insertLast(WorldMapConnectionInstance("something_else_to_cave_arena"));
+            global_data.world_map_connections.insertLast(WorldMapConnectionInstance("cave_arena_to_waterfall_arena"));
+            global_data.world_map_connections.insertLast(WorldMapConnectionInstance("waterfall_arena_to_slave_camp"));
         }
-        prev_state = IsKeyDown(GetCodeForKey("esc"));
-        
+
+        if( IsKeyDown( GetCodeForKey("f12") ) )
+        {
+            JSON r;
+
+            r.getRoot()["profile"] = global_data.serializeCurrentProfile(); 
+
+            Log(info,r.writeString(true));
+        }
+
+        if( IsKeyDown( GetCodeForKey("f5") ) ) 
+        {
+            forceReloadState = true;
+            global_data.ReloadJSON();
+        }
 
         handleStateChange();
 
         // Update the GUI 
         AHGUI::GUI::update();
-
     }
 
     /*******************************************************************************************/
@@ -1159,6 +1268,7 @@ class ArenaGUI : AHGUI::GUI {
             AHGUI::Text@ totalfans = cast<AHGUI::Text>(root.findElement("totalfans"));
             AHGUI::Text@ skillassesment = cast<AHGUI::Text>(root.findElement("skillassesment"));
             AHGUI::Divider@ statesdiv = cast <AHGUI::Divider>(root.findElement("states"));
+            AHGUI::Divider@ statesdiv2 = cast <AHGUI::Divider>(root.findElement("states2"));
             AHGUI::Image@ rightarrow = cast<AHGUI::Image>(root.findElement("rightarrow"));
             AHGUI::Image@ leftarrow = cast<AHGUI::Image>(root.findElement("leftarrow"));
 
@@ -1179,19 +1289,51 @@ class ArenaGUI : AHGUI::GUI {
                 battlesfought.setText( "" + (cur_profile["player_wins"].asInt() 
                                         + cur_profile["player_loses"].asInt()));
                 totalfans.setText( "" + cur_profile["fans"].asInt());
-                skillassesment.setText( "" + cur_profile["player_skill"].asDouble() );
+                skillassesment.setText( "" + floor(cur_profile["player_skill"].asDouble() * 1000 + 0.5f)/1000.0f);
 
                 statesdiv.clear();
-                for( uint i = 0; i < cur_profile["states"].size(); i++ )
+                statesdiv2.clear();
+                for( uint i = 0; i < 6 ; i++ )
                 {
-                    JSONValue state = global_data.getState(cur_profile["states"][i].asString());
+                    AHGUI::Divider@ div;
+                    if( i < 3 )
+                        @div = @statesdiv;
+                    else
+                        @div = @statesdiv2;
+                    
+                    if( i != 0 && i != 3 ) div.addSpacer(50,DDLeft);
 
-                    if( i > 0 ) statesdiv.addSpacer(100,DDLeft);
+                    if( i < cur_profile["states"].size() )
+                    {
+                        JSONValue state = global_data.getState(cur_profile["states"][i].asString());
 
-                    AHGUI::Divider@ icon1div = statesdiv.addDivider(DDLeft, DOVertical, ivec2(100, UNDEFINEDSIZE));  
-                
-                    icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
-                    icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                        if( state.type() == JSONobjectValue )
+                        {
+                            AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+
+                            if( i == 6 )
+                            {
+                                icon1div.addElement(AHGUI::Text("...", label_font, label_font_size, label_color), DDBottom);
+                            }
+                            else
+                            {
+                                icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
+                                icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                            }
+                        }
+                        else
+                        {
+                            Log( error, "Missing state " + cur_profile["states"][i].asString() );
+                        }
+                    }
+                    else
+                    {
+                        AHGUI::Divider@ icon1div = div.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                        /*
+                        icon1div.addElement(AHGUI::Image("Textures/ui/arena_mode/glyphs/skull.png"),DDTop);
+                        icon1div.addElement(AHGUI::Text("Food", label_font, label_font_size, label_color), DDBottom);
+                        */
+                    }
                 }
             }
         }
@@ -1204,28 +1346,73 @@ class ArenaGUI : AHGUI::GUI {
             AHGUI::Text@ description = cast<AHGUI::Text>(root.findElement("description"));
             AHGUI::Image@ portrait = cast<AHGUI::Image>(root.findElement("portrait"));
 
+            AHGUI::Divider@ nextDivider = cast<AHGUI::Divider>(root.findElement("nextdivider"));
+            AHGUI::Image@ nextImage = cast<AHGUI::Image>(root.findElement("nextimage"));
+            AHGUI::Text@ nextText = cast<AHGUI::Text>(root.findElement("nexttext"));
+
             if( statediv !is null 
                 && title !is null 
                 && description !is null
+                && nextDivider !is null
+                && nextImage !is null
+                && nextText !is null
                 && portrait !is null ) {
+
                 statediv.clear();
-                
+
                 JSONValue cur_character = global_data.getCharacters()[id];
+
+                nextDivider.removeLeftMouseClickBehavior( "leftclick" );
+
+                nextImage.removeUpdateBehavior( "update" );
+                nextImage.removeMouseOverBehavior( "mouseover" );
+        
+                nextText.removeUpdateBehavior( "update" );
+                nextText.removeMouseOverBehavior( "mouseover" );
+
+                nextText.setColor(deactivatedButton); 
+                nextImage.setColor(deactivatedButton); 
+
+                if( cur_character["enabled"].asBool() )
+                {
+                    nextImage.setColor(activatedButton);
+                    nextText.setColor(activatedButton);
+
+                    nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next"), "leftclick" );
+
+                    nextImage.addMouseOverBehavior( buttonHover, "mouseover" );
+
+                    nextText.addMouseOverBehavior( buttonHover, "mouseover" );
+                }
 
                 title.setText(cur_character["title"].asString());
                 description.setText(cur_character["description"].asString());
                 portrait.setImageFile(cur_character["portrait"].asString());
 
-                for( uint i = 0; i < cur_character["states"].size(); i++ )
+                for( uint i = 0; i < 4; i++ )
                 {
-                    JSONValue state = global_data.getState(cur_character["states"][i].asString());
+                    if( i < cur_character["states"].size() )
+                    {
+                        JSONValue state = global_data.getState(cur_character["states"][i].asString());
 
-                    if( i > 0 ) statediv.addSpacer(100,DDLeft);
+                        if( state.type() == JSONobjectValue )
+                        {
+                            if( i > 0 ) statediv.addSpacer(50,DDLeft);
 
-                    AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(100, UNDEFINEDSIZE));  
-                
-                    icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
-                    icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                            AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                        
+                            icon1div.addElement(AHGUI::Image(state["glyph"].asString()),DDTop);
+                            icon1div.addElement(AHGUI::Text(state["title"].asString(), label_font, label_font_size, label_color), DDBottom);
+                        }
+                        else
+                        {
+                            Log( error, "Missing state " + cur_character["states"][i].asString() );
+                        }
+                    }
+                    else
+                    {
+                        AHGUI::Divider@ icon1div = statediv.addDivider(DDLeft, DOVertical, ivec2(275, UNDEFINEDSIZE));  
+                    }
                 }
             }
         }
@@ -1287,7 +1474,7 @@ class ArenaGUI : AHGUI::GUI {
 
 
             int curdivindex = 0;
-            JSONValue meta_choice = global_data.getMetaChoice( world_map_node["target_id"].asString() );
+            JSONValue meta_choice = global_data.getMetaChoice( global_data.meta_choice_id );
 
             title.setText(meta_choice["title"].asString());
 
@@ -1335,7 +1522,7 @@ class ArenaGUI : AHGUI::GUI {
 
             int curdivindex = 0;
 
-            JSONValue message = global_data.getMessage( world_map_node["target_id"].asString() );
+            JSONValue message = global_data.getMessage( global_data.message_id );
 
             title.setText(message["title"].asString());
 
@@ -1378,6 +1565,7 @@ class ArenaGUI : AHGUI::GUI {
             AHGUI::Text@ playtime = cast<AHGUI::Text>(root.findElement("playtime"));
             //AHGUI::Text@ wealth = cast<AHGUI::Text>(root.findElement("wealth"));
             AHGUI::Divider@ statediv = cast<AHGUI::Divider>(root.findElement("statediv"));
+            AHGUI::Text@ state_text = cast<AHGUI::Text>(root.findElement("state"));
 
             if( title !is null )
             {
@@ -1488,13 +1676,22 @@ class ArenaGUI : AHGUI::GUI {
                 statediv.clear();
                 for( uint i = 0; i < global_data.states.length(); i++ )
                 {
-                    if( i != 0 )
-                        statediv.addSpacer(40,DDLeft);
                     JSONValue state = global_data.getState(global_data.states[i]);
+                    if( state.type() == JSONobjectValue )
+                    {
+                        if( i != 0 )
+                            statediv.addSpacer(40,DDLeft);
 
-                    AHGUI::Image glyph = AHGUI::Image( state["glyph"].asString() ); 
-                    glyph.scaleToSizeY(100);
-                    statediv.addElement( glyph, DDLeft );
+                        AHGUI::Image glyph = AHGUI::Image( state["glyph"].asString() ); 
+                        glyph.scaleToSizeY(100);
+                        glyph.addMouseOverBehavior(MouseHoverSetTextValue(@state_text, state["title"].asString()));
+                        glyph.addMouseOverBehavior(buttonHover);
+                        statediv.addElement( glyph, DDLeft );
+                    }
+                    else
+                    {
+                        Log( error, "Invalid state " + global_data.states[i] );
+                    }
                 }
             }
         }
@@ -1542,6 +1739,34 @@ class ArenaGUI : AHGUI::GUI {
         }
     }
 
+    string GetWorldMapNodeMarkerImage( WorldMapNodeInstance@ node, bool hover = false )
+    {
+        string name = "Textures/world_map/map_marker";
+        if(!node.is_available)
+        {
+            name += "_unavailable";
+        }
+
+        if(node.is_visited)
+        {
+            name += "_visited";
+        }
+
+        if( node.id == global_data.world_map_node_id )
+        {
+            name += "_current";
+        }
+    
+        if( hover )
+        {
+            name += "_hover";
+        }
+
+        name += ".png";
+
+        return name;
+    }
+
     void RefreshWorldMap()
     {
         if( currentState == agsMapScreen )
@@ -1552,96 +1777,144 @@ class ArenaGUI : AHGUI::GUI {
             AHGUI::Text@ title = cast<AHGUI::Text>(root.findElement( "title" ));
             AHGUI::Divider@ subbodydiv = cast<AHGUI::Divider>(root.findElement("subbodydiv"));
             
+            AHGUI::Divider@ nextDivider = cast<AHGUI::Divider>(root.findElement("nextdivider"));
+            AHGUI::Image@ nextImage = cast<AHGUI::Image>(root.findElement("nextimage"));
+            AHGUI::Text@ nextText = cast<AHGUI::Text>(root.findElement("nexttext"));
+
+            nextDivider.removeLeftMouseClickBehavior( "leftclick" );
+
+            nextImage.removeUpdateBehavior( "update" );
+            nextImage.removeMouseOverBehavior( "mouseover" );
+    
+            nextText.removeUpdateBehavior( "update" );
+            nextText.removeMouseOverBehavior( "mouseover" );
+
+            nextText.setColor(deactivatedButton); 
+            nextImage.setColor(deactivatedButton); 
             
             RefreshStatusPane();
 
             subbodydiv.setBackgroundImage( world_map["map"].asString() );
 
+            //TODO: Make work with new node system, where they are now a state rather than static data.
             int linecount = 0;
-            for( uint i = 0; i < world_map["nodes"].size(); i++ )
+            for( uint i = 0; i < global_data.world_map_nodes.length(); i++ )
             {
-                JSONValue node = world_map["nodes"][i];
-                  
-                float xpos = node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX());
-                float ypos = node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY());
-        
-                vec2 title_offset = vec2( node["title_offset"]["x"].asFloat(),node["title_offset"]["y"].asFloat()) * float(subbodydiv.getSizeX());
+                WorldMapNodeInstance@ inst = global_data.world_map_nodes[i];
+                JSONValue node = global_data.getWorldMapNode(inst.id);
 
-                AHGUI::Text node_title( node["title"].asString(), world_map_font, world_map_font_size, world_map_color);
-                //subbodydiv.addElement(node_title, DDTop);
-                int node_title_width = node_title.getSizeX();
-                subbodydiv.addFloatingElement(node_title, "world_map_node_title_" + node["id"].asString(), ivec2(title_offset)+ivec2(int(xpos)-node_title_width/2, int(ypos)-75), 5);
-        
-                AHGUI::Image node_marker( "Textures/world_map/map_marker.png" );
-                int node_marker_width = 50;
-                int node_marker_height = 50;
-                node_marker.setSize( node_marker_width,node_marker_height );
-                node_marker.addMouseOverBehavior(mouse_world_map_hover_behavior);
-                node_marker.addMouseOverBehavior( buttonHover );
-                node_marker.setName("world_map_node_image_" + node["id"].asString());
-                //subbodydiv.addElement( node_marker, DDTop);
-                subbodydiv.addFloatingElement( node_marker, "world_map_node_image_" + node["id"].asString(), ivec2(int(xpos)-node_marker_width/2, int(ypos)-node_marker_height/2));
+                //Check if the currently selected node (if there is one) is valid, meaning we want to enable player to continue
+                if( inst.id == global_data.world_map_node_id && inst.is_available && not inst.is_visited )
+                {
+                    nextImage.setColor(activatedButton);
+                    nextText.setColor(activatedButton);
+
+                    nextDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("next"), "leftclick" );
+
+                    nextImage.addMouseOverBehavior( buttonHover, "mouseover" );
+
+                    nextText.addMouseOverBehavior( buttonHover, "mouseover" );
+                }
+
+                if( node.type() == JSONobjectValue )
+                {
+                    float xpos = node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX());
+                    float ypos = node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY());
+            
+                    vec2 title_offset = vec2( node["title_offset"]["x"].asFloat(),node["title_offset"]["y"].asFloat()) * float(subbodydiv.getSizeX());
+
+                    AHGUI::Text node_title( node["title"].asString(), world_map_font, world_map_font_size, world_map_color);
+                    //subbodydiv.addElement(node_title, DDTop);
+                    int node_title_width = node_title.getSizeX();
+                    subbodydiv.addFloatingElement(node_title, "world_map_node_title_" + node["id"].asString(), ivec2(title_offset)+ivec2(int(xpos)-node_title_width/2, int(ypos)-75), 5);
+            
+                    AHGUI::Image node_marker( GetWorldMapNodeMarkerImage( inst ) );
+
+                    node_marker.setSize( node_marker_width,node_marker_height );
+
+                    if( inst.is_available && not inst.is_visited )
+                    {
+                        node_marker.addMouseOverBehavior( MouseOverImage( GetWorldMapNodeMarkerImage(inst), GetWorldMapNodeMarkerImage(inst,true) ));
+                        node_marker.addLeftMouseClickBehavior( MouseClickWorldNode( this, node["id"].asString() ) );
+                        node_marker.addMouseOverBehavior( buttonHover );
+                    }
+
+                    node_marker.setName("world_map_node_image_" + node["id"].asString());
+                    //subbodydiv.addElement( node_marker, DDTop);
+                    subbodydiv.addFloatingElement( node_marker, "world_map_node_image_" + node["id"].asString(), ivec2(int(xpos)-node_marker_width/2, int(ypos)-node_marker_height/2 ) );
+                }
+                else
+                {
+                    DisplayError( "Can't draw invalid node", "Can't draw invalid world_map_node: " + inst.id );
+                }
             }
 
             AHGUI::Image line_( "Textures/world_map/line_segment.png" );
             int line_segment_width = line_.getSizeX();
             float safe_zone = 50;
 
-            JSONValue connections = world_map["connections"];
-            for( uint i = 0; i < connections.size(); i++ )
+            for( uint i = 0; i < global_data.world_map_connections.length(); i++ )
             { 
-                JSONValue from_node = getWithId(world_map["nodes"], connections[i]["from"].asString());
-                JSONValue to_node = getWithId(world_map["nodes"], connections[i]["to"].asString());
+                JSONValue world_map_connection = global_data.getWorldMapConnection(global_data.world_map_connections[i].id);
 
-                vec2 from_node_pos(
-                    from_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
-                    from_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
-                );
-                vec2 to_node_pos(
-                    to_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
-                    to_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
-                );
-
-                float dist = length( from_node_pos - to_node_pos );
-                vec2 dir = normalize( from_node_pos - to_node_pos );
-
-                const float pi = 3.141592f;
-                float rotation = -atan2(dir.y, dir.x) * (180/pi);
-
-                float step = 0;
-                float optimal_step = 0;
-                float missing = 3.402823466e+38;
-                 
-                for( int k = 100; k < 200; k++ )
+                if( world_map_connection.type() == JSONobjectValue )
                 {
-                    step = line_segment_width + k*0.10;
+                    JSONValue from_node = global_data.getWorldMapNode(world_map_connection["from"].asString());
+                    JSONValue to_node = global_data.getWorldMapNode(world_map_connection["to"].asString());
 
-                    float curdist = safe_zone;
-                    while( curdist + step < (dist - safe_zone) )
+                    if( from_node.type() == JSONobjectValue && to_node.type() == JSONobjectValue )
                     {
-                        curdist += step;
-                    }
+                        vec2 from_node_pos(
+                            from_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
+                            from_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
+                        );
+                        vec2 to_node_pos(
+                            to_node["pos"]["x"].asFloat() * float(subbodydiv.getSizeX()),
+                            to_node["pos"]["y"].asFloat() * float(subbodydiv.getSizeY()) 
+                        );
+
+                        float dist = length( from_node_pos - to_node_pos );
+                        vec2 dir = normalize( from_node_pos - to_node_pos );
+
+                        const float pi = 3.141592f;
+                        float rotation = -atan2(dir.y, dir.x) * (180/pi);
+
+                        float step = 0;
+                        float optimal_step = 0;
+                        float missing = 3.402823466e+38;
+                         
+                        for( int k = 100; k < 200; k++ )
+                        {
+                            step = line_segment_width + k*0.10;
+
+                            float curdist = safe_zone;
+                            while( curdist + step < (dist - safe_zone) )
+                            {
+                                curdist += step;
+                            }
+                            
+                            if( dist-curdist < missing )
+                            {
+                                missing = dist-curdist;
+                                optimal_step = step;
+                            }
+                        }
                     
-                    if( dist-curdist < missing )
-                    {
-                        missing = dist-curdist;
-                        optimal_step = step;
+                        step = optimal_step;
+
+                        float curdist = safe_zone;
+
+                        while( curdist < (dist - safe_zone) )
+                        {
+                            vec2 curpos = to_node_pos + dir * curdist;
+                                
+                            AHGUI::Image line( "Textures/world_map/line_segment.png" );
+                            line.setRotation( rotation );
+                            subbodydiv.addFloatingElement( line, "mapline" + linecount++, ivec2(curpos)-ivec2(line_segment_width/2,line_segment_width/2) );
+
+                            curdist += step;
+                        }
                     }
-                }
-            
-                step = optimal_step;
-
-                float curdist = safe_zone;
-
-                while( curdist < (dist - safe_zone) )
-                {
-                    vec2 curpos = to_node_pos + dir * curdist;
-                        
-                    AHGUI::Image line( "Textures/world_map/line_segment.png" );
-                    line.setRotation( rotation );
-                    subbodydiv.addFloatingElement( line, "mapline" + linecount++, ivec2(curpos)-ivec2(line_segment_width/2,line_segment_width/2) );
-
-                    curdist += step;
                 }
             }
         }
@@ -1661,8 +1934,7 @@ class ArenaGUI : AHGUI::GUI {
         } 
         else if( world_map_node["type"].asString() == "arena_instance" )
         {
-            JSONValue arena_instance = global_data.getArenaInstance(world_map_node["target_id"].asString());      
-            
+            JSONValue arena_instance = global_data.getArenaInstance(global_data.arena_instance_id);      
             this_ui.SendCallback( arena_instance["level"].asString() );
         }
         else if( world_map_node["type"].asString() == "end_game" )
@@ -1707,7 +1979,6 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
     int flyingTextDir = 1;
     array<int> flyingImagesX = {0,0,0,0,0}; 
     array<int> flyingImagesDir = {1,1,1,1,1}; 
-
 
     /*******************************************************************************************/
     /**
@@ -1887,6 +2158,7 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
         // Check to see if an exit has been requested 
         if( message.name == "mainmenu" ) {
             global_data.WritePersistentInfo( false );
+            global_data.clearSessionProfile();
             this_ui.SendCallback("back");
         }
     }
@@ -1897,11 +2169,6 @@ class NewFeaturesExampleGUI : AHGUI::GUI {
      *
      */
     void update() {
-        
-        // have a way to get out of here
-        if(IsKeyDown(GetCodeForKey("esc"))) {   
-            processMessage(AHGUI::Message("mainmenu"));
-        }
 
         // Update the background images (we could have made this into a behavior)
     
@@ -2031,8 +2298,17 @@ bool HasFocus(){
     return false;
 }
 
-void Initialize(){
+void Initialize( ) {
 
+}
+
+void Dispose() {
+    
+}
+
+bool CanGoBack()
+{
+    return true;
 }
 
 void Update(){
@@ -2055,8 +2331,3 @@ void Draw(){
 
 void Init(string str){
 }
-
-void StartArenaMeta(){
-
-}
-

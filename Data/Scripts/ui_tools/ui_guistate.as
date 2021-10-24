@@ -10,16 +10,16 @@
 
 namespace AHGUI {
 
-/*******************************************************************************************/
-/**
- * @brief The current state of the GUI passed during update
- *
- */
-class GUIState
-{
-    ivec2 mousePosition;
-    UIMouseState leftMouseState;
-}
+    /*******************************************************************************************/
+    /**
+     * @brief The current state of the GUI passed during update
+     *
+     */
+    class GUIState
+    {
+        ivec2 mousePosition;
+        UIMouseState leftMouseState;
+    }
 
 } // namespace AHGUI
 

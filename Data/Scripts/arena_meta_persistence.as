@@ -7,7 +7,7 @@
 const float MIN_PLAYER_SKILL = 0.5f;
 const float MAX_PLAYER_SKILL = 1.9f;
 
-const int SAVEVERSION = 12;  // So we can keep track of older versions
+const int SAVEVERSION = 17;  // So we can keep track of older versions
 
 // Just for fun let's have some random name -- total non-cannon 
 array<string> firstNames = {"P'teth", "Greah", "Smugli", "Mec", "Jinx", "Malchi", 
@@ -27,6 +27,85 @@ enum ActionIfOperator
     ActionOperatorNot
 };
 
+class WorldMapNodeInstance
+{
+    WorldMapNodeInstance( string _id )
+    {
+        id = _id;
+        is_available = true;
+        is_visited = false;
+    }
+
+    WorldMapNodeInstance( string _id, bool _available, bool _visited )
+    {
+        id = _id;
+        is_available = _available;
+        is_visited = _visited;
+    }
+
+    WorldMapNodeInstance( JSONValue node )
+    {
+        id = node["id"].asString();
+        is_available = node["available"].asBool();
+        is_visited = node["visited"].asBool();
+    }
+
+    JSONValue toJSON()
+    {
+        JSONValue node = JSONValue( JSONobjectValue );
+        node["id"] = JSONValue( id );
+        node["available"] = JSONValue( is_available );
+        node["visited"] = JSONValue( is_visited ); 
+        return node;
+    }
+
+    void unavailable()
+    {
+        is_available = false;
+    }
+
+    void available()
+    {
+        is_available = true;
+    }
+
+    void visit()
+    {
+        is_visited = true;
+    }
+
+    void unvisit()
+    {
+        is_visited = false;
+    }
+
+    string id;
+    bool is_visited;
+    bool is_available;
+};
+
+class WorldMapConnectionInstance
+{
+    WorldMapConnectionInstance( string _id )
+    {
+        id = _id;
+    }
+
+    WorldMapConnectionInstance( JSONValue node )
+    {
+        id = node["id"].asString();
+    }
+
+    JSONValue toJSON()
+    {
+        JSONValue node = JSONValue( JSONobjectValue );
+        node["id"] = JSONValue( id );
+        return node;
+    }
+
+    string id;
+};
+
 class GlobalArenaData { 
     //Info about campaigns/world maps
     JSON campaignJSON;
@@ -43,15 +122,25 @@ class GlobalArenaData {
     array<vec3> player_colors;  // What colors has the player selected
     array<string> states;       // Current states of the player
     array<string> hidden_states; // Non visualized states
+
+    array<WorldMapNodeInstance@> world_map_nodes; //World map nodes that are rendered
+    array<WorldMapConnectionInstance@> world_map_connections; //List of connections between world map nodes;
+
     int player_wins;            // Lifetime wins
     int player_loses;           // Lifetime loses
     int player_kills;           // Number of individuals murdered
     int player_kos;             // Number of individuals knocked out
-    int player_deaths;     // Number of deaths.
+    int player_deaths;          // Number of deaths.
     string character_name;      // Name for this character
     string character_id;        // Character type chosen
+
     string world_map_id;        // Current world map
-    string world_map_node_id;    // Current world map node
+
+    string world_map_node_id;   // Current world map node
+    string meta_choice_id;      // Id for current meta choice
+    string message_id;          // Id for currently shown message
+    string arena_instance_id;   // Current arena instance id.
+
     string world_node_id;       // Current node.
     int play_time;              // Play time in seconds
     /**************************/
@@ -80,6 +169,9 @@ class GlobalArenaData {
         world_node_id = "";
         world_map_id = "";
         world_map_node_id = "";
+        meta_choice_id = "";
+        message_id = "";
+        arena_instance_id = "";
         play_time = 0;
 
         player_colors.resize(4);
@@ -101,15 +193,17 @@ class GlobalArenaData {
     {
         dictionary filesAndRoots = 
         {
-            {"characters",      "Data/Campaign/ArenaMode/StandardCampaign/characters.json"},
-            {"states",          "Data/Campaign/ArenaMode/StandardCampaign/states.json"},
-            {"hidden_states",   "Data/Campaign/ArenaMode/StandardCampaign/hidden_states.json"},
-            {"world_maps",      "Data/Campaign/ArenaMode/StandardCampaign/world_maps.json"},
-            {"world_nodes",     "Data/Campaign/ArenaMode/StandardCampaign/world_nodes.json"},
-            {"meta_choices",    "Data/Campaign/ArenaMode/StandardCampaign/meta_choices.json"},
-            {"arena_instances", "Data/Campaign/ArenaMode/StandardCampaign/arena_instances.json"},
-            {"messages",        "Data/Campaign/ArenaMode/StandardCampaign/messages.json"},
-            {"actions",         "Data/Campaign/ArenaMode/StandardCampaign/actions.json"}
+            {"characters",              "Data/Campaign/ArenaMode/StandardCampaign/characters.json"},
+            {"states",                  "Data/Campaign/ArenaMode/StandardCampaign/states.json"},
+            {"hidden_states",           "Data/Campaign/ArenaMode/StandardCampaign/hidden_states.json"},
+            {"world_maps",              "Data/Campaign/ArenaMode/StandardCampaign/world_maps.json"},
+            {"world_map_nodes",         "Data/Campaign/ArenaMode/StandardCampaign/world_map_nodes.json"},
+            {"world_map_connections",   "Data/Campaign/ArenaMode/StandardCampaign/world_map_connections.json"},
+            {"world_nodes",             "Data/Campaign/ArenaMode/StandardCampaign/world_nodes.json"},
+            {"meta_choices",            "Data/Campaign/ArenaMode/StandardCampaign/meta_choices.json"},
+            {"arena_instances",         "Data/Campaign/ArenaMode/StandardCampaign/arena_instances.json"},
+            {"messages",                "Data/Campaign/ArenaMode/StandardCampaign/messages.json"},
+            {"actions",                 "Data/Campaign/ArenaMode/StandardCampaign/actions.json"}
         };
 
         JSON j;
@@ -211,28 +305,33 @@ class GlobalArenaData {
         }
 
         // Write in some default value
-        newProfile["id"]                    = JSONValue( newId );
-        newProfile["fan_base"]              = JSONValue( 0 );
-        newProfile["player_skill"]          = JSONValue( MIN_PLAYER_SKILL );
-        newProfile["player_colors"]         = JSONValue( JSONarrayValue );
-        newProfile["player_wins"]           = JSONValue( 0 );
-        newProfile["player_loses"]          = JSONValue( 0 );
-        newProfile["player_kills"]          = JSONValue( 0 );
-        newProfile["player_kos"]            = JSONValue( 0 );
-        newProfile["player_deaths"]         = JSONValue( 0 );
-        newProfile["character_name"]        = JSONValue( generateRandomName() );
-        newProfile["fans"]                  = JSONValue( 0 );
-        newProfile["states"]                = JSONValue( JSONarrayValue );
-        newProfile["hidden_states"]         = JSONValue( JSONarrayValue );
-        newProfile["character_id"]          = JSONValue( "" );
-        newProfile["world_node_id"]         = JSONValue( "" );
-        newProfile["world_map_id"]          = JSONValue( "" );
-        newProfile["world_map_node_id"]     = JSONValue( "" );
-        newProfile["play_time"]             = JSONValue( 0 );
-        newProfile["pronoun"]               = JSONValue( JSONobjectValue );
-        newProfile["pronoun"]["she"]        = JSONValue( "he" );
-        newProfile["pronoun"]["her"]        = JSONValue( "his" );
-        newProfile["pronoun"]["herself"]    = JSONValue( "himself" );
+        newProfile["id"]                        = JSONValue( newId );
+        newProfile["fan_base"]                  = JSONValue( 0 );
+        newProfile["player_skill"]              = JSONValue( MIN_PLAYER_SKILL );
+        newProfile["player_colors"]             = JSONValue( JSONarrayValue );
+        newProfile["player_wins"]               = JSONValue( 0 );
+        newProfile["player_loses"]              = JSONValue( 0 );
+        newProfile["player_kills"]              = JSONValue( 0 );
+        newProfile["player_kos"]                = JSONValue( 0 );
+        newProfile["player_deaths"]             = JSONValue( 0 );
+        newProfile["character_name"]            = JSONValue( generateRandomName() );
+        newProfile["fans"]                      = JSONValue( 0 );
+        newProfile["states"]                    = JSONValue( JSONarrayValue );
+        newProfile["hidden_states"]             = JSONValue( JSONarrayValue );
+        newProfile["world_map_nodes"]           = JSONValue( JSONarrayValue );
+        newProfile["world_map_connections"]     = JSONValue( JSONarrayValue );
+        newProfile["character_id"]              = JSONValue( "" );
+        newProfile["world_node_id"]             = JSONValue( "" );
+        newProfile["world_map_id"]              = JSONValue( "" );
+        newProfile["world_map_node_id"]         = JSONValue( "" );
+        newProfile["meta_choice_id"]            = JSONValue( "" );
+        newProfile["message_id"]                = JSONValue( "" );
+        newProfile["arena_instance_id"]         = JSONValue( "" );
+        newProfile["play_time"]                 = JSONValue( 0 );
+        newProfile["pronoun"]                   = JSONValue( JSONobjectValue );
+        newProfile["pronoun"]["she"]            = JSONValue( "he" );
+        newProfile["pronoun"]["her"]            = JSONValue( "his" );
+        newProfile["pronoun"]["herself"]        = JSONValue( "himself" );
 
         // Now add the colors
         for( uint i = 0; i < 4; i++ ) {
@@ -283,6 +382,9 @@ class GlobalArenaData {
                 world_node_id = profiles[ i ][ "world_node_id" ].asString(); 
                 world_map_id = profiles[ i ][ "world_map_id" ].asString(); 
                 world_map_node_id = profiles[ i ][ "world_map_node_id" ].asString(); 
+                meta_choice_id = profiles[ i ][ "meta_choice_id" ].asString(); 
+                message_id = profiles[ i ][ "message_id" ].asString(); 
+                arena_instance_id = profiles[ i ][ "arena_instance_id" ].asString(); 
                 play_time = profiles[ i ][ "play_time" ].asInt(); 
 
                 // Combine the color vectors
@@ -296,14 +398,44 @@ class GlobalArenaData {
 
                 for( uint j = 0; j < profiles[i]["states"].size(); j++ )
                 {
-                    states.insertLast(profiles[i]["states"][j].asString());
+                    string state = profiles[i]["states"][j].asString();
+                    if( getState( state ).type() == JSONobjectValue )
+                    {
+                        states.insertLast(state);
+                    }
+                    else
+                    {
+                        Log( warning, "Not loading invalid state \"" + state + "\"" );
+                    }
                 }
 
                 hidden_states = array<string>();
 
                 for( uint j = 0; j < profiles[i]["hidden_states"].size(); j++ )
                 {
-                    hidden_states.insertLast(profiles[i]["hidden_states"][j].asString());
+                    string state = profiles[i]["hidden_states"][j].asString();
+                    if( getHiddenState( state ).type() == JSONobjectValue )
+                    {
+                        hidden_states.insertLast(state);
+                    }
+                    else
+                    {
+                        Log( warning, "Not loading invalid state \"" + state + "\"" );
+                    }
+                }
+
+                world_map_nodes.resize(0);
+
+                for( uint j = 0; j < profiles[i]["world_map_nodes"].size(); j++ )  
+                {
+                    world_map_nodes.insertLast(WorldMapNodeInstance(profiles[i]["world_map_nodes"][j]));
+                }
+
+                world_map_connections.resize(0);
+
+                for( uint j = 0; j < profiles[i]["world_map_connections"].size(); j++ )  
+                {
+                    world_map_connections.insertLast(WorldMapConnectionInstance(profiles[i]["world_map_connections"][j]));
                 }
 
                 // We're done here
@@ -313,8 +445,65 @@ class GlobalArenaData {
 
         // Sanity checking
         if( !profileFound ) {
-            DisplayError("Persistence Error", "Profile id " + targetId + " not found in store.");
+            DisplayError("Persistence Error", "1 Profile id " + targetId + " not found in store.");
         }
+    }
+
+    JSONValue serializeCurrentProfile()
+    {
+        JSONValue prof = JSONValue(JSONobjectValue);
+
+        // Copy all the values back
+        prof[ "id" ]              = JSONValue( profileId );
+        prof[ "fan_base" ]        = JSONValue( fan_base );
+        prof[ "player_skill" ]    = JSONValue( player_skill );
+        prof[ "player_wins" ]     = JSONValue( player_wins );
+        prof[ "player_loses" ]    = JSONValue( player_loses );
+        prof[ "player_kills" ]    = JSONValue( player_kills );
+        prof[ "player_kos" ]      = JSONValue( player_kos );
+        prof[ "player_deaths" ]   = JSONValue( player_deaths );
+        prof[ "character_name" ]  = JSONValue( character_name );
+        prof[ "character_id" ]    = JSONValue( character_id );
+        prof[ "world_node_id" ]   = JSONValue( world_node_id );
+        prof[ "world_map_id" ]    = JSONValue( world_map_id );
+        prof[ "world_map_node_id"]= JSONValue( world_map_node_id );
+        prof[ "meta_choice_id"]   = JSONValue( meta_choice_id );
+        prof[ "message_id"]       = JSONValue( message_id );
+        prof[ "arena_instance_id"]= JSONValue( arena_instance_id );
+        prof[ "play_time" ]       = JSONValue( play_time );
+
+        // Unpack the color vectors
+        for( uint c = 0; c < 4; c++ ) {
+            prof[ "player_colors" ][c][0] = JSONValue( player_colors[c].x );
+            prof[ "player_colors" ][c][1] = JSONValue( player_colors[c].y );
+            prof[ "player_colors" ][c][2] = JSONValue( player_colors[c].z );
+        }
+
+        prof[ "states" ] = JSONValue( JSONarrayValue );
+        for( uint j = 0; j < states.length(); j++ )
+        {
+            prof[ "states" ].append(JSONValue(states[j]));
+        }
+
+        prof[ "hidden_states" ] = JSONValue( JSONarrayValue );
+        for( uint j = 0; j < hidden_states.length(); j++ )
+        {
+            prof[ "hidden_states" ].append(JSONValue(hidden_states[j]));
+        }
+
+        prof[ "world_map_nodes" ] = JSONValue( JSONarrayValue );
+        for( uint j = 0; j < world_map_nodes.length(); j++ )
+        {
+            prof[ "world_map_nodes" ].append( world_map_nodes[j].toJSON() );
+        }
+
+        prof[ "world_map_connections" ] = JSONValue( JSONarrayValue );
+        for( uint j = 0; j < world_map_connections.length(); j++ )
+        {
+            prof[ "world_map_connections" ].append(world_map_connections[j].toJSON());
+        }
+
+        return prof;
     }
 
     /*******************************************************************************************/
@@ -334,38 +523,14 @@ class GlobalArenaData {
             if( profileData.getRoot()["profiles"][ i ]["id"].asInt() == profileId ) {
                 profileFound = true;
 
-                // Copy all the values back
-                profileData.getRoot()["profiles"][ i ][ "fan_base" ]        = JSONValue( fan_base );
-                profileData.getRoot()["profiles"][ i ][ "player_skill" ]    = JSONValue( player_skill );
-                profileData.getRoot()["profiles"][ i ][ "player_wins" ]     = JSONValue( player_wins );
-                profileData.getRoot()["profiles"][ i ][ "player_loses" ]    = JSONValue( player_loses );
-                profileData.getRoot()["profiles"][ i ][ "player_kills" ]    = JSONValue( player_kills );
-                profileData.getRoot()["profiles"][ i ][ "player_kos" ]      = JSONValue( player_kos );
-                profileData.getRoot()["profiles"][ i ][ "player_deaths" ]   = JSONValue( player_deaths );
-                profileData.getRoot()["profiles"][ i ][ "character_name" ]  = JSONValue( character_name );
-                profileData.getRoot()["profiles"][ i ][ "character_id" ]    = JSONValue( character_id );
-                profileData.getRoot()["profiles"][ i ][ "world_node_id" ]   = JSONValue( world_node_id );
-                profileData.getRoot()["profiles"][ i ][ "world_map_node_id"]= JSONValue( world_map_node_id );
-                profileData.getRoot()["profiles"][ i ][ "play_time" ]       = JSONValue( play_time );
-                
+                JSONValue partial_profile = serializeCurrentProfile();
 
-                // Unpack the color vectors
-                for( uint c = 0; c < 4; c++ ) {
-                    profileData.getRoot()["profiles"][ i ][ "player_colors" ][c][0] = JSONValue( player_colors[c].x );
-                    profileData.getRoot()["profiles"][ i ][ "player_colors" ][c][1] = JSONValue( player_colors[c].y );
-                    profileData.getRoot()["profiles"][ i ][ "player_colors" ][c][2] = JSONValue( player_colors[c].z );
-                }
+                array<string> partial_profile_members = partial_profile.getMemberNames();
 
-                profileData.getRoot()["profiles"][ i ][ "states" ] = JSONValue( JSONarrayValue );
-                for( uint j = 0; j < states.length(); j++ )
+                for(uint j = 0; j < partial_profile_members.size(); j++ )
                 {
-                    profileData.getRoot()["profiles"][ i ][ "states" ].append(JSONValue(states[j]));
-                }
-
-                profileData.getRoot()["profiles"][ i ][ "hidden_states" ] = JSONValue( JSONarrayValue );
-                for( uint j = 0; j < hidden_states.length(); j++ )
-                {
-                    profileData.getRoot()["profiles"][ i ][ "hidden_states" ].append(JSONValue(hidden_states[j]));
+                    profileData.getRoot()["profiles"][ i ][partial_profile_members[j]] 
+                        = partial_profile[partial_profile_members[j]];
                 }
 
                 // We're done here
@@ -375,7 +540,7 @@ class GlobalArenaData {
 
         // Sanity checking
         if( !profileFound ) {
-            DisplayError("Persistence Error", "Profile id " + profileId + " not found in store.");
+            DisplayError("Persistence Error", "2 Profile id " + profileId + " not found in store.");
         }
     }
 
@@ -402,6 +567,7 @@ class GlobalArenaData {
         // if we got this far, it's a new one, so just append it
         profileData.getRoot()["profiles"].append( newProfile );
 
+        WritePersistentInfo( false );
     }
 
     /*******************************************************************************************/
@@ -430,6 +596,7 @@ class GlobalArenaData {
         // Do the removal 
         profileData.getRoot()["profiles"].removeIndex(targetProfileIndex);
 
+        WritePersistentInfo( false );
     }
 
     /*******************************************************************************************/
@@ -550,6 +717,7 @@ class GlobalArenaData {
      *
      */
     void WritePersistentInfo( bool moveDataToStore = true ) {
+        Log( info, "Saving profile data to disk" );
 
         // Make sure we've got information to write -- this is not an error
         if( !dataLoaded ) return;
@@ -614,11 +782,20 @@ class GlobalArenaData {
 
     void clearSessionProfile()
     {
+        WritePersistentInfo( false );
+
         JSONValue thisSession = getSessionParameters();
         thisSession["profile_id"] = JSONValue(-1); 
         setSessionParameters( thisSession );
     }
 
+    void clearArenaSession()
+    {
+        WritePersistentInfo( false );
+
+        JSONValue thisSession = JSONValue( JSONobjectValue );
+        setSessionParameters( thisSession );
+    }
 
     /*******************************************************************************************/
     /**
@@ -775,25 +952,25 @@ class GlobalArenaData {
                 string memb = memberNames[0];
                 bool ret_value = false;
 
-                if( memb == "if_result_match_any" ) {
+                if( memb == "result_match_any" ) {
                     ret_value = false;
-                    JSONValue if_result_match_any = node["if_result_match_any"];
-                    for( uint j = 0; j < if_result_match_any.size(); j++ )
+                    JSONValue result_match_any = node["result_match_any"];
+                    for( uint j = 0; j < result_match_any.size(); j++ )
                     {
-                        if( if_result_match_any[j].asString() == result )
+                        if( result_match_any[j].asString() == result )
                         {
-                            Log( info, "Match on result " + if_result_match_any[j].asString() + " and " + result );
+                            Log( info, "Match on result " + result_match_any[j].asString() + " and " + result );
                             ret_value = true;
                         }
                     }
-                } else if(memb == "if_eq" ) {
-                    JSONValue if_eq = node["if_eq"];
-                    for( uint k = 0; k < if_eq.size(); k++ )
+                } else if(memb == "eq" ) {
+                    JSONValue eq = node["eq"];
+                    for( uint k = 0; k < eq.size(); k++ )
                     {
-                        for( uint j = 1; j < if_eq[k].size(); j++  )
+                        for( uint j = 1; j < eq[k].size(); j++  )
                         {
-                            string s1 = resolveString(if_eq[k][j-1].asString());
-                            string s2 = resolveString(if_eq[k][j].asString());
+                            string s1 = resolveString(eq[k][j-1].asString());
+                            string s2 = resolveString(eq[k][j].asString());
                             if( s1 == s2 )
                             {
                                 Log( info, "Evaluated \"" + s1 + "\" == \"" + s2 + "\" to true" );
@@ -806,14 +983,14 @@ class GlobalArenaData {
                             }
                         }
                     }
-                } else if( memb == "if_gt" ) {
-                    JSONValue if_gt = node["if_gt"];
-                    for( uint k = 0; k < if_gt.size(); k++ )
+                } else if( memb == "gt" ) {
+                    JSONValue gt = node["gt"];
+                    for( uint k = 0; k < gt.size(); k++ )
                     {
-                        for( uint j = 1; j < if_gt[k].size(); j++  )
+                        for( uint j = 1; j < gt[k].size(); j++  )
                         {
-                            string s1 = resolveString(if_gt[k][j-1].asString());
-                            string s2 = resolveString(if_gt[k][j].asString());
+                            string s1 = resolveString(gt[k][j-1].asString());
+                            string s2 = resolveString(gt[k][j].asString());
 
                             uint c1 = 0;
                             double v1 = parseFloat(s1,c1);
@@ -843,12 +1020,17 @@ class GlobalArenaData {
                         JSONValue chance = node["chance"];
                         double r = ((rand()%1001)/1000.0f);
                         ret_value = ( r <= chance.asDouble());
-                } else if( memb == "if_has_state" ) {
-                        ret_value = global_data.hasState( node["if_has_state"].asString() );
-                } else if( memb == "if_has_hidden_state" ) {
-                        ret_value = global_data.hasHiddenState( node["if_has_hidden_state"].asString() );
-                } else if( memb == "if_current_world_node_is" ) {
-                        ret_value = (global_data.world_node_id == node["if_current_world_node_is"].asString());
+                } else if( memb == "has_state" ) {
+                        ret_value = global_data.hasState( node["has_state"].asString() );
+                } else if( memb == "has_hidden_state" ) {
+                        ret_value = global_data.hasHiddenState( node["has_hidden_state"].asString() );
+                } else if( memb == "current_world_node_is" ) {
+                        ret_value = (global_data.world_node_id == node["current_world_node_is"].asString());
+                } else if( memb == "current_world_map_node_is" ) {
+                        ret_value = (global_data.world_map_node_id == node["current_world_map_node_is"].asString());
+                } else if( memb == "visited_world_map_node" ) {
+                        WorldMapNodeInstance@ wmni = global_data.getWorldMapNodeInstance( node["visited_world_map_node"].asString() );
+                        ret_value = (wmni !is null && wmni.is_visited);
                 } else {
                     DisplayError("Unknown action if-clause", "Unknown action if-clause \"" + memberNames[0] + "\"");
                 }
@@ -860,10 +1042,14 @@ class GlobalArenaData {
                 return false;
             }
         }
+        else if( node.type() == JSONnullValue )
+        {
+            //Assume true if we are missing the if clause
+            return true;
+        } 
         else
         {
             DisplayError( "Action data error", "Invalid node in action if statement for node " + node["id"].asString() );
-            PrintCallstack();
             return false;
         }
     }
@@ -873,8 +1059,8 @@ class GlobalArenaData {
         JSONValue set_world_node = action_clause["set_world_node"];
         if( set_world_node.type() != JSONnullValue )
         {
-            queued_world_node_id = set_world_node.asString();
             Log( info, "Setting next world_node to " + world_node_id );
+            queued_world_node_id = set_world_node.asString();
         }
         
         JSONValue add_states = action_clause["add_states"];
@@ -882,6 +1068,7 @@ class GlobalArenaData {
         {
             for( uint j = 0; j < add_states.size(); j++ )
             {
+                Log( info, "add_states: " + add_states[j].asString() );
                 addState( add_states[j].asString() );
             }
         }
@@ -891,6 +1078,7 @@ class GlobalArenaData {
         {
             for( uint j = 0; j < lose_states.size(); j++ )
             {
+                Log( info, "lose_states: " + lose_states[j].asString() );
                 removeState( lose_states[j].asString() );
             }
         }
@@ -900,6 +1088,7 @@ class GlobalArenaData {
         {
             for( uint j = 0; j < add_hidden_states.size(); j++ )
             {
+                Log( info, "add_hidden_states: " + add_hidden_states[j].asString() );
                 addHiddenState( add_hidden_states[j].asString() );
             }
         }
@@ -909,6 +1098,7 @@ class GlobalArenaData {
         {
             for( uint j = 0; j < lose_hidden_states.size(); j++ )
             {
+                Log( info, "lose_hidden_states: " + lose_hidden_states[j].asString() );
                 removeHiddenState( lose_hidden_states[j].asString() );
             }
         }
@@ -918,11 +1108,166 @@ class GlobalArenaData {
         {
             ProcessActionNodeArray( actions, result );
         }
+
+        JSONValue set_meta_choice = action_clause["set_meta_choice"];
+        if( set_meta_choice.type() != JSONnullValue )
+        {
+            Log( info, "set_meta_choice: " + set_meta_choice.asString() );
+            meta_choice_id = set_meta_choice.asString();
+        }  
+
+        JSONValue set_message = action_clause["set_message"];
+        if( set_message.type() != JSONnullValue )
+        {
+            Log( info, "set_message: " + set_message.asString() );
+            message_id = set_message.asString(); 
+        }
+         
+        JSONValue set_arena_instance = action_clause["set_arena_instance"];
+        if( set_arena_instance.type() != JSONnullValue )
+        {
+            Log( info, "set_arena_instance: " + set_arena_instance.asString() );
+            arena_instance_id = set_arena_instance.asString();
+        }
+
+        JSONValue set_world_map = action_clause["set_world_map"];
+        if( set_world_map.type() != JSONnullValue )
+        {
+            Log( info, "set_world_map: " + set_world_map.asString() );
+            world_map_id = set_world_map.asString();
+        }
+
+        JSONValue add_world_map_nodes = action_clause["add_world_map_nodes"];
+        if( add_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < add_world_map_nodes.size(); i++ )
+            {
+                Log( info, "add_world_map_nodes: " + add_world_map_nodes[i].asString() );
+                addWorldMapNodeInstance( add_world_map_nodes[i].asString() );
+            }
+        }
+
+        JSONValue remove_world_map_nodes = action_clause["remove_world_map_nodes"];
+        if( remove_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < remove_world_map_nodes.size(); i++ )
+            {
+                Log( info, "remove_world_map_nodes: " + remove_world_map_nodes[i].asString() );
+                removeWorldMapNodeInstance( remove_world_map_nodes[i].asString() );
+            }
+        }
+        
+        JSONValue visit_world_map_nodes = action_clause["visit_world_map_nodes"];
+        if( visit_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < visit_world_map_nodes.size(); i++ )
+            {
+                WorldMapNodeInstance@ n = getWorldMapNodeInstance( visit_world_map_nodes[i].asString() );
+
+                if( n is null )
+                {
+                    Log(error, "Trying to visit non-activated node \"" + visit_world_map_nodes[i].asString() + "\""  );
+                }
+                else
+                {
+                    Log( info, "visit_world_map_nodes: " + visit_world_map_nodes[i].asString( ));
+                    n.visit();
+                }
+            }
+        }
+
+        JSONValue unvisit_world_map_nodes = action_clause["unvisit_world_map_nodes"];
+        if( unvisit_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < unvisit_world_map_nodes.size(); i++ )
+            {
+                WorldMapNodeInstance@ n = getWorldMapNodeInstance( unvisit_world_map_nodes[i].asString() );
+
+                if( n is null )
+                {
+                    Log(error, "Trying to unvisit non-activated node \"" + unvisit_world_map_nodes[i].asString() + "\""  );
+                }
+                else
+                {
+                    Log( info, "unvisit_world_map_nodes: " + unvisit_world_map_nodes[i].asString( ));
+                    n.unvisit();
+                }
+            }
+        }
+
+        JSONValue available_world_map_nodes = action_clause["available_world_map_nodes"];
+        if( available_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < available_world_map_nodes.size(); i++ )
+            {
+                WorldMapNodeInstance@ n = getWorldMapNodeInstance( available_world_map_nodes[i].asString() );
+
+                if( n is null )
+                {
+                    Log(error, "Trying to available non-activated node \"" + available_world_map_nodes[i].asString() + "\""  );
+                }
+                else
+                {
+                    Log( info, "available_world_map_nodes: " + available_world_map_nodes[i].asString( ));
+                    n.available();
+                }
+            }
+        }
+
+        JSONValue unavailable_world_map_nodes = action_clause["unavailable_world_map_nodes"];
+        if( unavailable_world_map_nodes.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < unavailable_world_map_nodes.size(); i++ )
+            {
+                WorldMapNodeInstance@ n = getWorldMapNodeInstance( unavailable_world_map_nodes[i].asString() );
+
+                if( n is null )
+                {
+                    Log(error, "Trying to unavailable non-activated node \"" + unavailable_world_map_nodes[i].asString() + "\""  );
+                }
+                else
+                {
+                    Log( info, "unavailable_world_map_nodes: " + unavailable_world_map_nodes[i].asString( ));
+                    n.unavailable();
+                }
+            }
+        }
+
+        JSONValue set_world_map_node = action_clause["set_world_map_node"];
+        if( set_world_map_node.type() != JSONnullValue )
+        {
+            if( !hasWorldMapNodeInstance(set_world_map_node.asString() ) )
+            {
+                Log( info, "set_world_map_node: " + set_world_map_node.asString() );
+                addWorldMapNodeInstance( set_world_map_node.asString() );
+            }
+
+            world_map_node_id = set_world_map_node.asString();
+        }
+
+        JSONValue add_world_map_connections = action_clause["add_world_map_connections"];
+        if( add_world_map_connections.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < add_world_map_connections.size(); i++ )
+            {
+                Log( info, "add_world_map_connections: " + add_world_map_connections[i].asString() );
+                addWorldMapConnectionInstance( add_world_map_connections[i].asString() );
+            }
+        }
+
+        JSONValue remove_world_map_connections = action_clause["remove_world_map_connections"];
+        if( remove_world_map_connections.type() != JSONnullValue )
+        {
+            for( uint i = 0; i < remove_world_map_connections.size(); i++ )
+            {
+                Log( info, "remove_world_map_connections: " + remove_world_map_connections[i].asString() );
+                removeWorldMapConnectionInstance( remove_world_map_connections[i].asString() );
+            }
+        }
     }
 
     void ProcessActionNode( JSONValue action_node, string result )
     {
-
         Log(info, "Processing action node: \"" + action_node["id"].asString() + "\"");
 
         JSONValue action_if = action_node["if"];
@@ -957,44 +1302,53 @@ class GlobalArenaData {
 
     void ProcessActionNodeArray( JSONValue actions, string result )
     {
-        for( uint i = 0; i < actions.size(); i++ )
+        if( actions.type() == JSONarrayValue )
         {
-            JSONValue action = actions[i];
+            for( uint i = 0; i < actions.size(); i++ )
+            {
+                JSONValue action = actions[i];
 
-            if( action.type() == JSONstringValue )
-            {
-                ProcessActionNode(getAction(action.asString()),result);
+                if( action.type() == JSONstringValue )
+                {
+                    ProcessActionNode(getAction(action.asString()),result);
+                }
+                else if( action.type() == JSONobjectValue )
+                {
+                    ProcessActionNode(action,result);
+                }
             }
-            else if( action.type() == JSONobjectValue )
-            {
-                ProcessActionNode(action,result);
-            }
+        }
+        else
+        {
+            Log( error, "*_actions is not an array." );
         }
     }
 
-    void ResolveWorldNode()
+    void ResolveWorldNode( bool top_level = true )
     {
-        JSONValue world_node = getCurrentWorldNode();
         JSONValue character = getCurrentCharacter();
-
         if( queued_world_node_id != "" )
         {
-            Log(info, "Trying to resolve pre_action for node: \"" + world_node["id"].asString() + "\"");
             world_node_id = queued_world_node_id;
+
+            JSONValue world_node = getWorldNode( world_node_id );
             queued_world_node_id = "";
+
+            Log(info, "Trying to resolve pre_action for node: \"" + world_node["id"].asString() + "\"");
             ProcessActionNodeArray(character["global_pre_actions"], "");
             ProcessActionNodeArray(world_node["pre_actions"], "");
             ProcessActionNodeArray(character["global_post_actions"], "");
 
             done_with_current_node = false;
-            ResolveWorldNode();
+            ResolveWorldNode(false);
         }
         else if( done_with_current_node )
         {
+            JSONValue world_node = getWorldNode( world_node_id );
             Log(info, "Trying to resolve post_action for node: \"" + world_node["id"].asString() + "\"");
             if( world_node["type"].asString() == "meta_choice" )
             { 
-                JSONValue meta_choice = getMetaChoice(world_node["target_id"].asString());
+                JSONValue meta_choice = getMetaChoice(meta_choice_id);
 
                 if( meta_choice_option >= 0 && meta_choice_option < int(meta_choice["options"].size()) )
                 {
@@ -1022,6 +1376,12 @@ class GlobalArenaData {
                 ProcessActionNodeArray(world_node["post_actions"], arena_victory ? "win" : "loss");
                 ProcessActionNodeArray(character["global_post_actions"], arena_victory ? "win" : "loss");
             }
+            else if( world_node["type"].asString() == "world_map" )
+            {
+                ProcessActionNodeArray(character["global_pre_actions"], "continue");
+                ProcessActionNodeArray(world_node["post_actions"], "continue");
+                ProcessActionNodeArray(character["global_post_actions"], "continue");
+            }
             else
             {
                 Log(error, "Unknown world_node type \""  + world_node["type"].asString() + "\"" );
@@ -1031,8 +1391,113 @@ class GlobalArenaData {
             { 
                 DisplayError( "Arena Mode", "We were not given a new world_node from actions this means we are stuck here.");
             }
+
             done_with_current_node = false;
-            ResolveWorldNode();
+
+            ResolveWorldNode(false);
+        }
+
+        if( top_level )
+        {
+            WritePersistentInfo();
+        }
+    }
+
+    WorldMapNodeInstance@ getWorldMapNodeInstance( string id )
+    {
+        for( uint i = 0; i < world_map_nodes.length(); i++ )
+        {
+            if( world_map_nodes[i].id == id )
+                return @world_map_nodes[i];
+        }
+        return null;
+    }
+
+    bool hasWorldMapNodeInstance( string id )
+    {
+        if( getWorldMapNodeInstance(id) is null  )
+            return false;
+        else
+            return true;
+    }
+
+    void addWorldMapNodeInstance( string id )
+    {
+        if( !hasWorldMapNodeInstance( id ) )
+        {
+            if( getWorldMapNode( id ).type() == JSONobjectValue )
+            {
+                world_map_nodes.insertLast( WorldMapNodeInstance( id ) );
+            }
+            else
+            {
+                DisplayError( "Error adding world map node", "Can't add world_map_node \"" + id + "\" because it isn't declared:" );
+            }
+        }
+        else
+        {
+            Log( warning, "Tried to add world map node which already exists." );
+        }
+    }
+
+    void removeWorldMapNodeInstance( string id )
+    {
+        for( uint i = 0; i < world_map_nodes.length(); i++ )
+        {
+            if( world_map_nodes[i].id == id )
+            {
+                world_map_nodes.removeAt(i);
+                break;
+            }
+        }
+    }
+
+    WorldMapConnectionInstance@ getWorldMapConnectionInstance( string id )
+    {
+        for( uint i = 0; i < world_map_connections.length(); i++ )
+        {
+            if( world_map_connections[i].id == id )
+                return @world_map_connections[i];
+        }
+        return null;
+    }
+
+    bool hasWorldMapConnectionInstance( string id )
+    {
+        if( getWorldMapConnectionInstance(id) is null  )
+            return false;
+        else
+            return true;
+    }
+
+    void addWorldMapConnectionInstance( string id )
+    {
+        if( !hasWorldMapConnectionInstance( id ) )
+        {
+            if( getWorldMapConnection( id ).type() == JSONobjectValue )
+            {
+                world_map_connections.insertLast( WorldMapConnectionInstance( id ) );
+            }
+            else
+            {
+                DisplayError( "Error adding world map connection", "Can't add world_map_connection \"" + id + "\" because it isn't declared:" );
+            }
+        }
+        else
+        {
+            Log( warning, "Tried to add world map connection which already exists." );
+        }
+    }
+
+    void removeWorldMapConnectionInstance( string id )
+    {
+        for( uint i = 0; i < world_map_connections.length(); i++ )
+        {
+            if( world_map_connections[i].id == id )
+            {
+                world_map_connections.removeAt(i);
+                break;
+            }
         }
     }
 
@@ -1060,7 +1525,6 @@ class GlobalArenaData {
             }
         }
 
-        WritePersistentInfo();
     }
 
     void addState( string state )
@@ -1071,7 +1535,6 @@ class GlobalArenaData {
             {
                 states.insertLast(state);
             } 
-            WritePersistentInfo();
         }
         else
         {
@@ -1102,7 +1565,6 @@ class GlobalArenaData {
                 }
             }
         }
-        WritePersistentInfo();
     }
 
     void addHiddenState( string hidden_state )
@@ -1113,7 +1575,6 @@ class GlobalArenaData {
             {
                 hidden_states.insertLast(hidden_state); 
             }
-            WritePersistentInfo();
         }
         else
         {
@@ -1151,6 +1612,16 @@ class GlobalArenaData {
     JSONValue getWorldMaps()
     {
         return campaignJSON.getRoot()["world_maps"];
+    }
+
+    JSONValue getWorldMapNodes()
+    {
+        return campaignJSON.getRoot()["world_map_nodes"];
+    }
+
+    JSONValue getWorldMapConnections()
+    {
+        return campaignJSON.getRoot()["world_map_connections"];
     }
 
     JSONValue getArenaInstances()
@@ -1209,6 +1680,34 @@ class GlobalArenaData {
             {
                 return worldmaps[i];
             } 
+        }
+        return JSONValue();
+    }
+
+    JSONValue getWorldMapNode( string id )
+    {
+        JSONValue worldmapnodes = getWorldMapNodes();
+
+        for( uint i = 0; i < worldmapnodes.size(); i++ )
+        {
+            if( worldmapnodes[i]["id"].asString() == id )
+            {
+                return worldmapnodes[i];
+            }
+        }
+        return JSONValue();
+    }
+
+    JSONValue getWorldMapConnection( string id )
+    {
+        JSONValue worldmapconnections = getWorldMapConnections();
+
+        for( uint i = 0; i < worldmapconnections.size(); i++ )
+        {
+            if( worldmapconnections[i]["id"].asString() == id )
+            {
+                return worldmapconnections[i];
+            }
         }
         return JSONValue();
     }

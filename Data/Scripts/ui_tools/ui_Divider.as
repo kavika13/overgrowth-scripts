@@ -19,7 +19,7 @@ namespace AHGUI {
  *
  */
 class Divider : Container {
-    
+
     array<Element@> topLeftContents; // elements in this container top/left
     array<Element@> bottomRightContents; // elements in this container topLeft
     Element@ centeredElement; // element in this container centered (only one allowed)
@@ -81,11 +81,23 @@ class Divider : Container {
      * 
      */
     void clear() {
+
+        Print("Divider " + getName() + " is being cleared");
+
         topLeftContents.resize(0);
         @centeredElement = null;
         bottomRightContents.resize(0);
-        setSize(UNDEFINEDSIZE,UNDEFINEDSIZE);
-        boundaryOffset = ivec2(0,0);
+
+        // Reset the region tracking
+        topLeftBoundStart = UNDEFINEDSIZE;   
+        topLeftBoundEnd = UNDEFINEDSIZE; 
+        topLeftSize = 0;  
+        centerBoundStart = UNDEFINEDSIZE;   
+        centerBoundEnd = UNDEFINEDSIZE;     
+        centerSize = 0;
+        bottomRightBoundStart = UNDEFINEDSIZE;
+        bottomRightBoundEnd = UNDEFINEDSIZE;
+        bottomRightSize = 0;
 
         Container::clear();
 
@@ -176,7 +188,7 @@ class Divider : Container {
             currentClipSize = clipSize;
         }
         else {
-            currentClipSize = getSize();
+            currentClipSize = getBoundarySize();
         }
 
         // See if the superclass wants to do anything
@@ -721,6 +733,12 @@ class Divider : Container {
                 default:
 
             }   
+        }
+
+        // If we don't have a default size already and we have a size, set the default size
+        if( newElement.getDefaultSize().x == UNDEFINEDSIZE &&
+            newElement.getDefaultSize().y == UNDEFINEDSIZE  ) {
+            newElement.setDefaultSize( newElement.getSize() );
         }
 
         // Link to this element/owning GUI

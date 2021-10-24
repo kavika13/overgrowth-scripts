@@ -78,8 +78,12 @@ class Container : Element {
      */
     void clear() {
         floatingContents.deleteAll();
-        setSize(UNDEFINEDSIZE,UNDEFINEDSIZE);
+        
         boundaryOffset = ivec2(0,0);
+        setSize(getDefaultSize());
+        setBoundarySize();
+        setDisplacement();
+        
         onRelayout();
     }
 

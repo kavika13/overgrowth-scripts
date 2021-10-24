@@ -88,37 +88,11 @@ bool VerifyWorldNodeReferences( GlobalArenaData@ gad )
 
         //Log( info, "Evaluating world_node id:" + world_node["id"].asString() );
         JSONValue type = world_node["type"];
-        JSONValue target_id = world_node["target_id"];
         JSONValue pre_actions = world_node["pre_actions"];
         JSONValue post_actions = world_node["post_actions"];
 
         string type_s = type.asString();
         string id = world_node["id"].asString();
-
-        if( type_s == "meta_choice" )
-        {
-            if( gad.getMetaChoice( target_id.asString() ).type() != JSONobjectValue )
-            {
-                Log( error, "world_node " + id + " references invalid meta_choice: " + target_id.asString() );
-                is_ok = false;
-            }
-        }
-        else if( type_s == "message" )
-        {
-            if( gad.getMessage( target_id.asString() ).type() != JSONobjectValue )
-            {
-                Log( error, "world_node " + id + " references invalid message: " + target_id.asString() );
-                is_ok = false;
-            }
-        }
-        else if( type_s == "arena_instance" )
-        {
-            if( gad.getArenaInstance( target_id.asString() ).type() != JSONobjectValue )
-            {
-                Log( error, "world_node " + id + " references invalid arena_instance: " + target_id.asString() );
-                is_ok = false;
-            }
-        }
 
         for( uint j = 0; j < pre_actions.size(); j++ )
         {
@@ -152,7 +126,6 @@ bool VerifyCharacterReferences( GlobalArenaData@ gad )
 
         JSONValue portrait =        character["portrait"];
         JSONValue states =          character["states"];
-        JSONValue world_map_id =    character["world_map_id"];
         JSONValue world_node_id =   character["world_node_id"];
         JSONValue global_pre_actions =  character["global_pre_actions"];
         JSONValue global_post_actions =  character["global_post_actions"];
@@ -174,12 +147,6 @@ bool VerifyCharacterReferences( GlobalArenaData@ gad )
                 is_ok = false;
             }
         }
-
-        if( gad.getWorldMap( world_map_id.asString() ).type() != JSONobjectValue )
-        {
-            Log( error, "character " +  id + " world_map_id is invalid " + world_map_id.asString() ); 
-            is_ok = false;  
-        } 
     
         if( gad.getWorldNode( world_node_id.asString() ).type() != JSONobjectValue )
         {
@@ -284,12 +251,28 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
     bool is_ok = true;
     if( clause.type() == JSONobjectValue )
     {
-        JSONValue set_world_node = clause["set_world_node"];
-        JSONValue add_states = clause["add_states"];
-        JSONValue lose_states = clause["lose_states"];
-        JSONValue add_hidden_states = clause["add_hidden_states"];
-        JSONValue lose_hidden_states = clause["lose_hidden_states"];
-        JSONValue actions = clause["actions"]; 
+        JSONValue set_world_node                = clause["set_world_node"];
+        JSONValue add_states                    = clause["add_states"];
+        JSONValue lose_states                   = clause["lose_states"];
+        JSONValue add_hidden_states             = clause["add_hidden_states"];
+        JSONValue lose_hidden_states            = clause["lose_hidden_states"];
+        JSONValue actions                       = clause["actions"]; 
+        JSONValue set_arena_instance            = clause["set_arena_instance"];
+        JSONValue set_meta_choice               = clause["set_meta_choice"];
+        JSONValue set_message                   = clause["set_message"];
+        JSONValue set_world_map                 = clause["set_world_map"];
+
+        JSONValue add_world_map_nodes           = clause["add_world_map_nodes"];
+        JSONValue remove_world_map_nodes        = clause["remove_world_map_nodes"];
+        JSONValue visit_world_map_nodes         = clause["visit_world_map_nodes"];
+        JSONValue unvisit_world_map_nodes       = clause["unvisit_world_map_nodes"];
+        JSONValue available_world_map_nodes     = clause["available_world_map_nodes"];
+        JSONValue unavailable_world_map_nodes   = clause["unavailable_world_map_nodes"];
+
+        JSONValue set_world_map_node            = clause["set_world_map_node"];
+
+        JSONValue add_world_map_connections     = clause["add_world_map_connections"];
+        JSONValue remove_world_map_connections  = clause["remove_world_map_connections"];
 
         if( set_world_node.type() != JSONnullValue )
         {
@@ -363,11 +346,151 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 is_ok = VerifyActionReferenceValue(gad,actions[j]) && is_ok;
             }
         }
+
+        if( set_arena_instance.type() == JSONstringValue )
+        {
+            if( gad.getArenaInstance(set_arena_instance.asString()).type() != JSONobjectValue ) 
+            {
+                Log( error, "set_arena_instance refers to invalid set_arena_instance: " + set_arena_instance.asString());
+                is_ok = false;
+            }
+        }
+
+        if( set_meta_choice.type() == JSONstringValue )
+        {
+            if( gad.getMetaChoice(set_meta_choice.asString()).type() != JSONobjectValue )
+            {
+                Log(error, "set_meta_choice referes to invalid meta_choice: " + set_meta_choice.asString() );
+                is_ok = false;
+            }
+        }
+
+        if( set_message.type() == JSONstringValue )
+        {
+            if( gad.getMessage( set_message.asString() ).type() != JSONobjectValue )
+            {
+                Log(error, "set_message referes to invalid message: " + set_message.asString() );
+                is_ok = false;
+            }
+        }
+
+        if( set_world_map.type() == JSONstringValue )
+        {
+            if( gad.getWorldMap( set_world_map.asString() ).type() != JSONobjectValue )
+            {
+                Log(error, "set_world_map referes to invalid message: " + set_world_map.asString() );
+                is_ok = false;
+            }
+        }
+
+        if( add_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < add_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( add_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "add_world_map_nodes refers to invalid world_map_node: " + add_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( remove_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < remove_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( remove_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "remove_world_map_nodes refers to invalid world_map_node: " + remove_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( visit_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < visit_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( visit_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "visit_world_map_nodes refers to invalid world_map_node: " + visit_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( unvisit_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < unvisit_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( unvisit_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "unvisit_world_map_nodes refers to invalid world_map_node: " + unvisit_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( available_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < available_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( available_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "available_world_map_nodes refers to invalid world_map_node: " + available_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( unavailable_world_map_nodes.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < unavailable_world_map_nodes.size(); i++ )
+            {
+                if( gad.getWorldMapNode( unavailable_world_map_nodes[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "unavailable_world_map_nodes refers to invalid world_map_node: " + unavailable_world_map_nodes[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( set_world_map_node.type() == JSONstringValue )
+        {
+            if( gad.getWorldMapNode( set_world_map_node.asString() ).type() != JSONobjectValue )
+            {
+                Log( error, "set_world_map_node refers to invalid world_map_node: " + set_world_map_node.type() );
+                is_ok = false;
+            }
+        }
+
+        if( add_world_map_connections.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < add_world_map_connections.size(); i++ )
+            {
+                if( gad.getWorldMapConnection( add_world_map_connections[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "add_world_map_connections refers to invalid world_map_node: " + add_world_map_connections[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
+
+        if( remove_world_map_connections.type() == JSONarrayValue )
+        {
+            for( uint i = 0; i < remove_world_map_connections.size(); i++ )
+            {
+                if( gad.getWorldMapConnection( remove_world_map_connections[i].asString() ).type() != JSONobjectValue )
+                {
+                    Log( error, "remove_world_map_connections refers to invalid world_map_node: " + remove_world_map_connections[i].asString() );
+                    is_ok = false;
+                } 
+            }
+        } 
     }
 
     return is_ok;
 }
-
 
 bool RecursivelyCheckActionIfReferences( GlobalArenaData@ gad, JSONValue node )
 {
@@ -381,62 +504,51 @@ bool RecursivelyCheckActionIfReferences( GlobalArenaData@ gad, JSONValue node )
     }
     else if( node.type() == JSONobjectValue )
     {
-        JSONValue required_states = node["required_states"];
-        JSONValue excluding_states = node["excluding_states"];
-        JSONValue required_hidden_states = node["required_hidden_states"];
-        JSONValue excluding_hidden_states = node["excluding_hidden_states"];
+        JSONValue result_match_any           = node["result_match_any"]; //Untested
+        JSONValue eq                         = node["eq"]; //Untested
+        JSONValue gt                         = node["gt"]; //Untested
+        JSONValue chance                     = node["chance"]; 
+        JSONValue has_state                  = node["has_state"];
+        JSONValue has_hidden_state           = node["has_hidden_state"];
+        JSONValue current_world_node_is      = node["current_world_node_is"];
 
-        if( required_states.type() == JSONarrayValue )
+        if( chance.type() == JSONrealValue )
         {
-            for( uint i = 0; i < required_states.size(); i++ )
+            double c = chance.asDouble();
+            if( c < 0 || c > 1.0 )
             {
-                string id = required_states[i].asString();
-                if( gad.getState( id ).type() != JSONobjectValue )
-                {
-                    Log(error,"required_states is referencing non-existant state: " +  id );
-                    is_ok = false;
-                }
-            }     
+                Log( error, "chance is outside the valid range [0,1]: " + c );
+                is_ok = false;
+            }
         }
 
-        if( excluding_states.type() == JSONarrayValue )
+        if( has_state.type() == JSONstringValue )
         {
-            for( uint i = 0; i < excluding_states.size(); i++ )
+            if( gad.getState( has_state.asString() ).type() != JSONobjectValue )
             {
-                string id = excluding_states[i].asString();
-                if(gad.getState( id ).type() != JSONobjectValue )
-                {
-                    Log(error,"excluding_states is referencing non-existant state: " +  id );
-                    is_ok = false;
-                }
-            }     
+                Log( error, "has_state refers to invalid state: " + has_state.asString());
+                is_ok = false;
+            }
         }
 
-        if( required_hidden_states.type() == JSONarrayValue )
+        if( has_hidden_state.type() == JSONstringValue )
         {
-            for( uint i = 0; i < required_hidden_states.size(); i++ )
+            if( gad.getHiddenState( has_hidden_state.asString() ).type() != JSONobjectValue )
             {
-                string id = required_hidden_states[i].asString();
-                if(gad.getHiddenState( id ).type() != JSONobjectValue )
-                {
-                    Log(error,"required_hidden_states is referencing non-existant state: " +  id );
-                    is_ok = false;
-                }
-            }     
+                Log( error, "has_hidden_state refers to invalid state: " + has_hidden_state.asString() );
+                is_ok = false;
+            }
+        }
+        
+        if( current_world_node_is.type() == JSONstringValue )
+        {
+            if( gad.getWorldNode( current_world_node_is.asString() ).type() != JSONobjectValue )
+            {
+                Log( error, "current_world_node_is refers to invalid world_node: " + current_world_node_is.asString() );
+                is_ok = false;
+            }
         }
 
-        if( excluding_hidden_states.type() == JSONarrayValue )
-        {
-            for( uint i = 0; i < excluding_hidden_states.size(); i++ )
-            {
-                string id = excluding_hidden_states[i].asString();
-                if(gad.getHiddenState( id ).type() != JSONobjectValue )
-                {
-                    Log(error,"excluding_hidden_states is referencing non-existant state: " +  id );
-                    is_ok = false;
-                }
-            }     
-        }
     }
     return is_ok;
 }

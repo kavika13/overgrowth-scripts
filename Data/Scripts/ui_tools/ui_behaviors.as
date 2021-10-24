@@ -451,6 +451,71 @@ class MouseOverShowBorder : MouseOverBehavior {
 }
 
  /**
+  * Causes the listed elements to pulse when the given object is hovered.
+  **/
+ class MouseOverPulseColorSubElements : MouseOverBehavior {
+
+ 	vec4 midPoints;
+ 	vec4 differences;
+ 	vec4 originalColor;
+ 	uint64 elapsedTime;
+ 	float speed;
+    array<string> sub_elements;
+
+ 	MouseOverPulseColorSubElements( vec4 first, vec4 second, float _speed, array<string> _sub_elements) {
+
+ 		speed = _speed;
+
+ 		midPoints = vec4( first.x + second.x /2,
+ 		 				  first.y + second.y /2, 
+ 		 				  first.z + second.z /2,
+ 		 				  first.a + second.a /2 );
+
+ 		differences = vec4( (first.x - second.x)/2,
+ 		 				    (first.y - second.y)/2, 
+ 		 				    (first.z - second.z)/2,
+ 		 				    (first.a - second.a)/2 );
+
+        sub_elements = _sub_elements;
+ 	}
+
+    void onStart( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
+    	originalColor = element.getColor();
+    	elapsedTime = 0;
+    }
+
+    float computeTransition( float base, float range ) {
+    	return base + sin( float( elapsedTime ) / (1000.0 / speed ) * (2.0 * pi) ) * range;
+    }
+
+    void onContinue( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
+    	vec4 currentColor = vec4( computeTransition( midPoints.x, differences.x ),
+    							  computeTransition( midPoints.y, differences.y ),
+    						      computeTransition( midPoints.z, differences.z ),
+    							  computeTransition( midPoints.a, differences.a ) );
+
+        for( uint i = 0; i < sub_elements.size(); i++ )
+        {
+            Element@ el_inst = element.findElement( sub_elements[i] );
+            if( el_inst !is null )
+    	        el_inst.setColor( currentColor );
+        }
+
+    	elapsedTime += delta;
+    }
+
+    bool onFinish( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
+        for( uint i = 0; i < sub_elements.size(); i++ )
+        {
+            Element@ el_inst = element.findElement( sub_elements[i] );
+            if( el_inst !is null )
+    	        el_inst.setColor( originalColor);
+        }
+        return true;
+    }
+}
+
+ /**
   * Causes the element's border to pulse between two given colors when the mouse is hovering
   **/
 class MouseOverPulseBorder : MouseOverBehavior {

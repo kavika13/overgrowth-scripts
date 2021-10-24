@@ -11,7 +11,6 @@ UNIFORM_COMMON_TEXTURES
 UNIFORM_TRANSLUCENCY_TEXTURE
 #endif
 UNIFORM_LIGHT_DIR
-UNIFORM_EXTRA_AO
 #ifdef DETAILMAP4
 UNIFORM_DETAIL4_TEXTURES
 UNIFORM_AVG_COLOR4
@@ -146,7 +145,8 @@ void main() {
         #endif
     #endif
 
-    CalculateDecals(colormap, ws_normal, world_vert);
+    float spec_amount;
+    //CalculateDecals(colormap, ws_normal, spec_amount, world_vert);
 
     CALC_SHADOWED
     CALC_DIRECT_DIFFUSE_COLOR
@@ -205,9 +205,9 @@ void main() {
             }
         }
         #ifdef ALPHA
-            float spec_amount = normalmap.a;
+            spec_amount = normalmap.a;
         #else
-            float spec_amount = colormap.a;
+            spec_amount = colormap.a;
         #endif
         #if !defined(ALPHA) && !defined(DETAILMAP4)
             colormap.xyz *= mix(vec3(1.0),color_tint[instance_id].xyz,normalmap.a);
@@ -215,7 +215,6 @@ void main() {
         vec3 color = diffuse_color * colormap.xyz +
                      spec_color * GammaCorrectFloat(spec_amount);
     #endif
-    CALC_COLOR_ADJUST
     CALC_HAZE
     #ifdef ALPHA
         out_color = vec4(color,colormap.a);

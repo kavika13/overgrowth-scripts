@@ -8175,6 +8175,83 @@ void DrawTail(int num_frames){
     LeaveTelemetryZone();
 }
 
+int shadow_id = -1;
+int lf_shadow_id = -1;
+int rf_shadow_id = -1;
+void UpdateShadow() {   
+    RiggedObject@ rigged_object = this_mo.rigged_object();
+    Skeleton@ skeleton = rigged_object.skeleton();
+    if(shadow_id != -1){
+        DeleteObjectID(shadow_id);
+        shadow_id = -1;
+    }
+    if(lf_shadow_id != -1){
+        DeleteObjectID(lf_shadow_id);
+        lf_shadow_id = -1;
+    }
+    if(rf_shadow_id != -1){
+        DeleteObjectID(rf_shadow_id);
+        rf_shadow_id = -1;
+    }
+        vec3 head, torso, left_foot, right_foot;
+        int bone;
+
+        bone = skeleton.IKBoneStart("torso");
+        BoneTransform transform = BoneTransform(rigged_object.GetDisplayBoneMatrix(bone));
+        BoneTransform bind_matrix = invert(skeleton_bind_transforms[bone]);
+        transform = transform;
+        torso = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+
+        bone = skeleton.IKBoneStart("head");
+        transform = BoneTransform(rigged_object.GetDisplayBoneMatrix(bone));
+        bind_matrix = invert(skeleton_bind_transforms[bone]);
+        transform = transform;
+        head = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+
+        bone = skeleton.IKBoneStart("left_leg");
+        transform = BoneTransform(rigged_object.GetDisplayBoneMatrix(bone));
+        bind_matrix = invert(skeleton_bind_transforms[bone]);
+        transform = transform;// * bind_matrix;
+        left_foot = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+
+        bone = skeleton.IKBoneStart("right_leg");
+        transform = BoneTransform(rigged_object.GetDisplayBoneMatrix(bone));
+        bind_matrix = invert(skeleton_bind_transforms[bone]);
+        transform = transform;
+        right_foot = transform * skeleton.GetPointPos(skeleton.GetBonePoint(bone, 0));
+
+        {
+            shadow_id = CreateObject("Data/Objects/Decals/blob_shadow.xml", true);    
+            Object @shadow_obj = ReadObjectFromID(shadow_id);
+            //shadow_obj.SetTranslation(this_mo.position + vec3(0.0,0.3,0.0));
+            vec3 scale = vec3(1.5,max(1.5, distance((left_foot+right_foot)*0.5, head)*2.0), 1.5);
+            shadow_obj.SetScale(scale);
+
+            shadow_obj.SetTranslation(torso + vec3(0.0, -0.3, 0.0));
+            //DebugDrawWireScaledSphere(shadow_obj.GetTranslation(),1.0f,shadow_obj.GetScale()*0.5, vec3(1.0f),_delete_on_draw);
+        }
+        {
+            lf_shadow_id = CreateObject("Data/Objects/Decals/blob_shadow.xml", true);    
+            Object @shadow_obj = ReadObjectFromID(lf_shadow_id);
+
+            shadow_obj.SetTranslation(left_foot + vec3(0.0,0.0,0.0));
+            shadow_obj.SetScale(vec3(0.4));        
+            //DebugDrawWireScaledSphere(shadow_obj.GetTranslation(),1.0f,shadow_obj.GetScale()*0.5, vec3(1.0f),_delete_on_draw);
+        }
+        {
+            rf_shadow_id = CreateObject("Data/Objects/Decals/blob_shadow.xml", true);    
+            Object @shadow_obj = ReadObjectFromID(rf_shadow_id);
+
+            shadow_obj.SetTranslation(right_foot + vec3(0.0,0.0,0.0));
+            shadow_obj.SetScale(vec3(0.4));        
+            //DebugDrawWireScaledSphere(shadow_obj.GetTranslation(),1.0f,shadow_obj.GetScale()*0.5, vec3(1.0f),_delete_on_draw);
+        }
+}
+
+void PreDraw() {
+    UpdateShadow();
+}
+
 void DrawBody(const BoneTransform &in hip_transform, const BoneTransform &in chest_transform){
     EnterTelemetryZone("DrawBody");
     RiggedObject@ rigged_object = this_mo.rigged_object();
@@ -8218,6 +8295,7 @@ void DrawBody(const BoneTransform &in hip_transform, const BoneTransform &in che
         int bone = ik_chain_elements[start+i];
         rigged_object.SetFrameMatrix(bone, hip_rel * rigged_object.GetFrameMatrix(bone));
     }
+
     LeaveTelemetryZone();
 }
 

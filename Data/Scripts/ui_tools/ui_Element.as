@@ -206,6 +206,7 @@ class MouseClickBehavior {
 class Element {
 
     ivec2 size;             // dimensions of the actual region (GUI space)    
+    ivec2 defaultSize;      // What size (if any) should this element become once 'reset'
     ivec2 boundarySize;     // length and width of the maximum extent of this element (GUI Space) 
     ivec2 boundaryOffset;   // upper left coordinate relative to the containing boundary (GUI space)
     ivec2 drawDisplacement; // Is this element being drawn somewhere other than where it 'lives' (mostly for tweening)
@@ -247,6 +248,7 @@ class Element {
         name = "";
 
         size = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
+        defaultSize = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
         boundarySize = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
         boundaryOffset = ivec2( 0, 0 );
         drawDisplacement = ivec2( 0, 0);
@@ -1046,7 +1048,6 @@ class Element {
                     MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
                     behavior.onContinue( this, delta, drawOffset, guistate );
                 }
-
             }   
 
             // Mouse click status
@@ -1063,7 +1064,6 @@ class Element {
                         removeLeftMouseClickBehavior( keys[k] );
                     }
                 }
-
             }
             break; 
             
@@ -1078,7 +1078,6 @@ class Element {
                         removeLeftMouseClickBehavior( keys[k] );
                     }
                 }
-
             }
             break;
 
@@ -1092,7 +1091,6 @@ class Element {
                         // If the behavior has indicated it is done
                         removeLeftMouseClickBehavior( keys[k] );
                     }
-
                 }
 
                 // Consider this no longer hovering
@@ -1108,7 +1106,6 @@ class Element {
                         }
                     }
                 }
-
             }
             break; 
 
@@ -1124,7 +1121,6 @@ class Element {
             // See if this is an 'exit'
             if( mouseOver )
             {
-
                 array<string>@ keys = mouseOverBehaviors.getKeys();
                 for( uint k = 0; k < keys.length(); k++ ) {
                     MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
@@ -1135,7 +1131,6 @@ class Element {
                     }
                 }
                 mouseOver = false;
-
             }
         }
     }
@@ -1440,6 +1435,30 @@ class Element {
         return boundaryOffset;
     
     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Sets the default size
+     * 
+     * @param newDefault the new default size  
+     *
+     */
+    void setDefaultSize( ivec2 newDefault ) {
+
+        defaultSize = newDefault;
+
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Retrieves the default size
+     * 
+     * @returns 2d integer vector of the default size
+     *
+     */
+     ivec2 getDefaultSize() {
+        return defaultSize;
+     }
 
     /*******************************************************************************************/
     /**

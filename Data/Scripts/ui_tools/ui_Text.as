@@ -11,6 +11,27 @@
 
 namespace AHGUI {
 
+class FontSetup
+{
+    string name;
+    int size;
+    vec4 color;
+
+    FontSetup()
+    {
+        name = "edosz";
+        size = 70;
+        color = HexColor("#fff");
+    }
+
+    FontSetup( string _name, int _size, vec4 _color )
+    {
+        name = _name;
+        size = _size;
+        color = _color;
+    }
+}
+
 /*******************************************************************************************/
 /**
  * @brief Any styled text element 
@@ -98,6 +119,21 @@ class Text : Element
 
     /*******************************************************************************************/
     /**
+     * @brief  Constructor
+     * 
+     * @param _text String for the text
+     * @param _fontSetup Font parameter structure
+     *
+     */
+    Text( string _text, FontSetup _fontSetup )
+    {
+        setText( _text );
+        setFont( _fontSetup.name, _fontSetup.size );
+        setColor( _fontSetup.color.x, _fontSetup.color.y, _fontSetup.color.z, _fontSetup.color.a );
+    }
+
+    /*******************************************************************************************/
+    /**
      * @brief  Derives the various metrics for this text element
      * 
      */
@@ -129,6 +165,8 @@ class Text : Element
     void doScreenResize()  {
         screenFontSize = int(screenMetrics.GUItoScreenY() * float(GUIfontSize));
         deriveMetrics();
+        
+        setFont( fontName, GUIfontSize );
     }
 
     /*******************************************************************************************/

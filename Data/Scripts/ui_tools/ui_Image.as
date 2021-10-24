@@ -72,6 +72,12 @@ class Image : Element
      */
     void setImageFile( string _fileName ) {
         
+        if( _fileName == "" )
+        {
+            Log(info, "Sent in empty string, will print callstack");
+            PrintCallstack();
+        }
+        
         imageFileName = "Data/" + _fileName;
     	if( !imuiImage.loadImage( imageFileName ) ) {
     		DisplayError("Error", "Unable to locate image " + imageFileName );

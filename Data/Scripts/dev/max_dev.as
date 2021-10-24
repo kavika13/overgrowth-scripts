@@ -1,6 +1,6 @@
 void Init(string p_level_name)
 {
-    DebugDrawText(vec3(0,20,-10),GetBuildVersion(),1.0f, true, _persistent);
+    DebugDrawText(vec3(0,20,-10),GetBuildVersionShort(),1.0f, true, _persistent);
     DebugDrawText(vec3(0,20,10),GetBuildTimestamp(), 30.0f, false, _persistent);
 }
 

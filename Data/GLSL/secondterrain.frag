@@ -24,7 +24,6 @@ void main()
 
     // Combine diffuse lighting with color
     color *= texture(tex0,var_uv).xyz;    
-    color *= BalanceAmbient(NdotL);
 
     // Fade borders
     float alpha = 1.0;

@@ -20,7 +20,6 @@ uniform float overbright;
 uniform float max_distance;
 
 UNIFORM_LIGHT_DIR
-UNIFORM_EXTRA_AO
 uniform vec3 avg_color;
 uniform vec3 color_tint;
 
