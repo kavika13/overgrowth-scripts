@@ -349,6 +349,16 @@ void MakeBeaconParticle(){
 }
 
 void Update(int _num_frames) {
+    int num_items = GetNumItems();
+    string str;
+    for(int i=0; i<num_items; ++i){
+        ItemObject@ item_obj = ReadItem(i);
+        ScriptParams@ sp = item_obj.GetScriptParams();
+        if(sp.HasParam("attachment")){
+            DebugText("Test",sp.GetString("attachment"),0.5f);
+        }
+    }
+
     /*if(this_mo.controlled){
         DebugText("char"+this_mo.getID()+"0","Character ID: "+this_mo.getID(), 0.5f);
         DebugText("char"+this_mo.getID()+"00","Pos: "+
@@ -2536,7 +2546,13 @@ void AttachWeapon(int which){
     }
     ItemObject@ item_obj = ReadItemID(which);
     vec3 pos = item_obj.GetPhysicsPosition();
-    string sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
+    string sound_modifier = item_obj.GetSoundModifier();
+    string sound;
+    if(sound_modifier == "soft"){
+        sound = "Data/Sounds/weapon_foley/impact/soft_bag_on_soft.xml";
+    } else {
+        sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
+    }
     PlaySoundGroup(sound, pos,0.5f);
     //item_object_getter.SceneMaterialEvent("weapon_metal_pickup", item_object_getter.GetPhysicsPosition());
     if(weapon_slots[primary_weapon_slot] == -1){

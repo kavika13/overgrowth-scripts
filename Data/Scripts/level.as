@@ -502,7 +502,7 @@ class ChallengeEndGUI {
                     mission_objective_color = "red";
                     success = false;
                 }
-                mission_objective = "  Reach the goal";
+                mission_objective += "Reach the goal";
             }
             if(objective == "reach_a_trigger_with_no_pursuers"){
                 if(in_victory_trigger > 0 && NumActivelyHostileThreats() == 0){
@@ -513,8 +513,20 @@ class ChallengeEndGUI {
                     mission_objective_color = "red";
                     success = false;
                 }
-                mission_objective = "  Reach the goal without any pursuers";
+                mission_objective += "Reach the goal without any pursuers";
             }
+            
+        if(objective == "collect"){
+            if(NumUnsatisfiedCollectableTargets() != 0){
+                success = false;
+                mission_objective += "x ";
+                mission_objective_color = "red";
+            }  else {
+                mission_objective += "v ";
+                mission_objective_color = "green";
+            }
+            mission_objective += "Collect items";
+        }
         }
         
         string title = success?'challenge complete':'challenge incomplete';
@@ -674,7 +686,20 @@ void Update() {
         game_type = _normal;
     }
     challenge_end_gui.Update();
-
+   
+   /*
+    int num_collectable = 0;
+    int num_items = GetNumItems();
+    for(int i=0; i<num_items; i++){
+        ItemObject@ item_obj = ReadItem(i);
+        DebugText("type", "Item type: "+item_obj.GetType(), 0.5f);
+        if(item_obj.GetType() == _collectable){
+            ++num_collectable;
+        }
+    }
+    DebugText("collectable", "Num collectable items: "+num_collectable, 0.5f);
+    */
+    
     if(HasFocus() == 1){
         SetGrabMouse(false);
     }
@@ -812,6 +837,20 @@ int NumUnvisitedMustVisitTriggers() {
     return return_val;
 }
 
+int NumUnsatisfiedCollectableTargets() {
+    int num_hotspots = GetNumHotspots();
+    int return_val = 0;
+    for(int i=0; i<num_hotspots; ++i){
+        Hotspot@ hotspot = ReadHotspot(i);
+        if(hotspot.GetTypeString() == "collectable_target"){
+            if(!hotspot.GetBoolVar("condition_satisfied")){
+                ++return_val;
+            }
+        }
+    }
+    return return_val;
+}
+
 void IncrementScoreRight() {
     if(score_right < 5){
         versus_gui.IncrementScoreRight(score_right);
@@ -863,6 +902,13 @@ void VictoryCheckNormal() {
         if(objective == "must_visit_trigger"){
             max_reset_delay = 1.0;
             if(NumUnvisitedMustVisitTriggers() != 0){
+               victory = false;
+               //DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
+            } 
+        }
+        if(objective == "collect"){
+            max_reset_delay = 1.0;
+            if(NumUnsatisfiedCollectableTargets() != 0){
                victory = false;
                //DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
             } 
