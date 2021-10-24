@@ -52,8 +52,17 @@ float block_health = 1.0f; // How strong is auto-block? Similar to ssb shield
 float temp_health = 1.0f; // Remaining regenerating health until knocked out
 float permanent_health = 1.0f; // Remaining non-regenerating health until killed
 
+bool test_talking = false;
+float test_talking_amount = 0.0f;
+
 int knocked_out = _awake;
 float knocked_out_time = 0.0f;
+
+float speak_sound_delay = 0.0f;
+vec3 dialogue_torso_target;
+float dialogue_torso_control;
+vec3 dialogue_head_target;
+float dialogue_head_control;
 
 // Body bob offset so that characters don't sway in sync
 float body_bob_freq;
@@ -97,6 +106,7 @@ bool blinking = false;  // Currently in the middle of blinking?
 float blink_progress = 0.0f; // Progress from 0.0 (pre-blink) to 1.0 (post-blink)
 float blink_delay = 0.0f; // Time until next blink
 float blink_amount = 0.0f; // How open eyes currently are
+float blink_mult = 1.0f; // How open eyes want to be (when not blinking)
 
 vec3 target_tilt(0.0f);
 vec3 tilt(0.0f);
@@ -121,6 +131,8 @@ float layer_throwing_fade = 0.0f;
 vec3 eye_dir; // Direction eyes are looking
 vec3 target_eye_dir; // Direction eyes want to look
 float eye_delay = 0.0f; // How much time until the next eye dir adjustment
+vec3 dialogue_eye_dir;
+string dialogue_anim;
 
 vec3 dodge_dir;
 bool active_dodging = false;
@@ -848,20 +860,55 @@ string TetheredStr(int val){
 
 void Update(int num_frames) {
     Timestep ts(time_step, num_frames);
-
+    
+    if(test_talking){
+        test_talking_amount = min(test_talking_amount + ts.step() * 20.0f, 1.0f);
+        speak_sound_delay -= ts.step();
+        if(speak_sound_delay <= 0.0f){
+            string sound = "Data/Sounds/voice/speak_test/speak_test.xml";
+            //this_mo.ForceSoundGroupVoice(sound, 0.0f);
+            speak_sound_delay = 0.25f;
+        }
+    } else {
+        test_talking_amount = max(test_talking_amount - ts.step() * 5.0f, 0.0f);
+    }
+    float talk_speed_mult = 1.5f;
+    // Test of talking animation
+    this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f*talk_speed_mult)+sin(time*13.0f))*0.25f+0.5f,0.7f * test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
+    
+    time += ts.step();
+    
     if(dialogue_control){
+        this_mo.SetAnimation(dialogue_anim, 3.0f, 0);
+        idle_stance_amount = 0.2f;
+        UpdateBlink(ts);
+        UpdateEyeLook(ts);
+        {
+            vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("torso");
+            vec3 dir = normalize(dialogue_torso_target - ik_pos);
+            float head_bob = 0.1f * test_talking_amount+0.02f;
+            dir.y += (sin(time * 5.5) * 0.1f + sin(time * 9.5) * 0.1f)*head_bob;
+            dir.x += (sin(time * 4.5) * 0.1f + sin(time * 7.5) * 0.1f)*head_bob;
+            dir.z += (sin(time * 6.5) * 0.1f + sin(time * 8.5) * 0.1f)*head_bob;
+            dir = normalize(dir);
+            this_mo.rigged_object().SetIKTargetOffset("torso", dir*dialogue_torso_control);
+        }
+        {
+            vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
+            float head_bob = 0.3f * test_talking_amount+0.02f;
+            vec3 dir = normalize(dialogue_head_target - ik_pos);
+            dir.y += (sin(time * 5) * 0.1f + sin(time * 12) * 0.1f)*head_bob;
+            dir.x += (sin(time * 4) * 0.1f + sin(time * 10) * 0.1f)*head_bob;
+            dir.z += (sin(time * 6) * 0.1f + sin(time * 11) * 0.1f)*head_bob;
+            dir = normalize(dir);
+            this_mo.rigged_object().SetIKTargetOffset("head",dir * dialogue_head_control);
+        }
         return;
     }
 
-    bool test_talking = false;
-    // Test of talking animation
-    if(test_talking){
-        this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f)*0.5f+0.5f,0.3f);
-        this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f)+sin(time*13.0f))*0.25f+0.5f,0.7f);
-        this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f)*0.5f+0.5f,0.3f);
-        this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f)*0.5f+0.5f,0.3f);
-    }
-    
     bool display_player_state = false;
     if(this_mo.controlled && display_player_state){
         DebugText("player_state","State: "+StateStr(state),0.5f);
@@ -956,7 +1003,6 @@ void Update(int num_frames) {
     } else {
         push_velocity = vec3(0.0f);
     }
-    time += ts.step();
 
     if(!this_mo.controlled && on_ground){
         //MouseControlJumpTest();
@@ -1800,25 +1846,7 @@ void UpdateHeadLook(const Timestep &in ts) {
     //Print("stance_move_fade: "+stance_move_fade+"\n");
 }
 
-void UpdateEyeLook(const Timestep &in ts){
-    if(knocked_out != _awake){
-        return;
-    }
-
-    const float _eye_inertia = 0.85f;
-    const float _eye_min_delay = 0.5f; //Minimum time before changing eye direction
-    const float _eye_max_delay = 2.0f; //Maximum time before changing eye direction
-
-    if(eye_delay <= 0.0f){
-        eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
-        target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);        
-        target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);    
-        normalize(target_eye_dir);
-    }
-    eye_delay -= ts.step();
-    eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
-
+void SetEyeLookDir(const vec3 &in eye_dir) {
     // Set weights for carnivore
     this_mo.rigged_object().SetMorphTargetWeight("look_r",max(0.0f,eye_dir.x),1.0f);
     this_mo.rigged_object().SetMorphTargetWeight("look_l",max(0.0f,-eye_dir.x),1.0f);
@@ -1843,6 +1871,31 @@ void UpdateEyeLook(const Timestep &in ts){
     this_mo.rigged_object().SetMorphTargetWeight("look_b_r",max(0.0f,-right_front),1.0f);
     this_mo.rigged_object().SetMorphTargetWeight("look_f_l",max(0.0f,left_front),1.0f);
     this_mo.rigged_object().SetMorphTargetWeight("look_b_l",max(0.0f,-left_front),1.0f);
+}
+
+void UpdateEyeLook(const Timestep &in ts){
+    if(knocked_out != _awake){
+        return;
+    }
+
+    const float _eye_inertia = 0.85f;
+    const float _eye_min_delay = 0.5f; //Minimum time before changing eye direction
+    const float _eye_max_delay = 2.0f; //Maximum time before changing eye direction
+
+    if(eye_delay <= 0.0f){
+        eye_delay = RangedRandomFloat(_eye_min_delay,_eye_max_delay);
+        target_eye_dir.x = RangedRandomFloat(-1.0f, 1.0f);        
+        target_eye_dir.y = RangedRandomFloat(-1.0f, 1.0f);        
+        target_eye_dir.z = RangedRandomFloat(-1.0f, 1.0f);    
+        normalize(target_eye_dir);
+        if(dialogue_control){
+            target_eye_dir = normalize(mix(target_eye_dir, dialogue_eye_dir, 0.7f));
+        }
+    }
+    eye_delay -= ts.step();
+    eye_dir = normalize(mix(target_eye_dir, eye_dir, _eye_inertia));
+
+    SetEyeLookDir(eye_dir);
 }
 
 void UpdateBlink(const Timestep &in ts) {
@@ -1871,8 +1924,9 @@ void UpdateBlink(const Timestep &in ts) {
     } else if(knocked_out == _unconscious){
         blink_amount = mix(blink_amount, 0.7f, 0.1f);
     }
-    this_mo.rigged_object().SetMorphTargetWeight("wink_r",blink_amount,1.0f);
-    this_mo.rigged_object().SetMorphTargetWeight("wink_l",blink_amount,1.0f);
+    float final_blink = 1.0f-((1.0f-blink_amount) * blink_mult);
+    this_mo.rigged_object().SetMorphTargetWeight("wink_r",final_blink,1.0f);
+    this_mo.rigged_object().SetMorphTargetWeight("wink_l",final_blink,1.0f);
 }
 
 void UpdateActiveBlockAndDodge(const Timestep &in ts) {
@@ -2169,6 +2223,7 @@ void SetRagdollType(int type) {
             this_mo.rigged_object().DisableSleep();
             this_mo.rigged_object().SetRagdollStrength(1.0);
             this_mo.SetAnimation("Data/Animations/r_writhe.anm",4.0f,_ANM_FROM_START);
+            //this_mo.rigged_object().anim_client().AddLayer("Data/Animations/r_grabface.anm",4.0f,_ANM_FROM_START);
             injured_mouth_open = 0.0f;
             break;
         case _RGDL_ANIMATION:
@@ -2974,16 +3029,42 @@ void ReceiveMessage(string msg){
     string token = token_iter.GetToken(msg);
     if(token == "restore_health"){
         RecoverHealth();
+    } else if(token == "start_talking"){
+        test_talking = true;
+    } else if(token == "stop_talking"){
+        test_talking = false;
     } else if(token == "set_dialogue_control"){ // params: bool enabled
         token_iter.FindNextToken(msg);
         string token = token_iter.GetToken(msg);
         if(token == "true"){
             dialogue_control = true;
-            this_mo.velocity = vec3(0.0f, 0.0f, 0.0f);
+            this_mo.velocity = vec3(0.0f, 0.0f, 0.0f);            
+            dialogue_torso_control = 0.0f;
+            dialogue_head_control = 0.0f;
+            test_talking = false;
+            dialogue_anim = "Data/Animations/r_actionidle.anm";
         } else if(token == "false"){
             dialogue_control = false;
         }
     } else if(token == "set_head_target"){ // params: vec3 pos, float control
+        // Get params
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_head_target.x = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_head_target.y = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_head_target.z = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_head_control = atof(token);
+    } else if(token == "set_animation"){ // params: string path   
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_anim = token;
+    } else if(token == "set_eye_dir"){ 
         // Get params
         vec3 pos;        
         token_iter.FindNextToken(msg);
@@ -2997,11 +3078,23 @@ void ReceiveMessage(string msg){
         pos.z = atof(token);
         token_iter.FindNextToken(msg);
         token = token_iter.GetToken(msg);
-        float control = atof(token);
-        // Apply head look
-        vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
-        vec3 dir = normalize(pos - ik_pos);
-        this_mo.rigged_object().SetIKTargetOffset("head",dir * control);
+        blink_mult = atof(token);
+
+        mat4 head_mat = this_mo.rigged_object().GetAvgIKChainTransform("head");
+        vec3 head_pos = head_mat * vec3(0,0,0);
+        //quaternion head_rot = invert(QuaternionFromMat4(head_mat));
+        //pos = Mult(head_rot, normalize(pos - head_pos));
+        pos = invert(head_mat.GetRotationPart()) * normalize(pos-head_pos);
+
+        dialogue_eye_dir = vec3(pos.x, pos.z, pos.y);
+        target_eye_dir = dialogue_eye_dir;
+    } else if(token == "set_rotation"){ // params: float rotation
+        // Get params     
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        float rotation = atof(token);
+        vec3 new_facing = Mult(quaternion(vec4(0,1,0,rotation*3.1415f/180.0f)), vec3(1,0,0));
+        this_mo.SetRotationFromFacing(new_facing);
     } else if(token == "set_torso_target"){ // params: vec3 pos, float control
         // Get params
         vec3 pos;        
@@ -3017,10 +3110,8 @@ void ReceiveMessage(string msg){
         token_iter.FindNextToken(msg);
         token = token_iter.GetToken(msg);
         float control = atof(token);
-        // Apply head look
-        vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("torso");
-        vec3 dir = normalize(pos - ik_pos);
-        this_mo.rigged_object().SetIKTargetOffset("torso",dir * control);
+        dialogue_torso_target = pos;
+        dialogue_torso_control = control;
     } else {
         MindReceiveMessage(msg); // Pass message to mind if it doesn't match body messages
     }
@@ -5698,7 +5789,8 @@ void ApplyCameraControls(const Timestep &in ts) {
 
     // Apply camera state to actual scene camera
     camera.SetYRotation(cam_rotation);    
-    camera.SetXRotation(cam_rotation2);
+    camera.SetXRotation(cam_rotation2);  
+    camera.SetZRotation(0.0f);
     camera.SetFOV(90);
     camera.SetPos(cam_pos);
     camera.CalcFacing();

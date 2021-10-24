@@ -458,6 +458,7 @@ class ChallengeEndGUI {
 
 ChallengeEndGUI challenge_end_gui;
 
+
 void Update() {
     const bool display_achievements = false;
     if(display_achievements && GetPlayerCharacterID() != -1){

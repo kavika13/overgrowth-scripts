@@ -187,7 +187,7 @@ Object@ SpawnObjectAtSpawnPoint(Object@ spawn, string &in path){
     Object @new_obj = ReadObjectFromID(obj_id);
     new_obj.SetTranslation(spawn.GetTranslation());
     vec4 rot_vec4 = spawn.GetRotationVec4();
-    quaternion q(rot_vec4);
+    quaternion q(rot_vec4.x, rot_vec4.y, rot_vec4.z, rot_vec4.a);
     new_obj.SetRotation(q);
     ScriptParams@ params = new_obj.GetScriptParams();
     params.AddIntCheckbox("No Save", true);
@@ -437,7 +437,7 @@ void SetUpLevel(float initial_difficulty){
             } else if(team == 3){
                 color = mix(color, vec3(0,1,1), tint_amount);
             }
-            color = mix(color, vec3(1.0-(curr_difficulty-0.5f)), 0.5f);
+            color = mix(color, vec3(1.0-(player_skill-0.5f)), 0.5f);
             player_colors[2] = color;
             
             for(int i=0; i<4; ++i){
@@ -1176,6 +1176,7 @@ void Update() {
     }
     // Decay excitement based on total character movement
     float excitement_decay_rate = 1.0f / (1.0f + total_char_speed / 14.0f);
+    excitement_decay_rate *= 3.0f;
     audience_excitement *= pow(0.05f, 0.001f*excitement_decay_rate);
     total_excitement += audience_excitement * time_step;
     // Update crowd sound effect volume and pitch based on excitement
