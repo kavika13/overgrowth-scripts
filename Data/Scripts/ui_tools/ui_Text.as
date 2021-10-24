@@ -93,8 +93,8 @@ class Text : Element
             screenSize.x = metrics.bounds_x;
             screenSize.y = metrics.bounds_y;
 
-            setSize( int(float(screenSize.x) / GUItoScreenX()), 
-                     int(float(screenSize.y) / GUItoScreenX()) );
+            setSize( int(float(screenSize.x) / screenMetrics.GUItoScreenX()), 
+                     int(float(screenSize.y) / screenMetrics.GUItoScreenX()) );
 
             // Reset the boundary to the size
             setBoundarySize();
@@ -103,6 +103,16 @@ class Text : Element
 
         }
 
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Do whatever is necessary when the resolution changes
+     *
+     */
+    void doScreenResize()  {
+        screenFontSize = int(screenMetrics.GUItoScreenY() * float(GUIfontSize));
+        deriveMetrics();
     }
 
     /*******************************************************************************************/
@@ -117,7 +127,7 @@ class Text : Element
         
         fontName = _fontName;
         GUIfontSize = _fontSize;
-        screenFontSize = int(GUItoScreenY() * float(_fontSize));
+        screenFontSize = int(screenMetrics.GUItoScreenY() * float(_fontSize));
 
         deriveMetrics();
         onRelayout();
@@ -164,7 +174,7 @@ class Text : Element
         
             ivec2 GUIRenderPos = drawOffset + boundaryOffset + ivec2( paddingL, paddingU ) + drawDisplacement;
 
-            ivec2 screenRenderPos = GUIToScreen( GUIRenderPos );
+            ivec2 screenRenderPos = screenMetrics.GUIToScreen( GUIRenderPos );
 
             DrawTextAtlas( "Data/Fonts/" + fontName + ".ttf", screenFontSize, 
                            kSmallLowercase, text, 

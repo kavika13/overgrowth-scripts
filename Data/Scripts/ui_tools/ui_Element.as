@@ -52,6 +52,17 @@ class UpdateBehavior {
         return true;
     }
 
+    /*******************************************************************************************/
+    /**
+     * @brief  Called when the behavior ceases, whether by its own indicate or externally
+     * 
+     * @param element The element attached to this behavior 
+     *
+     */
+    void cleanUp( Element@ element ) {
+        
+    }
+
 }
 
 /*******************************************************************************************/
@@ -103,6 +114,17 @@ class MouseOverBehavior {
      */
     bool onFinish( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
         return true;
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Called when the behavior ceases, whether by its own indicate or externally
+     * 
+     * @param element The element attached to this behavior 
+     *
+     */
+    void cleanUp( Element@ element ) {
+        
     }
 
 }
@@ -162,6 +184,17 @@ class MouseClickBehavior {
         return true;
     }
 
+    /*******************************************************************************************/
+    /**
+     * @brief  Called when the behavior ceases, whether by its own indicate or externally
+     * 
+     * @param element The element attached to this behavior 
+     *
+     */
+    void cleanUp( Element@ element ) {
+        
+    }
+
 }
 
 
@@ -174,7 +207,6 @@ class Element {
 
     ivec2 size;             // dimensions of the actual region (GUI space)    
     ivec2 boundarySize;     // length and width of the maximum extent of this element (GUI Space) 
-    ivec2 boundaryMax;      // the absolute biggest that this element can get
     ivec2 boundaryOffset;   // upper left coordinate relative to the containing boundary (GUI space)
     ivec2 drawDisplacement; // Is this element being drawn somewhere other than where it 'lives' (mostly for tweening)
     BoundaryAlignment alignmentX; // How to position this element versus a boundary that's bigger than the size
@@ -190,9 +222,11 @@ class Element {
     Element@ parent;        // null if 'root'
     GUI@ owner;             // what GUI owns this element
 
-    array<UpdateBehavior@> updateBehaviors;         // update behaviors
-    array<MouseOverBehavior@> mouseOverBehaviors;   // mouse over behaviors
-    array<MouseClickBehavior@> leftMouseClickBehaviors;        // mouse up behaviors
+    int numBehaviors = 0; // Counter for unique behavior names
+
+    dictionary updateBehaviors;         // update behaviors
+    dictionary mouseOverBehaviors;   // mouse over behaviors
+    dictionary leftMouseClickBehaviors;        // mouse up behaviors
 
     bool show;          // should this element be rendered?
     vec4 color;         // if this element is colored, what color is it? -- other elements may define further colors
@@ -213,7 +247,6 @@ class Element {
 
         size = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
         boundarySize = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
-        boundaryMax = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
         boundaryOffset = ivec2( 0, 0 );
         drawDisplacement = ivec2( 0, 0);
 
@@ -596,11 +629,11 @@ class Element {
             ivec2 borderCornerUL = drawOffset + drawDisplacement + boundaryOffset - ivec2( paddingL, paddingU );
             ivec2 borderCornerLR = drawOffset + drawDisplacement + boundaryOffset + size + ivec2( paddingR, paddingD );
 
-            ivec2 screenCornerUL = GUIToScreen( borderCornerUL );
-            ivec2 screenCornerLR = GUIToScreen( borderCornerLR );
+            ivec2 screenCornerUL = screenMetrics.GUIToScreen( borderCornerUL );
+            ivec2 screenCornerLR = screenMetrics.GUIToScreen( borderCornerLR );
 
             // figure out the thickness in screen pixels (minimum 1)
-            int thickness = max( int( float( borderSize ) * GUItoScreenXScale ), 1 );
+            int thickness = max( int( float( borderSize ) * screenMetrics.GUItoScreenXScale ), 1 );
 
             // top 
             drawBox( screenCornerUL, 
@@ -623,7 +656,7 @@ class Element {
                      borderColor );  
 
 
-            hud.Draw();          
+            //hud.Draw();          
 
         }
 
@@ -659,10 +692,52 @@ class Element {
      * @brief  Add an update behavior
      *  
      * @param behavior Handle to behavior in question
+     * @param behaviorName name to identify the behavior
      *
      */
-     void addUpdateBehavior( UpdateBehavior@ behavior ) {
-        updateBehaviors.insertLast( behavior );
+     void addUpdateBehavior( UpdateBehavior@ behavior, string behaviorName = "" ) {
+        // if they haven't given us a name, generate one
+        if( behaviorName == "" ) {
+            behaviorName = "behavior" + numBehaviors;
+            numBehaviors++;
+        }
+        else {
+            removeUpdateBehavior( behaviorName );
+        }
+
+        @updateBehaviors[behaviorName] = @behavior;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Removes a named update behavior
+     * 
+     * @param behaviorName name to identify the behavior
+     *
+     * @returns true if there was a behavior to remove, false otherwise
+     *
+     */
+     bool removeUpdateBehavior( string behaviorName ) {
+        // see if there is already a behavior with this name
+        if( updateBehaviors.exists(behaviorName) ) {
+            // if so clean it up if its been initialized 
+
+            UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[behaviorName]);
+            
+            if( updater.initialized ) {
+                updater.cleanUp( this );
+            }
+
+            // and delete it
+            updateBehaviors.delete( behaviorName );
+
+            return true;
+        }
+        else {
+            // Let the caller know
+            return false;
+        }
+
      }
 
     /*******************************************************************************************/
@@ -671,7 +746,16 @@ class Element {
      *
      */
      void clearUpdateBehaviors() {
-        updateBehaviors.resize(0);
+
+        // iterate through all the behaviors and clean them up
+        array<string>@  keys = updateBehaviors.getKeys();
+        for( uint k = 0; k < keys.length(); k++ ) {
+            UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[keys[k]]);
+            updater.cleanUp( this );
+        }
+
+        updateBehaviors.deleteAll();
+
      }
 
     /*******************************************************************************************/
@@ -679,10 +763,68 @@ class Element {
      * @brief  Add a mouse over behavior
      *  
      * @param behavior Handle to behavior in question
+     * @param behaviorName name to identify the behavior
      *
      */
-     void addMouseOverBehavior( MouseOverBehavior@ behavior ) {
-        mouseOverBehaviors.insertLast( behavior );
+     void addMouseOverBehavior( MouseOverBehavior@ behavior, string behaviorName = "" ) {
+        
+        // if they haven't given us a name, generate one
+        if( behaviorName == "" ) {
+            behaviorName = "behavior" + numBehaviors;
+            numBehaviors++;
+        }
+        else {
+            removeMouseOverBehavior( behaviorName );
+        }
+
+        @mouseOverBehaviors[behaviorName] = @behavior;
+
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Removes a named update behavior
+     * 
+     * @param behaviorName name to identify the behavior
+     *
+     * @returns true if there was a behavior to remove, false otherwise
+     *
+     */
+     bool removeMouseOverBehavior( string behaviorName ) {
+        // see if there is already a behavior with this name
+        if( mouseOverBehaviors.exists(behaviorName) ) {
+            // if so clean it up 
+            MouseOverBehavior@ updater = cast<MouseOverBehavior>(mouseOverBehaviors[behaviorName]);
+            updater.cleanUp( this );
+
+            // and delete it
+            mouseOverBehaviors.delete( behaviorName );
+
+            return true;
+        }
+        else {
+            // Let the caller know
+            return false;
+        }
+
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear mouse over behaviors
+     *
+     */
+     void clearMouseOverBehaviors() {
+
+        // iterate through all the behaviors and clean them up
+        array<string>@  keys = mouseOverBehaviors.getKeys();
+        for( uint k = 0; k < keys.length(); k++ ) {
+            MouseOverBehavior@ updater = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+            updater.cleanUp( this );
+        }
+
+        mouseOverBehaviors.deleteAll();
+
      }
 
     /*******************************************************************************************/
@@ -690,10 +832,70 @@ class Element {
      * @brief  Add a click behavior
      *  
      * @param behavior Handle to behavior in question
+     * @param behaviorName name to identify the behavior
      *
      */
-     void addLeftMouseClickBehavior( MouseClickBehavior@ behavior ) {
-        leftMouseClickBehaviors.insertLast( behavior );
+    void addLeftMouseClickBehavior( MouseClickBehavior@ behavior, string behaviorName = "" ) {
+        
+        // if they haven't given us a name, generate one
+        if( behaviorName == "" ) {
+            behaviorName = "behavior" + numBehaviors;
+            numBehaviors++;
+        }
+        else {
+            removeLeftMouseClickBehavior( behaviorName );
+        }
+
+        @leftMouseClickBehaviors[behaviorName] = @behavior;
+        
+    }
+
+
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Removes a named click behavior
+     * 
+     * @param behaviorName name to identify the behavior
+     *
+     * @returns true if there was a behavior to remove, false otherwise
+     *
+     */
+     bool removeLeftMouseClickBehavior( string behaviorName ) {
+        // see if there is already a behavior with this name
+        if( leftMouseClickBehaviors.exists(behaviorName) ) {
+            // if so clean it up 
+            MouseClickBehavior@ updater = cast<MouseClickBehavior>(leftMouseClickBehaviors[behaviorName]);
+            updater.cleanUp( this );
+
+            // and delete it
+            leftMouseClickBehaviors.delete( behaviorName );
+
+            return true;
+        }
+        else {
+            // Let the caller know
+            return false;
+        }
+
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear mouse over behaviors
+     *
+     */
+     void clearLeftMouseClickBehaviors() {
+
+        // iterate through all the behaviors and clean them up
+        array<string>@  keys = leftMouseClickBehaviors.getKeys();
+        for( uint k = 0; k < keys.length(); k++ ) {
+            MouseClickBehavior@ updater = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+            updater.cleanUp( this );
+        }
+
+        leftMouseClickBehaviors.deleteAll();
+
      }
 
     /*******************************************************************************************/
@@ -706,26 +908,29 @@ class Element {
      *
      */
     void update( uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
+        // Update behaviors
+        {
+            array<string>@ keys = updateBehaviors.getKeys();
+            for( uint k = 0; k < keys.length(); k++ ) {
+                UpdateBehavior@ updater = cast<UpdateBehavior>(updateBehaviors[keys[k]]);
+                
+                // See if this behavior has been initialized
+                if( !updater.initialized ) {
 
-        // Update behaviors 
-        for( int i = int(updateBehaviors.length())-1; i >= 0 ; i-- ) {
-            
-            // See if this behavior has been initialized
-            if( !updateBehaviors[i].initialized ) {
-
-                if( !updateBehaviors[i].initialize( this, delta, drawOffset, guistate ) ) {
-                    // If the behavior has indicated it should not begin remove it
-                    updateBehaviors.removeAt(uint(i));    
-                    continue;
+                    if( !updater.initialize( this, delta, drawOffset, guistate ) ) {
+                        // If the behavior has indicated it should not begin remove it
+                        removeUpdateBehavior( keys[k] );    
+                        continue;
+                    }
+                    else {
+                        updater.initialized = true;
+                    }
                 }
-                else {
-                    updateBehaviors[i].initialized = true;
-                }
-            }
 
-            if( !updateBehaviors[i].update( this, delta, drawOffset, guistate ) ) {
-                // If the behavior has indicated it is done
-                updateBehaviors.removeAt(uint(i));
+                if( !updater.update( this, delta, drawOffset, guistate ) ) {
+                    // If the behavior has indicated it is done
+                    removeUpdateBehavior( keys[k] );
+                }
             }
         }
 
@@ -738,48 +943,82 @@ class Element {
                 mouseOver = true;
 
                 // Update behaviors 
-                for( int i = int(mouseOverBehaviors.length())-1; i >= 0 ; i-- ) {
-                    mouseOverBehaviors[i].onStart( this, delta, drawOffset, guistate );
+                array<string>@ keys = mouseOverBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+                    behavior.onStart( this, delta, drawOffset, guistate );
                 }
             }
             else {
-                for( int i = int(mouseOverBehaviors.length())-1; i >= 0 ; i-- ) {
-                    mouseOverBehaviors[i].onContinue( this, delta, drawOffset, guistate );
-                }   
+
+                array<string>@ keys = mouseOverBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+                    behavior.onContinue( this, delta, drawOffset, guistate );
+                }
+
             }   
 
             // Mouse click status
             switch( guistate.leftMouseState ) {
             
             case kMouseDown: {
-                for( int i = int(leftMouseClickBehaviors.length())-1; i >= 0 ; i-- ) {
-                    if( !leftMouseClickBehaviors[i].onDown( this, delta, drawOffset, guistate ) ) {
+
+                array<string>@ keys = leftMouseClickBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+
+                    if( !behavior.onDown( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        leftMouseClickBehaviors.removeAt(uint(i));
+                        removeLeftMouseClickBehavior( keys[k] );
                     }
                 }
+
             }
             break; 
             
             case kMouseStillDown: {
-                for( int i = int(leftMouseClickBehaviors.length())-1; i >= 0 ; i-- ) {
-                    if( !leftMouseClickBehaviors[i].onStillDown( this, delta, drawOffset, guistate ) ) {
+
+                array<string>@ keys = leftMouseClickBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+
+                    if( !behavior.onStillDown( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        leftMouseClickBehaviors.removeAt(uint(i));
+                        removeLeftMouseClickBehavior( keys[k] );
                     }
                 }
+
             }
             break;
 
             case kMouseUp: {
-                for( int i = int(leftMouseClickBehaviors.length())-1; i >= 0 ; i-- ) {
-                    if( !leftMouseClickBehaviors[i].onUp( this, delta, drawOffset, guistate ) ) {
+
+                array<string>@ keys = leftMouseClickBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseClickBehavior@ behavior = cast<MouseClickBehavior>(leftMouseClickBehaviors[keys[k]]);
+
+                    if( !behavior.onUp( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        leftMouseClickBehaviors.removeAt(uint(i));
+                        removeLeftMouseClickBehavior( keys[k] );
                     }
-                    // Consider this no longer hovering
-                    mouseOver = false;
+
                 }
+
+                // Consider this no longer hovering
+                mouseOver = false;
+                {
+                    array<string>@ mokeys = mouseOverBehaviors.getKeys();
+                    for( uint k = 0; k < mokeys.length(); k++ ) {
+                        MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[mokeys[k]]);
+
+                        if( !behavior.onFinish( this, delta, drawOffset, guistate ) ) {
+                            // If the behavior has indicated it is done
+                            removeMouseOverBehavior( mokeys[k] );
+                        }
+                    }
+                }
+
             }
             break; 
 
@@ -795,13 +1034,18 @@ class Element {
             // See if this is an 'exit'
             if( mouseOver )
             {
-                for( int i = int(mouseOverBehaviors.length())-1; i >= 0 ; i-- ) {
-                    if( !mouseOverBehaviors[i].onFinish( this, delta, drawOffset, guistate ) ) {
+
+                array<string>@ keys = mouseOverBehaviors.getKeys();
+                for( uint k = 0; k < keys.length(); k++ ) {
+                    MouseOverBehavior@ behavior = cast<MouseOverBehavior>(mouseOverBehaviors[keys[k]]);
+
+                    if( !behavior.onFinish( this, delta, drawOffset, guistate ) ) {
                         // If the behavior has indicated it is done
-                        mouseOverBehaviors.removeAt(uint(i));
+                        removeMouseOverBehavior( keys[k] );
                     }
                 }
-                mouseOver = false;    
+                mouseOver = false;
+
             }
         }
     }
@@ -830,6 +1074,15 @@ class Element {
         checkBoundary();
         resetAlignmentInBoundary();
 
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Do whatever is necessary when the resolution changes
+     *
+     */
+     void doScreenResize()  {
+        // Nothing to do in the base class
      }
 
     /*******************************************************************************************/
@@ -986,23 +1239,6 @@ class Element {
         if( size.y + paddingU + paddingD > boundarySize.y ) {
             boundarySize.y = size.y + paddingU + paddingD;
         }
-
-        // Make sure we haven't exceeded the maximum boundary
-        // if the boundary or boundaryMax is undefined this always passes
-        if( boundaryMax.x != UNDEFINEDSIZE && boundarySize.x != UNDEFINEDSIZE && boundarySize.x > boundaryMax.x ) {
-            if( throwErorr ) {
-                Print("Element " + name + " has a boundary of " + getBoundarySize().toString() + "\n");
-                DisplayError("GUI Error", "Element " + name + " exceeds its x boundaries");
-            }
-            return false;
-        }
-    
-        if( boundaryMax.y != UNDEFINEDSIZE && boundarySize.y != UNDEFINEDSIZE && boundarySize.y > boundaryMax.y ) {
-            if( throwErorr ) {
-                DisplayError("GUI Error", "Element " + name + " exceeds its y boundaries");
-            }
-            return false;
-        }
      
         return true;
 
@@ -1126,6 +1362,9 @@ class Element {
     void setSize( const ivec2 _size, bool resetBoundarySize = true ) {
         
         size = _size;
+        if( resetBoundarySize ) {
+            setBoundarySize( size );
+        }
         onRelayout();
 
     }
@@ -1281,85 +1520,6 @@ class Element {
      void setBoundarySizeY( int y ) {
 
         boundarySize.y = y;
-        onRelayout();
-
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Gets the max boundary size vector
-     * 
-     * @returns The max size vector 
-     *
-     */
-    ivec2 getBoundaryMax() {
-        return boundaryMax;
-    }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Gets the max boundary size x component
-     * 
-     * @returns The x size
-     *
-     */
-    int getBoundaryMaxX() {
-        return boundaryMax.x;
-    }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Gets the boundary size y component
-     * 
-     * @returns The y size
-     *
-     */
-    int getBoundaryMaxY() {
-        return boundaryMax.y;
-    }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Resizes the boundary 
-     * 
-     * @param newSize 2d size vector
-     *
-     */
-     void setBoundaryMax( ivec2 newSize ) {
-
-        boundaryMax = newSize;
-        checkBoundary();
-        onRelayout();
-
-     }
-
-    /*******************************************************************************************/
-    /**
-     * @brief Resizes the boundary in the x dimension 
-     * 
-     * @param x the new size
-     *
-     */
-     void setBoundaryMaxX( int x ) {
-
-        boundaryMax.x = x;
-        checkBoundary();
-        onRelayout();
-
-     }
-
-
-    /*******************************************************************************************/
-    /**
-     * @brief Resizes the boundary in the y dimension 
-     * 
-     * @param y the new size
-     *
-     */
-     void setBoundaryMaxY( int y ) {
-
-        boundaryMax.y = y;
-        checkBoundary();
         onRelayout();
 
      }

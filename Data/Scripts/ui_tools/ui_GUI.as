@@ -22,7 +22,6 @@ class GUI {
     Divider@ root;  // Root of the UI, holds all the contents 
     uint64 lastUpdateTime; // When was this last updated (ms)
     uint elementCount; // Counter for naming unnamed elements
-    ivec2 aspectCompensation; // offset from the upper left hand corner for 'letterboxing' 
     bool needsRelayout; // has a relayout signal been fired?
     bool showGuides; // overlay some extra lines to aid layout
     IMUIContext imui_context; // Getting UI information from the engine
@@ -46,8 +45,6 @@ class GUI {
         @newRoot.parent = null;
         @root = @newRoot;
         lastUpdateTime = 0;
-
-        aspectCompensation = getRenderOffset();
 
         needsRelayout = false;
         showGuides = false;
@@ -152,9 +149,71 @@ class GUI {
         vec2 engineMousePos = imui_context.getMousePosition();
 
         // Translate to GUISpace
-        mousePosition.x = int( (engineMousePos.x - renderOffset.x ) / GUItoScreenXScale );
-        mousePosition.y = int(float( GetScreenHeight() - int( engineMousePos.y + renderOffset.y ) ) / GUItoScreenYScale);  
+        mousePosition.x = int( (engineMousePos.x - screenMetrics.renderOffset.x ) / screenMetrics.GUItoScreenXScale );
+        mousePosition.y = int(float( GetScreenHeight() - int( engineMousePos.y + screenMetrics.renderOffset.y ) ) / screenMetrics.GUItoScreenYScale);  
         leftMouseState = imui_context.getLeftMouseState();
+
+        // Do relayout as necessary 
+        while( needsRelayout ) {
+            needsRelayout = false;
+            root.doRelayout();
+
+            // MJB Note: I'm aware that redoing the layout for the whole structure
+            // is rather inefficient, but given that this is targeted at most a few
+            // dozen elements, this should not be a problem -- can easily be optimized
+            // if so
+        }
+
+        
+        // Now pass this on to the children
+
+        GUIState guistate;
+
+        guistate.mousePosition = mousePosition;
+        guistate.leftMouseState = leftMouseState;
+
+        ivec2 origin(0,0);
+        root.update( delta, origin, guistate );
+
+        while( needsRelayout ) {
+            needsRelayout = false;
+            root.doRelayout();
+        }
+
+        // Finally process all of our message
+        for( uint i = 0; i < messageQueue.length(); i++ ) {
+            processMessage( messageQueue[i] );
+        }
+
+        messageQueue.resize(0);
+
+        // See if this triggered any resize events
+        while( needsRelayout ) {
+            needsRelayout = false;
+            root.doRelayout();
+        }
+
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Render the GUI
+     *
+     */
+     void render() {
+
+        // Check to see if the screen size has changed
+        if( screenMetrics.checkMetrics() ) {
+                
+            // All the font sizes will likely have changed
+            DisposeTextAtlases();
+            // We need to inform the elements
+            root.doScreenResize();
+            root.doRelayout();
+        }
+
+        ivec2 origin(0,0);
+        root.render( origin );
 
         if( showGuides ) {
 
@@ -210,7 +269,7 @@ class GUI {
         }
 
         // Blackout the top and bottom if we're 'letterboxing' 
-        if( renderOffset.y > 0 ) {
+        if( screenMetrics.renderOffset.y > 0 ) {
 
             // Top bar
             HUDImage @topbar = hud.AddImage();
@@ -220,10 +279,10 @@ class GUI {
             
             topbar.scale = 1;
             topbar.scale.x *= GetScreenWidth();
-            topbar.scale.y *= renderOffset.y;
+            topbar.scale.y *= screenMetrics.renderOffset.y;
 
             topbar.position.x = imagepos.x;
-            topbar.position.y = GetScreenHeight() - imagepos.y - (topbar.GetWidth() * topbar.scale.y );
+            topbar.position.y = GetScreenHeight() - imagepos.y - (topbar.GetHeight() * topbar.scale.y );
             topbar.position.z = 10.0;// 0.1f;
 
             topbar.color = vec4( 0.0, 0.0, 0.0, 1.0f ); 
@@ -232,63 +291,54 @@ class GUI {
             HUDImage @bottombar = hud.AddImage();
             bottombar.SetImageFromPath("Data/Textures/ui/whiteblock.tga");
 
-            imagepos = ivec2( 0, GetScreenHeight() - renderOffset.y );
+            imagepos = ivec2( 0, GetScreenHeight() - screenMetrics.renderOffset.y );
             
             bottombar.scale = 1;
             bottombar.scale.x *= GetScreenWidth();
-            bottombar.scale.y *= renderOffset.y;
+            bottombar.scale.y *= screenMetrics.renderOffset.y;
 
             bottombar.position.x = imagepos.x;
-            bottombar.position.y = GetScreenHeight() - imagepos.y - (bottombar.GetWidth() * bottombar.scale.y );
+            bottombar.position.y = GetScreenHeight() - imagepos.y - (bottombar.GetHeight() * bottombar.scale.y );
             bottombar.position.z = 10.0;// 0.1f;
 
             bottombar.color = vec4( 0.0, 0.0, 0.0, 1.0f );   
         }
 
-        // Do relayout as necessary 
-        while( needsRelayout ) {
-            needsRelayout = false;
-            root.doRelayout();
+        if( screenMetrics.renderOffset.x > 0 ) {
 
-            // MJB Note: I'm aware that redoing the layout for the whole structure
-            // is rather inefficient, but given that this is targeted at most a few
-            // dozen elements, this should not be a problem -- can easily be optimized
-            // if so
+            // Left bar
+            HUDImage @leftbar = hud.AddImage();
+            leftbar.SetImageFromPath("Data/Textures/ui/whiteblock.tga");
+
+            ivec2 imagepos( 0, 0 );
+            
+            leftbar.scale = 1;
+            leftbar.scale.x *= screenMetrics.renderOffset.x;
+            leftbar.scale.y *= GetScreenHeight();
+
+            leftbar.position.x = GetScreenWidth() - imagepos.x - (leftbar.GetWidth() * leftbar.scale.x );
+            leftbar.position.y = imagepos.y;
+            leftbar.position.z = 10.0;// 0.1f;
+
+            leftbar.color = vec4( 0.0, 0.0, 0.0, 1.0f ); 
+
+            // Bottom bar
+            HUDImage @rightbar = hud.AddImage();
+            rightbar.SetImageFromPath("Data/Textures/ui/whiteblock.tga");
+
+            imagepos = ivec2( GetScreenWidth() - screenMetrics.renderOffset.x, 0 );
+            
+            rightbar.scale = 1;
+            rightbar.scale.x *= screenMetrics.renderOffset.x;
+            rightbar.scale.y *= GetScreenHeight();
+
+            rightbar.position.x = GetScreenWidth() - imagepos.x - (rightbar.GetWidth() * rightbar.scale.x );
+            rightbar.position.y = imagepos.y;
+            rightbar.position.z = 10.0;// 0.1f;
+
+            rightbar.color = vec4( 0.0, 0.0, 0.0, 1.0f );   
         }
 
-        
-        // Now pass this on to the children
-
-        GUIState guistate;
-
-        guistate.mousePosition = mousePosition;
-        guistate.leftMouseState = leftMouseState;
-
-        ivec2 origin(0,0);
-        root.update( delta, origin, guistate );
-
-        while( needsRelayout ) {
-            needsRelayout = false;
-            root.doRelayout();
-        }
-
-        // Finally process all of our message
-        for( uint i = 0; i < messageQueue.length(); i++ ) {
-            processMessage( messageQueue[i] );
-        }
-
-        messageQueue.resize(0);
-
-    }
-
-    /*******************************************************************************************/
-    /**
-     * @brief  Render the GUI
-     *
-     */
-     void render() {
-        ivec2 origin(0,0);
-        root.render( origin );
         hud.Draw();
      }
 

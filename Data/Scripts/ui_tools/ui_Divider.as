@@ -82,6 +82,7 @@ class Divider : Element {
         @centeredElement = null;
         bottomRightContents.resize(0);
         setSize(UNDEFINEDSIZE,UNDEFINEDSIZE);
+        boundaryOffset = ivec2(0,0);
         onRelayout();
     }
 
@@ -96,7 +97,7 @@ class Divider : Element {
      */
     void update( uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
 
-        ivec2 currentDrawOffset = drawOffset;
+        ivec2 currentDrawOffset = boundaryOffset + drawOffset;
 
         // Do whatever the superclass wants
         Element::update( delta, currentDrawOffset, guistate );
@@ -116,7 +117,7 @@ class Divider : Element {
 
         if( centeredElement !is null ) {
 
-            currentDrawOffset = drawOffset;
+            currentDrawOffset = boundaryOffset + drawOffset;
 
             if( orientation == DOVertical ) {
                 currentDrawOffset.y += centerBoundStart;
@@ -128,7 +129,7 @@ class Divider : Element {
             centeredElement.update( delta, currentDrawOffset, guistate );
         }
 
-        currentDrawOffset = drawOffset;
+        currentDrawOffset = boundaryOffset + drawOffset;
 
         if( orientation == DOVertical ) {
             currentDrawOffset.y += bottomRightBoundStart;
@@ -160,7 +161,7 @@ class Divider : Element {
     void render( ivec2 drawOffset ) {
 
         // Simply pass this on to the children
-        ivec2 currentDrawOffset = drawOffset + drawDisplacement;
+        ivec2 currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
         for( uint i = 0; i < topLeftContents.length(); i++ ) {
             
             topLeftContents[i].render( currentDrawOffset );
@@ -175,7 +176,7 @@ class Divider : Element {
 
         if( centeredElement !is null ) {
 
-            currentDrawOffset = drawOffset + drawDisplacement;
+            currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
 
             if( orientation == DOVertical ) {
                 currentDrawOffset.y += centerBoundStart;
@@ -187,7 +188,7 @@ class Divider : Element {
             centeredElement.render( currentDrawOffset );
         }
 
-        currentDrawOffset = drawOffset + drawDisplacement;
+        currentDrawOffset = boundaryOffset + drawOffset + drawDisplacement;
 
         if( orientation == DOVertical ) {
             currentDrawOffset.y += bottomRightBoundStart;
@@ -254,11 +255,7 @@ class Divider : Element {
 
                     // check to make sure the element boundary is the same as this container
                     if( topLeftContents[i].getBoundarySizeX() < getBoundarySizeX() ) {
-                        // Respect the element's max boundary 
-                        //if( getBoundarySizeX() <= topLeftContents[i].getBoundaryMaxX() ) {
-                            topLeftContents[i].setBoundarySizeX( getBoundarySizeX() );    
-                        //}
-                        
+                        topLeftContents[i].setBoundarySizeX( getBoundarySizeX() );   
                     }
 
                 }   
@@ -267,7 +264,7 @@ class Divider : Element {
             // As the center is one element, we just need to calculate from it
             if( centeredElement !is null && centeredElement.getBoundarySizeY() != UNDEFINEDSIZE ) {
                 
-                int dividerCenter = ((getBoundarySizeY() - 1)/2);
+                int dividerCenter = ((getSizeY() - 1)/2);
 
                 centerBoundStart = dividerCenter - (centeredElement.getBoundarySizeY()/2);
                 centerBoundEnd = centerBoundStart  + ( centeredElement.getBoundarySizeY() - 1 );
@@ -281,10 +278,7 @@ class Divider : Element {
 
                 // check to make sure the element boundary is the same as this container
                 if( centeredElement.getBoundarySizeX() < getBoundarySizeX() ) {
-                    // Respect the element's max boundary 
-                    //if( getBoundarySizeX() <= centeredElement.getBoundaryMaxX() ) {
-                        centeredElement.setBoundarySizeX( getBoundarySizeX() );
-                    //}
+                    centeredElement.setBoundarySizeX( getBoundarySizeX() );
                 }
             }
 
@@ -293,7 +287,7 @@ class Divider : Element {
             for( int i = int(bottomRightContents.length())-1; i >= 0 ; i-- ) {
 
                 if( bottomRightBoundStart == UNDEFINEDSIZE ) {
-                    bottomRightBoundEnd = getBoundarySizeY() - 1;
+                    bottomRightBoundEnd = getSizeY() - 1;
                     bottomRightBoundStart = bottomRightBoundEnd + 1;
                 }
 
@@ -310,10 +304,7 @@ class Divider : Element {
 
                     // check to make sure the element boundary is the same as this container
                     if( bottomRightContents[i].getBoundarySizeX() < getBoundarySizeX() ) {
-                        // Respect the element's max boundary 
-                        //if( getBoundarySizeX() <= bottomRightContents[i].getBoundaryMaxX() ) {
-                            bottomRightContents[i].setBoundarySizeX( getBoundarySizeX() );
-                        //}
+                        bottomRightContents[i].setBoundarySizeX( getBoundarySizeX() );
                     }
                 }
             }
@@ -368,10 +359,7 @@ class Divider : Element {
 
                     // check to make sure the element boundary is the same as this container
                     if( topLeftContents[i].getBoundarySizeY() < getBoundarySizeY() ) {
-                        // Respect the element's max boundary 
-                        //if( getBoundarySizeY() <= topLeftContents[i].getBoundaryMaxY() ) {
-                            topLeftContents[i].setBoundarySizeY( getBoundarySizeY() );
-                        //}
+                        topLeftContents[i].setBoundarySizeY( getBoundarySizeY() );
                     }
                 }
             }
@@ -379,7 +367,7 @@ class Divider : Element {
             // As the center is one element, we just need to calculate from it
             if( centeredElement !is null && centeredElement.getBoundarySizeX() != UNDEFINEDSIZE ) {
                 
-                int dividerCenter = ((getBoundarySizeX()- 1)/2);
+                int dividerCenter = ((getSizeX()- 1)/2);
                 centerBoundStart = dividerCenter - (centeredElement.getBoundarySizeX()/2);
                 centerBoundEnd = centeredElement.getBoundarySizeX() - 1;
                 centerSize = centeredElement.getBoundarySizeX();
@@ -391,10 +379,7 @@ class Divider : Element {
 
                 // check to make sure the element boundary is the same as this container
                 if( centeredElement.getBoundarySizeY() < getBoundarySizeY() ) {
-                    // Respect the element's max boundary 
-                    //if( getBoundarySizeY() <= centeredElement.getBoundaryMaxY() ) {
-                        centeredElement.setBoundarySizeY( getBoundarySizeY() );
-                    //}
+                    centeredElement.setBoundarySizeY( getBoundarySizeY() );
                 }
             }
 
@@ -402,7 +387,7 @@ class Divider : Element {
             for( int i = int(bottomRightContents.length())-1; i >= 0 ; i-- ) {
 
                 if( bottomRightBoundStart == UNDEFINEDSIZE ) {
-                    bottomRightBoundEnd = getBoundarySizeX() - 1;
+                    bottomRightBoundEnd = getSizeX() - 1;
                     bottomRightBoundStart = bottomRightBoundEnd + 1;
                 }                
 
@@ -419,10 +404,7 @@ class Divider : Element {
 
                     // check to make sure the element boundary is the same as this container
                     if( bottomRightContents[i].getBoundarySizeY() < getBoundarySizeY() ) {
-                        // Respect the element's max boundary 
-                        //if( getBoundarySizeY() <= bottomRightContents[i].getBoundaryMaxY() ) {
-                            bottomRightContents[i].setBoundarySizeY( getBoundarySizeY() );
-                        //}
+                        bottomRightContents[i].setBoundarySizeY( getBoundarySizeY() );
                     }
                 }
             }
@@ -481,6 +463,30 @@ class Divider : Element {
 
         checkRegions();
 
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Do whatever is necessary when the resolution changes
+     *
+     */
+     void doScreenResize()  {
+        
+        // Invoke the superclass's method
+        Element::doScreenResize();
+        
+        // Pass this down to the children
+        for( uint i = 0; i < topLeftContents.length(); i++ ) {
+            topLeftContents[i].doScreenResize();
+        }
+
+        if( centeredElement !is null ) {
+            centeredElement.doScreenResize();
+        }
+
+        for( uint i = 0; i < bottomRightContents.length(); i++ ) {
+            bottomRightContents[i].doScreenResize();
+        }
      }
 
 
@@ -543,13 +549,6 @@ class Divider : Element {
 
             newDivider.setSize( size );
 
-            // Inherit the max size, if we don't have a max size
-            if( size.y == UNDEFINEDSIZE ) {
-                size.y = getBoundaryMaxY();
-            }
-
-            newDivider.setBoundaryMax( size ); 
-
         }
         else {
             
@@ -559,13 +558,6 @@ class Divider : Element {
             }
 
             newDivider.setSize( size );
-
-            // Inherit the max size, if we don't have a max size
-            if( size.x == UNDEFINEDSIZE ) {
-                size.x = getBoundaryMaxX();
-            }
-
-            newDivider.setBoundaryMax( size ); 
         
         }
 
@@ -694,7 +686,6 @@ class Divider : Element {
 
             for( uint i = 0; i < bottomRightContents.length(); i++ ) {
 
-
                 Element@ results = bottomRightContents[i].findElement( elementName );
 
                 if( results !is null ) {
@@ -719,8 +710,6 @@ class Divider : Element {
         bottomRightContents.resize(0);
         @centeredElement = null;
     }
-
-
 
 }
 

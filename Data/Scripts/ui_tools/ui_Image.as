@@ -122,11 +122,11 @@ class Image : Element
 
 	        ivec2 GUIRenderPos = drawOffset + boundaryOffset + drawDisplacement;
 
-			ivec2 screenRenderPos = GUIToScreen( GUIRenderPos );
+			ivec2 screenRenderPos = screenMetrics.GUIToScreen( GUIRenderPos );
 
 			imageHandle.scale = 1;
-	     	imageHandle.scale.x *= (float(getSizeX())*GUItoScreenXScale)/float(originalImageSize.x);
-	    	imageHandle.scale.y *= (float(getSizeY())*GUItoScreenYScale)/float(originalImageSize.y);
+	     	imageHandle.scale.x *= (float(getSizeX())*screenMetrics.GUItoScreenXScale)/float(originalImageSize.x);
+	    	imageHandle.scale.y *= (float(getSizeY())*screenMetrics.GUItoScreenYScale)/float(originalImageSize.y);
 
 	     	imageHandle.position.x = screenRenderPos.x;
 	     	imageHandle.position.y = GetScreenHeight() - screenRenderPos.y - (originalImageSize.x * imageHandle.scale.y );
@@ -134,7 +134,7 @@ class Image : Element
 	     	
 	     	imageHandle.color = color;
 
-	     	hud.Draw();
+	     	//hud.Draw();
 
     	}
 

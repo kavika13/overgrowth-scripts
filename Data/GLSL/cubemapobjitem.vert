@@ -13,6 +13,7 @@ uniform mat4 shadow_matrix[4];
 
 #ifndef DEPTH_ONLY
 out vec3 ws_vertex;
+out vec3 world_vert;
 out vec2 frag_tex_coords;
 out vec4 shadow_coords[4];
 #endif
@@ -22,6 +23,8 @@ void main() {
     gl_Position = projection_view_mat * transformed_vertex;
 #ifndef DEPTH_ONLY
     ws_vertex = transformed_vertex.xyz - cam_pos;
+    world_vert = transformed_vertex.xyz;
+    
 	frag_tex_coords = tex_coords_attrib;
     
     shadow_coords[0] = shadow_matrix[0] * transformed_vertex;

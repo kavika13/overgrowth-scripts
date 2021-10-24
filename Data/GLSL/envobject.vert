@@ -33,10 +33,8 @@ uniform float time;
 #ifdef TANGENT
 out mat3 tan_to_obj;
 #endif
-out vec3 ws_vertex;
 out vec3 world_vert;
 out vec2 frag_tex_coords;
-out vec4 shadow_coords[4];
 #ifndef NO_INSTANCE_ID
 flat out int instance_id;
 #endif
@@ -58,10 +56,5 @@ void main() {
     frag_tex_coords = tex_coords_attrib;
     #ifndef DEPTH_ONLY
         world_vert = transformed_vertex.xyz;
-        ws_vertex = transformed_vertex.xyz - cam_pos;
-        shadow_coords[0] = shadow_matrix[0] * transformed_vertex;
-        shadow_coords[1] = shadow_matrix[1] * transformed_vertex;
-        shadow_coords[2] = shadow_matrix[2] * transformed_vertex;
-        shadow_coords[3] = shadow_matrix[3] * transformed_vertex;
     #endif
 } 

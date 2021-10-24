@@ -71,6 +71,10 @@ class FadeIn : UpdateBehavior {
 
     }
 
+    void cleanUp( Element@ element ) {
+        element.setAlpha( originalAlpha );
+    }
+
 }
 
 /**
@@ -192,7 +196,6 @@ class ChangeTextFadeOutIn : UpdateBehavior {
 				return true;	
 			}
 		}
-
     }
 }
 

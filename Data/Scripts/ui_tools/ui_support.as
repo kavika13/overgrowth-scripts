@@ -91,58 +91,118 @@ const int GUISpaceY = 1440;
 
 /*******************************************************************************************/
 /**
- * @brief  Helper functions to get the scaling factors and offsets between GUI space 
+ * @brief  Helper class to derive and contain the scaling factors and offsets between GUI space 
  *         and screen space
  * 
  */
 
-//Figure out the largest 16 x 9 box we can fit on the screen (hopefully the whole screen)
-// TODO: math for the odd case where the screen is *wider* than 16:9 
-ivec2 get16x9Size() {
 
-    ivec2 adjScreenSize;
-    adjScreenSize.x = GetScreenWidth();
-    adjScreenSize.y = int((float(adjScreenSize.x)/ 16.0 ) * 9.0);
 
-    return adjScreenSize;
+class ScreenMetrics {
+    
+
+
+    float GUItoScreenXScale; // Scaling factor between screen width and GUI space width
+    float GUItoScreenYScale; // Scaling factor between screen height and GUI space height
+    ivec2 renderOffset; // Where to start rendering to get a 16x9 picture
+    ivec2 screenSize; // what physical screen resolution are these values based on
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Constructor, for constructing
+     * 
+     */
+    ScreenMetrics() {
+        computeFactors();
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Checks to see if the resolution has changed and if so rederive the values
+     * 
+     * @returns true if the resolution has changed, false otherwise
+     *
+     */
+     bool checkMetrics() {
+        if( screenSize.x != GetScreenWidth() || screenSize.y != GetScreenHeight() ) {
+            computeFactors();
+            return true;
+        }
+        else {
+            return false;
+        }
+
+
+     }
+
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Computer various values this class is responsible for
+     * 
+     */
+    void computeFactors() {
+        GUItoScreenXScale = GUItoScreenX();
+        GUItoScreenYScale = GUItoScreenY();
+        renderOffset = getRenderOffset();
+        screenSize = ivec2( GetScreenWidth(), GetScreenHeight() );
+
+        // Print("computing metrics for screen size " + screenSize.toString() + "\n");
+        // Print(" GUItoScreenXScale:" + GUItoScreenXScale + "\n");
+        // Print(" GUItoScreenYScale:" + GUItoScreenYScale + "\n");
+        // Print(" renderOffset:" + renderOffset.toString() + "\n");
+
+    }
+
+    //Figure out the largest 16 x 9 box we can fit on the screen (hopefully the whole screen)
+    ivec2 get16x9Size() {
+
+        ivec2 adjScreenSize;
+        // see if we're wider than 16x9
+        if( float(GetScreenWidth())/16.0 > (GetScreenHeight())/9.0 ) {
+            // if so, we'll black out the sides
+            adjScreenSize.y = GetScreenHeight();
+            adjScreenSize.x = int((float(adjScreenSize.y)/ 9.0 ) * 16.0);
+        }
+        else {
+            // otherwise we 'letterbox' up top (if needed)
+            adjScreenSize.x = GetScreenWidth();
+            adjScreenSize.y = int((float(adjScreenSize.x)/ 16.0 ) * 9.0);
+        }
+
+        return adjScreenSize;
+    }
+
+
+    float GUItoScreenX() {
+        ivec2 screenSpace = get16x9Size();
+        return ( float(screenSpace.x) / float(GUISpaceX) );
+    }
+
+    float GUItoScreenY() {
+        ivec2 screenSpace = get16x9Size();
+        return ( float(screenSpace.y) / float(GUISpaceY) );
+    }
+
+    ivec2 getRenderOffset() {
+        ivec2 screenSpace = get16x9Size();
+        return ivec2( (GetScreenWidth() - screenSpace.x )/2, (GetScreenHeight() - screenSpace.y )/2 );
+    }
+
+    ivec2 GUIToScreen( const ivec2 pos ) {
+        return ivec2( int( float(pos.x) * GUItoScreenXScale ) + renderOffset.x,
+                      int( float(pos.y) * GUItoScreenYScale ) + renderOffset.y );
+    }
+
+    ivec2 GUIToScreen( const int x, const int y ) {
+        return ivec2( int( float(x) * GUItoScreenXScale ) + renderOffset.x,
+                      int( float(y) * GUItoScreenYScale ) + renderOffset.y );
+    }
+
 }
 
-
-float GUItoScreenX() {
-
-    ivec2 screenSpace = get16x9Size();
-    return ( float(screenSpace.x) / float(GUISpaceX) );
-
-}
-
-float GUItoScreenXScale = GUItoScreenX();
-float GUItoScreenYScale = GUItoScreenY();
-
-float GUItoScreenY() {
-
-    ivec2 screenSpace = get16x9Size();
-    return ( float(screenSpace.y) / float(GUISpaceY) );
-
-}
-
-ivec2 getRenderOffset() {
-    ivec2 screenSpace = get16x9Size();
-    return ivec2( 0, (GetScreenHeight() - screenSpace.y )/2 );
-}
-
-ivec2 renderOffset = getRenderOffset();
-
-ivec2 GUIToScreen( const ivec2 pos ) {
-    return ivec2( int( float(pos.x) * GUItoScreenXScale ) + renderOffset.x,
-                  int( float(pos.y) * GUItoScreenYScale ) + renderOffset.y );
-}
-
-ivec2 GUIToScreen( const int x, const int y ) {
-    return ivec2( int( float(x) * GUItoScreenXScale ) + renderOffset.x,
-                  int( float(y) * GUItoScreenYScale ) + renderOffset.y );
-}
-
-
+// make a global pseudo-singleton
+ScreenMetrics screenMetrics;
 
 /*******************************************************************************************/
 /**
@@ -155,9 +215,9 @@ void drawDebugBox( bool GUISpace, ivec2 pos, ivec2 size, float R = 1.0f, float G
 
     // Check to see if the coordinates are in GUI Space (if not it's in screen space)
     if( GUISpace ) {
-        pos = GUIToScreen( pos );
-        size.x = int( float(size.x) * GUItoScreenXScale );
-        size.y = int( float(size.y) * GUItoScreenYScale );
+        pos = screenMetrics.GUIToScreen( pos );
+        size.x = int( float(size.x) * screenMetrics.GUItoScreenXScale );
+        size.y = int( float(size.y) * screenMetrics.GUItoScreenYScale );
     }
 
     HUDImage @boximage = hud.AddImage();
