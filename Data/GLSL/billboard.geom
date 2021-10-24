@@ -14,7 +14,7 @@ out vec2 uv;
 
 void main()
 {
-    vec2 halfsize = billboardDim/2.0f * scale;
+    vec2 halfsize = billboardDim/2.0 * scale;
 
 #ifdef SCREENSPACE_SCALING
     vec4 projected = p * mv * gl_in[0].gl_Position;

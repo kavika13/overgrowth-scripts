@@ -82,9 +82,16 @@ const vec2 poisson_disc_16[16] = vec2[16](
 #endif
 
 #ifdef FRAGMENT_SHADER
-float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, float rand_a) {    
+
+float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, float rand_a, float slope_dot) {
+    //vec3 normal=normalize(cross(X,Y));
+    #ifndef SIMPLE_SHADOW    
     shadow_coord.z -= 0.00003 * pow(2.0, float(index)*1.7);
-#ifndef SIMPLE_SHADOW
+    #else
+    //shadow_coord.z -= 0.001;
+    shadow_coord.z -= (1.0-abs(slope_dot))*0.0009 + 0.0001;
+    #endif
+    #ifndef SIMPLE_SHADOW
     shadow_coord.x *= 0.5;
     shadow_coord.y *= 0.5;
     if(index == 1){
@@ -114,11 +121,23 @@ float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, 
     offset_rot[1] = vec2(-sin_angle, cos_angle);
 
     #ifdef ONE_TAP
-    shadow_amount = textureProj(tex5,shadow_coord);
+    shadow_amount += textureProj(tex5,shadow_coord);
+    #endif
+
+    #ifdef ONE_TAP_Z_INTERP
+    float val = 10000.0;
+    float temp_min = floor(shadow_coord.z * val) / val;
+    float temp_max = ceil(shadow_coord.z * val) / val;
+    float alpha = (shadow_coord.z - temp_min) / (temp_max - temp_min);
+    alpha = max(0.0, min(1.0, alpha));
+    shadow_coord.z = temp_max;
+    shadow_amount += textureProj(tex5,shadow_coord) * alpha;
+    shadow_coord.z = temp_min;
+    shadow_amount += textureProj(tex5,shadow_coord) * (1.0 - alpha);
     #endif
 
     #ifdef FOUR_TAP_STATIC
-    float temp = 0.5/2048.0;
+    float temp = 0.25/2048.0;
     shadow_amount += textureProj(tex5,shadow_coord+vec4(temp, 0.0, 0.0,0.0));
     shadow_amount += textureProj(tex5,shadow_coord+vec4(0.0, temp, 0.0,0.0));
     shadow_amount += textureProj(tex5,shadow_coord+vec4(-temp, 0.0, 0.0,0.0));
@@ -156,7 +175,7 @@ float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, 
     return shadow_amount;
 }
 
-float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
+float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist, float slope_dot){
     float rand_a = rand(gl_FragCoord.xy);
     vec3 shadow_tex = vec3(1.0);
     int index = 4;
@@ -175,9 +194,15 @@ float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
     if(index == 4){
         return 1.0;
     }
-    return GetCascadeShadowIndex(tex5, sc[index], index, rand_a);
+    return GetCascadeShadowIndex(tex5, sc[index], index, rand_a, slope_dot);
 }
+
+float GetCascadeShadow(sampler2DShadow tex5, vec4 sc[4], float dist){
+    return GetCascadeShadow(tex5, sc, dist, 0.0);
+}
+
 #endif
+
 
 vec3 CalcVertexOffset (const vec4 world_pos, float wind_amount, float time, float plant_shake) {
     vec3 vertex_offset = vec3(0.0);
@@ -289,9 +314,21 @@ float GetSpecContrib ( const vec3 light_pos,
 }
 
 float GetHazeAmount( in vec3 relative_position ) { 
-    float near = 0.1;
+    /*float near = 0.1;
     float far = 1000.0;
     float fog_opac = min(1.0,length(relative_position)/far);
+    */
+    float haze_mult = 0.0008;
+    float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
+    return fog_opac;
+}
+
+float GetHazeAmount( in vec3 relative_position, float haze_mult) { 
+    /*float near = 0.1;
+    float far = 1000.0;
+    float fog_opac = min(1.0,length(relative_position)/far);
+    */
+    float fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
     return fog_opac;
 }
 

@@ -7,11 +7,11 @@ int water_decal_id = -1;
 
 void Dispose() {
     if(water_decal_id != -1){
-        DeleteObjectID(water_decal_id);
+        QueueDeleteObjectID(water_decal_id);
         water_decal_id = -1;
     }
     if(water_surface_id != -1){
-        DeleteObjectID(water_surface_id);
+        QueueDeleteObjectID(water_surface_id);
         water_surface_id = -1;
     }
 }

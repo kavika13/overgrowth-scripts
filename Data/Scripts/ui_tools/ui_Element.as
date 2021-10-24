@@ -249,9 +249,9 @@ class Element {
         
         name = "";
 
-        size = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
-        defaultSize = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
-        boundarySize = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE );
+        size = ivec2( AH_UNDEFINEDSIZE,AH_UNDEFINEDSIZE );
+        defaultSize = ivec2( AH_UNDEFINEDSIZE,AH_UNDEFINEDSIZE );
+        boundarySize = ivec2( AH_UNDEFINEDSIZE,AH_UNDEFINEDSIZE );
         boundaryOffset = ivec2( 0, 0 );
         drawDisplacement = ivec2( 0, 0);
 
@@ -898,7 +898,7 @@ class Element {
         boxImage.setColor( boxColor );
         boxImage.setRenderSize( vec2( float(boxSize.x), float(boxSize.y) ) );
 
-        if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ){
+        if( currentClipSize.x != AH_UNDEFINEDSIZE && currentClipSize.y != AH_UNDEFINEDSIZE ){
 
             ivec2 screenClipPos = screenMetrics.GUIToScreen( currentClipPos );
 
@@ -1435,7 +1435,7 @@ class Element {
     /**
      * @brief  Set the padding for each direction on the element
      *
-     * UNDEFINEDSIZE will cause no change 
+     * AH_UNDEFINEDSIZE will cause no change 
      * 
      * @param U (minimum) Padding between the element and the upper boundary  
      * @param D (minimum) Padding between the element and the lower boundary  
@@ -1445,10 +1445,10 @@ class Element {
      */
     void setPadding( int U, int D, int L, int R) {
 
-        if( U != UNDEFINEDSIZE ) { paddingU = U; }
-        if( D != UNDEFINEDSIZE ) { paddingD = D; }
-        if( L != UNDEFINEDSIZE ) { paddingL = L; }
-        if( R != UNDEFINEDSIZE ) { paddingR = R; }
+        if( U != AH_UNDEFINEDSIZE ) { paddingU = U; }
+        if( D != AH_UNDEFINEDSIZE ) { paddingD = D; }
+        if( L != AH_UNDEFINEDSIZE ) { paddingL = L; }
+        if( R != AH_UNDEFINEDSIZE ) { paddingR = R; }
 
         onRelayout();
 
@@ -1548,8 +1548,8 @@ class Element {
      bool checkBoundary( bool throwErorr = true ) {
         
         // first check if we have undefined boundary sizes (probably shouldn't happen)
-        if( boundarySize.x == UNDEFINEDSIZE ) boundarySize.x = size.x + paddingL + paddingR;
-        if( boundarySize.y == UNDEFINEDSIZE ) boundarySize.y = size.y + paddingU + paddingD;
+        if( boundarySize.x == AH_UNDEFINEDSIZE ) boundarySize.x = size.x + paddingL + paddingR;
+        if( boundarySize.y == AH_UNDEFINEDSIZE ) boundarySize.y = size.y + paddingU + paddingD;
 
         // The boundary is defined to always be at least as big as the element it contains
         // Make sure this is the case
@@ -1700,7 +1700,7 @@ class Element {
     /**
      * @brief  Sets the size of the region  
      * 
-     * @param _size 2d size vector (-1 element implies undefined - or use UNDEFINEDSIZE)
+     * @param _size 2d size vector (-1 element implies undefined - or use AH_UNDEFINEDSIZE)
      * @param resetBoundarySize Should we reset the boundary if it's too small?
      *
      */
@@ -1718,8 +1718,8 @@ class Element {
     /**
      * @brief  Sets the size of the region 
      * 
-     * @param x x dimension size (-1 implies undefined - or use UNDEFINEDSIZE)
-     * @param y y dimension size (-1 implies undefined - or use UNDEFINEDSIZE)
+     * @param x x dimension size (-1 implies undefined - or use AH_UNDEFINEDSIZE)
+     * @param y y dimension size (-1 implies undefined - or use AH_UNDEFINEDSIZE)
      * @param resetBoundarySize Should we reset the boundary if it's too small?
      *
      */
@@ -1734,7 +1734,7 @@ class Element {
     /**
      * @brief  Sets the x dimension of a region
      * 
-     * @param x x dimension size (-1 implies undefined - or use UNDEFINEDSIZE)
+     * @param x x dimension size (-1 implies undefined - or use AH_UNDEFINEDSIZE)
      * @param resetBoundarySize Should we reset the boundary if it's too small?
      *
      */
@@ -1748,7 +1748,7 @@ class Element {
     /**
      * @brief  Sets the y dimension of a region
      * 
-     * @param y y dimension size (-1 implies undefined - or use UNDEFINEDSIZE)
+     * @param y y dimension size (-1 implies undefined - or use AH_UNDEFINEDSIZE)
      * @param resetBoundarySize Should we reset the boundary if it's too small?
      *
      */

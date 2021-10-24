@@ -85,7 +85,7 @@ class ivec2 {
     }
 }
 
-const int UNDEFINEDSIZE = -1;
+const int AH_UNDEFINEDSIZE = -1;
 
 namespace AHGUI {
 
@@ -275,10 +275,10 @@ void drawDebugBox( bool GUISpace, ivec2 pos, ivec2 size, float R = 1.0f, float G
  *        be easily unique
  *
  */
-enum DividerOrientation {
-    DOVertical,  // self explanatory 
-    DOHorizontal // also self explanatory 
-}
+// enum DividerOrientation {
+//     DOVertical,  // self explanatory 
+//     DOHorizontal // also self explanatory 
+// }
 
 // When placing an element in a divider, which direction is it coming from
 //  right now a container can only have one centered element

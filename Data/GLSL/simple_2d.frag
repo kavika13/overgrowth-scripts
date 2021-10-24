@@ -15,6 +15,7 @@ in vec4 color;
 in vec2 var_tex_coord; 
 #endif
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {    

@@ -33,7 +33,7 @@ class MainMenuGUI : AHGUI::GUI {
     {
         AHGUI::Divider@ mainpane = root.addDivider( DDTop,
                                                     DOVertical,
-                                                    ivec2( UNDEFINEDSIZE, 1140 ) );
+                                                    ivec2( UNDEFINEDSIZEI, 1140 ) );
 
         /*
         AHGUI::Image alphasticker = AHGUI::Image("Textures/ui/main_menu/alphasticker.png");
@@ -88,14 +88,14 @@ class MainMenuGUI : AHGUI::GUI {
 			mainpane.addSpacer( menu_item_spacing, DDTop ) ;
 		}
 
-        /*{
+        {
             AHGUI::Text buttonText = AHGUI::Text("Lugaru", labelFont);
             buttonText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("lugaru") );
             buttonText.addMouseOverBehavior( buttonHover );
             mainpane.addElement(buttonText, DDTop);
 
             mainpane.addSpacer( menu_item_spacing, DDTop ) ;
-        }*/
+        }
 
         {
             AHGUI::Text buttonText = AHGUI::Text("Settings", labelFont);
@@ -153,7 +153,7 @@ class MainMenuGUI : AHGUI::GUI {
         }
         else if( message.name == "lugaru" )
         {
-			this_ui.SendCallback( "lugaru_menu.as" );
+			this_ui.SendCallback( "lugaru_menu_simple.as" );
         }
 		else if( message.name == "tutorial" )
         {
@@ -173,7 +173,7 @@ class MainMenuGUI : AHGUI::GUI {
         }
         else if( message.name == "exit" )
         {
-            this_ui.SendCallback( "back" );
+            this_ui.SendCallback( "exit" );
         }
         else if( message.name == "settings" )
         {
@@ -189,11 +189,25 @@ class MainMenuGUI : AHGUI::GUI {
     }
 
     void render() {
-        ribbon_background.Update();
-        ribbon_background.DrawGUI(1.1f);
-        hud.Draw();
+        EnterTelemetryZone("MainMenuGUI::render()");
 
+        EnterTelemetryZone("ribbon_background.Update()");
+        ribbon_background.Update();
+        LeaveTelemetryZone();
+
+        EnterTelemetryZone("ribbon_background.DrawGUI");
+        ribbon_background.DrawGUI(1.1f);
+        LeaveTelemetryZone();
+
+        EnterTelemetryZone("hud.Draw()");
+        hud.Draw();
+        LeaveTelemetryZone();
+
+        EnterTelemetryZone("AHGUI::GUI::render()");
         AHGUI::GUI::render();
+        LeaveTelemetryZone();
+
+        LeaveTelemetryZone();
     }
 
 }
@@ -207,7 +221,7 @@ bool HasFocus() {
 }
 
 void Initialize() {
-    PlaySong("menu-lugaru");
+    PlaySong("overgrowth_main");
 }
 
 void Dispose() {
@@ -224,7 +238,9 @@ void Update() {
 }
 
 void DrawGUI() {
+    EnterTelemetryZone("DrawGUI");
     mainmenuGUI.render();
+    LeaveTelemetryZone();
 }
 
 void Draw() {

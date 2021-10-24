@@ -21,8 +21,9 @@ void main() {
     gl_Position = mvp * vec4(world_vert, 1.0);
 #ifdef COLOR_ATTRIB
     color = color_attrib;
-#endif
-#ifdef COLOR_UNIFORM
+#elif defined(COLOR_UNIFORM)
     color = color_uniform;
+#else
+    color = vec4(1.0);
 #endif
 } 

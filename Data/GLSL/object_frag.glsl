@@ -74,10 +74,10 @@ uniform sampler2D detail_color_3; \
 uniform sampler2D detail_normal_3;
 
 #define UNIFORM_AVG_COLOR4 \
-uniform vec3 avg_color0; \
-uniform vec3 avg_color1; \
-uniform vec3 avg_color2; \
-uniform vec3 avg_color3;
+uniform vec4 avg_color0; \
+uniform vec4 avg_color1; \
+uniform vec4 avg_color2; \
+uniform vec4 avg_color3;
 
 #define CALC_BLOOD_AMOUNT \
 float blood_amount, wetblood; \

@@ -135,6 +135,7 @@ class FlipInfo {
     void StartFlip(vec3 dir){
         if(allow_rolling){
             level.SendMessage("character_start_flip "+this_mo.getID());
+            AchievementEvent("character_start_flip");
             rolling = false;
             flipping = true;
             wall_flip_protection = 0.0f;
@@ -245,7 +246,7 @@ class FlipInfo {
                 this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
             } else {
                 this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
-                AISound(this_mo.position, QUIET_SOUND_AI);
+                AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
             }
 
             flipping = true;

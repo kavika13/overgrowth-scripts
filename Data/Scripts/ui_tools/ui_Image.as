@@ -155,7 +155,7 @@ class Image : Element
 			}
 			
 			// Add clipping (if we need it)
-			if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ) {
+			if( currentClipSize.x != AH_UNDEFINEDSIZE && currentClipSize.y != AH_UNDEFINEDSIZE ) {
 
 				ivec2 adjustedClipPos = screenMetrics.GUIToScreen( currentClipPos );
 	            imuiImage.setClipping( vec2((float(adjustedClipPos.x)), 

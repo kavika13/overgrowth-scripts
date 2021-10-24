@@ -25,6 +25,8 @@ uniform mat4 proj_mat;
 uniform mat4 view_mat;
 uniform mat4 prev_view_mat;
 uniform float time;
+uniform vec3 tint;
+uniform vec3 vignette_tint;
 
 uniform float near_blur_amount;
 uniform float far_blur_amount;
@@ -32,6 +34,8 @@ uniform float near_sharp_dist;
 uniform float far_sharp_dist;
 uniform float near_blur_transition_size;
 uniform float far_blur_transition_size;
+
+uniform float motion_blur_mult;
 
 const float near = 0.1;
 const float far = 1000.0;
@@ -47,6 +51,56 @@ vec4 ScreenCoordFromDepth(vec2 tex_uv, vec2 offset, out float distance) {
                 (tex_uv[1] + offset[1]) * 2.0 - 1.0, 
                 depth * 2.0- 1.0, 
                 1.0);
+}
+
+vec4 FXAA(sampler2D buf0, vec2 texCoords, vec2 frameBufSize) {
+    float FXAA_SPAN_MAX = 8.0;
+    float FXAA_REDUCE_MUL = 1.0/8.0;
+    float FXAA_REDUCE_MIN = 1.0/128.0;
+
+    vec3 rgbNW=texture(buf0,texCoords+(vec2(-1.0,-1.0)/frameBufSize)).xyz;
+    vec3 rgbNE=texture(buf0,texCoords+(vec2(1.0,-1.0)/frameBufSize)).xyz;
+    vec3 rgbSW=texture(buf0,texCoords+(vec2(-1.0,1.0)/frameBufSize)).xyz;
+    vec3 rgbSE=texture(buf0,texCoords+(vec2(1.0,1.0)/frameBufSize)).xyz;
+    vec3 rgbM=texture(buf0,texCoords).xyz;
+
+    vec3 luma=vec3(0.299, 0.587, 0.114);
+    float lumaNW = dot(rgbNW, luma);
+    float lumaNE = dot(rgbNE, luma);
+    float lumaSW = dot(rgbSW, luma);
+    float lumaSE = dot(rgbSE, luma);
+    float lumaM  = dot(rgbM,  luma);
+
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+    vec2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    float dirReduce = max(
+        (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * FXAA_REDUCE_MUL),
+        FXAA_REDUCE_MIN);
+
+    float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y)) + dirReduce);
+
+    dir = min(vec2( FXAA_SPAN_MAX,  FXAA_SPAN_MAX),
+          max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX),
+          dir * rcpDirMin)) / frameBufSize;
+
+    vec3 rgbA = (1.0/2.0) * (
+        texture(buf0, texCoords.xy + dir * (1.0/3.0 - 0.5)).xyz +
+        texture(buf0, texCoords.xy + dir * (2.0/3.0 - 0.5)).xyz);
+    vec3 rgbB = rgbA * (1.0/2.0) + (1.0/4.0) * (
+        texture(buf0, texCoords.xy + dir * (0.0/3.0 - 0.5)).xyz +
+        texture(buf0, texCoords.xy + dir * (3.0/3.0 - 0.5)).xyz);
+    float lumaB = dot(rgbB, luma);
+
+    if((lumaB < lumaMin) || (lumaB > lumaMax)){
+        return vec4(rgbA, 1.0);
+    }else{
+        return vec4(rgbB, 1.0);
+    }
 }
 
 void main(void)
@@ -140,6 +194,7 @@ void main(void)
     float temp_bp = black_point;
     float contrast = 1.0 / (temp_wp - temp_bp);
     vec4 src_color = texture(tex0, tex);
+
     for(int i=0; i<3; ++i){
         src_color[i] = pow(src_color[i], 1.0/2.2);
     }
@@ -147,6 +202,17 @@ void main(void)
     for(int i=0; i<3; ++i){
         color[i] = pow(color[i], 2.2);
     }
+
+    color.xyz *= tint;
+
+    if(vignette_tint != vec3(1.0)){
+        float vignette_amount = 1.0;
+        // Vignette
+        float vignette = 1.0 - distance(gl_FragCoord.xy, vec2(screen_width*0.5, screen_height*0.5)) / max(screen_width, screen_height);
+        float vignette_opac = 1.0 - mix(1.0, pow(vignette, 3.0), vignette_amount);
+        color.xyz *= mix(vec3(1.0), vignette_tint, vignette_opac);
+    }
+
     color.a = src_color.a;   
 #elif defined(ADD)
     vec4 bloom = mix(texture(tex0, tex) , texture(tex3, tex), 0.5);
@@ -163,22 +229,21 @@ void main(void)
     vec4 screen_coord = ScreenCoordFromDepth(tex, vec2(0,0), dist);
     vec4 world_pos = inverse(proj_mat * view_mat) * screen_coord;
     vec4 world_pos2 = inverse(proj_mat * prev_view_mat) * screen_coord;
+    world_pos.xyz -= vel * time_offset * world_pos[3];
     color = texture( tex0, tex );
     vec3 vel_3d = (view_mat * world_pos - view_mat * world_pos2).xyz;
     vel_3d /= time_offset;
-    vel_3d -= (view_mat * vec4(vel,0.0)).xyz*0.5;
     vel_3d.x += vel_3d.z * screen_coord.x;
     vel_3d.y += vel_3d.z * screen_coord.y;
     vel_3d.z = 0.0;
     vel_3d *= 0.002;
     color.xyz = vel_3d;
 #elif defined(APPLY_MOTION_BLUR)
-    float blur_mult = 1.0;
-    vec3 vel = texture( tex2, tex).rgb * blur_mult;
+    vec3 vel = texture( tex2, tex).rgb * motion_blur_mult;
     float depth = DistFromDepth(texture( tex1, tex).r);
     vec4 noise = texture( tex3, gl_FragCoord.xy / 256.0 );
     float dist;
-    vec3 dominant_dir = texture( tex4, tex).rgb * blur_mult;
+    vec3 dominant_dir = texture( tex4, tex).rgb * motion_blur_mult;
     color = vec4(0.0);
     float total = 0.0 ;
     const int num_samples = 5;
@@ -201,7 +266,7 @@ void main(void)
         } else {
             weight *= 0.0001;   
         }
-        vec3 sample_vel = texture( tex2, coord).rgb * blur_mult;
+        vec3 sample_vel = texture( tex2, coord).rgb * motion_blur_mult;
         if(abs(offset_amount) < length(sample_vel) || i == num_samples/2){
             float sample_depth = DistFromDepth(texture( tex1, coord).r);
             if(sample_depth < depth + 0.1 || i == num_samples/2){
@@ -214,5 +279,21 @@ void main(void)
     //color.xyz = abs(texture( tex2, tex).rgb);
 #else
     color = texture( tex0, tex );
+
+    //#define DARK_WORLD_TEST
+    #ifdef DARK_WORLD_TEST
+        // Average grayscale method
+        //float avg = (color[0] + color[1] + color[2]) / 3.0;
+        //color.xyz = mix(color.xyz, vec3(avg), sin(time)*0.5+0.5);
+        
+        float dark_world_amount = sin(time)*0.5+0.5;
+        // Luminosity grayscale method
+        float avg = 0.21*color[0] + 0.72*color[1] + 0.07*color[2];
+        color.xyz = mix(color.xyz, vec3(avg), dark_world_amount);
+
+    #endif
+
+    //vec2 buf = vec2(screen_width, screen_height);
+    //color = FXAA(tex0, tex, buf);
 #endif
 }

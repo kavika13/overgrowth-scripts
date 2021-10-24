@@ -5,7 +5,6 @@ float UpdateVisible(float visible, float target_visible){
 class RibbonBackground {
     int gui_id;
     float display_time;
-    IMUIContext imui_context;
 
     void Init(){
         gui_id = -1;
@@ -13,7 +12,6 @@ class RibbonBackground {
     }
 
     RibbonBackground() {
-        imui_context.Init();
     }
     
     void Update(){
@@ -27,7 +25,6 @@ class RibbonBackground {
     } 
     
     void DrawGUI(float visible){
-        imui_context.UpdateControls();
         if(visible < 0.01){
             return;
         }
@@ -53,7 +50,7 @@ class RibbonBackground {
             image.tex_scale.x = stretch;
             image.tex_scale.y = 1.0;
             image.tex_offset.x = display_time * 0.05;
-            image.color = vec4(0.7,0.7,0.7,1.0);
+            image.color = vec4(0.7,0.7,0.7,1.0); 
             image.scale = vec3(ui_scale*stretch,-ui_scale,1.0);}
             /*
         {   HUDImage @image = hud.AddImage();
@@ -79,7 +76,7 @@ class RibbonBackground {
             image.scale = vec3(ui_scale, ui_scale*stretch, 1.0);}
         */
         {   HUDImage @image = hud.AddImage();
-            image.SetImageFromPath("Data/Textures/ui/challenge_mode/blue_gradient_c.tga");
+            image.SetImageFromPath("Data/Textures/ui/challenge_mode/blue_gradient_c_nocompress.tga");
             image.position.x = -2;
             image.position.y = -2;
             image.position.z = 0;

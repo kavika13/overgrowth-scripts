@@ -59,7 +59,7 @@ class victim{
 		}
         if( params.GetInt("InstantKill") == 1 )
         {
-            char.Execute("KillCharacter()");
+//            char.Execute("KillCharacter()");
         }
     }
 	void ReActivate(){
@@ -70,7 +70,7 @@ class victim{
 		}
         if( params.GetInt("InstantKill") == 1 )
         {
-            char.Execute("KillCharacter()");
+//            char.Execute("KillCharacter()");
         }
 		applyDamage = true;
 	}

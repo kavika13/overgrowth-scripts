@@ -1,49 +1,35 @@
 float time = 0;
-float soundTimer = 0;
-float soundInterval = 30.0f;
-float moveInterval = 0.02f;
-float moveSpeed = 0.01f;
-int hawkID = -1;
-float angle = 0.0f;
+float next_sound_time = 0;
+float sound_interval = 30.0f;
+int hawk_id = -1;
 
 void Init() {
-
+	next_sound_time = RangedRandomFloat(0.0f, sound_interval) + 2.0f + the_time;
 }
 
+void Dispose() {
+	if(hawk_id != -1){
+		if(ObjectExists(hawk_id)){
+			DeleteObjectID(hawk_id);
+		}
+		hawk_id = -1;
+	}
+}
 
 void Update() {
-	if(hawkID == -1){
-		Object@ thisHotspot = ReadObjectFromID(hotspot.GetID());
-		hawkID = CreateObject("Data/Prototypes/Lugaru/Hawk_Offset.xml", true);
-		Object@ hawkObj = ReadObjectFromID(hawkID);
-		hawkObj.SetTranslation(thisHotspot.GetTranslation());
+	if(hawk_id == -1){
+		hawk_id = CreateObject("Data/Prototypes/Lugaru/Hawk_Offset.xml", true);
 	}
-    time += time_step;
-    soundTimer += time_step;
-    if(soundTimer > soundInterval){
-		soundTimer = 0.0f;
-    	PlaySound("Data/Sounds/lugaru/hawk.ogg");
+	if(ObjectExists(hawk_id)){
+		Object@ hawk_obj = ReadObjectFromID(hawk_id);
+		Object@ this_hotspot = ReadObjectFromID(hotspot.GetID());
+		hawk_obj.SetTranslation(this_hotspot.GetTranslation());
+	    hawk_obj.SetRotation(this_hotspot.GetRotation() * quaternion(vec4(0.0, 1.0, 0.0, the_time * 0.5)));
+	}
+
+    if(the_time > next_sound_time){
+		next_sound_time += sound_interval;
+    	//PlaySound("Data/Sounds/lugaru/hawk.ogg");
     }
 
-    if(time > moveInterval){
-		time = 0;
-		Object@ thisHotspot = ReadObjectFromID(hotspot.GetID());
-	    Object@ hawkObj = ReadObjectFromID(hawkID);
-	    quaternion oldRot = hawkObj.GetRotation();
-		mat4 mat4Rot = Mat4FromQuaternion(oldRot);
-		angle += moveSpeed;
-		mat4Rot.SetRotationY(angle);
-		quaternion newRot = QuaternionFromMat4(mat4Rot);
-	    hawkObj.SetRotation(newRot);
-		if(angle > 3.1415f * 2.0f){
-			angle = 0;
-		}
-		if(EditorModeActive()){
-	    	hawkObj.SetTranslation(thisHotspot.GetTranslation());
-		}
-	}
-}
-
-void Reset(){
-	time = 0;
 }

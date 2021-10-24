@@ -269,7 +269,7 @@ class Text : Element
                 imuiText.setColor( color );
             }
 
-            if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ){
+            if( currentClipSize.x != AH_UNDEFINEDSIZE && currentClipSize.y != AH_UNDEFINEDSIZE ){
                 
                 ivec2 adjustedClipPos = screenMetrics.GUIToScreen( currentClipPos );
 

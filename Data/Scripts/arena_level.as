@@ -102,6 +102,9 @@ void ClearMeta() {
     meta_event_wait = 0;
     wait_player_move_dist = 0.0f;
     wait_for_click = false;
+    score_hud.target_blackout_amount = 0.0f;
+    score_hud.target_skill_visible_amount = 0.0f;
+    score_hud.target_score_visible_amount = 0.0f;
 }
 
 void ReadPersistentInfo() {
@@ -171,6 +174,9 @@ void Init(string str) {
     crowd_cheer_vel = 0.0f;
     show_text = false;
     text_visible = 0.0f;
+    ReceiveMessage("update_skill");
+
+    level.SendMessage("disable_retry");
 }
 
 void DeleteObjectsInList(array<int> &inout ids){
@@ -227,12 +233,161 @@ bool HasFocus(){
     return false;
 }
 
+float MoveTowards(float curr, float target, float amount){
+    float val;
+    if(curr < target){
+        val = min(curr + amount, target);
+    } else if(curr > target){
+        val = max(curr - amount, target);
+    } else {
+        val = target;
+    }
+    return val;
+}
+
+class ScoreHUD {
+    array<int> players_per_team;
+    array<vec3> team_colors;
+    int num_teams;
+    int max_score;
+
+    float target_skill_visible_amount;
+    float skill_visible_amount;
+
+    float target_blackout_amount;
+    float blackout_amount;
+
+    float player_skill_display;
+    float target_player_skill_display;
+
+    float level_skill_display;
+    float target_level_skill_display;
+
+    float score_visible_amount;
+    float target_score_visible_amount;
+
+    void Update() {
+        player_skill_display = MoveTowards(player_skill_display, target_player_skill_display, 0.2f * time_step);
+        level_skill_display = MoveTowards(level_skill_display, target_level_skill_display, 1.0f * time_step);
+        blackout_amount = MoveTowards(blackout_amount, target_blackout_amount, 2.0f * time_step);
+        skill_visible_amount = MoveTowards(skill_visible_amount, target_skill_visible_amount, 2.0f * time_step);
+        score_visible_amount = MoveTowards(score_visible_amount, target_score_visible_amount, 2.0f * time_step);
+    }
+
+    void DrawGUIHUD() {
+        if(blackout_amount > 0.0f){
+            HUDImage @blackout_image = hud.AddImage();
+            blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
+            blackout_image.position.y = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+            blackout_image.position.x = (GetScreenWidth() + GetScreenHeight())*-1.0f;
+            blackout_image.position.z = -2.0f;
+            blackout_image.scale = vec3(GetScreenWidth() + GetScreenHeight())*2.0f;
+            blackout_image.color = vec4(0.0f,0.0f,0.0f,blackout_amount);
+        }
+
+        float display_height = GetScreenHeight() - 100;
+        float height = 20;
+
+        if(skill_visible_amount > 0.0f){
+            float width = 400;
+            vec3 color = vec3(1.0f);
+            // Display skill bar
+            {
+                HUDImage @image = hud.AddImage();
+                image.SetImageFromPath(level.GetPath("diffuse_tex"));
+                image.position.x = GetScreenWidth() * 0.5f - width * 0.5f;
+                image.position.y = display_height - height * 0.5f;
+                image.position.z = 3;
+                image.color = vec4(color,skill_visible_amount);
+                image.scale = vec3(width / image.GetWidth(), height / image.GetHeight(), 1.0);
+            }
+            // Display player skill
+            {
+                float small_width = 5;
+                HUDImage @image = hud.AddImage();
+                image.SetImageFromPath(level.GetPath("diffuse_tex"));
+                image.position.x = GetScreenWidth() * 0.5f - width * 0.5f + player_skill_display * (width - small_width);
+                image.position.y = display_height - height * 0.5f + height;
+                image.position.z = 3;
+                image.color = vec4(color,skill_visible_amount);
+                image.scale = vec3(small_width / image.GetWidth(), height / image.GetHeight(), 1.0);
+            }
+            // Display match difficulty
+            {
+                float skill_display = level_skill_display;
+
+                float small_width = 5;
+                HUDImage @image = hud.AddImage();
+                image.SetImageFromPath(level.GetPath("diffuse_tex"));
+                image.position.x = GetScreenWidth() * 0.5f - width * 0.5f + skill_display * (width - small_width);
+                image.position.y = display_height - height * 0.5f - height;
+                image.position.z = 3;
+                image.color = vec4(color,skill_visible_amount);
+                image.scale = vec3(small_width / image.GetWidth(), height / image.GetHeight(), 1.0);
+            }
+        }
+
+        if(score_visible_amount > 0.0f){
+            // Display current score
+            for(int i=0; i<int(players_per_team.size()); ++i){
+                players_per_team[i] = 0;
+            }
+
+            int num_chars = GetNumCharacters();
+            for(int i=0; i<num_chars; ++i){
+                MovementObject@ char = ReadCharacter(i);
+                ScriptParams@ params = ReadObjectFromID(char.GetID()).GetScriptParams(); 
+                int team = atoi(params.GetString("Teams"));
+                if(team+1 > int(players_per_team.size())) {
+                    players_per_team.resize(team+1);
+                }
+                ++players_per_team[team];
+            }
+
+            int num_teams = 0;
+            for(int i=0; i<int(players_per_team.size()); ++i){
+                if(players_per_team[i] > 0){
+                    ++num_teams;
+                    if(int(team_colors.size()) < num_teams){
+                        team_colors.resize(num_teams);
+                    }
+                    team_colors[num_teams-1] = ColorFromTeam(i);
+                }
+            }
+
+            const int team_display_width = 20;
+            int total_width = team_display_width * num_teams + team_display_width * (num_teams - 1);
+            for(int i=0; i<num_teams; ++i){
+                for(int j=0; j<MaxScore(); ++j){
+                    {
+                        HUDImage @image = hud.AddImage();
+                        image.SetImageFromPath(level.GetPath("diffuse_tex"));
+                        image.position.x = GetScreenWidth() * 0.5f + team_display_width * 2 * i - total_width / 2;
+                        image.position.y = display_height - height * 0.5f - height - team_display_width - team_display_width*j*2;
+                        image.position.z = 3;
+                        float opac = 0.25;
+                        if(match_score[i] > j) {
+                            opac = 1.0;
+                        }
+                        image.color = vec4(team_colors[i],opac * score_visible_amount);
+                        image.scale = vec3(team_display_width / image.GetWidth(), team_display_width / image.GetHeight(), 1.0);                
+                    }
+                }
+            }
+        }
+    }
+}
+
+ScoreHUD score_hud;
+
+
 // This script has no GUI elements
 void DrawGUI() {
     // Do not draw the GUI in editor mode (it makes it hard to edit)
     /*if(GetPlayerCharacterID() == -1){
         return;
     }*/
+    score_hud.DrawGUIHUD();
 
     float ui_scale = 0.5f;
     float visible = 1.0f;
@@ -310,6 +465,16 @@ void SetPlayerColors() {
     player_colors[3] = GetRandomFurColor();
 }
 
+vec3 ColorFromTeam(int which_team){
+    switch(which_team){
+        case 0: return vec3(1,0,0);
+        case 1: return vec3(0,0,1);
+        case 2: return vec3(0,0.5f,0.5f);
+        case 3: return vec3(1,1,0);
+    }
+    return vec3(1,1,1);
+}
+
 // Create a random enemy at spawn point obj, with a given skill level
 void CreateEnemy(Object@ obj, float difficulty, int team){
     string actor_path; // Path to actor xml
@@ -334,15 +499,7 @@ void CreateEnemy(Object@ obj, float difficulty, int team){
     for(int i=0; i<4; ++i){
         vec3 color = FloatTintFromByte(RandReasonableColor());
         float tint_amount = 0.5f;
-        if(team == 0){
-            color = mix(color, vec3(1,0,0), tint_amount);
-        } else if(team == 1){
-            color = mix(color, vec3(0,0,1), tint_amount);
-        } else if(team == 2){
-            color = mix(color, vec3(1,0.5f,0), tint_amount);
-        } else if(team == 3){
-            color = mix(color, vec3(0,1,1), tint_amount);
-        }
+        color = mix(color, ColorFromTeam(team), tint_amount);
         color = mix(color, vec3(1.0-difficulty), 0.5f);
         char_obj.SetPaletteColor(i, color);
     }
@@ -390,6 +547,7 @@ void SetUpLevel(float initial_difficulty){
     DeleteObjectsInList(spawned_object_ids);
     spawned_object_ids.resize(0);
     
+    // Determine which spawn points we are using
     bool knife_test = false;
     int game_type_int = rand()%3;
     if(knife_test){
@@ -447,15 +605,7 @@ void SetUpLevel(float initial_difficulty){
 
             vec3 color = FloatTintFromByte(RandReasonableColor());
             float tint_amount = 0.5f;
-            if(team == 0){
-                color = mix(color, vec3(1,0,0), tint_amount);
-            } else if(team == 1){
-                color = mix(color, vec3(0,0,1), tint_amount);
-            } else if(team == 2){
-                color = mix(color, vec3(1,0.5f,0), tint_amount);
-            } else if(team == 3){
-                color = mix(color, vec3(0,1,1), tint_amount);
-            }
+            color = mix(color, ColorFromTeam(team), tint_amount);
             color = mix(color, vec3(1.0-(player_skill-0.5f)), 0.5f);
             player_colors[2] = color;
             
@@ -465,6 +615,7 @@ void SetUpLevel(float initial_difficulty){
         }
     }
     
+    // Determine which weapons we are using
     bool use_weapons = knife_test || rand()%3==0;
     if(use_weapons){
         string weap_str;
@@ -517,7 +668,7 @@ void SetUpLevel(float initial_difficulty){
             difficulty -= temp_difficulty;
         }           
     }
-    const bool print_difficulties = false;
+    bool print_difficulties = false;
     if(print_difficulties){
         Print("Enemy difficulties: ");
         for(int i=0; i<int(enemy_difficulties.size()); ++i){
@@ -569,14 +720,14 @@ void SetUpLevel(float initial_difficulty){
     AddMetaEvent(kMessage, "set_meta_state 0 pre_intro");
     AddMetaEvent(kMessage, "set_intro_text");
     AddMetaEvent(kMessage, "set show_text true");
-    AddMetaEvent(kMessage, "wait_for_player_move 1.0");
+    //AddMetaEvent(kMessage, "wait_for_player_move 1.0");
 
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "set_meta_state 0 intro");
-    AddMetaEvent(kWait, "0.5");
+    //AddMetaEvent(kWait, "0.5");
 
     AddMetaEvent(kDisplay, "Welcome to the arena!");
-    AddMetaEvent(kWait, "2.0");
+    //AddMetaEvent(kWait, "2.0");
 
     if(use_weapons){
         AddMetaEvent(kDisplay, "This is a fight to the death!");
@@ -585,12 +736,12 @@ void SetUpLevel(float initial_difficulty){
         AddMetaEvent(kDisplay, "Two points to win!");
         AddMetaEvent(kMessage, "set_meta_state 1 two_points");
     }
-    AddMetaEvent(kWait, "2.0");
+    //AddMetaEvent(kWait, "2.0");
 
     AddMetaEvent(kDisplay, "Time to fight!");
     AddMetaEvent(kMessage, "set_all_hostile true");
     AddMetaEvent(kMessage, "set_meta_state 0 fighting");
-    AddMetaEvent(kWait, "2.0");
+    //AddMetaEvent(kWait, "2.0");
 
     AddMetaEvent(kDisplay, "");
     //TimedSlowMotion(0.5f,7.0f, 0.0f);
@@ -603,7 +754,7 @@ enum MessageParseType {
 }
 
 void AggressionDetected(int attacker_id){
-    if(meta_states[0] != "fighting" && meta_states[0] != "fighting_over_but_allowed"){
+    /*if(meta_states[0] != "fighting" && meta_states[0] != "fighting_over_but_allowed"){
         if(ReadCharacterID(attacker_id).controlled){
             ClearMeta();
             AddMetaEvent(kMessage, "set_meta_state 0 disqualify");
@@ -611,7 +762,7 @@ void AggressionDetected(int attacker_id){
             AddMetaEvent(kWait, "2.0");
             EndMatch(false);
         }
-    }
+    }*/
 
 }
 
@@ -634,8 +785,9 @@ void ReceiveMessage(string msg) {
             MovementObject@ char = ReadCharacter(i);
             char.ReceiveMessage("restore_health");
         }
-    } else if(token == "new_match"){
+    } else if(token == "randomize_difficulty") {
         curr_difficulty = GetRandomDifficultyNearPlayerSkill();
+    } else if(token == "new_match"){
         SetUpLevel(curr_difficulty);    
     } else if(token == "set_all_hostile"){
         token_iter.FindNextToken(msg);
@@ -657,8 +809,29 @@ void ReceiveMessage(string msg) {
                 show_text = true;
             }
         }
+        if(param1 == "skill_visible"){
+            if(param2 == "false"){
+                score_hud.target_blackout_amount = 0.0f;
+                score_hud.target_skill_visible_amount = 0.0f;
+            } else if(param2 == "true"){
+                score_hud.target_blackout_amount = 1.0f;
+                score_hud.target_skill_visible_amount = 1.0f;
+            }
+        }
+        if(param1 == "score_visible"){
+            if(param2 == "false"){
+                score_hud.target_blackout_amount = 0.0f;
+                score_hud.target_score_visible_amount = 0.0f;
+            } else if(param2 == "true"){
+                score_hud.target_blackout_amount = 0.75f;
+                score_hud.target_score_visible_amount = 1.0f;
+            }
+        }
     } else if(token == "set_intro_text"){
         SetIntroText();
+    } else if(token == "update_skill"){
+        score_hud.target_player_skill_display = (player_skill - MIN_PLAYER_SKILL) / (MAX_PLAYER_SKILL - MIN_PLAYER_SKILL);
+        score_hud.target_level_skill_display = (curr_difficulty - MIN_PLAYER_SKILL) / (MAX_PLAYER_SKILL - MIN_PLAYER_SKILL);
     } else if(token == "wait_for_player_move"){
         token_iter.FindNextToken(msg);
         string param1 = token_iter.GetToken(msg);
@@ -787,6 +960,7 @@ void EndMatch(bool victory){
         player_skill -= player_skill * win_prob * kMatchImportance;
         player_skill = min(max(player_skill, MIN_PLAYER_SKILL), MAX_PLAYER_SKILL);
         SetLoseText(new_fans, excitement_level);
+        PlaySoundGroup("Data/Sounds/versus/fight_lose2.xml");
     } else if(victory){ // Increase difficulty on win
         level_outcome = kVictory;
         player_skill += curr_difficulty * (1.0f - win_prob) * kMatchImportance;        
@@ -796,20 +970,37 @@ void EndMatch(bool victory){
         int new_fans = int(audience_size * audience_fan_ratio);
         fan_base += new_fans;
         SetWinText(new_fans, fan_base, excitement_level);
+        PlaySoundGroup("Data/Sounds/versus/fight_win2.xml");
     }
 
     WritePersistentInfo();
                
+    AddMetaEvent(kWait, "1.0");
     AddMetaEvent(kMessage, "set_all_hostile false");
     AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
-    AddMetaEvent(kDisplay, "The match is over!");
-    AddMetaEvent(kWait, "2.0");
+    AddMetaEvent(kMessage, "set skill_visible true");
+    AddMetaEvent(kWait, "1.0");
+    AddMetaEvent(kMessage, "update_skill");
+    AddMetaEvent(kWait, "1.0");
+    for(int i=0; i<8; ++i){
+        AddMetaEvent(kMessage, "randomize_difficulty");
+        AddMetaEvent(kMessage, "update_skill");
+        AddMetaEvent(kWait, "0.1");
+    }
+    AddMetaEvent(kWait, "0.8");
     AddMetaEvent(kDisplay, "");
-    AddMetaEvent(kMessage, "set show_text true");
-    AddMetaEvent(kMessage, "wait_for_click");
-    AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "new_match");
+    AddMetaEvent(kMessage, "set skill_visible false");
+    AddMetaEvent(kWait, "1.0");
 
+}
+
+int MaxScore() {
+    int max_score = 1;
+    if(meta_states[1] == "two_points"){
+        max_score = 2;
+    }
+    return max_score;
 }
 
 // Check if level should be reset
@@ -851,41 +1042,42 @@ void VictoryCheck() {
             }
             
             Print("Last round winner: " + last_round_winner + "\n");
-            int max_score = 1;
-            if(meta_states[1] == "two_points"){
-                max_score = 2;
-            }
+            int max_score = MaxScore();
+
 
             if(match_score[last_round_winner] < max_score){
                 ClearMeta();
                 AddMetaEvent(kMessage, "set_all_hostile false");
                 AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
-                AddMetaEvent(kDisplay, "The round is over!");
-                AddMetaEvent(kWait, "2.0");
                 AddMetaEvent(kMessage, "set_meta_state 0 resetting");
-                AddMetaEvent(kMessage, "restore_health");
                 if(last_round_winner != -1){
-                    string team_color = "A";
-                    switch(last_round_winner){
-                    case 0: team_color = "Red"; break;
-                    case 1: team_color = "Blue"; break;
-                    case 2: team_color = "Tan"; break;
-                    case 3: team_color = "Cyan"; break;
+                    bool victory = false;
+                    int num_chars = GetNumCharacters();
+                    for(int i=0; i<num_chars; ++i){
+                        MovementObject@ char = ReadCharacter(i);
+                        Object@ obj = ReadObjectFromID(char.GetID());
+                        ScriptParams@ params = obj.GetScriptParams();                    
+                        if(char.controlled && params.HasParam("Teams") && params.GetString("Teams") == team_alive){
+                            victory = true;
+                        }
                     }
-                    string display_text = team_color+" team has "+match_score[last_round_winner]+" point";
-                    if(match_score[last_round_winner] != 1){
-                        display_text += "s";
+                    if(victory){
+                        PlaySoundGroup("Data/Sounds/versus/fight_win1.xml");
+                    } else {                        
+                        PlaySoundGroup("Data/Sounds/versus/fight_lose1.xml");
                     }
-                    display_text += "!";
-                    AddMetaEvent(kDisplay, display_text);
-                    AddMetaEvent(kWait, "2.0");
                 }
-                AddMetaEvent(kDisplay, "Get ready for the next round...");
+                AddMetaEvent(kMessage, "set score_visible true");
                 AddMetaEvent(kWait, "2.0");
+                AddMetaEvent(kMessage, "set score_visible false");
+                AddMetaEvent(kMessage, "restore_health");
+            
+                AddMetaEvent(kDisplay, "Get ready for the next round...");
+                //AddMetaEvent(kWait, "2.0");
                 AddMetaEvent(kDisplay, "Fight!");
                 AddMetaEvent(kMessage, "set_all_hostile true");
                 AddMetaEvent(kMessage, "set_meta_state 0 fighting");
-                AddMetaEvent(kWait, "2.0");
+                //AddMetaEvent(kWait, "2.0");
                 AddMetaEvent(kDisplay, "");
             } else {
                 bool victory = false;
@@ -926,7 +1118,7 @@ void UpdateIngameText(string str) {
     text.SetPenColor(255,255,255,255);
     text.SetPenRotation(0.0f);
     
-    text.AddText(str, style);
+    text.AddText(str, style, UINT32MAX);
 
     text.UploadTextCanvasToTexture();
 }
@@ -943,30 +1135,30 @@ void SetIntroText() {
     text.SetPenPosition(pen_pos);
     text.SetPenColor(0,0,0,255);
     text.SetPenRotation(0.0f);
-    text.AddText("Odds are ", small_style);
+    text.AddText("Odds are ", small_style, UINT32MAX);
     float prob = ProbabilityOfWin(player_skill, curr_difficulty);
     int a, b;
     OddsFromProbability(1.0f-prob, a, b);
     if(a < b){
-        text.AddText("" + b+":"+a, big_style);
-        text.AddText(" in your favor", small_style);
+        text.AddText("" + b+":"+a, big_style, UINT32MAX);
+        text.AddText(" in your favor", small_style, UINT32MAX);
     } else if(a > b){
-        text.AddText("" + a+":"+b, big_style);
-        text.AddText(" against you", small_style);
+        text.AddText("" + a+":"+b, big_style, UINT32MAX);
+        text.AddText(" against you", small_style, UINT32MAX);
     } else {
-        text.AddText("even", small_style);
+        text.AddText("even", small_style, UINT32MAX);
     }
 
     int line_break_dist = 42;
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("There are ",small_style);
-    text.AddText(""+audience_size,big_style);
-    text.AddText(" spectators",small_style);
+    text.AddText("There are ",small_style, UINT32MAX);
+    text.AddText(""+audience_size,big_style, UINT32MAX);
+    text.AddText(" spectators",small_style, UINT32MAX);
 
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Good luck!",small_style);
+    text.AddText("Good luck!",small_style, UINT32MAX);
 
     text.UploadTextCanvasToTexture();
 }
@@ -983,30 +1175,30 @@ void SetWinText(int new_fans, int total_fans, float excitement_level) {
     text.SetPenPosition(pen_pos);
     text.SetPenColor(0,0,0,255);
     text.SetPenRotation(0.0f);
-    text.AddText("You won!", small_style);
+    text.AddText("You won!", small_style, UINT32MAX);
 
     int line_break_dist = 42;
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("You gained ",small_style);
-    text.AddText(""+new_fans,big_style);
-    text.AddText(" fans",small_style);
+    text.AddText("You gained ",small_style, UINT32MAX);
+    text.AddText(""+new_fans,big_style, UINT32MAX);
+    text.AddText(" fans",small_style, UINT32MAX);
     
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Your fanbase totals ",small_style);
-    text.AddText(""+total_fans,big_style);
+    text.AddText("Your fanbase totals ",small_style, UINT32MAX);
+    text.AddText(""+total_fans,big_style, UINT32MAX);
     
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Your skill assessment is now ",small_style);
-    text.AddText(""+int((player_skill-0.5f)*40+1),big_style);
+    text.AddText("Your skill assessment is now ",small_style, UINT32MAX);
+    text.AddText(""+int((player_skill-0.5f)*40+1),big_style, UINT32MAX);
 
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Audience ",small_style);
-    text.AddText(""+int(excitement_level * 100.0f) + "%",big_style);
-    text.AddText(" entertained",small_style);
+    text.AddText("Audience ",small_style, UINT32MAX);
+    text.AddText(""+int(excitement_level * 100.0f) + "%",big_style, UINT32MAX);
+    text.AddText(" entertained",small_style, UINT32MAX);
 
     text.UploadTextCanvasToTexture();
 }
@@ -1024,31 +1216,31 @@ void SetLoseText(int new_fans, float excitement_level) {
     text.SetPenPosition(pen_pos);
     text.SetPenColor(0,0,0,255);
     text.SetPenRotation(0.0f);
-    text.AddText("You were defeated.", small_style);
+    text.AddText("You were defeated.", small_style, UINT32MAX);
     
     if(new_fans > 0){
         pen_pos.y += line_break_dist;
         text.SetPenPosition(pen_pos);
-        text.AddText("You gained ",small_style);
-        text.AddText(""+new_fans, big_style);
-        text.AddText(" new fans",small_style);
+        text.AddText("You gained ",small_style, UINT32MAX);
+        text.AddText(""+new_fans, big_style, UINT32MAX);
+        text.AddText(" new fans",small_style, UINT32MAX);
     
         pen_pos.y += line_break_dist;
         text.SetPenPosition(pen_pos);
-        text.AddText("Your fanbase totals ",small_style);
-        text.AddText(""+fan_base,big_style);
+        text.AddText("Your fanbase totals ",small_style, UINT32MAX);
+        text.AddText(""+fan_base,big_style, UINT32MAX);
     }
 
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Your skill assessment is now ",small_style);
-    text.AddText(""+int((player_skill-0.5f)*40+1),big_style);
+    text.AddText("Your skill assessment is now ",small_style, UINT32MAX);
+    text.AddText(""+int((player_skill-0.5f)*40+1),big_style, UINT32MAX);
     
     pen_pos.y += line_break_dist;
     text.SetPenPosition(pen_pos);
-    text.AddText("Audience ",small_style);
-    text.AddText(""+int(excitement_level * 100.0f) + "%",big_style);
-    text.AddText(" entertained",small_style);
+    text.AddText("Audience ",small_style, UINT32MAX);
+    text.AddText(""+int(excitement_level * 100.0f) + "%",big_style, UINT32MAX);
+    text.AddText(" entertained",small_style, UINT32MAX);
 
     text.UploadTextCanvasToTexture();
 }
@@ -1168,6 +1360,8 @@ bool MetaEventWaiting(){
 }
 
 void Update() { 
+    score_hud.Update();
+
     global_time += uint64(time_step * 1000);
 
     SetPlaceholderPreviews();

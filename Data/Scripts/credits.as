@@ -1,217 +1,200 @@
-#include "ui_effects.as"
-#include "ui_tools.as"
+#include "menu_common.as"
+#include "arena_meta_persistence.as"
 #include "music_load.as"
 
-array<ScrollingElement@> onscreenElements;
-int roomTaken = 0;
-int elementIndex = 0;
-int normalTextSize = 70;
-int titleTextSize = 120;
-int screen_height = 1440;
-int screen_width = 2560;
+// Load the music 
 MusicLoad ml("Data/Music/menu.xml");
-bool showBorders = true;
 
-class ScrollingElement
-  {
-    string text;
-	string image_path;
-	string type;
-	int posX = 0;
-	int posY = 0;
-	int height = 0;
-	int width = 0;
-	int index = -1;
+// Constants because I'm not typing this in again
+const float postHeader = 40;
+const float postName = 20;
+const float postGroup = 80;
+const float scrollUpdateSize = 2;
 
-    ScrollingElement(string _text, int textSize = normalTextSize)
-    {
-        text = _text;
-		height = textSize;
-		width = text.length() * int(textSize / 3.0f);
-		type = "text";
-    }
-	ScrollingElement(string _type, string _text){
-		if(_type == "image"){
-			image_path = _text;
-			AHGUI::Image testImage(image_path);
-			height = testImage.getSizeY();
-			width = testImage.getSizeX();
-		}
-		type = _type;
+// Just to avoid some repeated text
+// Some structure to hold the credits in 
+IMDivider creditDiv( "mainDiv", DOVertical );
+
+void addToTextScroll( string text, bool isHeaer = false ) {
+	if( isHeaer ) {
+		// New text object
+		IMText newText( text, creditFontBig );
+		
+		// Add it to the divider
+		creditDiv.append( newText );
+
+		// Add some space
+		creditDiv.appendSpacer( postHeader );
 	}
-	void Render(AHGUI::Divider@ pane){
-		if(type == "text"){
-			vec4 color = vec4(1.0f,1.0f,1.0f,1.0f);
-			AHGUI::Text singleSentence( text, "OptimusPrinceps", height, color.x, color.y, color.z, color.a );
-			singleSentence.setShadowed(true);
-			pane.addFloatingElement(singleSentence, "element" + index, ivec2(posX, posY), 2);
-		}else if(type == "image"){
-			AHGUI::Image image(image_path);
-			pane.addFloatingElement(image, "element" + index, ivec2(posX, posY), 2);
-		}
+	else {
+		// Second verse, same as the first
+		IMText newText( text, creditFontSmall );	
+		creditDiv.append( newText );	
+		creditDiv.appendSpacer( postName );
 	}
-};
-
-array<ScrollingElement@> scrollingElements = {	ScrollingElement("Thank you for playing Overgrowth!", titleTextSize),
-												ScrollingElement(" ", titleTextSize),
-												ScrollingElement("image", "Textures/logo.tga"),
-												ScrollingElement("Project lead", titleTextSize),
-												ScrollingElement("David Rosen"),
-												ScrollingElement(" "),
-												ScrollingElement("Art", titleTextSize),
-												ScrollingElement("Aubrey Serr"),
-												ScrollingElement("Mark Stockton"),
-												ScrollingElement(" "),
-												ScrollingElement("Game design", titleTextSize),
-												ScrollingElement("David Rosen"),
-												ScrollingElement("Jillian Ogle"),
-                                                ScrollingElement(" "),
-                                                ScrollingElement("Level design", titleTextSize),
-                                                ScrollingElement("Aubrey Serr"),
-                                                ScrollingElement("Josh Goheen"),
-                                                ScrollingElement("Mark Stockton"),
-												ScrollingElement(" "),
-												ScrollingElement("Music", titleTextSize),
-												ScrollingElement("Anton Riehl"),
-												ScrollingElement("Mikko Tarmia"),
-												ScrollingElement(" "),
-												ScrollingElement("Producers", titleTextSize),
-												ScrollingElement("Jillian Ogle"),
-												ScrollingElement("Lukas Orsvärn"),
-												ScrollingElement(" "),
-												ScrollingElement("Programming", titleTextSize),
-												ScrollingElement("Brian Cronin"),
-												ScrollingElement("David Rosen"),
-												ScrollingElement("Gyrth McMulin"),
-												ScrollingElement("Jeffrey Rosen"),
-												ScrollingElement("John Graham"),
-												ScrollingElement("Max Danielsson"),
-												ScrollingElement("Micah J. Best"),
-												ScrollingElement("Phillip Isola"),
-												ScrollingElement("Tuomas Närväinen"),
-												ScrollingElement("Turo Lamminen"),
-												ScrollingElement(" "),
-												ScrollingElement("Public relations", titleTextSize),
-												ScrollingElement("John Graham"),
-												ScrollingElement(" "),
-												ScrollingElement("Sound effects", titleTextSize),
-												ScrollingElement("Tapio Liukkonen"),
-												ScrollingElement(" "),
-												ScrollingElement("User interface", titleTextSize),
-												ScrollingElement("Aubrey Serr"),
-												ScrollingElement("Jeffrey Rosen"),
-												ScrollingElement("Mark Stockton"),
-												ScrollingElement("Micah J. Best"),
-												ScrollingElement(" "),
-												ScrollingElement("Special thanks to", titleTextSize),
-												ScrollingElement("Kylie Allen"),
-												ScrollingElement("Ryan Mapa")};
-
-class CreditsGUI : AHGUI::GUI {
-    // fancy ribbon background stuff
-    float visible = 0.0f;
-    float target_visible = 1.0f;
-
-    CreditsGUI() {
-        // Call the superclass to set things up
-        super();
-
-    }
-    void ShowCredits(){
-		clear();
-		//Move existing elements up.
-		for(uint i = 0; i<onscreenElements.size();i++){
-			onscreenElements[i].posY = onscreenElements[i].posY - 1;
-		}
-		//Add new elements if there is room
-		if(uint(elementIndex) < scrollingElements.size() && roomTaken <= 0){
-			ScrollingElement@ newElement = scrollingElements[elementIndex];
-			//Print(scrollingElements[elementIndex].width + "\n");
-			newElement.posX = screen_width / 2 - (scrollingElements[elementIndex].width / 2);
-			newElement.posY = screen_height;
-			onscreenElements.insertLast(newElement);
-			roomTaken = scrollingElements[elementIndex].height;
-			scrollingElements[elementIndex].index = elementIndex;
-			elementIndex++;
-		}else{
-			roomTaken--;
-		}
-
-		//Display all the elements
-		for(uint i = 0; i<onscreenElements.size();i++){
-			if(onscreenElements[i].posY < - onscreenElements[i].height){
-				//Print("Removing " + onscreenElements[i].text + "\n");
-				onscreenElements.removeAt(i);
-				i--;
-				continue;
-			}
-			onscreenElements[i].Render(root);
-		}
-		//If all the elements are shown return to the main menu.
-		if(onscreenElements.size() == 0){
-			this_ui.SendCallback("back");
-		}
-    }
-    /*/
-    /
-     * @brief Called for each message received
-     *
-     * @param message The message in question
-     *
-     */
-    void processMessage( AHGUI::Message@ message ) {
-        // Check to see if an exit has been requested
-        if( message.name == "mainmenu" ) {
-            this_ui.SendCallback("back");
-        }
-    }
-
-    void update() {
-		ShowCredits();
-        if(GetInputPressed(0,'esc')){
-            this_ui.SendCallback("back");
-        }
-        // Update the GUI
-        AHGUI::GUI::update();
-    }
-
-    void LoadLevel(string level){
-        this_ui.SendCallback(level);
-    }
-
-    /*/
-    /
-     * @brief  Render the gui
-     *
-     */
-     void render() {
-
-        // Update the background
-        // TODO: fold this into AHGUI
-        hud.Draw();
-
-        // Update the GUI
-        AHGUI::GUI::render();
-
-     }
+	
 }
 
-CreditsGUI creditsGUI;
+// The actual GUI object 
+IMGUI imGUI;
 
-bool HasFocus(){
-    return false;
-}
+void Initialize() {
 
-void Initialize(){
+	// Kick off some music
 	PlaySong("menu-lugaru");
+
+	// Actually setup the GUI -- must do this before we do anything 
+    imGUI.setup();
+
+    // The center will hold in this case
+    creditDiv.setAlignment( CACenter, CACenter );
+
+    // The following is really showing my PhD in CS to it's maximum advantage
+	addToTextScroll( "Thank you for playing:", true );
+	
+
+	creditDiv.append( IMImage( "Textures/ui/menus/credits/overgrowth-white.png" ) );
+	creditDiv.appendSpacer( postGroup );
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "Project lead", true );
+	addToTextScroll( "David Rosen" );
+
+	creditDiv.appendSpacer( postGroup );
+	
+	addToTextScroll( "Art", true);
+	addToTextScroll( "Aubrey Serr");
+	addToTextScroll( "Mark Stockton");
+	
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "Game design", true);
+	addToTextScroll( "David Rosen");
+	addToTextScroll( "Jillian Ogle");
+	
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "Level design", true);
+	addToTextScroll( "Aubrey Serr");
+	addToTextScroll( "Josh Goheen");
+	addToTextScroll( "Mark Stockton");
+
+	creditDiv.appendSpacer( postGroup );
+	
+	addToTextScroll( "Music", true);
+	addToTextScroll( "Anton Riehl");
+	addToTextScroll( "Mikko Tarmia");
+
+	creditDiv.appendSpacer( postGroup );
+	
+	addToTextScroll( "Producers", true);
+	addToTextScroll( "Jillian Ogle");
+	addToTextScroll( "Lukas Orsvärn");
+
+	creditDiv.appendSpacer( postGroup );
+	
+	addToTextScroll( "Programming", true);
+	addToTextScroll( "Brian Cronin");
+	addToTextScroll( "David Rosen");
+	addToTextScroll( "Gyrth McMulin");
+	addToTextScroll( "Jeffrey Rosen");
+	addToTextScroll( "John Graham");
+	addToTextScroll( "Max Danielsson");
+	addToTextScroll( "Micah J Best");
+	addToTextScroll( "Phillip Isola");
+	addToTextScroll( "Tuomas Närväinen");
+	addToTextScroll( "Turo Lamminen");
+	
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "Public relations", true);
+	addToTextScroll( "John Graham");
+	
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "Sound effects", true);
+	addToTextScroll( "Tapio Liukkonen");
+	
+	creditDiv.appendSpacer( postGroup );
+
+	addToTextScroll( "User interface", true);
+	addToTextScroll( "Aubrey Serr");
+	addToTextScroll( "Jeffrey Rosen");
+	addToTextScroll( "Mark Stockton");
+	addToTextScroll( "Micah J Best");
+
+	creditDiv.appendSpacer( postGroup );
+	
+	addToTextScroll( "Special thanks to", true);
+	addToTextScroll( "Kylie Allen");
+	addToTextScroll( "Ryan Mapa");
+
+	creditDiv.appendSpacer( postGroup );
+
+	creditDiv.append( IMImage( "Textures/ui/menus/credits/logo.tga" ) );
+
+
+	// Now make this a 'floating component' of the main container
+	
+	// Actually add it to the container
+	// start at the bottom of the screen
+	imGUI.getMain().addFloatingElement(	creditDiv, 	
+									    "credits", 
+									    vec2(
+											UNDEFINEDSIZE, // Will center 
+											screenMetrics.GUISpace.y
+										)
+									  );
+
+	// Send a message if somebody clicks anywhere
+	imGUI.getMain().addLeftMouseClickBehavior( IMFixedMessageOnClick("click"), "click" );
+
 }
 
 void Update(){
-    creditsGUI.update();
+
+	bool done = false;
+
+	// Check to see if we get an early exit 
+	if(GetInputPressed(0,'esc')){
+    	done = true;
+    }
+
+    // process waiting messages
+    while( imGUI.getMessageQueueSize() > 0 ) {
+        IMMessage@ message = imGUI.getNextMessage();
+        if( message.name == "click" )
+        {
+        	done = true;
+        }
+    }
+
+    // Move the credits up
+    // Get the position 
+    vec2 creditPos = imGUI.getMain().getElementPosition("credits");
+
+    //Check to see if we're off the screen
+    if( creditPos.y + creditDiv.getSizeY() < 0.0 ) {
+    	done = true;
+    }
+
+    creditPos.y -= scrollUpdateSize;
+
+    imGUI.getMain().moveElement( "credits", creditPos );
+
+    if( done ) {
+    	this_ui.SendCallback("back");
+    }
+
+    imGUI.update();
+}
+
+void Resize() {
+    imGUI.doScreenResize();
 }
 
 void DrawGUI(){
-    creditsGUI.render();
+    imGUI.render();
 }
 
 void Draw(){

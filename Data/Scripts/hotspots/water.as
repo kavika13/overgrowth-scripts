@@ -61,7 +61,6 @@ void OnEnter(MovementObject @mo) {
     //If the character is already in the array it doesn't need to add it again.
     if(index == -1){
         victims.insertLast(victim(mo));
-        mo.Execute("swim_layer_id = this_mo.rigged_object().anim_client().AddLayer(\"Data/Animations/r_flailfall.anm\",0.1f,_ANM_FROM_START);");
     }
 }
 
@@ -71,7 +70,6 @@ void OnExit(MovementObject @mo) {
     //If the character is not in the array (somehow) don't do anything.
     if(index != -1){
         SetCharSpeed(mo, victims[index].origSpeed);
-        mo.Execute("this_mo.rigged_object().anim_client().RemoveLayer(swim_layer_id,1.0f);");
         mo.Execute("allow_rolling = true;");
         victims.removeAt(index);
     }
@@ -117,8 +115,6 @@ void Update(){
                     float newSpeed = max(0.1f, 1.0f - waterDepth);
                     SetCharSpeed(curVictim.char, newSpeed);
                     float animSpeed = max(0.0f,((0.8f - newSpeed)/2));
-                    //DebugText("wer", "newSpeed " + animSpeed, _fade);
-                    curVictim.char.Execute("this_mo.rigged_object().anim_client().SetLayerOpacity(swim_layer_id, " + animSpeed + ");");
 
                 }else{
                     //The character is jumping or falling.

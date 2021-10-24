@@ -23,6 +23,7 @@ in vec3 ws_vertex;
 in vec2 frag_tex_coords;
 in vec4 shadow_coords[4];
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #define tc0 frag_tex_coords

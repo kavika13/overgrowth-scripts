@@ -135,7 +135,7 @@ class JumpInfo {
     void UpdateAirAnimation() {
         if(ledge_info.on_ledge){
             ledge_info.UpdateLedgeAnimation();
-        } else if(hit_wall){
+        } else if(hit_wall && !flip_info.IsFlipping()){
             UpdateWallRunAnimation();
         } else {
             UpdateFreeAirAnimation();
@@ -233,7 +233,7 @@ class JumpInfo {
             UpdateWallRun(ts);
         }
 
-        if(WantsToGrabLedge() && (ledge_info.on_ledge || ledge_delay <= 0.0f)){
+        if(WantsToGrabLedge() && (ledge_info.on_ledge || ledge_delay <= 0.0f) && !flip_info.IsFlipping()){
             ledge_info.CheckLedges();
             if(ledge_info.on_ledge){
                 has_hit_wall = false;
@@ -264,7 +264,7 @@ class JumpInfo {
         LostWallContact();
         StartFall();
 
-        vec3 jump_vel = GetJumpVelocity(target_velocity);
+        vec3 jump_vel = GetJumpVelocity(target_velocity, vec3(0.0, 1.0, 0.0));
         this_mo.velocity = jump_vel * 0.5f;
         jetpack_fuel = _jump_fuel;
         jump_launch = 1.0f;
@@ -276,7 +276,7 @@ class JumpInfo {
         } else {
             this_mo.MaterialEvent("jump",this_mo.position + wall_dir * _leg_sphere_size);
         }
-        AISound(this_mo.position, QUIET_SOUND_AI);
+        AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
         this_mo.velocity += old_vel_flat;
         tilt = this_mo.velocity * 5.0f;
     }
@@ -293,7 +293,7 @@ class JumpInfo {
             jump_vel = target_velocity;
             target_velocity = vec3(target_velocity.x, 0.0f, target_velocity.z);
         } else {
-            jump_vel = GetJumpVelocity(target_velocity);
+            jump_vel = GetJumpVelocity(target_velocity, ground_normal);
         }
         this_mo.velocity = jump_vel;
 		if(this_mo.controlled){
@@ -316,7 +316,7 @@ class JumpInfo {
         } else {
             this_mo.MaterialEvent("jump",this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
         }
-        AISound(this_mo.position, QUIET_SOUND_AI);
+        AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
         
         if(length(target_velocity)>0.4f){
             this_mo.SetRotationFromFacing(target_velocity);
@@ -333,20 +333,16 @@ class JumpInfo {
         has_hit_wall = false;
         flip_info.StartedJump();
         ledge_delay = 0.0f;
-
-        this_mo.rigged_object().SetIKTargetOffset("left_leg",vec3(0.0f));
-        this_mo.rigged_object().SetIKTargetOffset("right_leg",vec3(0.0f));
-        this_mo.rigged_object().SetIKTargetOffset("full_body",vec3(0.0f));
     }
 
     // adjusts the velocity of jumps and wall jumps based on ground_normal
-    vec3 GetJumpVelocity(vec3 target_velocity){
+    vec3 GetJumpVelocity(vec3 target_velocity, vec3 temp_ground_normal){
         vec3 jump_vel = target_velocity * run_speed;
         jump_vel.y = _jump_vel;
 
         vec3 jump_dir = normalize(jump_vel);
-        if(dot(jump_dir, ground_normal) < 0.3f){
-            vec3 ground_up = ground_normal;
+        if(dot(jump_dir, temp_ground_normal) < 0.3f){
+            vec3 ground_up = temp_ground_normal;
             vec3 ground_front = target_velocity;
             if(length_squared(ground_front) == 0){
                 ground_front = vec3(0,0,1);

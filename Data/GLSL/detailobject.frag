@@ -35,6 +35,7 @@ in vec3 ws_vertex;
 in vec3 world_vert;
 in vec4 shadow_coords[4];
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #define tc0 frag_tex_coords
@@ -46,7 +47,7 @@ void main()
 #ifdef PLANT
     colormap.a = pow(colormap.a, max(0.1,min(1.0,3.0/length(ws_vertex))));
 #ifndef TERRAIN
-        colormap.a -= max(0.0f, -1.0f + (length(ws_vertex)/max_distance * (1.0+rand(gl_FragCoord.xy)*0.5f))*2.0f);
+        colormap.a -= max(0.0, -1.0 + (length(ws_vertex)/max_distance * (1.0+rand(gl_FragCoord.xy)*0.5))*2.0);
 #endif
 #ifndef ALPHA_TO_COVERAGE
     if(colormap.a < 0.5){

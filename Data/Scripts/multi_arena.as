@@ -398,6 +398,8 @@ void Init(string str) {
     crowd_cheer_vel = 0.0f;
     show_text = false;
     text_visible = 0.0f;
+
+    level.SendMessage("disable_retry");
 }
 
 // This script has no need of input focus
@@ -691,7 +693,9 @@ void ReceiveMessage(string msg) {
         int num_chars = GetNumCharacters();
         for(int i=0; i<num_chars; ++i) {
             MovementObject@ char = ReadCharacter(i);
-            char.ReceiveMessage("restore_health");
+            if(char.GetIntVar("zone_killed") == 0){
+                char.ReceiveMessage("restore_health");
+            }
         }
     } else if(token == "new_match") {
         Print("new_match received\n");

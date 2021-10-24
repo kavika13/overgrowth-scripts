@@ -44,11 +44,12 @@ void Update(){
 	}else{
 		for(uint i = 0; i < charIDs.size(); i++){
 			MovementObject@ this_mo = ReadCharacterID(charIDs[i]);
-		    const float _push_force_mult = 0.5f;
+		    const float _push_force_mult = 2.0f;
 		    vec3 push_force;
 			vec3 oldPos = charOldPos[i];
-	        push_force.x -= (this_mo.position.x - oldPos.x);
-	        push_force.z -= (this_mo.position.z - oldPos.z);
+			vec3 direction = normalize(this_mo.position - oldPos);
+	        push_force.x -= direction.x;
+	        push_force.z -= direction.z;
 		    push_force *= _push_force_mult;
 		    if(length_squared(push_force) > 0.0f){
 		        this_mo.velocity += push_force;

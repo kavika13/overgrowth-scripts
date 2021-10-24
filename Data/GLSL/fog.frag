@@ -6,6 +6,7 @@ uniform samplerCube tex3; // skybox
 in vec3 rel_pos;
 in vec2 var_uv;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {    

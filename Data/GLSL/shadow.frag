@@ -3,6 +3,8 @@
 uniform sampler2D tex0;
 in vec2 frag_tex;
 #endif
+
+#pragma bind_out_color
 out vec4 out_color;
 
 void main() {    

@@ -57,7 +57,7 @@ class SimpleArenaGUI : AHGUI::GUI {
         AHGUI::Container@ foreground = getForegroundLayer( 0 );
 
         // Make a new image 
-        AHGUI::Image blueBackground("Textures/ui/challenge_mode/blue_gradient_c.tga");
+        AHGUI::Image blueBackground("Textures/ui/challenge_mode/blue_gradient_c_nocompress.tga");
         // fill the screen
         blueBackground.setSize(2560, AHGUI::screenMetrics.GUISpaceY);
         blueBackground.setColor( 1.0,1.0,1.0,0.8 );
@@ -187,7 +187,7 @@ class SimpleArenaGUI : AHGUI::GUI {
                                         HexColor("#ffde00"), 
                                         HexColor("#ffe956"), .25, sub_names );
 
-        AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ backDivider = footer.addDivider( DDLeft, DOHorizontal, ivec2( 200, UNDEFINEDSIZEI ) );
 
         backDivider.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("back") );
         backDivider.addMouseOverBehavior( buttonHoverSubElements, "mouseover" );

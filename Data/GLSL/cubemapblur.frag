@@ -11,6 +11,7 @@ uniform float src_mip;
 in vec3 vec;
 in vec3 face_vec;
 
+#pragma bind_out_color
 out vec4 out_color;
 
 #define M_PI 3.1415926535897932384626433832795

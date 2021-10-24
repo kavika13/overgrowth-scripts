@@ -87,14 +87,14 @@ class Divider : Container {
         bottomRightContents.resize(0);
 
         // Reset the region tracking
-        topLeftBoundStart = UNDEFINEDSIZE;   
-        topLeftBoundEnd = UNDEFINEDSIZE; 
+        topLeftBoundStart = AH_UNDEFINEDSIZE;   
+        topLeftBoundEnd = AH_UNDEFINEDSIZE; 
         topLeftSize = 0;  
-        centerBoundStart = UNDEFINEDSIZE;   
-        centerBoundEnd = UNDEFINEDSIZE;     
+        centerBoundStart = AH_UNDEFINEDSIZE;   
+        centerBoundEnd = AH_UNDEFINEDSIZE;     
         centerSize = 0;
-        bottomRightBoundStart = UNDEFINEDSIZE;
-        bottomRightBoundEnd = UNDEFINEDSIZE;
+        bottomRightBoundStart = AH_UNDEFINEDSIZE;
+        bottomRightBoundEnd = AH_UNDEFINEDSIZE;
         bottomRightSize = 0;
 
         Container::clear();
@@ -182,7 +182,7 @@ class Divider : Container {
         ivec2 currentClipPos = drawOffset + boundaryOffset + drawDisplacement;
         ivec2 currentClipSize;
 
-        if( getSizeX() == UNDEFINEDSIZE || getSizeY() == UNDEFINEDSIZE ) {
+        if( getSizeX() == AH_UNDEFINEDSIZE || getSizeY() == AH_UNDEFINEDSIZE ) {
             currentClipSize = clipSize;
         }
         else {
@@ -254,14 +254,14 @@ class Divider : Container {
      void checkRegions() {
 
         // Reset the region tracking
-        topLeftBoundStart = UNDEFINEDSIZE;   
-        topLeftBoundEnd = UNDEFINEDSIZE; 
+        topLeftBoundStart = AH_UNDEFINEDSIZE;   
+        topLeftBoundEnd = AH_UNDEFINEDSIZE; 
         topLeftSize = 0;  
-        centerBoundStart = UNDEFINEDSIZE;   
-        centerBoundEnd = UNDEFINEDSIZE;     
+        centerBoundStart = AH_UNDEFINEDSIZE;   
+        centerBoundEnd = AH_UNDEFINEDSIZE;     
         centerSize = 0;
-        bottomRightBoundStart = UNDEFINEDSIZE;
-        bottomRightBoundEnd = UNDEFINEDSIZE;
+        bottomRightBoundStart = AH_UNDEFINEDSIZE;
+        bottomRightBoundEnd = AH_UNDEFINEDSIZE;
         bottomRightSize = 0;
         
         // see which direction we're going
@@ -270,12 +270,12 @@ class Divider : Container {
             // sum the top contents
             for( uint i = 0; i < topLeftContents.length(); i++ ) {
 
-                if( topLeftBoundStart == UNDEFINEDSIZE ) {
+                if( topLeftBoundStart == AH_UNDEFINEDSIZE ) {
                     topLeftBoundStart = 0;
                     topLeftBoundEnd = -1;
                 }
 
-                if( topLeftContents[i].getBoundarySizeY() != UNDEFINEDSIZE ) {
+                if( topLeftContents[i].getBoundarySizeY() != AH_UNDEFINEDSIZE ) {
                     // update the totals
                     topLeftSize += topLeftContents[i].getBoundarySizeY();
                     topLeftBoundEnd += topLeftContents[i].getBoundarySizeY() - 1;
@@ -294,7 +294,7 @@ class Divider : Container {
             }
 
             // As the center is one element, we just need to calculate from it
-            if( centeredElement !is null && centeredElement.getBoundarySizeY() != UNDEFINEDSIZE ) {
+            if( centeredElement !is null && centeredElement.getBoundarySizeY() != AH_UNDEFINEDSIZE ) {
                 
                 int dividerCenter = ((getSizeY() - 1)/2);
 
@@ -318,12 +318,12 @@ class Divider : Container {
             // sum the bottom contents
             for( int i = int(bottomRightContents.length())-1; i >= 0 ; i-- ) {
 
-                if( bottomRightBoundStart == UNDEFINEDSIZE ) {
+                if( bottomRightBoundStart == AH_UNDEFINEDSIZE ) {
                     bottomRightBoundEnd = getSizeY() - 1;
                     bottomRightBoundStart = bottomRightBoundEnd + 1;
                 }
 
-                if( bottomRightContents[i].getBoundarySizeY() != UNDEFINEDSIZE ) {
+                if( bottomRightContents[i].getBoundarySizeY() != AH_UNDEFINEDSIZE ) {
                     
                     // update the totals
                     bottomRightBoundStart -= (bottomRightContents[i].getSizeY() - 1);
@@ -376,12 +376,12 @@ class Divider : Container {
             // sum the left contents
             for( uint i = 0; i < topLeftContents.length(); i++ ) {
 
-                if( topLeftBoundStart == UNDEFINEDSIZE ) {
+                if( topLeftBoundStart == AH_UNDEFINEDSIZE ) {
                     topLeftBoundStart = 0;
                     topLeftBoundEnd = -1;
                 }
 
-                if( topLeftContents[i].getBoundarySizeX() != UNDEFINEDSIZE ) {
+                if( topLeftContents[i].getBoundarySizeX() != AH_UNDEFINEDSIZE ) {
                     // update the totals
                     topLeftBoundEnd += topLeftContents[i].getBoundarySizeX()- 1;
                     topLeftSize += topLeftContents[i].getBoundarySizeX();
@@ -399,7 +399,7 @@ class Divider : Container {
             }
 
             // As the center is one element, we just need to calculate from it
-            if( centeredElement !is null && centeredElement.getBoundarySizeX() != UNDEFINEDSIZE ) {
+            if( centeredElement !is null && centeredElement.getBoundarySizeX() != AH_UNDEFINEDSIZE ) {
                 
                 int dividerCenter = ((getSizeX()- 1)/2);
                 centerBoundStart = dividerCenter - (centeredElement.getBoundarySizeX()/2);
@@ -420,12 +420,12 @@ class Divider : Container {
             // sum the bottom/right contents
             for( int i = int(bottomRightContents.length())-1; i >= 0 ; i-- ) {
 
-                if( bottomRightBoundStart == UNDEFINEDSIZE ) {
+                if( bottomRightBoundStart == AH_UNDEFINEDSIZE ) {
                     bottomRightBoundEnd = getSizeX() - 1;
                     bottomRightBoundStart = bottomRightBoundEnd + 1;
                 }                
 
-                if( bottomRightContents[i].getBoundarySizeX() != UNDEFINEDSIZE ) {
+                if( bottomRightContents[i].getBoundarySizeX() != AH_UNDEFINEDSIZE ) {
 
                     // update the totals
                     bottomRightBoundStart -= (bottomRightContents[i].getBoundarySizeX() - 1);
@@ -544,10 +544,10 @@ class Divider : Container {
         
         // Set the coordinates based on the orientation
         if( orientation == DOVertical ) {
-            newSpacer.setSize( UNDEFINEDSIZE, _size );
+            newSpacer.setSize( AH_UNDEFINEDSIZE, _size );
         }
         else {
-            newSpacer.setSize( _size, UNDEFINEDSIZE );
+            newSpacer.setSize( _size, AH_UNDEFINEDSIZE );
         }
 
         // Add this to the divider
@@ -570,7 +570,7 @@ class Divider : Container {
      * @returns the space object created, just in case you need it
      *
      */
-    Divider@ addDivider( DividerDirection direction, DividerOrientation newOrientation, ivec2 size = ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) ) {
+    Divider@ addDivider( DividerDirection direction, DividerOrientation newOrientation, ivec2 size = ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) ) {
         
         // Create a new spacer object
         Divider@ newDivider = Divider(newOrientation); 
@@ -579,7 +579,7 @@ class Divider : Container {
         if( orientation == DOVertical ) {
                 
             // If the user hasn't specified a size, set it to the width of the container
-            if( size.x == UNDEFINEDSIZE ) {
+            if( size.x == AH_UNDEFINEDSIZE ) {
                 size.x = getSizeX();
             }
 
@@ -589,7 +589,7 @@ class Divider : Container {
         else {
             
             // If the user hasn't specified a size, set it to the height of the container
-            if( size.y == UNDEFINEDSIZE ) {
+            if( size.y == AH_UNDEFINEDSIZE ) {
                 size.y = getSizeY();
             }
 
@@ -734,8 +734,8 @@ class Divider : Container {
         }
 
         // If we don't have a default size already and we have a size, set the default size
-        if( newElement.getDefaultSize().x == UNDEFINEDSIZE &&
-            newElement.getDefaultSize().y == UNDEFINEDSIZE  ) {
+        if( newElement.getDefaultSize().x == AH_UNDEFINEDSIZE &&
+            newElement.getDefaultSize().y == AH_UNDEFINEDSIZE  ) {
             newElement.setDefaultSize( newElement.getSize() );
         }
 

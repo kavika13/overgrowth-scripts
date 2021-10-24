@@ -1,8 +1,12 @@
 #version 150
 uniform samplerCube tex0;
+uniform samplerCube tex1;
 uniform float time;
 uniform vec3 tint;
+uniform float fog_amount;
 in vec3 normal;
+
+#pragma bind_out_color
 out vec4 out_color;
 
 #ifdef YCOCG_SRGB
@@ -64,6 +68,13 @@ void main() {
 #else
     color = texture(tex0,normal).xyz;
 #endif
+    float foggy = max(0.0, min(1.0, (fog_amount - 1.0) / 2.0));
+    float fogness = mix(-1.0, 1.0, foggy);
+    if(normal.y < 0.0){
+        fogness = mix(fogness, 1.0, -normal.y * fog_amount / 5.0);
+    }
+    float blur = max(0.0, min(1.0, (1.0-abs(normalize(normal).y)+fogness)));
+    color = mix(color, textureLod(tex1,normal, mix(pow(blur, 2.0), 1.0, fogness*0.5+0.5) * 5.0).xyz, min(1.0, blur * 4.0));
     color.xyz *= tint;
     //vec3 tint = vec3(1.0, 0.0, 0.0);
     //color *= tint;

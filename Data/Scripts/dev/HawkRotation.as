@@ -1,10 +1,12 @@
 #include "threatcheck.as"
+#include "music_load.as"
 
 float time = 0.0f;
 vec3 old;
-
 array<int> @object_ids = GetObjectIDs();
 int num_objects = object_ids.length();
+
+MusicLoad ml("Data/Music/challengelevel.xml");
 
 void Update()
 {

@@ -321,17 +321,17 @@ class GUI {
         ivec2 origin(0,0);
         // render the backgrounds
         for( int layer = int(backgrounds.length())-1; layer >= 0; --layer ) {
-            backgrounds[ layer ].render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+            backgrounds[ layer ].render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
             AHGUI_IMUIContext.render();
         }
 
         // render the main content
-        root.render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        root.render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
         AHGUI_IMUIContext.render();
 
         // render the foregrounds
         for( uint layer = 0; layer < foregrounds.length(); ++layer ) {
-            foregrounds[ layer ].render( origin, origin, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+            foregrounds[ layer ].render( origin, origin, ivec2( AH_UNDEFINEDSIZE, AH_UNDEFINEDSIZE ) );
             AHGUI_IMUIContext.render();
         }
 

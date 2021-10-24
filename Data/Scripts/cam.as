@@ -101,8 +101,8 @@ void Update() {
 
     float _camera_collision_radius = 0.4f;
     vec3 old_new_position = position;
-    position = col.GetSlidingCapsuleCollision(old_position, position, _camera_collision_radius) ;
-    co.velocity += (position - old_new_position)/time_step;
+    //position = col.GetSlidingCapsuleCollision(old_position, position, _camera_collision_radius) ;
+    //co.velocity += (position - old_new_position)/time_step;
 
     float rot_inertia;
     if(MediaMode()){

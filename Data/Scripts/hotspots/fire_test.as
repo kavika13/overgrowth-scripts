@@ -87,14 +87,14 @@ vec3 GetWind(vec3 check_where, float curr_game_time, float change_rate) {
     return wind_vel;
 }
 
-const int num_ribbons = 20;
+const int num_ribbons = 4;
 int fire_object_id = -1;
 
 float last_game_time = 0.0f;
 
 void Dispose() {
     if(fire_object_id != -1){
-        DeleteObjectID(fire_object_id);
+        QueueDeleteObjectID(fire_object_id);
     }
 }
 
@@ -169,11 +169,12 @@ void Update() {
         count = 10;
     }
     delay -= time_step;
+
     if(delay <= 0.0f){
         for(int i=0; i<1; ++i){
             uint32 id = MakeParticle("Data/Particles/firespark.xml", ribbons[int(RangedRandomFloat(0, num_ribbons-0.01))].pos, vec3(RangedRandomFloat(-2.0f, 2.0f), RangedRandomFloat(5.0f, 10.0f), RangedRandomFloat(-2.0f, 2.0f)), vec3(1.0f));
         }
-        delay += RangedRandomFloat(0.0f, 1.6f);
+        delay += RangedRandomFloat(0.0f, 0.6f);
     }
     if(fire_object_id == -1){
         fire_object_id = CreateObject("Data/Objects/default_light.xml", true);

@@ -350,7 +350,7 @@ class ChallengeEndGUI {
                     int num = GetNumCharacters();
                     for(int j=0; j<num; ++j){
                         MovementObject@ char = ReadCharacter(j);
-                        if(!player_char.OnSameTeam(char) && !char.GetBoolVar("ignore_death")){
+                        if(!player_char.OnSameTeam(char)){
                             int knocked_out = char.GetIntVar("knocked_out");
                             if(knocked_out == 1 && char.GetFloatVar("blood_health") <= 0.0f){
                                 knocked_out = 2;
@@ -463,7 +463,7 @@ ChallengeEndGUI challenge_end_gui;
 
 
 void Update() {
-    const bool display_achievements = false;
+    bool display_achievements = false;
     if(display_achievements && GetPlayerCharacterID() != -1){
         achievements.UpdateDebugText();
     }
@@ -506,7 +506,7 @@ void VictoryCheckNormal() {
         return;
     }
     bool victory = true;
-    const bool display_victory_conditions = false;
+    bool display_victory_conditions = false;
 
     float max_reset_delay = _reset_delay;
     for(int i=0; i<level.GetNumObjectives(); ++i){

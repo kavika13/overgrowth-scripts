@@ -43,7 +43,7 @@ class Container : Element {
      * @param size Size of this container 
      *
      */
-    Container( string name, ivec2 size = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE ) ) {
+    Container( string name, ivec2 size = ivec2( AH_UNDEFINEDSIZE,AH_UNDEFINEDSIZE ) ) {
         super(name);
         setSize( size );
     }
@@ -55,7 +55,7 @@ class Container : Element {
      * @param size Size of this container 
      * 
      */
-    Container( ivec2 size = ivec2( UNDEFINEDSIZE,UNDEFINEDSIZE ) ) {
+    Container( ivec2 size = ivec2( AH_UNDEFINEDSIZE,AH_UNDEFINEDSIZE ) ) {
         super();
         setSize( size );
     }
@@ -124,7 +124,7 @@ class Container : Element {
         ivec2 currentClipPos = drawOffset + boundaryOffset + drawDisplacement;
         ivec2 currentClipSize;
 
-        if( getSizeX() == UNDEFINEDSIZE || getSizeY() == UNDEFINEDSIZE ) {
+        if( getSizeX() == AH_UNDEFINEDSIZE || getSizeY() == AH_UNDEFINEDSIZE ) {
             currentClipSize = clipSize;
         }
         else {
@@ -358,7 +358,7 @@ class Container : Element {
             return;
         }
 
-        if( getSizeX() == UNDEFINEDSIZE || getSizeY() == UNDEFINEDSIZE ) {
+        if( getSizeX() == AH_UNDEFINEDSIZE || getSizeY() == AH_UNDEFINEDSIZE ) {
             DisplayError("GUI Error", "Cannot add a background image to a container with an undefined dimension" );  
         }
 
