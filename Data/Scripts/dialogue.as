@@ -2051,6 +2051,9 @@ class Dialogue {
         if(id == -1){
             return;
         }
+        if(!ObjectExists(id)) {  // Mostly happens during undo/redo spam
+            return;
+        }
         Object @obj = ReadObjectFromID(id);
         if(obj.GetType() != _placeholder_object){
             return;

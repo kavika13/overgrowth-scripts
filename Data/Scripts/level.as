@@ -89,7 +89,7 @@ void DrawDialogueTextCanvas(int obj_id){
 void Init(string p_level_name) {
     @imGUI = CreateIMGUI();
     dialogue.Init();
-	imGUI.setup();
+    imGUI.setup();
 }
 
 int HasCameraControl() {
@@ -135,8 +135,8 @@ void ReceiveMessage(string msg) {
     } else if(token == "go_to_main_menu"){
         LoadLevel("back_to_menu");
     } else if(token == "clearhud"){
-	    hotspot_image_string.resize(0);
-	} else if(token == "manual_reset"){
+        hotspot_image_string.resize(0);
+    } else if(token == "manual_reset"){
         level.SendMessage("reset");
     } else if(token == "reset"){
         Log(info,"Level script received \"reset\"");
@@ -187,18 +187,18 @@ void ReceiveMessage(string msg) {
         gui_id = gui.AddGUI("displaygui_call",token_iter.GetToken(msg),220,250,0);
         has_gui = true;*/
     } else if(token == "displayhud"){
-		if(hotspot_image_string.length() == 0){
-		    token_iter.FindNextToken(msg);
+        if(hotspot_image_string.length() == 0){
+            token_iter.FindNextToken(msg);
             hotspot_image_string = token_iter.GetToken(msg);
-		}
+        }
     } else if(token == "loadlevel"){
-		token_iter.FindNextToken(msg);
+        token_iter.FindNextToken(msg);
         Log(info,"Received loadlevel message: "+token_iter.GetToken(msg));
         LoadLevel(token_iter.GetToken(msg));
     } else if(token == "make_all_aware"){
         CharactersNoticeEachOther();
     } else if(token == "start_dialogue"){
-		token_iter.FindNextToken(msg);
+        token_iter.FindNextToken(msg);
         dialogue_queue.push_back(token_iter.GetToken(msg));
         if(fade_out_end == -1.0f){
             dialogue.UpdatedQueue();
@@ -213,20 +213,42 @@ void ReceiveMessage(string msg) {
             fade_in_start = the_time+fade_time;
             fade_in_end = the_time+fade_time*2.0f;
         } else {
-            dialogue.UpdatedQueue(); // Don't fade if we are resetting            
+            dialogue.UpdatedQueue(); // Don't fade if we are resetting
         }
     } else if(token == "open_menu") {
-		if(!has_gui){
-			toggle_gui = true;
-			SetPaused(true);
-			menu_paused = true;
-		}else{
-			if(draw_settings){
-				ProcessSettingsMessage(IMMessage("back"));
-			}else{
-				toggle_gui = true;
-			}
-		}
+        if(!has_gui){
+            toggle_gui = true;
+            SetPaused(true);
+            menu_paused = true;
+        }else{
+            if(draw_settings){
+                ProcessSettingsMessage(IMMessage("back"));
+            }else{
+                toggle_gui = true;
+            }
+        }
+    } else if(token == "make_selected_character_saved_corpse") {
+        int num_characters = GetNumCharacters();
+
+        for(int i = 0; i < num_characters; ++i) {
+            MovementObject@ current_char = ReadCharacter(i);
+            Object@ current_char_obj = ReadObjectFromID(current_char.GetID());
+
+            if(current_char_obj.IsSelected()) {
+                current_char_obj.QueueScriptMessage("make_saved_corpse");
+            }
+        }
+    } else if(token == "revive_selected_character_and_unsave_corpse") {
+        int num_characters = GetNumCharacters();
+
+        for(int i = 0; i < num_characters; ++i) {
+            MovementObject@ current_char = ReadCharacter(i);
+            Object@ current_char_obj = ReadObjectFromID(current_char.GetID());
+
+            if(current_char_obj.IsSelected()) {
+                current_char_obj.QueueScriptMessage("revive_and_unsave_corpse");
+            }
+        }
     } else if(token.findFirst("menu_player") == 0) {
         ProcessSettingsMessage(IMMessage(token));
     } else {
@@ -289,9 +311,9 @@ void DrawGUI2() {
             vec2 pos(GetScreenWidth() *0.5, GetScreenHeight() *0.2);
             TextMetrics metrics = GetTextAtlasMetrics(font_path, font_size, 0, tutorial_message_display);
             pos.x -= metrics.bounds_x * 0.5;
-            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display, 
+            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display,
                           int(pos.x+2), int(pos.y+2), vec4(vec3(0.0f), tutorial_opac * 0.5));
-            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display, 
+            DrawTextAtlas(font_path, font_size, 0, tutorial_message_display,
                           int(pos.x), int(pos.y), vec4(vec3(1.0f), tutorial_opac));
         }
     }
@@ -301,18 +323,18 @@ void DrawGUI2() {
         vec2 pos(GetScreenWidth() *0.5, GetScreenHeight() *0.2);
         TextMetrics metrics = GetTextAtlasMetrics(font_path, font_size, 0, display_text);
         pos.x -= metrics.bounds_x * 0.5;
-        DrawTextAtlas(font_path, font_size, 0, display_text, 
+        DrawTextAtlas(font_path, font_size, 0, display_text,
                       int(pos.x+2), int(pos.y+2), vec4(vec3(0.0f), 0.5));
-        DrawTextAtlas(font_path, font_size, 0, display_text, 
+        DrawTextAtlas(font_path, font_size, 0, display_text,
                       int(pos.x), int(pos.y), vec4(vec3(1.0f), 1.0));
-    }    
+    }
 
     if(level.WaitingForInput()){
         fade_in_start = the_time;
         fade_in_end = the_time + 0.2;
     }
 
-    if(fade_out_end != -1.0f){        
+    if(fade_out_end != -1.0f){
         float blackout_amount = min(1.0, 1.0 - ((fade_out_end - the_time) / (fade_out_end - fade_out_start)));
         HUDImage @blackout_image = hud.AddImage();
         blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
@@ -325,7 +347,7 @@ void DrawGUI2() {
             dialogue.UpdatedQueue();
             fade_out_end = -1.0f;
         }
-    } else if(fade_in_end != -1.0f){        
+    } else if(fade_in_end != -1.0f){
         float blackout_amount = min(1.0, ((fade_in_end - the_time) / (fade_in_end - fade_in_start)));
         HUDImage @blackout_image = hud.AddImage();
         blackout_image.SetImageFromPath("Data/Textures/diffuse.tga");
@@ -356,20 +378,20 @@ void Update(int paused) {
         string str;
         for(int i=0, len=dialogue_queue.size(); i<len; ++i){
             str += "\""+dialogue_queue[i] + "\" ";
-        }   
-	   DebugText("dialogue_queue", "Dialogue queue("+dialogue_queue.size()+"): " + str, 0.5f);
-	}
+        }
+       DebugText("dialogue_queue", "Dialogue queue("+dialogue_queue.size()+"): " + str, 0.5f);
+    }
     if(!has_gui && toggle_gui){
-		AddPauseMenu();
-		toggle_gui = false;
-		has_gui = true;
-	}
-	else if(has_gui && toggle_gui){
-		imGUI.clear();
-		toggle_gui = false;
-		has_gui = false;
-	}
-	
+        AddPauseMenu();
+        toggle_gui = false;
+        has_gui = true;
+    }
+    else if(has_gui && toggle_gui){
+        imGUI.clear();
+        toggle_gui = false;
+        has_gui = false;
+    }
+
     if(level.HasFocus()){
         SetGrabMouse(false);
     } else {
@@ -378,35 +400,35 @@ void Update(int paused) {
             menu_paused = false;
         }
     }
-	
-	// process any messages produced from the update
+
+    // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
-		if( message.name == "" ){return;}
+        if( message.name == "" ){return;}
         //Log( info, "Got processMessage " + message.name );
-		if(draw_settings){
-			if( message.name == "Back" ){
-				draw_settings = false;
-				category_elements.resize(0);
-				AddPauseMenu();
+        if(draw_settings){
+            if( message.name == "Back" ){
+                draw_settings = false;
+                category_elements.resize(0);
+                AddPauseMenu();
             }else if( message.name == "rebuild_settings"){
                 imGUI.clear();
                 imGUI.setup();
                 ResetController();
                 BuildUI("Graphics");
-			}else{
-				ProcessSettingsMessage(message);
-			}
-		}
+            }else{
+                ProcessSettingsMessage(message);
+            }
+        }
         if( message.name == "Continue" )
         {
             toggle_gui = true;
         }
         else if( message.name == "Settings" )
         {
-			draw_settings = true;
-			ResetController();
-			BuildUI("Graphics");
+            draw_settings = true;
+            ResetController();
+            BuildUI("Graphics");
         }
         else if( message.name == "Settings_refresh" )
         {
@@ -418,21 +440,21 @@ void Update(int paused) {
                 SwitchSettingsScreen(current_screen);
             }
         }
-		else if( message.name == "Retry")
-		{
-			toggle_gui = true;
-			level.SendMessage("reset");
-		}
-		else if( message.name == "Main Menu")
-		{
-			toggle_gui = true;
-			level.SendMessage("go_to_main_menu");
-		}
-		else if( message.name == "Media Mode")
-		{
-			toggle_gui = true;
-			SetMediaMode(true);
-		}
+        else if( message.name == "Retry")
+        {
+            toggle_gui = true;
+            level.SendMessage("reset");
+        }
+        else if( message.name == "Main Menu")
+        {
+            toggle_gui = true;
+            level.SendMessage("go_to_main_menu");
+        }
+        else if( message.name == "Media Mode")
+        {
+            toggle_gui = true;
+            SetMediaMode(true);
+        }
         else if ( message.name == "capture_input" ){
             capture_input = true;
         } else if( message.name == "release_input" ){
@@ -450,7 +472,7 @@ void Update(int paused) {
             level.SendMessage("manual_reset");
         }
 
-        if(DebugKeysEnabled() && GetInputDown(controller_id, "x")){  
+        if(DebugKeysEnabled() && GetInputDown(controller_id, "x")){
             int num_items = GetNumItems();
             for(int i=0; i<num_items; i++){
                 ItemObject@ item_obj = ReadItem(i);
@@ -464,12 +486,12 @@ void Update(int paused) {
         SetAnimUpdateFreqs();
         LeaveTelemetryZone();
     }
-	if(has_gui){
-		UpdateSettings(false);
-		imGUI.update();
+    if(has_gui){
+        UpdateSettings(false);
+        imGUI.update();
         if(!capture_input)
-		    UpdateController();
-	}
+            UpdateController();
+    }
 }
 
 const float _max_anim_frames_per_second = 100.0f;
@@ -583,60 +605,60 @@ JSON getArenaSpawns() {
 void SetWindowDimensions(int w, int h)
 {
     dialogue.ResizeUpdate(w,h);
-	imGUI.doScreenResize();
-    
+    imGUI.doScreenResize();
+
     imGUI.receiveMessage( IMMessage("Settings_refresh") );
 }
 
 void AddPauseMenu(){
-	float background_height = 1200;
-	float background_width = 1200;
-	float header_width = 550;
-	float header_height = 128;
+    float background_height = 1200;
+    float background_width = 1200;
+    float header_width = 550;
+    float header_height = 128;
 
-	imGUI.clear();
+    imGUI.clear();
     imGUI.setup();
-	ResetController();
-	category_elements.resize(0);
-	@current_item = null;
+    ResetController();
+    category_elements.resize(0);
+    @current_item = null;
 
-	string ingame_menu_background = "Textures/ui/menus/main/inGameMenu-bg.png";
+    string ingame_menu_background = "Textures/ui/menus/main/inGameMenu-bg.png";
 
-	IMContainer background_container(background_width, background_height);
-	float middle_x = background_container.getSizeX() / 2.0f;
-	float middle_y = background_container.getSizeY() / 2.0f;
-	background_container.setAlignment(CACenter, CACenter);
-	IMImage menu_background(ingame_menu_background);
+    IMContainer background_container(background_width, background_height);
+    float middle_x = background_container.getSizeX() / 2.0f;
+    float middle_y = background_container.getSizeY() / 2.0f;
+    background_container.setAlignment(CACenter, CACenter);
+    IMImage menu_background(ingame_menu_background);
 
     if(kAnimateMenu){
-    	menu_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
-	}
+        menu_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+    }
 
-	menu_background.scaleToSizeX(450);
-	menu_background.setZOrdering(0);
-	menu_background.setColor(vec4(0,0,0,0.85f));
-	background_container.addFloatingElement(menu_background, "menu_background", vec2(middle_x - menu_background.getSizeX() / 2.0f, middle_y - menu_background.getSizeY() / 2.0f), 0);
-	
-	IMDivider mainDiv( "mainDiv", DOVertical );
-	background_container.setElement(mainDiv);
+    menu_background.scaleToSizeX(450);
+    menu_background.setZOrdering(0);
+    menu_background.setColor(vec4(0,0,0,0.85f));
+    background_container.addFloatingElement(menu_background, "menu_background", vec2(middle_x - menu_background.getSizeX() / 2.0f, middle_y - menu_background.getSizeY() / 2.0f), 0);
+
+    IMDivider mainDiv( "mainDiv", DOVertical );
+    background_container.setElement(mainDiv);
     mainDiv.setAlignment(CACenter, CACenter);
-	
+
     IMDivider buttons_holder(DOVertical);
-	buttons_holder.setSizeX(1200);
-	buttons_holder.setBorderColor(vec4(1,0,0,1));
+    buttons_holder.setSizeX(1200);
+    buttons_holder.setBorderColor(vec4(1,0,0,1));
 
     IMImage header_background( brushstroke_background );
     if(kAnimateMenu){
-    	header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+        header_background.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
     }
-	header_background.scaleToSizeX(header_width);
+    header_background.scaleToSizeX(header_width);
     header_background.setColor(button_background_color);
     IMDivider header_holder("header_holder", DOHorizontal);
     IMText header_text("Game Menu", button_font);
     if(kAnimateMenu){
-    	header_text.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
+        header_text.addUpdateBehavior(IMMoveIn ( move_in_time, vec2(0, move_in_distance * -1), inQuartTween ), "");
     }
-	IMContainer header_container(header_background.getSizeX(), header_background.getSizeY());
+    IMContainer header_container(header_background.getSizeX(), header_background.getSizeY());
     header_container.setElement(header_text);
     header_container.setAlignment(CACenter, CACenter);
     header_text.setZOrdering(3);
@@ -645,21 +667,21 @@ void AddPauseMenu(){
     header_holder.append(header_container);
     buttons_holder.append(header_holder);
 
-	buttons_holder.append(IMSpacer(DOVertical, 25.0f));
+    buttons_holder.append(IMSpacer(DOVertical, 25.0f));
 
     buttons_holder.setAlignment(CACenter, CACenter);
     mainDiv.append(buttons_holder);
     AddButton("Continue", buttons_holder, 30, forward_chevron);
     AddButton("Retry", buttons_holder, 30, retry_icon);
     AddButton("Settings", buttons_holder, 30, settings_icon);
-	if(EditorEnabled()){
-		AddButton("Media Mode", buttons_holder, 30, media_icon);
-	}
+    if(EditorEnabled()){
+        AddButton("Media Mode", buttons_holder, 30, media_icon);
+    }
     AddButton("Main Menu", buttons_holder, 30, exit_icon);
-	
-	buttons_holder.append(IMSpacer(DOVertical, 100.0f));
-	imGUI.getMain().setElement(@background_container);
-	controller_wraparound = true;
+
+    buttons_holder.append(IMSpacer(DOVertical, 100.0f));
+    imGUI.getMain().setElement(@background_container);
+    controller_wraparound = true;
 }
 
 bool DialogueCameraControl() {

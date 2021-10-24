@@ -1,6 +1,5 @@
 void object_frag(){} // This is just here to make sure it gets added to include paths
 
-
 layout (std140) uniform ClusterInfo {
     uvec3 grid_size;
     uint num_decals;
@@ -16,21 +15,18 @@ layout (std140) uniform ClusterInfo {
     float pad4;
 };
 
-
 // this MUST match the one in source or bad things happen
 struct PointLightData {
-	vec3 pos;
-	float radius;
-	vec3 color;
-	float padding;
+    vec3 pos;
+    float radius;
+    vec3 color;
+    float padding;
 };
 
 #define POINT_LIGHT_SIZE_VEC4 2u
 
-
 #define NUM_GRID_COMPONENTS 2u
 #define ZCLUSTERFUNC(val) (log(-1.0 * (val) - z_near + 1.0) * z_mult)
-
 
 #define light_decal_data_buffer tex15
 #define cluster_buffer tex13
@@ -40,95 +36,99 @@ const uint COUNT_MASK = ((1u << (32u - COUNT_BITS)) - 1u);
 const uint INDEX_MASK = ((1u << (COUNT_BITS)) - 1u);
 
 #if !defined(DEPTH_ONLY)
-uniform samplerBuffer light_decal_data_buffer;
-uniform usamplerBuffer cluster_buffer;
+    uniform samplerBuffer light_decal_data_buffer;
+    uniform usamplerBuffer cluster_buffer;
 
-PointLightData FetchPointLight(uint light_index) {
-	PointLightData l;
+    PointLightData FetchPointLight(uint light_index) {
+        PointLightData l;
 
-	vec4 temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 0u));
-	l.pos = temp.xyz;
-	l.radius = temp.w;
+        vec4 temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 0u));
+        l.pos = temp.xyz;
+        l.radius = temp.w;
 
-	temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 1u));
-	l.color = temp.xyz;
-	l.padding = temp.w;
+        temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 1u));
+        l.color = temp.xyz;
+        l.padding = temp.w;
 
-	return l;
-}
+        return l;
+    }
 
+    void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness, uint light_val, float ambient_mult) {
+        // number of lights in current cluster
+        uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
 
-void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness, uint light_val, float ambient_mult) {
-	// number of lights in current cluster
-	uint light_count = (light_val >> COUNT_BITS) & COUNT_MASK;
+        // index into cluster_lights
+        uint first_light_index = light_val & INDEX_MASK;
 
-	// index into cluster_lights
-	uint first_light_index = light_val & INDEX_MASK;
+        // light list data is immediately after cluster lookup data
+        uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
+        first_light_index = first_light_index + uint(light_cluster_data_offset);
 
-	// light list data is immediately after cluster lookup data
-	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
-	first_light_index = first_light_index + uint(light_cluster_data_offset);
+        // debug option, uncomment to visualize clusters
+        //out_color = vec3(min(light_count, 63u) / 63.0);
+        //out_color = vec3(g.z / grid_size.z);
 
-	// debug option, uncomment to visualize clusters
-	//out_color = vec3(min(light_count, 63u) / 63.0);
-	//out_color = vec3(g.z / grid_size.z);
+        for (uint i = 0u; i < light_count; i++) {
+            uint light_index = texelFetch(cluster_buffer, int(first_light_index + i)).x;
 
-	for (uint i = 0u; i < light_count; i++) {
-		uint light_index = texelFetch(cluster_buffer, int(first_light_index + i)).x;
+            PointLightData l = FetchPointLight(light_index);
 
-		PointLightData l = FetchPointLight(light_index);
+            float light_size = 0.8;
 
-        float light_size = 0.8;
+            vec3 to_light = l.pos - world_vert;
+            // TODO: inverse square falloff
+            // TODO: real light equation
+            float dist = max(light_size, length(to_light));
+            float falloff = max(0.0, (1.0 / dist / dist) * (1.0 - dist / l.radius));
 
-		vec3 to_light = l.pos - world_vert;
-		// TODO: inverse square falloff
-		// TODO: real light equation
-		float dist = max(light_size, length(to_light));
-		float falloff = max(0.0, (1.0 / dist / dist) * (1.0 - dist / l.radius));
+            vec3 n = normalize(to_light);
+            float bias = max(0.0, (light_size - length(to_light)) / light_size * 2.0);
 
-		vec3 n = normalize(to_light);
-        float bias = max(0.0, (light_size - length(to_light)) / light_size * 2.0);
-        #ifdef PLANT
-            float d = abs(dot(n, ws_normal)+bias)/(1.0 + bias);
-        #elif defined(WATERFALL)
-            float d = 0.5;
-        #elif defined(LIGHT_AMB)
-            float d = 0.5;
-        #else
-            float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
-        #endif
+            #if defined(PLANT)
+                float d = abs(dot(n, ws_normal)+bias)/(1.0 + bias);
+            #elif defined(WATERFALL)
+                float d = 0.5;
+            #elif defined(LIGHT_AMB)
+                float d = 0.5;
+            #else
+                float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+            #endif
 
-        float temp_ambient_mult = ambient_mult;
-        #ifdef LANTERN
-        if(l.color.r > 1.635 && l.color.r < 1.636){
-            temp_ambient_mult = 1.0;
-            if(n.y > 0.0){
-                temp_ambient_mult = max(0.0, temp_ambient_mult-pow(n.y,0.9));
-            }
-            if(n.y < 0.0){
-                temp_ambient_mult = max(0.0, temp_ambient_mult+n.y*0.99);
-            }
-            temp_ambient_mult *= 2.0;
-            bias = 0.05;
-            d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+            float temp_ambient_mult = ambient_mult;
+
+            #if defined(LANTERN)
+                if(l.color.r > 1.635 && l.color.r < 1.636){
+                    temp_ambient_mult = 1.0;
+
+                    if(n.y > 0.0){
+                        temp_ambient_mult = max(0.0, temp_ambient_mult-pow(n.y,0.9));
+                    }
+
+                    if(n.y < 0.0){
+                        temp_ambient_mult = max(0.0, temp_ambient_mult+n.y*0.99);
+                    }
+
+                    temp_ambient_mult *= 2.0;
+                    bias = 0.05;
+                    d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+                }
+            #endif
+
+            falloff = min(1.0, falloff);
+            diffuse_color += falloff * d * l.color * temp_ambient_mult;
+
+            #if !defined(SWAMP2)
+                roughness = max(roughness, 0.05);
+                vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
+                float spec_pow = 2/pow(roughness, 4.0) - 2.0;
+                float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
+                spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
+
+                spec_color += falloff * spec * l.color * temp_ambient_mult;
+            #endif
         }
-        #endif
-
-        falloff = min(1.0, falloff);
-		diffuse_color += falloff * d * l.color * temp_ambient_mult;
-
-        #ifndef SWAMP2
-        roughness = max(roughness, 0.05);
-        vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
-        float spec_pow = 2/pow(roughness, 4.0) - 2.0;
-        float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
-        spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
-
-		spec_color += falloff * spec * l.color * temp_ambient_mult;
-        #endif
-	}
-}
-#endif
+    }
+#endif  // ^ !defined(DEPTH_ONLY)
 
 // From iq on shadertoy
 float hash(vec2 p)
@@ -163,24 +163,23 @@ float fractal(in vec2 uv) {
     return f;
 }
 
-
 #include "lighting150.glsl"
 #include "relativeskypos.glsl"
 
-#ifndef ARB_sample_shading_available
-#define CALC_MOTION_BLUR \
-    if(stipple_val != 1 && \
-       (int(mod(gl_FragCoord.x + float(x_stipple_offset),float(stipple_val))) != 0 ||  \
-        int(mod(gl_FragCoord.y + float(y_stipple_offset),float(stipple_val))) != 0)){  \
-        discard;  \
-    }
+#if !defined(ARB_sample_shading_available)
+    #define CALC_MOTION_BLUR \
+        if(stipple_val != 1 && \
+           (int(mod(gl_FragCoord.x + float(x_stipple_offset),float(stipple_val))) != 0 ||  \
+            int(mod(gl_FragCoord.y + float(y_stipple_offset),float(stipple_val))) != 0)){  \
+            discard;  \
+        }
 #else
-#define CALC_MOTION_BLUR \
-    if(stipple_val != 1 && \
-       (int(mod(gl_FragCoord.x + mod(float(gl_SampleID), float(stipple_val)) + float(x_stipple_offset),float(stipple_val))) != 0 || \
-        int(mod(gl_FragCoord.y + float(gl_SampleID) / float(stipple_val) + float(y_stipple_offset),float(stipple_val))) != 0)){ \
-        discard; \
-    }
+    #define CALC_MOTION_BLUR \
+        if(stipple_val != 1 && \
+           (int(mod(gl_FragCoord.x + mod(float(gl_SampleID), float(stipple_val)) + float(x_stipple_offset),float(stipple_val))) != 0 || \
+            int(mod(gl_FragCoord.y + float(gl_SampleID) / float(stipple_val) + float(y_stipple_offset),float(stipple_val))) != 0)){ \
+            discard; \
+        }
 #endif
 
 #define CALC_HALFTONE_STIPPLE \
@@ -190,9 +189,11 @@ if(mod(gl_FragCoord.x + gl_FragCoord.y, 2.0) == 0.0){ \
 
 #define UNIFORM_SHADOW_TEXTURE \
     uniform sampler2DShadow shadow_sampler;
+
 #define CALC_SHADOWED \
     vec3 shadow_tex = vec3(1.0);\
     shadow_tex.r = GetCascadeShadow(tex4, shadow_coords, length(ws_vertex));
+
 #define CALC_DYNAMIC_SHADOWED CALC_SHADOWED
 
 #define color_tex tex0
@@ -258,10 +259,10 @@ uniform int x_stipple_offset; \
 uniform int y_stipple_offset; \
 uniform int stipple_val;
 
-#ifndef SHADOW_CATCHER
-#define UNIFORM_SIMPLE_SHADOW_CATCH uniform float in_light;
+#if !defined(SHADOW_CATCHER)
+    #define UNIFORM_SIMPLE_SHADOW_CATCH uniform float in_light;
 #else
-#define UNIFORM_SIMPLE_SHADOW_CATCH
+    #define UNIFORM_SIMPLE_SHADOW_CATCH
 #endif
 
 #define UNIFORM_COLOR_TINT \
@@ -347,7 +348,7 @@ float back_lit = max(0.0,dot(normalize(ws_vertex),ws_light));  \
 float rim_lit = max(0.0,(1.0-dot(view,ws_normal))); \
 rim_lit *= pow((dot(ws_light,ws_normal)+1.0)*0.5,0.5); \
 color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * GammaCorrectFloat(normalmap.a) * primary_light_color.xyz * primary_light_color.a * shadow_tex.r;
-    
+
 #define CALC_COMBINED_COLOR_WITH_NORMALMAP_TINT \
 vec3 color = diffuse_color * colormap.xyz  * mix(vec3(1.0),color_tint,normalmap.a)+ \
              spec_color * GammaCorrectFloat(colormap.a);
@@ -385,7 +386,6 @@ CALC_FINAL_UNIVERSAL(colormap.a)
 #define decalWaterFroth 8
 #define decalSpongeSquare 9
 #define decalSpongeRound 10
-
 
 vec4 GetWeightMap(sampler2D tex, vec2 coord){
     vec4 weight_map = texture(tex, coord);

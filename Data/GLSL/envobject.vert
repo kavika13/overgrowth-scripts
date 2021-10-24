@@ -421,6 +421,18 @@ void main() {
                 speed = 0.1;
                 size *= 80.0;
             }
+        #elif defined(SANDSTORM)
+            int type = instance_id % 83;
+            if(type >= 0 && type < 3){
+                max_dist *= 2.0;
+                size *= 2.0;
+                fall_speed = 1.0;
+                speed = 0.2;
+            } else { // cloud
+                fall_speed = 0;
+                speed = 0.1;
+                size *= 80.0;
+            }
         #elif defined(RAIN)
             speed = 0.0;
             fall_speed = 9.0;
@@ -480,6 +492,9 @@ void main() {
         pos.y += time*speed*3.0;
         pos.y -= time*fall_speed;
         pos.x += sin(instance_id);
+        #ifdef SANDSTORM
+        pos.x -= time*15.;
+        #endif
         pos += vec3(1000);
         for(int i=0; i<3; ++i){
             if(abs(pos[i] - cam_pos[i]) > max_dist){
@@ -504,6 +519,24 @@ void main() {
         #endif
         dist = distance(pos, cam_pos);
         #ifdef ASH
+            if(type == 0){
+                float max_spark_dist = 16.0;
+                if(dist > max_spark_dist){
+                    size = 0.0;
+                }
+                alpha = (1.0 - dist/max_spark_dist)*4.0;
+            } else if(type >= 1 && type < 3){
+                alpha = 4.0;
+            } else {
+                alpha = 0.04;
+                if(dist > 16){
+                    size = 0.0;
+                }
+            }
+            if(type > 15){
+                size = 0.0;
+            }
+        #elif defined(SANDSTORM)
             if(type == 0){
                 float max_spark_dist = 16.0;
                 if(dist > max_spark_dist){

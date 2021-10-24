@@ -1,6 +1,6 @@
 /*******
- *  
- * Classes and helpers defining the entities in an arena battle and the battle 
+ *
+ * Classes and helpers defining the entities in an arena battle and the battle
  *  itself
  *
  */
@@ -27,7 +27,7 @@ class SpawnLocation {
 
 class SpawnLocations {
     array<SpawnLocation> locations;
-     
+
     void deleteAll() {
         locations.removeRange(0,locations.length());
     }
@@ -40,7 +40,7 @@ class SpawnLocations {
         }
         return false;
     }
-    
+
     int Get(string name) {
         for( uint i = 0; i < locations.length(); i++ ) {
             if( locations[i].name == name ) {
@@ -65,13 +65,13 @@ class SpawnLocations {
 }
 
 /**
- * All the necessary bookkeeping for a battle in the arena 
+ * All the necessary bookkeeping for a battle in the arena
  **/
 class BattleInstance {
 
     array<BattleEntitySpawn@> spawnedEntities; // All entities that will be spawned
     array<array<int>> teamsByIndex; // The entities in each team by index of spawnedEntities
-    array<array<MovementObject@>> teams; // The actual entities in each team 
+    array<array<MovementObject@>> teams; // The actual entities in each team
     array<int> spawnedAgents; // The AI agents (by index of spawnedEntities)
     int playerIndexId; // The spawned player (by index of spawnedEntities)
     int playerObjectId; // The object id of the payer
@@ -121,6 +121,7 @@ class BattleInstance {
                         }
                         else {
                             spawnLocations.Set(LocName, allObjectIds[ objectIndex ]);
+                            obj.SetEditorLabel(LocName);
                         }
                     }
                 }
@@ -129,7 +130,7 @@ class BattleInstance {
     }
 
     /**
-     * Constructor 
+     * Constructor
      **/
     BattleInstance() {
         reset();
@@ -140,7 +141,7 @@ class BattleInstance {
      **/
     ~BattleInstance() {
         reset();
-    }   
+    }
 
     void initialize( string _gamemode, JSONValue battleParams ) {
         Log(info,"Starting initialize battle");
@@ -152,13 +153,13 @@ class BattleInstance {
 
         gamemode = _gamemode;
 
-        // Make sure there's enough teams to make this interesting 
-        int teamsWithMembers = 0; 
+        // Make sure there's enough teams to make this interesting
+        int teamsWithMembers = 0;
         for( uint teamCounter = 0; teamCounter < newTeams.size(); teamCounter++ )
         {
             if( newTeams[ teamCounter ]["members"].size() > 0 ) {
                 teamsWithMembers++;
-            } 
+            }
         }
 
         if( teamsWithMembers < 2 ) {
@@ -169,7 +170,7 @@ class BattleInstance {
             DisplayError( "error", "Arena battle currently supports at most four teams" );
         }
 
-        // First make sure there is exactly one player 
+        // First make sure there is exactly one player
         bool playerFound = false;
         uint totalChars = 0; // While we're at it, count the chars
         uint totalNotPlayerChars = 0; // Count the characters that can't be the player
@@ -177,9 +178,9 @@ class BattleInstance {
 
         for( uint teamIndex = 0; teamIndex < newTeams.size(); ++teamIndex ) {
             for( uint charIndex = 0; charIndex < newTeams[ teamIndex ]["members"].size(); ++charIndex ) {
-                if( newTeams[ teamIndex ]["members"][ charIndex ].isMember( "player" ) ) { 
+                if( newTeams[ teamIndex ]["members"][ charIndex ].isMember( "player" ) ) {
                     string playerValue = newTeams[ teamIndex ]["members"][ charIndex ]["player"].asString();
-                    // Todo -- readd player force? 
+                    // Todo -- readd player force?
                     if( playerValue == "maybe" ) {
                         int playerJSONId =  newTeams[ teamIndex ]["members"][ charIndex ]["id"].asInt();
                         playerFound = true;
@@ -198,12 +199,12 @@ class BattleInstance {
         }
 
         // If a specific player spawn hasn't been defined then randomly choose one
-        
+
 
         // Come up with a random number of characters to skip over
         //  before we choose a player (respecting the characters marked as non-player)
         int chosenPlayerJSONId = possiblePlayerJSONIds[rand()%(possiblePlayerJSONIds.length())];
-        
+
 
         // Finally we can go through the structure and create the new objects
         for( uint teamIndex = 0; teamIndex < newTeams.size(); ++teamIndex ) {
@@ -212,7 +213,7 @@ class BattleInstance {
             // Setup the spawns for all the characters in that team
             for( uint charIndex = 0; charIndex < newTeams[ teamIndex ]["members"].size(); ++charIndex ) {
                 if( newTeams[ teamIndex ]["members"][ charIndex ].isMember( "player" ) and
-                  newTeams[ teamIndex ]["members"][ charIndex ]["id"].asInt() == chosenPlayerJSONId ) {  
+                  newTeams[ teamIndex ]["members"][ charIndex ]["id"].asInt() == chosenPlayerJSONId ) {
                     addPlayer( newTeams[ teamIndex ]["members"][ charIndex ] );
                 }
                 else {
@@ -221,7 +222,7 @@ class BattleInstance {
             }
         }
 
-        // Now, much simpler, setup all the item spawns 
+        // Now, much simpler, setup all the item spawns
         for( uint itemIndex = 0; itemIndex < newItems.size(); ++itemIndex ) {
             addWeapon( newItems[ itemIndex ] );
         }
@@ -238,8 +239,8 @@ class BattleInstance {
     /**
      * Signal the start of a new team
      **/
-    void startTeam() {   
-        
+    void startTeam() {
+
         if( numTeams == 4 )
         {
             DisplayError("Error", "More than four teams not current supported" );
@@ -262,7 +263,7 @@ class BattleInstance {
         if( !spawnLocations.exists( name ) ) {
             DisplayError("error", "Location name " + name + " not found in level");
         }
-        return spawnLocations.Get( name ); 
+        return spawnLocations.Get( name );
     }
 
 
@@ -283,20 +284,20 @@ class BattleInstance {
 
         string weaponType = "";
         if( params.isMember( "weapon" ) ) {
-            weaponType = params[ "weapon" ].asString(); 
-        }        
+            weaponType = params[ "weapon" ].asString();
+        }
 
         int wave = 1;
         if( params.isMember( "wave" ) ) {
-            wave = params[ "wave" ].asInt(); 
+            wave = params[ "wave" ].asInt();
             Log( info, "got wave: " + wave );
         }
-        
+
         if( numTeams == 0 ) {
             DisplayError("Error", "No teams defined when adding enemy" );
         }
 
-        // Create a new entity 
+        // Create a new entity
         BattleEnemySpawn enemySpawn;
         enemySpawn.team = numTeams - 1;
         enemySpawn.difficulty =  battleDifficulty - 0.5f;
@@ -304,27 +305,27 @@ class BattleInstance {
         enemySpawn.locationName = spawnLocation;
         enemySpawn.wave = wave;
 
-        // if an enemy type wasn't specified, chose one 
+        // if an enemy type wasn't specified, chose one
         if( enemyType == "" or enemyType == "any" ) {
             switch( rand()%2+1 ) {
-                case 0: 
+                case 0:
                     enemySpawn.fur_channel = -1;
-                    enemySpawn.entityPath = level.GetPath("char_civ"); 
+                    enemySpawn.entityPath = level.GetPath("char_civ");
                     break;
-                case 1: 
+                case 1:
                     enemySpawn.fur_channel = 1;
-                    enemySpawn.entityPath = level.GetPath("char_guard"); 
+                    enemySpawn.entityPath = level.GetPath("char_guard");
                     break;
-                case 2: 
+                case 2:
                     enemySpawn.fur_channel = 0;
-                    enemySpawn.entityPath = level.GetPath("char_raider"); 
+                    enemySpawn.entityPath = level.GetPath("char_raider");
                     break;
             }
         }
         else {
             if( enemyType == "civ" ) {
                 enemySpawn.fur_channel = -1;
-                enemySpawn.entityPath = level.GetPath("char_civ"); 
+                enemySpawn.entityPath = level.GetPath("char_civ");
             }
             else if ( enemyType == "guard" ) {
                 enemySpawn.fur_channel = 1;
@@ -333,18 +334,18 @@ class BattleInstance {
             else if ( enemyType == "raider" ) {
                 enemySpawn.fur_channel = 0;
                 enemySpawn.entityPath = level.GetPath("char_raider");
-            } 
+            }
             else {
                 DisplayError("Error", "Unknown enemy type " + enemyType );
             }
         }
 
-        // Now determine the color 
+        // Now determine the color
         // Set palette colors randomly, darkening based on skill
         for(int i=0; i<4; ++i) {
             vec3 color = FloatTintFromByte(RandReasonableColor());
             float tintAmount = 0.5f;
-            
+
             uint teamNumber = numTeams - 1;
 
             if( teamNumber == 0 ) {
@@ -362,27 +363,27 @@ class BattleInstance {
         // See if the enemy gets a weapon
         if( weaponType == "any" ) {
             switch( rand()%4 ) {
-                case 0: 
-                    enemySpawn.useWeaponPath = level.GetPath("weap_knife"); 
+                case 0:
+                    enemySpawn.useWeaponPath = level.GetPath("weap_knife");
                     weaponsInUse = true;
                     break;
-                case 1: 
-                    enemySpawn.useWeaponPath = level.GetPath("weap_big_sword"); 
+                case 1:
+                    enemySpawn.useWeaponPath = level.GetPath("weap_big_sword");
                     weaponsInUse = true;
                     break;
-                case 2: 
-                    enemySpawn.useWeaponPath = level.GetPath("weap_sword"); 
+                case 2:
+                    enemySpawn.useWeaponPath = level.GetPath("weap_sword");
                     weaponsInUse = true;
                     break;
-                case 3: 
-                    enemySpawn.useWeaponPath = level.GetPath("weap_spear"); 
+                case 3:
+                    enemySpawn.useWeaponPath = level.GetPath("weap_spear");
                     weaponsInUse = true;
                     break;
             }
         }
         else {
             if( weaponType == "knife" ) {
-                enemySpawn.useWeaponPath = level.GetPath("weap_knife"); 
+                enemySpawn.useWeaponPath = level.GetPath("weap_knife");
                 weaponsInUse = true;
             }
             else if ( weaponType == "big_sword" ) {
@@ -392,7 +393,7 @@ class BattleInstance {
             else if ( weaponType == "sword" ) {
                 enemySpawn.useWeaponPath = level.GetPath("weap_sword");
                 weaponsInUse = true;
-            } 
+            }
             else if ( weaponType == "spear" ) {
                 enemySpawn.useWeaponPath = level.GetPath("weap_spear");
                 weaponsInUse = true;
@@ -401,7 +402,7 @@ class BattleInstance {
 
         // Finally, store the enemy
         teamsByIndex[ numTeams - 1 ].insertLast( spawnedEntities.length() );
-        spawnedAgents.insertLast( spawnedEntities.length() ); 
+        spawnedAgents.insertLast( spawnedEntities.length() );
         spawnedEntities.insertLast( enemySpawn );
 
     }
@@ -419,13 +420,13 @@ class BattleInstance {
         string weaponType = "";
         if( params.isMember( "weapon" ) ) {
             weaponType = params[ "weapon" ].asString();
-        }        
-        
+        }
+
         if( numTeams == 0 ) {
             DisplayError("Error", "No teams defined when adding player" );
         }
 
-        // Create a new entity 
+        // Create a new entity
         BattlePlayerSpawn playerSpawn;
         playerSpawn.team = numTeams - 1;
         playerSpawn.spawnPointOjectId = getObjectIdFromLocationName( spawnLocation );
@@ -434,27 +435,27 @@ class BattleInstance {
         // See if the player gets a weapon
         if( weaponType == "any" ) {
             switch( rand()%4 ) {
-                case 0: 
-                    playerSpawn.useWeaponPath = level.GetPath("weap_knife"); 
+                case 0:
+                    playerSpawn.useWeaponPath = level.GetPath("weap_knife");
                     weaponsInUse = true;
                     break;
-                case 1: 
-                    playerSpawn.useWeaponPath = level.GetPath("weap_big_sword"); 
+                case 1:
+                    playerSpawn.useWeaponPath = level.GetPath("weap_big_sword");
                     weaponsInUse = true;
                     break;
-                case 2: 
-                    playerSpawn.useWeaponPath = level.GetPath("weap_sword"); 
+                case 2:
+                    playerSpawn.useWeaponPath = level.GetPath("weap_sword");
                     weaponsInUse = true;
                     break;
-                case 3: 
-                    playerSpawn.useWeaponPath = level.GetPath("weap_spear"); 
+                case 3:
+                    playerSpawn.useWeaponPath = level.GetPath("weap_spear");
                     weaponsInUse = true;
                     break;
             }
         }
         else {
             if( weaponType == "knife" ) {
-                playerSpawn.useWeaponPath = level.GetPath("weap_knife"); 
+                playerSpawn.useWeaponPath = level.GetPath("weap_knife");
                 weaponsInUse = true;
             }
             else if ( weaponType == "big_sword" ) {
@@ -464,7 +465,7 @@ class BattleInstance {
             else if ( weaponType == "sword" ) {
                 playerSpawn.useWeaponPath = level.GetPath("weap_sword");
                 weaponsInUse = true;
-            } 
+            }
             else if ( weaponType == "spear" ) {
                 playerSpawn.useWeaponPath = level.GetPath("weap_spear");
                 weaponsInUse = true;
@@ -473,8 +474,8 @@ class BattleInstance {
 
         // Finally, store the player
         playerIndexId = spawnedEntities.length();
-        teamsByIndex[ numTeams - 1 ].insertLast( spawnedEntities.length() ); 
-        spawnedAgents.insertLast( spawnedEntities.length() ); 
+        teamsByIndex[ numTeams - 1 ].insertLast( spawnedEntities.length() );
+        spawnedAgents.insertLast( spawnedEntities.length() );
         spawnedEntities.insertLast( playerSpawn );
     }
 
@@ -494,41 +495,41 @@ class BattleInstance {
             weaponType = params[ "type" ].asString();
         }
 
-        // Create a new entity 
+        // Create a new entity
         BattleWeaponSpawn weaponSpawn;
         weaponSpawn.spawnPointOjectId = getObjectIdFromLocationName( spawnLocation );
         weaponSpawn.locationName = spawnLocation;
 
-        // if an weapon type wasn't specified, chose one 
+        // if an weapon type wasn't specified, chose one
         if( weaponType == "" or weaponType == "any" ) {
             switch( rand()%4 ) {
-                case 0: 
-                    weaponSpawn.entityPath = level.GetPath("weap_knife"); 
+                case 0:
+                    weaponSpawn.entityPath = level.GetPath("weap_knife");
                     break;
-                case 1: 
-                    weaponSpawn.entityPath = level.GetPath("weap_big_sword"); 
+                case 1:
+                    weaponSpawn.entityPath = level.GetPath("weap_big_sword");
                     break;
-                case 2: 
-                    weaponSpawn.entityPath = level.GetPath("weap_sword"); 
+                case 2:
+                    weaponSpawn.entityPath = level.GetPath("weap_sword");
                     break;
-                case 3: 
-                    weaponSpawn.entityPath = level.GetPath("weap_spear"); 
+                case 3:
+                    weaponSpawn.entityPath = level.GetPath("weap_spear");
                     break;
             }
         }
         else {
             if( weaponType == "knife" ) {
-                weaponSpawn.entityPath = level.GetPath("weap_knife"); 
+                weaponSpawn.entityPath = level.GetPath("weap_knife");
             }
             else if ( weaponType == "big_sword" ) {
                 weaponSpawn.entityPath = level.GetPath("weap_big_sword");
             }
             else if ( weaponType == "sword" ) {
                 weaponSpawn.entityPath = level.GetPath("weap_sword");
-            } 
+            }
             else if ( weaponType == "spear" ) {
                 weaponSpawn.entityPath = level.GetPath("weap_spear");
-            } 
+            }
             else {
                 DisplayError("Error", "Unknown weapon type " + weaponType );
             }
@@ -558,7 +559,7 @@ class BattleInstance {
         current_wave++;
 
         for( uint entityIndex = 0; entityIndex < spawnedEntities.length(); ++entityIndex ) {
-            if( spawnedEntities[ entityIndex ].wave == current_wave ) 
+            if( spawnedEntities[ entityIndex ].wave == current_wave )
             {
                 spawnedEntities[ entityIndex ].spawn();
                 spawned_something = true;
@@ -590,7 +591,7 @@ class BattleInstance {
     }
 }
 
-BattleInstance battle; // global battle instance 
+BattleInstance battle; // global battle instance
 
 
 
