@@ -11,6 +11,11 @@ enum ArenaGUIState {
     agsConfirmDelete
 };
 
+string title_font = "edosz";
+string label_font = "edosz";
+string button_font = "edosz";
+string body_font = "OpenSans-Regular";
+
 // Some data for the GUI
 
 // Based on the values from GetRandomFurColor
@@ -107,14 +112,14 @@ class ArenaGUI : AHGUI::GUI {
         // Create a divider for our footer 300px high (using a convenience factory in the divider)
         // The UNDEFINEDSIZE will tell it to expand to the size of it's container
         // So we take up the whole bottom of the screen
-        AHGUI::Divider@ footer = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
+        AHGUI::Divider@ footer = root.addDivider( DDBottomRight, DOHorizontal, ivec2( UNDEFINEDSIZE, 300 ) );
         footer.setName("footerdiv");
 
         // Add some space on the left
         footer.addSpacer( 175, DDLeft );
 
         // Create the 'main menu' text
-        AHGUI::Text mainMenu( "Main Menu", "OpenSans-Regular", 50, 0.6, 0.8, 0.6, 0.7 );
+        AHGUI::Text mainMenu( "Main Menu", title_font, 50, 0.6, 0.8, 0.6, 0.7 );
         
         // Add a little special effect
         mainMenu.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
@@ -135,7 +140,7 @@ class ArenaGUI : AHGUI::GUI {
         footer.addElement( mainMenu, DDLeft );
         
         // Add the version text
-        AHGUI::Text verText( "Arena (ver 2.0)", "OpenSans-Regular", 50, 1.0, 1.0, 1.0, 0.5 );     
+        AHGUI::Text verText( "Arena (ver 2.0)", body_font, 50, 1.0, 1.0, 1.0, 0.5 );     
         verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
 
         footer.addElement( verText ,DDRight );
@@ -187,7 +192,7 @@ class ArenaGUI : AHGUI::GUI {
                 mainpane.setName("mainpane");
 
                 // Create the text
-                AHGUI::Text newProfile( "Create a new profile", "OpenSans-Regular", 100, 1.0, 7.0, 0.0, 0.8 );
+                AHGUI::Text newProfile( "Create a new profile", button_font, 100, 1.0, 7.0, 0.0, 0.8 );
 
                 // Have it send a message to indicate we should go to create profile state
                 newProfile.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("createprofile") );
@@ -261,7 +266,7 @@ class ArenaGUI : AHGUI::GUI {
 
                 // Build the text for the name
                 AHGUI::Text nameText( newCharacter["character_name"].asString(), 
-                                      "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.9 );
+                                      body_font, 75, 1.0, 7.0, 0.0, 0.9 );
 
                 // Give it a name so we can find it again 
                 // (we could also keep a reference, but I wanted to show off this feature)
@@ -277,7 +282,7 @@ class ArenaGUI : AHGUI::GUI {
                 nameBox.addElement( nameText ,DDTop );
 
                 // Create a re-randomize text button
-                AHGUI::Text newRandomName( "New Random Name", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+                AHGUI::Text newRandomName( "New Random Name", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
 
                 // Have it send a message to indicate we should go back to the main menu
                 newRandomName.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("newrandomname") );
@@ -328,7 +333,7 @@ class ArenaGUI : AHGUI::GUI {
                     AHGUI::Divider@ colorPanel = characterpane.addDivider( DDLeft, DOHorizontal );
 
                     // Create the text 
-                    AHGUI::Text furColorLabel( "Fur Color " + i, "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+                    AHGUI::Text furColorLabel( "Fur Color " + i, label_font, 50, 1.0, 7.0, 0.0, 0.9 );
 
                     // Align it to the left
                     furColorLabel.setHorizontalAlignment( BALeft );
@@ -405,8 +410,8 @@ class ArenaGUI : AHGUI::GUI {
                 AHGUI::Divider@ buttonDivider = characterpane.addDivider( DDLeft, DOHorizontal, ivec2(700,UNDEFINEDSIZE) );
 
                 // Create the text 
-                AHGUI::Text okText( "Accept", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
-                AHGUI::Text cancelText( "Back", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+                AHGUI::Text okText( "Accept", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
+                AHGUI::Text cancelText( "Back", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
 
                 // Turn them into buttons
                 okText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("ok") );
@@ -479,7 +484,7 @@ class ArenaGUI : AHGUI::GUI {
                 characterSelectPane.addSpacer( 100, DDTop );
 
                 // Add a direction label
-                AHGUI::Text selectText( "Select Profile", "OpenSans-Regular", 70, 1.0, 7.0, 0.0, 0.9 );
+                AHGUI::Text selectText( "Select Profile", button_font, 70, 1.0, 7.0, 0.0, 0.9 );
                 selectText.setHorizontalAlignment( BALeft );
                 characterSelectPane.addElement( selectText, DDTop );
 
@@ -490,14 +495,14 @@ class ArenaGUI : AHGUI::GUI {
                 for( uint i = 0; i < profileData.size(); i++ ) {
                     // Add the character name and data in divider
                     AHGUI::Divider@ characterPane = characterSelectPane.addDivider( DDTop, DOVertical, ivec2( 650, 150 ) );
-                    AHGUI::Text nameText( profileData[i]["character_name"].asString(), "OpenSans-Regular", 85, 1.0, 7.0, 0.0, 0.9 );
+                    AHGUI::Text nameText( profileData[i]["character_name"].asString(), body_font, 85, 1.0, 7.0, 0.0, 0.9 );
                     nameText.setHorizontalAlignment( BALeft );
                     // add some padding
                     nameText.setPadding( 15, 0, 15, 40 );
                     characterPane.addElement( nameText, DDTop );
                     AHGUI::Text battlesText( "Total battles: " + 
                             (profileData[i]["player_wins"].asInt() + profileData[i]["player_loses"].asInt() ), 
-                            "OpenSans-Regular", 40, 1.0, 7.0, 0.0, 0.7 );
+                            body_font, 40, 1.0, 7.0, 0.0, 0.7 );
                     battlesText.setHorizontalAlignment( BALeft );
                     battlesText.setPadding( 10, 5, 30, 40 );
 
@@ -536,7 +541,7 @@ class ArenaGUI : AHGUI::GUI {
                 // If we haven't reached the maximum profiles, add the option to add a new one
                 if( profileData.size() < 6 ) {
                     // Create the text 
-                    AHGUI::Text newText( "New Profile", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+                    AHGUI::Text newText( "New Profile", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
                     
                     // Turn it into a button
                     newText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("new") );
@@ -579,7 +584,7 @@ class ArenaGUI : AHGUI::GUI {
                 AHGUI::Divider@ messagepane = mainpane.addDivider( DDTop, DOVertical );
 
                 // Create the text
-                AHGUI::Text promptText( "Are you sure you want to delete?", "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.8 );
+                AHGUI::Text promptText( "Are you sure you want to delete?", body_font, 75, 1.0, 7.0, 0.0, 0.8 );
 
                 messagepane.addElement( promptText, DDTop );
 
@@ -590,7 +595,7 @@ class ArenaGUI : AHGUI::GUI {
                 buttonpane.setName("buttonpane");
 
                 // Create the buttons
-                AHGUI::Text okText( "Ok", "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.8 );
+                AHGUI::Text okText( "Ok", button_font, 75, 1.0, 7.0, 0.0, 0.8 );
                 okText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("ok") );
                 // Make it pulse when we mouse over 
                 okText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
@@ -600,7 +605,7 @@ class ArenaGUI : AHGUI::GUI {
                 okText.addUpdateBehavior( AHGUI::FadeIn( 500, @inSine ) );
 
 
-                AHGUI::Text cancelText( "Cancel", "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.8 );
+                AHGUI::Text cancelText( "Cancel", button_font, 75, 1.0, 7.0, 0.0, 0.8 );
                 cancelText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("cancel") );
                 // Make it pulse when we mouse over 
                 cancelText.addMouseOverBehavior( AHGUI::MouseOverPulseColor( 
@@ -669,15 +674,15 @@ class ArenaGUI : AHGUI::GUI {
         AHGUI::Divider@ attributePane = statsPane.addDivider( DDLeft, DOVertical );
 
         // Add the information text
-        AHGUI::Text winsText( "Wins: " + profileData[profileNum]["player_wins"].asInt(), "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+        AHGUI::Text winsText( "Wins: " + profileData[profileNum]["player_wins"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
         winsText.setHorizontalAlignment( BALeft );
-        AHGUI::Text losesText( "Loses: " + profileData[profileNum]["player_loses"].asInt(), "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+        AHGUI::Text losesText( "Loses: " + profileData[profileNum]["player_loses"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
         losesText.setHorizontalAlignment( BALeft );
-        AHGUI::Text fanText( "Fan Base: " + profileData[profileNum]["fan_base"].asInt(), "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+        AHGUI::Text fanText( "Fan Base: " + profileData[profileNum]["fan_base"].asInt(), body_font, 50, 1.0, 7.0, 0.0, 0.9 );
         fanText.setHorizontalAlignment( BALeft );
         float limitedSkill = limitDecimalPoints( profileData[profileNum]["player_skill"].asFloat(), 2 );
 
-        AHGUI::Text skillText( "Skill Rating: " +  limitedSkill, "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+        AHGUI::Text skillText( "Skill Rating: " +  limitedSkill, body_font, 50, 1.0, 7.0, 0.0, 0.9 );
         skillText.setHorizontalAlignment( BALeft );
 
         attributePane.addElement( winsText, DDTop );
@@ -777,7 +782,7 @@ class ArenaGUI : AHGUI::GUI {
             showingProfileDetails = true;
 
             // Add the delete profile at the bottom
-            AHGUI::Text deleteText( "Delete Profile", "OpenSans-Regular", 50, 1.0, 7.0, 0.0, 0.9 );
+            AHGUI::Text deleteText( "Delete Profile", button_font, 50, 1.0, 7.0, 0.0, 0.9 );
             //deleteText.setHorizontalAlignment( BARight );
                     
             // Turn it into a button
@@ -840,7 +845,7 @@ class ArenaGUI : AHGUI::GUI {
                                                vec4( 0.5, 6.0, 0.0, 0.3 ), 
                                                vec4( 1.0, 6.0, 0.0, 0.9 ), 1.0f ) );
 
-            AHGUI::Text battleNameText( arenaNames[selectedArena], "OpenSans-Regular", 50, 1.0, 6.0, 0.1, 0.9 );
+            AHGUI::Text battleNameText( arenaNames[selectedArena], label_font, 50, 1.0, 6.0, 0.1, 0.9 );
             battleNameText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
             battleNameText.setName( "battlename" );
             infoPane.addElement( battleNameText, DDTop );
@@ -848,7 +853,7 @@ class ArenaGUI : AHGUI::GUI {
             infoPane.addSpacer( 125, DDTop );
 
             // Add the begin battle 
-            AHGUI::Text fightText( "Start Fight!", "OpenSans-Regular", 75, 1.0, 7.0, 0.0, 0.9 );
+            AHGUI::Text fightText( "Start Fight!", button_font, 75, 1.0, 7.0, 0.0, 0.9 );
             infoPane.addElement( fightText, DDTop );
 
             // Turn it into a button

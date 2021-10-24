@@ -113,15 +113,21 @@ void CalculateDecals(inout vec4 colormap, inout vec3 ws_normal, in vec3 world_ve
 		vec4 decal_normal = textureGrad(decal_normal_tex, normal_tex_coord, normal_tex_dx, normal_tex_dy);
 
 #endif  // DECAL_NORMALS
-
-        if( abs(dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0f)/1.0f)) > 0.85f )
+        float decal_normal_dot = dot(decal_ws_normal.xyz,(ws_normal.xyz*2.0f)/1.0f);
+        if( decal_normal_dot > 0.80f )
         {
+            float submix = 1.0f; 
+
+            if( decal_normal_dot < 0.85f )
+            {
+                submix = (decal_normal_dot - 0.80f)*(1.0f/0.05f);
+            }
+
             if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
                 
             } else {
-                colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a);
+                colormap.xyz = mix(colormap.xyz, decal_color.xyz * decal.tint.xyz, decal_color.a * submix);
 #ifdef DECAL_NORMALS
-
                 vec3 decal_tan = normalize(cross(ws_normal, (decal.transform * vec4(0.0, 0.0, 1.0, 0.0)).xyz));
                 vec3 decal_bitan = cross(ws_normal, decal_tan);
                 vec3 new_normal = vec3(0);
