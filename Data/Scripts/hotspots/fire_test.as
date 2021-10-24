@@ -89,12 +89,16 @@ vec3 GetWind(vec3 check_where, float curr_game_time, float change_rate) {
 
 const int num_ribbons = 4;
 int fire_object_id = -1;
+int sound_handle = -1;
 
 float last_game_time = 0.0f;
 
 void Dispose() {
     if(fire_object_id != -1){
         QueueDeleteObjectID(fire_object_id);
+    }
+    if(sound_handle != -1){
+        StopSound(sound_handle);
     }
 }
 
@@ -178,5 +182,10 @@ void Update() {
     }
     if(fire_object_id == -1){
         fire_object_id = CreateObject("Data/Objects/default_light.xml", true);
+    }
+    if(sound_handle == -1){
+        sound_handle = PlaySoundLoopAtLocation("Data/Sounds/fire/campfire_loop.wav",pos,1.0f);
+    } else {
+        SetSoundPosition(sound_handle, pos);
     }
 }

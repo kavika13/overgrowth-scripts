@@ -16,6 +16,30 @@ void Init() {
 void Dispose() {
 }
 
+void ReceiveMessage(string msg) {
+    Log(info, "Getting msg in lugaru: " + msg );
+    TokenIterator token_iter;
+    token_iter.Init();
+    if(!token_iter.FindNextToken(msg)){
+        return;
+    }
+    string token = token_iter.GetToken(msg);
+
+    if(token == "levelwin" ) {
+        if(!EditorModeActive()){
+            string path = params.GetString("next_level");
+            if(path != ""){
+                FinishedLugaruCampaignLevel(GetCurrLevel());
+                level.SendMessage("loadlevel \""+path+"\"");		
+            } else {
+                level.SendMessage("go_to_main_menu");		
+            }
+        } else {
+            Log(info, "Ignoring levelwin command, game is in editor mode");
+        }
+    }
+}
+
 float blackout_amount = 0.0;
 float ko_time = -1.0;
 float win_time = -1.0;
@@ -26,7 +50,10 @@ void Update() {
     if(player_id != -1 && ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1 && ReadCharacter(player_id).GetIntVar("knocked_out") == _awake){
         PlaySong("lugaru_combat");
     } else if(params.HasParam("music")){
-        PlaySong(params.GetString("music"));
+        string song= params.GetString("music");
+        if( song != "" ) {
+            PlaySong(song);
+        }
     }
 
 	blackout_amount = 0.0;
@@ -54,12 +81,9 @@ void Update() {
 			win_time = the_time;
 		}
 		if(win_time < the_time - 5.0 && !sent_level_complete_message){
-			string path = params.GetString("next_level");
-			if(path != ""){
-                FinishedLugaruCampaignLevel(GetCurrLevel());
-	            level.SendMessage("loadlevel \""+path+"\"");		
-                sent_level_complete_message = true;
-	        }
+            SendGlobalMessage("levelwin"); 
+            Log(info, "Sending level win");
+            sent_level_complete_message = true; 
 	    }
 	} else {
         win_time = -1.0;

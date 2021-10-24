@@ -43,7 +43,10 @@ void Update()
     {
         if( t )
         { 
-            PlaySong( randSong() );
+            string song = randSong();
+            if( song != "" ) {
+                PlaySong( song );
+            }
             t = false;
         }
     }

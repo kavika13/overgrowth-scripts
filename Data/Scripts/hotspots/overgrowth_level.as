@@ -9,6 +9,7 @@ float ko_time = -1.0;
 float win_time = -1.0;
 int win_target = 0;
 bool sent_level_complete_message = false;
+int curr_music_layer = 0;
 
 void SetParameters() {
     params.AddString("music", "lugaru_ambient_grass");
@@ -17,7 +18,9 @@ void SetParameters() {
 
 void Init() {
     save_file.WriteInPlace();
-    AddMusic("Data/Music/lugaru_new.xml");
+    AddMusic("Data/Music/swamp_loop/swamp_layer.xml");
+    PlaySong("swamp1");
+    curr_music_layer = 0;
     level.ReceiveLevelEvents(hotspot.GetID());
 }
 
@@ -183,6 +186,7 @@ void CheckReset() {
                 if(obj.GetType() == _placeholder_object){
                     mo.position = obj.GetTranslation();
                     mo.SetRotationFromFacing(obj.GetRotation() * vec3(0,0,1));
+                    mo.Execute("SetCameraFromFacing();");
                 }
             }
         }
@@ -253,6 +257,8 @@ void ReceiveMessage(string msg) {
     string msg_start = token_iter.GetToken(msg);
     if(msg_start == "reset"){
         queued_goal_check = true;
+        ko_time = -1.0;
+        win_time = -1.0;
     }
 
     if(win_time == -1.0){
@@ -271,18 +277,30 @@ void ReceiveMessage(string msg) {
     }
 }
 
+void SetMusicLayer(int layer){
+    DebugText("music_layer", "music_layer: "+layer, 0.5);
+    if(layer != curr_music_layer){
+        SetLayerGain("swamp_layer_"+curr_music_layer, 0.0);
+        SetLayerGain("swamp_layer_"+layer, 1.0);
+        curr_music_layer = layer;
+    }
+}
+
 void Update() {
     if(queued_goal_check){
         CheckReset();
         queued_goal_check = false;
     }
 
-    //DebugText("a", "Progress: "+progress, 0.5);
     int player_id = GetPlayerCharacterID();
-    if(player_id != -1 && ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1 && ReadCharacter(player_id).GetIntVar("knocked_out") == _awake){
-        PlaySong("lugaru_combat");
+    if(player_id == -1){
+        SetMusicLayer(-1);
+    } else if(ReadCharacter(player_id).GetIntVar("knocked_out") != _awake){
+        SetMusicLayer(0);
+    } else if(ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1){
+        SetMusicLayer(3);
     } else if(params.HasParam("music")){
-        PlaySong(params.GetString("music"));
+        SetMusicLayer(1);
     }
 
 	blackout_amount = 0.0;
@@ -336,6 +354,13 @@ void Update() {
             progress = 0;
         }
     }
+    /*
+    if(GetInputPressed(0, "i")){
+        ++curr_music_layer;
+        if(curr_music_layer >= int(music_layer.size())){
+            curr_music_layer = 0;
+        }
+    }*/
     DebugText("Progress", "Progress: "+progress, 2.0f);
 }
 

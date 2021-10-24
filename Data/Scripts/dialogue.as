@@ -80,6 +80,7 @@ class Dialogue {
     string dialogue_name;
     string dialogue_text;
     float dialogue_text_disp_chars;
+    float line_start_time;
 
     vec3 cam_pos;
     vec3 cam_rot;
@@ -395,62 +396,62 @@ class Dialogue {
                 continue;
             }
 
-            str_params.resize(5);
-            str_params[0] = i+1;
-                                
-            MovementObject @char = ReadCharacterID(char_id);
-            mat4 head_mat = char.rigged_object().GetAvgIKChainTransform("head");
-            vec3 head_pos = head_mat * vec4(0,0,0,1) + head_mat * vec4(0,1,0,0);
-            str_params[1] = head_pos.x;
-            str_params[2] = head_pos.y;
-            str_params[3] = head_pos.z;
-            str_params[4] = 0.0f;
-            AddLine(CreateStringFromParams(kHeadTarget, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(5);
-            mat4 chest_mat = char.rigged_object().GetAvgIKChainTransform("torso");
-            vec3 torso_pos = chest_mat * vec4(0,0,0,1) + chest_mat * vec4(0,1,0,0);
-            str_params[1] = torso_pos.x;
-            str_params[2] = torso_pos.y;
-            str_params[3] = torso_pos.z;
-            str_params[4] = 0.0f;
-            AddLine(CreateStringFromParams(kChestTarget, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(5);
-            vec3 eye_pos = head_mat * vec4(0,0,0,1) + head_mat * vec4(0,2,0,0);
-            str_params[1] = eye_pos.x;
-            str_params[2] = eye_pos.y;
-            str_params[3] = eye_pos.z;
-            str_params[4] = 1.0f;
-            AddLine(CreateStringFromParams(kEyeTarget, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(2);
-            str_params[1] = "Data/Animations/r_actionidle.anm";
-            AddLine(CreateStringFromParams(kSetAnimation, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(5);
-            Object @char_spawn = ReadObjectFromID(char_id);
-            str_params[1] = char_spawn.GetTranslation().x;
-            str_params[2] = char_spawn.GetTranslation().y;
-            str_params[3] = char_spawn.GetTranslation().z;
-            str_params[4] = 0;
-            AddLine(CreateStringFromParams(kCharacter, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(2);
-            str_params[1] = "true";
-            AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), insert_index);
-            strings[insert_index].visible = false;
-                
-            str_params.resize(2);
-            str_params[1] = "false";
-            int last_line = int(strings.size());
-            AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), last_line);
-            strings[last_line].visible = false;
+            if( MovementObjectExists(char_id) ) {
+                str_params.resize(5);
+                str_params[0] = i+1;
+                                    
+                MovementObject @char = ReadCharacterID(char_id);
+                mat4 head_mat = char.rigged_object().GetAvgIKChainTransform("head");
+                vec3 head_pos = head_mat * vec4(0,0,0,1) + head_mat * vec4(0,1,0,0);
+                str_params[1] = head_pos.x;
+                str_params[2] = head_pos.y;
+                str_params[3] = head_pos.z;
+                str_params[4] = 0.0f;
+                AddLine(CreateStringFromParams(kHeadTarget, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(5);
+                mat4 chest_mat = char.rigged_object().GetAvgIKChainTransform("torso");
+                vec3 torso_pos = chest_mat * vec4(0,0,0,1) + chest_mat * vec4(0,1,0,0);
+                str_params[1] = torso_pos.x;
+                str_params[2] = torso_pos.y;
+                str_params[3] = torso_pos.z;
+                str_params[4] = 0.0f;
+                AddLine(CreateStringFromParams(kChestTarget, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(2);
+                str_params[1] = "front";
+                AddLine(CreateStringFromParams(kEyeTarget, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(2);
+                str_params[1] = "Data/Animations/r_actionidle.anm";
+                AddLine(CreateStringFromParams(kSetAnimation, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(5);
+                Object @char_spawn = ReadObjectFromID(char_id);
+                str_params[1] = char_spawn.GetTranslation().x;
+                str_params[2] = char_spawn.GetTranslation().y;
+                str_params[3] = char_spawn.GetTranslation().z;
+                str_params[4] = 0;
+                AddLine(CreateStringFromParams(kCharacter, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(2);
+                str_params[1] = "true";
+                AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), insert_index);
+                strings[insert_index].visible = false;
+                    
+                str_params.resize(2);
+                str_params[1] = "false";
+                int last_line = int(strings.size());
+                AddLine(CreateStringFromParams(kCharacterDialogueControl, str_params), last_line);
+                strings[last_line].visible = false;
+            } else {
+                Log( error, "No object with id " + char_id );
+            }
         }
             
         str_params.resize(1);
@@ -613,6 +614,13 @@ class Dialogue {
         }
     }
 
+    bool SkipKeyDown() {
+        if(GetInputDown(0, "keypadenter") || GetInputDown(0, "return")){
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     void Play() {
         bool stop = false;
@@ -637,6 +645,9 @@ class Dialogue {
                     skip_dialogue = false;
                 }
                 if(skip_dialogue){
+                    stop = false;
+                }
+                if(SkipKeyDown()){
                     stop = false;
                 }
                 if(sub_index == -1){
@@ -742,6 +753,9 @@ class Dialogue {
         // Progress dialogue one character at a time
         if(waiting_for_dialogue){
             dialogue_text_disp_chars += time_step * 40.0f;
+            if(GetInputDown(controller_id, "attack")){
+                dialogue_text_disp_chars += time_step * 40.0f;                
+            }
             // Continue dialogue script if we have displayed all the text that we are waiting for
             if(uint32(dialogue_text_disp_chars) >= dialogue_text.length()){
                 waiting_for_dialogue = false;
@@ -752,22 +766,34 @@ class Dialogue {
         // Continue dialogue script if waiting time has completed
         if(is_waiting_time){
             wait_time -= time_step;
+            if(GetInputDown(controller_id, "attack")){
+                wait_time -= time_step;
+            }
             if(wait_time <= 0.0f){
                 is_waiting_time = false;
                 Play();   
             }
         }
 
+        if(SkipKeyDown() && dialogue_obj_id != -1){
+            Play();   
+            PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml");
+        }
         if(GetInputPressed(controller_id, "attack") && start_time != the_time){
             if(index != 0){
-                while(waiting_for_dialogue || is_waiting_time){
-                    dialogue_text_disp_chars = dialogue_text.length();
-                    waiting_for_dialogue = false;
-                    is_waiting_time = false;
-                    wait_time = 0.0f;
-                    Play();   
+                if(waiting_for_dialogue || is_waiting_time){
+                    while(waiting_for_dialogue || is_waiting_time){
+                        dialogue_text_disp_chars = dialogue_text.length();
+                        waiting_for_dialogue = false;
+                        is_waiting_time = false;
+                        wait_time = 0.0f;
+                        Play();   
+                    }
+                } else if(line_start_time < the_time - 0.5){
+                    Play(); 
+                }  else {
+                    line_start_time = -1.0;
                 }
-                Play();   
                 PlaySoundGroup("Data/Sounds/concrete_foley/fs_light_concrete_run.xml");
             }
         }
@@ -832,8 +858,10 @@ class Dialogue {
 
                         int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
                         if(char_id != -1){
-                            MovementObject@ mo = ReadCharacterID(char_id);
-                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            if(MovementObjectExists(char_id)) {
+                                MovementObject@ mo = ReadCharacterID(char_id);
+                                DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            }
                         }
                     }
                     break;
@@ -862,8 +890,10 @@ class Dialogue {
 
                         int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
                         if(char_id != -1){
-                            MovementObject@ mo = ReadCharacterID(char_id);
-                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            if(MovementObjectExists(char_id)) {
+                                MovementObject@ mo = ReadCharacterID(char_id);
+                                DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            }
                         }
                     }
                     break;
@@ -879,21 +909,26 @@ class Dialogue {
                         if(scale > 0.1f){
                             obj.SetScale(vec3(0.1f));
                         }
-                        float blink_mult = (obj.GetScale().x-0.05f)/0.05f;
 
-                        strings[i].params[1] = pos.x;
-                        strings[i].params[2] = pos.y;
-                        strings[i].params[3] = pos.z;
-                        strings[i].params[4] = blink_mult;
-                        
-                        string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
-                        
-                        RecordInput(new_string, i, last_wait);
+                        if(strings[i].params.size() == 5){
+                            float blink_mult = (obj.GetScale().x-0.05f)/0.05f;
+
+                            strings[i].params[1] = pos.x;
+                            strings[i].params[2] = pos.y;
+                            strings[i].params[3] = pos.z;
+                            strings[i].params[4] = blink_mult;
+                            
+                            string new_string = CreateStringFromParams(strings[i].obj_command, strings[i].params);
+                            
+                            RecordInput(new_string, i, last_wait);
+                        }
 
                         int char_id = GetDialogueCharID(atoi(strings[i].params[0]));
                         if(char_id != -1){
-                            MovementObject@ mo = ReadCharacterID(char_id);
-                            DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            if(MovementObjectExists(char_id) ) {
+                                MovementObject@ mo = ReadCharacterID(char_id);
+                                DebugDrawLine(mo.position, pos, vec4(vec3(1.0), 0.1), vec4(vec3(1.0), 0.1), _delete_on_update);
+                            }                         
                         }
                     }
                     break;
@@ -965,13 +1000,9 @@ class Dialogue {
             }
         } else if(token == "set_eye_dir"){
             se.obj_command = kEyeTarget;
-            const int kNumParams = 4;
             int old_param_size = se.params.size();
-            int new_param_size = old_param_size+kNumParams;
-            se.params.resize(new_param_size);
-            for(int i=old_param_size; i<new_param_size; ++i){
-                token_iter.FindNextToken(msg);
-                se.params[i] = token_iter.GetToken(msg);
+            while(token_iter.FindNextToken(msg)){
+                se.params.push_back(token_iter.GetToken(msg));
             }
         } else if(token == "set_animation"){
             se.obj_command = kSetAnimation;
@@ -1192,8 +1223,12 @@ class Dialogue {
                 se.spawned_id = CreateObject("Data/Objects/placeholder/empty_placeholder.xml", true);
             }
             int id = atoi(se.params[0]);
-            vec3 pos(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
-            float blink_mult = atof(se.params[4]);    
+            float blink_mult = 1.0f;    
+            vec3 pos;
+            if(se.params.size() == 5){
+                pos = vec3(atof(se.params[1]), atof(se.params[2]), atof(se.params[3]));
+                blink_mult = atof(se.params[4]);   
+            } 
             Object@ obj = ReadObjectFromID(se.spawned_id);        
             obj.SetTranslation(pos);
             obj.SetScale(0.05f+0.05f*blink_mult);
@@ -1291,6 +1326,7 @@ class Dialogue {
 
         dialogue_text = "";
         dialogue_text_disp_chars = 0;
+        line_start_time = the_time;
     }
 
     bool ExecuteScriptElement(const ScriptElement &in script_element, ProcessStringType type) { 
@@ -1336,6 +1372,7 @@ class Dialogue {
         case kSetDialogueText:
             dialogue_text = script_element.params[0];
             dialogue_text_disp_chars = 0;
+            line_start_time = the_time;
             if(type == kInGame){
                 waiting_for_dialogue = true;
             } else { 
@@ -1381,9 +1418,13 @@ class Dialogue {
             float rot = atof(script_element.params[4]);
             int char_id = GetDialogueCharID(atoi(script_element.params[0]));
             if(char_id != -1){
-                MovementObject@ mo = ReadCharacterID(char_id);
-                mo.ReceiveMessage("set_rotation "+rot);
-                mo.ReceiveMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
+                if(MovementObjectExists(char_id)) {
+                    MovementObject@ mo = ReadCharacterID(char_id);
+                    mo.ReceiveMessage("set_rotation "+rot);
+                    mo.ReceiveMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
+                } else {
+                    Log(error, "No movement object for " + char_id);
+                }
             }
             break; }
         case kWaitForClick:
@@ -1401,10 +1442,14 @@ class Dialogue {
                 int id = atoi(token);
                 int char_id = GetDialogueCharID(id);
                 if(char_id != -1){
-                    MovementObject@ mo = ReadCharacterID(char_id);
-                    token_iter.FindNextToken(script_element.str);
-                    token = token_iter.GetToken(script_element.str);
-                    mo.ReceiveMessage(token);
+                    if(MovementObjectExists(char_id)) {
+                        MovementObject@ mo = ReadCharacterID(char_id);
+                        token_iter.FindNextToken(script_element.str);
+                        token = token_iter.GetToken(script_element.str);
+                        mo.ReceiveMessage(token);
+                    } else {
+                        Log(error, "No movement object exists with id: " + char_id);
+                    }
                 }
             }
             if(!EditorModeActive()){
@@ -1412,6 +1457,11 @@ class Dialogue {
                     token_iter.FindNextToken(script_element.str);
                     token = token_iter.GetToken(script_element.str);
                     level.SendMessage(token);
+                }
+                if(token == "send_global_message") {
+                    token_iter.FindNextToken(script_element.str);
+                    token = token_iter.GetToken(script_element.str);
+                    SendGlobalMessage(token);
                 }
             }
             if(token == "make_participants_aware"){
@@ -1423,15 +1473,23 @@ class Dialogue {
                     int id_a = GetDialogueCharID(i+1);
                     if(id_a != -1){
                         Print("id_a: "+id_a+"\n");
-                        MovementObject@ mo_a = ReadCharacterID(id_a);
-                        for(int j=i+1; j<num_participants; ++j){
-                            int id_b = GetDialogueCharID(j+1);
-                            if(id_b != -1){
-                                Print("id_b: "+id_b+"\n");
-                                MovementObject@ mo_b = ReadCharacterID(id_b);
-                                mo_a.ReceiveMessage("notice "+id_b);
-                                mo_b.ReceiveMessage("notice "+id_a);
+                        if( MovementObjectExists(id_a) ){
+                            MovementObject@ mo_a = ReadCharacterID(id_a);
+                            for(int j=i+1; j<num_participants; ++j){
+                                int id_b = GetDialogueCharID(j+1);
+                                if(id_b != -1){
+                                    Print("id_b: "+id_b+"\n");
+                                    if( MovementObjectExists(id_a) ) {
+                                        MovementObject@ mo_b = ReadCharacterID(id_b);
+                                        mo_a.ReceiveMessage("notice "+id_b);
+                                        mo_b.ReceiveMessage("notice "+id_a);
+                                    } else {
+                                        Log(error, "Unable to handle " + script_element.str + " object id: " + id_b + " is invalid" );
+                                    }
+                                }
                             }
+                        } else {
+                            Log(error, "Unable to handle " + script_element.str + " object id: " + id_a + " is invalid" );
                         }
                     }
                 }
@@ -1614,16 +1672,6 @@ class Dialogue {
             
                 ExecutePreviousCommands(selected_line);
             }
-        } else if(token == "reload_dialogue"){
-            if(dialogue_obj_id != -1){
-                int id = dialogue_obj_id;
-                SetDialogueObjID(-1);
-                Object @obj = ReadObjectFromID(id);
-                ScriptParams @params = obj.GetScriptParams();
-                params.Remove("Script");
-                LoadScriptFile(params.GetString("Dialogue"));
-                SetDialogueObjID(id);
-            }
         }
     }
 
@@ -1690,9 +1738,6 @@ class Dialogue {
             ImGui_Begin("Dialogue Editor", show_editor_info, ImGuiWindowFlags_MenuBar);
             if(ImGui_BeginMenuBar()){
                 if(ImGui_BeginMenu("File")){
-                    if(ImGui_MenuItem("Reload")){
-                        ReceiveMessage("reload_dialogue");
-                    }
                     if(ImGui_MenuItem("Save")){
                         string path = GetUserPickedWritePath("txt", "Data/Dialogues");
                         if(path != ""){

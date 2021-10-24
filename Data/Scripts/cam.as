@@ -26,7 +26,91 @@ const float _camera_media_mode_inertia = 0.99f;
 const float _acceleration = 20.0f;
 const float _base_speed = 5.0f;
 
+const string _increase_current_camera_fov_zoom_key = "-";
+const string _decrease_current_camera_fov_zoom_key = "=";
+const string _reset_current_camera_fov_key = "0";
+const float _minimum_camera_fov = 1.0f;
+const float _default_camera_fov = 90.0f;
+const float _maximum_camera_fov = 180.0f;
+const float _fov_config_change_per_tick = 0.125f;
+
 bool just_got_control = false;
+
+float GetAndUpdateCurrentFov() {
+    float current_fov = _default_camera_fov;
+    float config_fov = GetConfigValueFloat("editor_camera_fov");
+    bool did_fov_change = false;
+
+    if (config_fov != 0.0f) {
+        current_fov = config_fov;
+    }
+
+    if (GetInputDown(controller_id, _increase_current_camera_fov_zoom_key)) {
+        current_fov += _fov_config_change_per_tick;
+        did_fov_change = true;
+    } else if (GetInputDown(controller_id, _decrease_current_camera_fov_zoom_key)) {
+        current_fov -= _fov_config_change_per_tick;
+        did_fov_change = true;
+    } else if (GetInputPressed(controller_id, _reset_current_camera_fov_key)) {
+        current_fov = _default_camera_fov;
+        did_fov_change = true;
+    }
+
+    if (current_fov < _minimum_camera_fov) {
+        current_fov = _minimum_camera_fov;
+    }
+    if (current_fov > _maximum_camera_fov) {
+        current_fov = _maximum_camera_fov;
+    }
+
+    if (did_fov_change) {
+        SetConfigValueFloat("editor_camera_fov", current_fov);
+    }
+
+    return current_fov;
+}
+
+vec3 ScaleNonUniform(const vec3 &lhs, const vec3 &rhs) {
+    return vec3(
+        lhs.x * rhs.x,
+        lhs.y * rhs.y,
+        lhs.z * rhs.z);
+}
+
+vec3 compMax(const vec3 &lhs, const vec3 &rhs) {
+    return vec3(
+        max(lhs.x, rhs.x),
+        max(lhs.y, rhs.y),
+        max(lhs.z, rhs.z));
+}
+
+vec3 compMin(const vec3 &lhs, const vec3 &rhs) {
+    return vec3(
+        min(lhs.x, rhs.x),
+        min(lhs.y, rhs.y),
+        min(lhs.z, rhs.z));
+}
+
+vec3 GetScaledBounds(Object @obj) {
+    vec3 bounding_box;
+
+    switch (obj.GetType()) {
+        case _hotspot_object:
+            bounding_box.x = bounding_box.y = bounding_box.z = 4.0f;
+            break;
+
+        // TODO: Anything other type incorrectly handled?
+
+        default:
+            bounding_box = obj.GetBoundingBox();
+            if (bounding_box.x == 0.0f && bounding_box.y == 0.0f && bounding_box.z == 0.0f) {
+                bounding_box.x = bounding_box.y = bounding_box.z = 1.0f;
+            }
+            break;
+    }
+
+    return ScaleNonUniform(bounding_box, obj.GetScale());
+}
 
 void Update() {
     if(!co.controlled) {
@@ -99,6 +183,56 @@ void Update() {
         SetGrabMouse(false);
     }
 
+    float current_fov = GetAndUpdateCurrentFov();
+
+    if (GetInputPressed(0, "f")) {
+        // Get bounding extents of selected objects
+        bool is_any_object_selected = false;
+        array<int> @object_ids = GetObjectIDs();
+        int num_objects = object_ids.length();
+
+        // Initialize with "unset" value - TODO: ideally would be infinite
+        vec3 min_object_extents(100000000.0f, 100000000.0f, 100000000.0f);
+        vec3 max_object_extents(-100000000.0f, -100000000.0f, -100000000.0f);
+
+        for (int i = 0; i < num_objects; ++i) {
+            Object @obj = ReadObjectFromID(object_ids[i]);
+
+            if (obj.IsSelected()) {
+                is_any_object_selected = true;
+                vec3 scaled_bounds = GetScaledBounds(obj);
+                vec3 translation = obj.GetTranslation();
+                min_object_extents = compMin(min_object_extents, translation - scaled_bounds);
+                max_object_extents = compMax(max_object_extents, translation + scaled_bounds);
+            }
+        }
+
+        if (is_any_object_selected) {
+            // Set new position, centering selected objects on screen
+            vec3 selected_objects_origin = (max_object_extents + min_object_extents) * 0.5f;
+            position = selected_objects_origin;
+
+            // Back away from the objects a bit, so not always directly inside them
+            float framing_distance;
+
+            if (!GetInputDown(controller_id, "crouch")) {
+                // Back up so loose bounding sphere of selected objects fill half of FOV
+                min_object_extents -= selected_objects_origin;
+                max_object_extents -= selected_objects_origin;
+                float selected_objects_radius = sqrt(
+                    max(length_squared(max_object_extents), length_squared(min_object_extents)));
+
+                framing_distance = selected_objects_radius / sin(3.1415926535f / 180.0f * current_fov * 0.5f);
+            } else {
+                // Get relatively close to the object, don't bother framing nicely
+                // Useful for teleporting to be close to objects
+                framing_distance = 10.0f;
+            }
+
+            position -= framing_distance * normalize(camera.GetFacing());
+        }
+    }
+
     float _camera_collision_radius = 0.4f;
     vec3 old_new_position = position;
     //position = col.GetSlidingCapsuleCollision(old_position, position, _camera_collision_radius) ;
@@ -137,8 +271,8 @@ void Update() {
 
     camera.SetDistance(0);
     camera.SetVelocity(co.velocity); 
-    camera.SetFOV(90.0f);
-    
+    camera.SetFOV(current_fov);
+
     camera.CalcFacing();
     camera.CalcUp();
 

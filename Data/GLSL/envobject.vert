@@ -238,6 +238,7 @@ void main() {
         ApplyWaterRefraction(transformed_vertex);
         mat4 projection_view_mat = mvp;
         tex_coord = tex_coord_attrib;    
+        tex_coord[1] = 1.0 - tex_coord[1];
         #ifdef INSTANCED
             instance_id = gl_InstanceID;
         #endif
@@ -271,11 +272,15 @@ void main() {
 
         frag_tex_coords = tex_coord_attrib;
         base_tex_coord = aux.xy+TERRAIN_LIGHT_OFFSET;
+
+        frag_tex_coords[1] = 1.0 - frag_tex_coords[1];
+        base_tex_coord[1] = 1.0 - base_tex_coord[1];
         
     #elif defined(ITEM)
         vec3 transformed_vertex = (model_mat * vec4(vertex_attrib, 1.0)).xyz;
         
-        frag_tex_coords = tex_coord_attrib;
+        frag_tex_coords = tex_coord_attrib; 
+        frag_tex_coords[1] = 1.0 - frag_tex_coords[1];
         #ifndef DEPTH_ONLY
                 #ifndef NO_VELOCITY_BUF
                     vec4 old_vel = old_vel_mat * vec4(vertex_attrib, 1.0);
@@ -303,6 +308,8 @@ void main() {
         #endif
         frag_tex_coords.xy = tex_coord_attrib+TERRAIN_LIGHT_OFFSET;    
         frag_tex_coords.zw = detail_tex_coord*0.1;
+        frag_tex_coords[1] = 1.0 - frag_tex_coords[1];
+        frag_tex_coords[3] = 1.0 - frag_tex_coords[3];
     #elif defined(CHARACTER)    
 
 #if defined(GPU_SKINNING)
@@ -342,8 +349,11 @@ void main() {
             #ifndef NO_VELOCITY_BUF
                 vel = vel_attrib;
             #endif
+            tex_coord[1] = 1.0 - tex_coord[1];
+            morphed_tex_coord[1] = 1.0 - morphed_tex_coord[1];
         #endif
         fur_tex_coord = fur_tex_coord_attrib;
+        fur_tex_coord[1] = 1.0 - fur_tex_coord[1];
     #else
         #ifdef NO_INSTANCE_ID
             int instance_id;
@@ -405,6 +415,7 @@ void main() {
         #ifdef SCROLL_VERY_SLOW
         frag_tex_coords.y -= time * 0.2;
         #endif
+        frag_tex_coords[1] = 1.0 - frag_tex_coords[1];
     #endif
 
     world_vert = transformed_vertex;

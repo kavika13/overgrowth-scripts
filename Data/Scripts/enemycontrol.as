@@ -517,9 +517,10 @@ void NotifySound(int created_by_id, vec3 pos, SoundType type) {
 
 void HandleAIEvent(AIEvent event){
     switch(event){
-    case _ragdolled:    
-        roll_after_ragdoll_delay = RangedRandomFloat(0.1f,1.0f);
-        break;
+    case _ragdolled: {    
+        float max_roll_delay = mix(2.0f, 1.0f, game_difficulty);
+        roll_after_ragdoll_delay = RangedRandomFloat(0.1f,max_roll_delay);
+        } break;
     case _jumped:
         has_jump_target = false;
         if(trying_to_climb == _jump){
@@ -531,15 +532,22 @@ void HandleAIEvent(AIEvent event){
             trying_to_climb = _climb_up;
         }   
         break;
+    case _defeated:
+        AllyInfo();
+        break;
     case _climbed_up:
         if(trying_to_climb == _climb_up){
             trying_to_climb = _nothing;
             path_find_type = _pft_nav_mesh;
         }   
         break;
-    case _thrown:
-        will_throw_counter = RangedRandomFloat(0.0f,1.0f)<_throw_counter_probability;   
+    case _attacking:
+        ground_punish_decision = -1;
         break;
+    case _thrown: {
+        float temp_throw_counter_probability = _throw_counter_probability * mix(0.25, 1.0, game_difficulty);
+        will_throw_counter = RangedRandomFloat(0.0f,1.0f)<temp_throw_counter_probability;   
+        } break;
     case _can_climb:
         trying_to_climb = _jump;
         break;
@@ -722,17 +730,20 @@ AISubGoal PickAttackSubGoal() {
         } else {
             if(chase_target_id != -1 && ObjectExists(chase_target_id)){
                 MovementObject @char = ReadCharacterID(chase_target_id);
-                bool enemy_using_knife = false;
-                int enemy_primary_weapon_id = GetCharPrimaryWeapon(char);
-                if(enemy_primary_weapon_id != -1){
-                    ItemObject@ weap = ReadItemID(enemy_primary_weapon_id);
-                    if(weap.GetLabel() != "knife"){
-                        enemy_using_knife = true;
+                // Don't defend if target is currently attacking someone else
+                if(char.GetIntVar("state") != _attack_state || char.GetIntVar("target_id") == this_mo.GetID()){
+                    bool enemy_using_knife = false;
+                    int enemy_primary_weapon_id = GetCharPrimaryWeapon(char);
+                    if(enemy_primary_weapon_id != -1){
+                        ItemObject@ weap = ReadItemID(enemy_primary_weapon_id);
+                        if(weap.GetLabel() != "knife"){
+                            enemy_using_knife = true;
+                        }
                     }
-                }
 
-                if(char.GetFloatVar("threat_amount") > 0.5 && char.controlled && !char.GetBoolVar("feinting")){
-                    target_goal = _provoke_attack;
+                    if(char.GetFloatVar("threat_amount") > 0.5 && char.controlled && !char.GetBoolVar("feinting")){
+                        target_goal = _provoke_attack;
+                    }
                 }
             }
         }
@@ -742,7 +753,7 @@ AISubGoal PickAttackSubGoal() {
         if(target.GetIntVar("state") == _ragdoll_state){
             target_on_ground_time = the_time;
             if(ground_punish_decision == -1){
-                if((RangedRandomFloat(0.0f,1.0f) < p_ground_aggression)){
+                if((RangedRandomFloat(0.0f,1.0f) < mix(0.0, p_ground_aggression, game_difficulty))){
                     ground_punish_decision = 1;
                 } else {
                     ground_punish_decision = 0;
@@ -761,7 +772,7 @@ AISubGoal PickAttackSubGoal() {
         target_goal = _defend;
     }
     if(target_goal == _rush_and_attack && group_leader != -1){
-        target_goal = _defend;
+        target_goal = _provoke_attack;
     }
 
     return target_goal;
@@ -879,8 +890,8 @@ array<int> followers;
 
 void AddFollower(int id){
     if(followers.size() == 0){
-        SetSubGoal(_rush_and_attack);
-        attack_sub_goal_pick_time = time + 1.0;
+        PickAttackSubGoal();
+        //attack_sub_goal_pick_time = time + 1.0;
     }
     followers.push_back(id);
 }
@@ -914,7 +925,7 @@ void AIEndAttack(){
 }
 
 void AllyInfo() {
-    if(goal == _attack){
+    if(goal == _attack && knocked_out == _awake){
         if(group_leader == -1 && followers.size() == 0){
             for(int i=0, len=GetNumCharacters(); i<len; ++i){
                 MovementObject@ char = ReadCharacter(i);
@@ -942,11 +953,31 @@ void AllyInfo() {
             StopBeingGroupLeader();
         }
     } else {
+        if(followers.size() != 0){
+            StopBeingGroupLeader();
+        }
         if(group_leader != -1){
             MovementObject@ char = ReadCharacterID(group_leader);
             char.Execute("RemoveFollower("+this_mo.GetID()+");");
             group_leader = -1;
         }
+    }
+}
+
+bool StuckToNavMesh() {
+    if(path_find_type == _pft_nav_mesh){
+        vec3 nav_pos = GetNavPointPos(this_mo.position); 
+        if(abs(nav_pos[1] - this_mo.position[1]) > 1.0){
+            return false;
+        }
+        nav_pos[1] = this_mo.position[1];
+        if(distance(nav_pos, this_mo.position) < 0.1){
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        return false;
     }
 }
 
@@ -1265,10 +1296,10 @@ void UpdateBrain(const Timestep &in ts){
             target_goal = _defend;
         }
 
-        if(!target.GetBoolVar("on_ground") && species != _wolf){
+        if(!target.GetBoolVar("on_ground") && species != _wolf && target.GetIntVar("state") != _ragdoll_state){
             if(target.QueryIntFunction("int IsOnLedge()") == 1){
                 target_goal = _knock_off_ledge;
-            } else {                
+            } else if(group_leader == -1 && followers.size() == 0){                
                 target_goal = _avoid_jump_kick;
             }
         } else if(sub_goal == _avoid_jump_kick || sub_goal == _knock_off_ledge){
@@ -1508,7 +1539,11 @@ bool WantsToDropItem() {
 }
 
 bool WantsToThrowItem() {
-    return false;
+    if(species == _dog){
+        return true;
+    } else {
+        return false;
+    }
 }
 
 bool WantsToThrowEnemy() {
@@ -1555,6 +1590,9 @@ bool WantsToAttack() {
 }
 
 bool WantsToRollFromRagdoll(){
+    if(!CanRoll()){
+        roll_after_ragdoll_delay = max(ragdoll_time+1.0, roll_after_ragdoll_delay);
+    }
     if(ragdoll_time > roll_after_ragdoll_delay && combat_allowed && !startled && goal == _attack){
         return true;
     } else {
@@ -1588,11 +1626,16 @@ bool ShouldDefend(BlockOrDodge bod){
 
 bool DeflectWeapon() {
     if(goal == _attack){
-        float kKnifeCatchProbability = 0.7f;
+        float knife_catch_probability = 0.7f;
         if(species == _wolf){
-            kKnifeCatchProbability = 0.3f;
+            knife_catch_probability = 0.3f;
         }
-        if(RangedRandomFloat(0.0f,1.0f) > kKnifeCatchProbability){
+        // Much less likely to catch weapons if in a group
+        if(followers.size() != 0 || group_leader != -1){
+            knife_catch_probability *= 0.4;
+        }
+        knife_catch_probability *= mix(0.5, 1.0, game_difficulty);
+        if(RangedRandomFloat(0.0f,1.0f) > knife_catch_probability){
             return false;
         } else {
             return true;
@@ -1621,6 +1664,7 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
             temp_block_skill *= 0.5;
         }
         //DebugText("temp_block_skill", "temp_block_skill: "+temp_block_skill, 2.0f);
+        temp_block_skill *= mix(0.5,1.0,game_difficulty);
         if(RangedRandomFloat(0.0f,1.0f) > temp_block_skill){
             block_delay += 0.4f;
         }

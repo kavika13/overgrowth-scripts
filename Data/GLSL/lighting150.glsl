@@ -86,24 +86,27 @@ const vec2 poisson_disc_16[16] = vec2[16](
 float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, float rand_a, float slope_dot) {
     //vec3 normal=normalize(cross(X,Y));
     #ifndef SIMPLE_SHADOW    
-    shadow_coord.z -= 0.00003 * pow(2.0, float(index)*1.7);
+        shadow_coord.z -= 0.00003 * pow(2.0, float(index)*1.7);
     #else
-    //shadow_coord.z -= 0.001;
-    shadow_coord.z -= (1.0-abs(slope_dot))*0.0009 + 0.0001;
+        #ifdef CHARACTER
+            shadow_coord.z -= 0.001;
+        #else
+            shadow_coord.z -= (1.0-abs(slope_dot))*0.0009 + 0.0001;
+        #endif
     #endif
     #ifndef SIMPLE_SHADOW
-    shadow_coord.x *= 0.5;
-    shadow_coord.y *= 0.5;
-    if(index == 1){
-        shadow_coord.x += 0.5;
-    }
-    if(index == 2){
-        shadow_coord.y += 0.5;
-    }
-    if(index == 3){
-        shadow_coord.xy += vec2(0.5);
-    }
-#endif
+        shadow_coord.x *= 0.5;
+        shadow_coord.y *= 0.5;
+        if(index == 1){
+            shadow_coord.x += 0.5;
+        }
+        if(index == 2){
+            shadow_coord.y += 0.5;
+        }
+        if(index == 3){
+            shadow_coord.xy += vec2(0.5);
+        }
+    #endif
     if(shadow_coord.x >= 1.0 ||
        shadow_coord.y >= 1.0 ||
        shadow_coord.x <= 0.0 ||
@@ -343,6 +346,20 @@ float GetHazeAmount( in vec3 relative_position, float haze_mult) {
         fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 100, dir.y * 5.0 + time * 16.0)) * 0.2 * first_layer_opac * fade));
         fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y + time * 2.0)) * 0.8 * second_layer_opac * fade));
         
+    }
+    #endif
+    #ifdef VOLCANO
+    {
+        fog_opac = (1.0 - (1.0 / pow(length(relative_position) * haze_mult + 1.0, 2.0)));
+        float dist = length(relative_position);
+        vec3 dir = normalize(relative_position);
+        float second_layer_opac = pow(min(1.0, dist * 0.025), 0.9);
+        float first_layer_opac = pow(min(1.0, dist * 0.05) - second_layer_opac * 0.5, 0.9);
+        //haze_amount *= 1.0 + sin(dir.y * 10.0 + time * 32.0 + cos(dir.x * 10.0)+ cos(dir.z * 7.0)) * 0.05 * first_layer_opac;
+        float angle = atan(dir.z, -dir.x);
+        float fade = 1.0 - dir.y * dir.y;
+        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 3, dir.y * 1.2 - time * 0.3)) * 0.2 * first_layer_opac * fade));
+        fog_opac = 1.0 - ((1.0 - fog_opac) * (1.0 + fractal(vec2(angle * 2, dir.y - time * 0.2)) * 0.8 * second_layer_opac * fade));
     }
     #endif
     return fog_opac;

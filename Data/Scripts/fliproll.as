@@ -242,10 +242,16 @@ class FlipInfo {
         if(allow_rolling){
             level.SendMessage("character_start_roll "+this_mo.getID());
 			AchievementEvent("character_start_roll");
-            if(character_getter.GetTag("species") == "cat"){
-                this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
-            } else {
-                this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+            if(water_depth < 0.1){
+                if(character_getter.GetTag("species") == "cat"){
+                    this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
+                } else {
+                    this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f));
+                    AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
+                }
+            }
+            if(water_depth > 0.0 && water_depth < 0.4){
+                this_mo.PlaySoundGroupAttached("Data/Sounds/water_foley/mud_slide_roll.xml", this_mo.position);
                 AISound(this_mo.position, QUIET_SOUND_RADIUS, _sound_type_foley);
             }
 
@@ -264,7 +270,9 @@ class FlipInfo {
                 
             feet_moving = false;
             rolling = true;
-            SetOnFire(false);
+            if(this_mo.controlled){
+                SetOnFire(false);
+            }
         }
     }
 

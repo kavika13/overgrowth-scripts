@@ -18,8 +18,7 @@ out vec4 color;
 
 void main() {
 #ifdef FIRE
-    world_vert = vert_attrib;
-    world_vert = world_vert + normalize(cam_pos - world_vert) * 0.1;
+    world_vert = vert_attrib + normalize(cam_pos - vert_attrib) * 0.1;
     gl_Position = mvp * vec4(world_vert, 1.0);
 #else
     gl_Position = mvp * vec4(vert_attrib, 1.0);

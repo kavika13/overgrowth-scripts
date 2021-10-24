@@ -5,6 +5,13 @@ int count = 0;
 int water_surface_id = -1;
 int water_decal_id = -1;
 
+void SetParameters() {
+    params.AddFloatSlider("Wave Density",0.25f,"min:0,max:1,step:0.01");
+    params.AddFloatSlider("Wave Height",0.5f,"min:0,max:1,step:0.01");
+    params.AddFloatSlider("Water Fog",1.0f,"min:0,max:1,step:0.01");
+
+}
+
 void Dispose() {
     if(water_decal_id != -1){
         QueueDeleteObjectID(water_decal_id);
@@ -46,19 +53,22 @@ void Update() {
         MovementObject@ mo = ReadCharacterID(nearby_characters[i]);
         mo.rigged_object().AddWaterCube(obj.GetTransform());
     }    */
-    if(water_surface_id == -1){
-        water_surface_id = CreateObject("Data/Objects/water_test.xml", true);
-    }
-    Object@ water_surface_obj = ReadObjectFromID(water_surface_id);
-    water_surface_obj.SetTranslation(obj.GetTranslation());
-    water_surface_obj.SetRotation(obj.GetRotation());
-    water_surface_obj.SetScale(obj.GetScale() * 2.0f);
-    water_surface_obj.SetTint(vec3(0.5,0.25,0.5));
+    if(!params.HasParam("Invisible")){
+        if(water_surface_id == -1){
+            water_surface_id = CreateObject("Data/Objects/water_test.xml", true);
+        }
+        Object@ water_surface_obj = ReadObjectFromID(water_surface_id);
+        water_surface_obj.SetTranslation(obj.GetTranslation());
+        water_surface_obj.SetRotation(obj.GetRotation());
+        water_surface_obj.SetScale(obj.GetScale() * 2.0f);
+
+        water_surface_obj.SetTint(vec3(params.GetFloat("Wave Height"),params.GetFloat("Wave Density"),params.GetFloat("Water Fog")));
+    }    
     if(water_decal_id == -1){
         water_decal_id = CreateObject("Data/Objects/Decals/water_fog.xml", true);
     }
     Object@ water_decal_obj = ReadObjectFromID(water_decal_id);
-    water_decal_obj.SetTranslation(obj.GetTranslation() + vec3(0.0, 0.01, 0.0)); // To avoid z-fighting
+    water_decal_obj.SetTranslation(obj.GetTranslation());
     water_decal_obj.SetRotation(obj.GetRotation());
     water_decal_obj.SetScale(obj.GetScale() * 4.00f);
 
