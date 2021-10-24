@@ -20,7 +20,7 @@ void Update(){
 		for(uint i = 0; i < charIDs.size(); i++){
             if(ReadObjectFromID(charIDs[i]).GetType() == _movement_object){
     			MovementObject@ this_mo = ReadCharacterID(charIDs[i]);
-                if(!this_mo.GetBoolVar("static_char")){
+                if(!this_mo.static_char){
         		    const float _push_force_mult = 0.5f;
         		    vec3 push_force;
         			vec3 direction = ReadObjectFromID(hotspot.GetID()).GetRotation() * vec3(0,0,-1);// normalize(this_mo.position - oldPos);

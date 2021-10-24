@@ -369,6 +369,8 @@ class Checkbox : GUIElement{
 class Slider : GUIElement{
 	IMImage@ slider_image;
 	IMText@ value_label;
+    float slider_value = 0.0f; //slider pos between 0.0f and 1.0f
+
 	float max_value = 100.0f;
 	float min_value = 0.0f;
 	vec2 old_mouse_pos;
@@ -377,7 +379,9 @@ class Slider : GUIElement{
 	float min_x_slide = 0;
 	float config_value;
     float max_percentage;
-	Slider(string _name, IMContainer@ _parent, IMImage@ _slider_image, IMText@ _value_label, string _config_name, float _max_value, float _max_percentage = 100.0f, float _min_value = 0.0f){
+    float min_percentage;
+    bool exponential_curve;
+	Slider(string _name, IMContainer@ _parent, IMImage@ _slider_image, IMText@ _value_label, string _config_name, float _max_value, float _max_percentage = 100.0f, float _min_value = 0.0f, float _min_percentage = 0.0f, bool _exponential_curve = false){
 		@slider_image = @_slider_image;
 		@parent = @_parent;
 		@value_label = @_value_label;
@@ -388,61 +392,96 @@ class Slider : GUIElement{
 		max_x_slide = parent.getSizeX() - slider_image.getSizeX();
 		min_x_slide = 0.0f;
         max_percentage = _max_percentage;
+        min_percentage = _min_percentage;
+        exponential_curve = _exponential_curve;
 		PutCurrentValue();
 	}
+
 	void PutCurrentValue(){
 		config_value = GetConfigValueFloat(config_name);
 		
-		float new_label_value = max_percentage * config_value / max_value;
+        float value_range = max_value - min_value;
+
+        if( config_value < min_value ) {
+            config_value = min_value;
+        }
+
+        if( exponential_curve ) {
+            float value_linear = (config_value-min_value) / value_range;
+            assert( value_linear >= 0.0f && value_linear <= 1.0f );
+            slider_value = sqrt(value_linear);
+        } else {
+            slider_value = (config_value-min_value) / value_range;
+        }
+
+		float new_label_value = min_percentage + (max_percentage-min_percentage) * slider_value;
 		value_label.setText(int(new_label_value) + "%");
 		
-		float new_slider_displacement = max_x_slide * config_value / max_value;
+		float new_slider_displacement = max_x_slide * slider_value;
 		slider_image.setDisplacementX( new_slider_displacement );
 	}
+
 	void SlideX(int value){
-		float new_value = config_value;
 		float current_x_displacement = slider_image.getDisplacementX();
 		float multiplier = 5.0f;
 		float new_slider_displacement;
 		new_slider_displacement = min(max_x_slide,max(value + current_x_displacement, min_x_slide));
-		new_value = max_value * new_slider_displacement / max_x_slide;
-		new_value = max(min_value, min(new_value, max_value));
-		float new_label_value = max_percentage * new_value / max_value;
+
+		slider_value = new_slider_displacement / max_x_slide;
+
+		float new_label_value = min_percentage + (max_percentage-min_percentage) * slider_value;
+
 		value_label.setText(ceil(new_label_value) + "%");
 		
 		slider_image.setDisplacementX( new_slider_displacement );
-		SetConfigValueFloat(config_name, new_value);
-		config_value = new_value;
+
+        if( exponential_curve ) {
+            config_value = min_value + (max_value-min_value) * (slider_value*slider_value);
+        } else {
+            config_value = min_value + (max_value-min_value) * slider_value;
+        }
+
+        //Log( info, config_name + ": " + slider_value + " " + slider_value*slider_value + " " + config_value);
+		SetConfigValueFloat(config_name, config_value);
+
 		RefreshAllOptions();
 	}
+
 	void SwitchOption(string value){
-		float new_value = config_value;
 		float current_x_displacement = slider_image.getDisplacementX();
 		float multiplier = 5.0f;
 		float new_slider_displacement;
 		if(value == "+"){
-			new_value += (max_value / 100.0f) * multiplier;
-			new_slider_displacement = max_x_slide * new_value / max_value;
+			slider_value += min(1.0f,(1.0f / 100.0f) * multiplier);
+			new_slider_displacement = max_x_slide * slider_value;
 		}
 		else if(value == "-"){
-			new_value -= (max_value / 100.0f) * multiplier;
-			new_slider_displacement = max_x_slide * new_value / max_value;
+			slider_value -= max(0.0f, (1.0f / 100.0f) * multiplier);
+			new_slider_displacement = max_x_slide * slider_value;
 		}
 		else if(value == "click_jump_value"){
 			float scaling_x = screenMetrics.GUIToScreen(vec2(1)).x;
 			float zero_pos = parent.getScreenPosition().x;
 			float mouse_pos = imGUI.guistate.mousePosition.x * scaling_x;
 			float difference = (mouse_pos - zero_pos) * (1.0f + scaling_x);
-			new_value = max_value * difference / max_x_slide;
-			new_slider_displacement = max_x_slide * new_value / max_value;
+
+			slider_value = max(0.0f,min(1.0f,difference / max_x_slide));
+			new_slider_displacement = max_x_slide * slider_value;
 		}
-		new_value = max(min_value, min(new_value, max_value));
-		float new_label_value = max_percentage * new_value / max_value;
+		float new_label_value = (min_percentage + max_percentage * slider_value);
 		value_label.setText(ceil(new_label_value) + "%");
 		
 		slider_image.setDisplacementX( new_slider_displacement );
-		SetConfigValueFloat(config_name, new_value);
-		config_value = new_value;
+
+        if( exponential_curve ) {
+            config_value = min_value + (max_value-min_value) * (slider_value*slider_value);
+        } else {
+            config_value = min_value + (max_value-min_value) * slider_value;
+        }
+
+        //Log( info, config_name + ": " + slider_value + " " + slider_value*slider_value + " " + config_value);
+		SetConfigValueFloat(config_name, config_value);
+
 		RefreshAllOptions();
 	}
 }
@@ -573,6 +612,32 @@ class DropdownMenu : GUIElement{
 	}
 }
 
+class ResolutionDropdownMenu : DropdownMenu{
+    ResolutionDropdownMenu(string _name, IMText@ _button_label, IMContainer@ _parent, IMContainer@ _restore_container, DropdownConfiguration@ _configuration)
+    {
+        super(_name, _button_label, _parent, _restore_container, _configuration);
+	}
+    
+    void SwitchOption(string value){    
+        if(value == "Custom") {
+            SetConfigValueBool("custom_resolution", true);
+
+            CloseAllOptionMenus();
+            IMMessage message("switch_category");
+            message.addString("Graphics");
+            imGUI.receiveMessage(message);
+        }
+        else {
+            SetConfigValueBool("custom_resolution", false);
+            DropdownMenu::SwitchOption(value);
+
+            IMMessage message("switch_category");
+            message.addString("Graphics");
+            imGUI.receiveMessage(message);
+        }
+	}
+}
+
 class DropdownConfigurationBaseClass{
 	string config_name;
 	string display_name;
@@ -636,23 +701,12 @@ class DropdownConfigurationvec2Array : DropdownConfigurationBaseClass{
 		@display_values = @_display_values;
 	}
 	void SetCurrentValue(IMText@ label){
-		vec2 current_values = vec2( GetConfigValueInt(config_names[0]), GetConfigValueInt(config_names[1]) );
-		current_option_index = config_values.find(current_values);
-		if(current_option_index != -1){
-			label.setText(display_values[current_option_index]);
-		}else{
-			//The window was resized and a non-standard value was set.
-			int current_res_index = display_values.find(label.getText());
-			if(current_res_index != -1){
-				config_values.removeAt(current_res_index);
-				display_values.removeAt(current_res_index);
-			}
-			int new_x = GetConfigValueInt(config_names[0]);
-			int new_y = GetConfigValueInt(config_names[1]);
-			config_values.insertLast(vec2(new_x, new_y));
-			display_values.insertLast(new_x + "x" + new_y);
-			label.setText(new_x + "x" + new_y);
-		}
+        if(GetConfigValueBool("custom_resolution"))
+			label.setText("Custom");
+        else {
+            vec2 current_values = vec2( GetConfigValueInt(config_names[0]), GetConfigValueInt(config_names[1]) );
+            label.setText(current_values.x + "x" + current_values.y);
+        }
 	}
 	void SetConfigValue(string value){
 		int index = display_values.find(value);
@@ -1314,7 +1368,7 @@ string GetRandomBackground(){
 }
 
 void AddDropDown(string text, IMDivider@ parent, DropdownConfiguration configuration, string extra_text = ""){
-	float dropdown_width = 350.0f;
+	float dropdown_width = 500.0f;
 	float dropdown_height = 55.0f;
 	float vertical_trailing_space = 10.0f;
 	float value_trailing_space = 35.0f;
@@ -1392,6 +1446,138 @@ void AddDropDown(string text, IMDivider@ parent, DropdownConfiguration configura
 	main_divider.setSizeX(whole_option_width);
 	
 	parent.append(main_divider);
+}
+
+void AddResolutionDropDown(string text, IMDivider@ parent, DropdownConfiguration configuration, string extra_text = ""){
+	float dropdown_width = 500.0f;
+	float dropdown_height = 55.0f;
+	float vertical_trailing_space = 10.0f;
+	float value_trailing_space = 35.0f;
+	float whole_option_width = 800.0f;
+	
+	IMDivider main_divider("main_divider" + text, DOHorizontal);
+	IMDivider left_divider("left_divider" + text, DOHorizontal);
+	IMDivider right_divider("right_divider" + text, DOHorizontal);
+	
+	left_divider.setAlignment(CALeft, CACenter);
+	main_divider.setAlignment(CALeft, CACenter);
+	
+	IMText title(text, button_font_small);
+	left_divider.append(title);
+
+	if(extra_text != ""){
+		IMText extra(extra_text, small_font);
+		left_divider.append(extra);
+	}
+
+	left_divider.setSizeX(whole_option_width / 2.0f);
+	
+	//-------------------------------------------------
+	right_divider.setAlignment(CALeft, CACenter);
+	right_divider.setSizeX(whole_option_width / 2.0f);
+	
+	IMContainer parent_container(dropdown_width, dropdown_height + vertical_trailing_space);
+	IMContainer main_button_container(dropdown_width, dropdown_height);
+	main_button_container.setAlignment(CALeft, CACenter);
+	
+	IMImage background_image(button_background_diamond_thin);
+	background_image.setZOrdering(1);
+	background_image.setSize(vec2(dropdown_width, dropdown_height));
+	main_button_container.addFloatingElement(background_image, "background" + text, vec2(0,0));
+	
+	IMDivider button_divider("button_divider", DOHorizontal);
+	button_divider.setAlignment(CALeft, CACenter);
+	button_divider.setZOrdering(2);
+	
+	IMText current_value_text("NA", button_font_small);
+	current_value_text.setZOrdering(3);
+	
+	IMImage dropdown_icon(arrow_icon);
+	dropdown_icon.setName("dropdown_icon" + text);
+	dropdown_icon.scaleToSizeX(35);
+	dropdown_icon.setRotation(90);
+	
+	IMContainer current_value_container(dropdown_width - dropdown_icon.getSizeX() - (value_trailing_space * 2.0f), dropdown_height);
+	current_value_container.setAlignment(CALeft, CACenter);
+	current_value_container.setElement(current_value_text);
+	
+	button_divider.appendSpacer(value_trailing_space);
+	button_divider.append(current_value_container);
+	button_divider.append(dropdown_icon);
+	
+	main_button_container.sendMouseOverToChildren(true);
+	IMMessage dropdown_message("ui_element_clicked", text);
+	main_button_container.addLeftMouseClickBehavior( IMFixedMessageOnClick(dropdown_message), "");
+	background_image.addMouseOverBehavior(mouseover_scale_button, "");
+	current_value_text.addMouseOverBehavior(text_color_mouse_over, "");
+	
+	right_divider.append(parent_container);
+	
+	parent_container.setElement(main_button_container);
+	main_button_container.setElement(button_divider);
+	
+	AddControllerItem(parent_container, dropdown_message);
+	gui_elements.insertLast(ResolutionDropdownMenu(text, current_value_text, parent_container, main_button_container, @configuration));
+
+	background_image.setClip(false);
+	
+	main_divider.append(left_divider);
+	main_divider.append(right_divider);
+	main_divider.setSizeY(dropdown_height + vertical_trailing_space);
+	main_divider.setSizeX(whole_option_width);
+	
+	parent.append(main_divider);
+}
+
+void AddTextbox(IMDivider@ parent, string textbox_name, Textbox@ textbox){
+    float textbox_width = 200.0f;
+	float textbox_height = 75.0f;
+
+    IMText text("0", button_font_small);
+
+	IMContainer text_container(textbox_width, textbox_height);
+    text_container.addLeftMouseClickBehavior(IMFixedMessageOnClick("activate_textbox", textbox_name), "");
+
+    IMDivider text_divider(DOHorizontal);
+	text_divider.setAlignment(CACenter, CACenter);
+	text_divider.append(text);
+	text_divider.setZOrdering(4);
+	text.setZOrdering(4);
+	text_container.setElement(text_divider);
+
+    parent.append(text_container);
+
+    textbox.SetText(@text);
+    textbox.SetToDefaultValue();
+
+    gui_elements.insertLast(textbox);
+}
+
+void AddCustomResolutionInput(IMDivider@ parent, Textbox@ width_textbox, Textbox@ height_textbox){
+    float whole_option_width = 800.0f;
+    
+    IMDivider main_divider("main_divider" + "resolution", DOHorizontal);
+	IMDivider left_divider("left_divider" + "resolution", DOHorizontal);
+	IMDivider right_divider("right_divider" + "resolution", DOHorizontal);
+    
+    left_divider.setAlignment(CALeft, CACenter);
+	main_divider.setAlignment(CALeft, CACenter);
+    
+    IMText label("Custom resolution", button_font_small);
+    left_divider.append(label);
+    left_divider.setSizeX(whole_option_width / 2.0f);
+    
+    AddTextbox(right_divider, "width", @width_textbox);
+    right_divider.append(IMText("x", button_font_small));
+    AddTextbox(right_divider, "height", @height_textbox);
+
+    main_divider.append(left_divider);
+    main_divider.append(right_divider);
+    
+    parent.append(main_divider);
+
+    //textbox.SetText(@text);
+    //textbox.SetToDefaultValue();
 }
 
 void AddLabel(string text, IMDivider@ parent){
@@ -1560,61 +1746,60 @@ void AddCategoryButton(string text, IMDivider@ parent){
 	category_elements.insertLast(CategoryButton(text, new_container, main_divider, button_background));
 }
 
-void AddCheckBox(string text, IMDivider@ parent, string config_name){
-	float dropdown_width = 350.0f;
-	float dropdown_height = 55.0f;
-	float vertical_trailing_space = 10.0f;
-	float leading_trailing_space = 200.0f;
-	float whole_option_width = 800.0f;
-	
-	IMDivider main_divider("main_divider" + text, DOHorizontal);
-	IMContainer main_container(whole_option_width, dropdown_height);
-	
-	main_container.setAlignment(CALeft, CACenter);
-	
-	main_divider.appendSpacer(leading_trailing_space);
-	
-	IMContainer checkbox_parent(dropdown_height, dropdown_height);
-	checkbox_parent.setAlignment(CACenter, CACenter);
-	
-	IMContainer checkbox_holder(checkbox_size, checkbox_size);
-	checkbox_parent.setElement(checkbox_holder);
-	
-	IMImage checkbox_background(checkbox);
-	checkbox_background.setClip(false);
-	checkbox_background.setZOrdering(2);
-	checkbox_background.scaleToSizeX(checkbox_size);
-	checkbox_background.addMouseOverBehavior(IMMouseOverScale( move_time, 12.0f, inQuartTween ), "");
-	
-	checkbox_holder.addFloatingElement(checkbox_background, "checkbox" + text, vec2(0,0));
-	
-	IMDivider checkbox_and_title_divider("checkbox_and_title_divider", DOHorizontal);
-	IMContainer checkbox_and_title_container(10.0f, 10.0f);
-	checkbox_and_title_container.setElement(checkbox_and_title_divider);
-	IMText title(text, button_font_small);
-	title.addMouseOverBehavior(text_color_mouse_over, "");
-	
-	checkbox_and_title_divider.append(checkbox_parent);
-	checkbox_and_title_divider.appendSpacer(25.0f);
-	checkbox_and_title_divider.append(title);
+void AddCheckBox(string text, IMDivider@ parent, string config_name, float leading_trailing_space = 200.0f){
+    float dropdown_width = 350.0f;
+    float dropdown_height = 55.0f;
+    float vertical_trailing_space = 10.0f;
+    float whole_option_width = 100.0f;
+    
+    IMDivider main_divider("main_divider" + text, DOHorizontal);
+    IMContainer main_container(whole_option_width, dropdown_height);
+    
+    main_container.setAlignment(CALeft, CACenter);
+    
+    main_divider.appendSpacer(leading_trailing_space);
+    
+    IMContainer checkbox_parent(dropdown_height, dropdown_height);
+    checkbox_parent.setAlignment(CACenter, CACenter);
+    
+    IMContainer checkbox_holder(checkbox_size, checkbox_size);
+    checkbox_parent.setElement(checkbox_holder);
+    
+    IMImage checkbox_background(checkbox);
+    checkbox_background.setClip(false);
+    checkbox_background.setZOrdering(2);
+    checkbox_background.scaleToSizeX(checkbox_size);
+    checkbox_background.addMouseOverBehavior(IMMouseOverScale( move_time, 12.0f, inQuartTween ), "");
+    
+    checkbox_holder.addFloatingElement(checkbox_background, "checkbox" + text, vec2(0,0));
+    
+    IMDivider checkbox_and_title_divider("checkbox_and_title_divider", DOHorizontal);
+    IMContainer checkbox_and_title_container(10.0f, 10.0f);
+    checkbox_and_title_container.setElement(checkbox_and_title_divider);
+    IMText title(text, button_font_small);
+    title.addMouseOverBehavior(text_color_mouse_over, "");
+    
+    checkbox_and_title_divider.append(checkbox_parent);
+    checkbox_and_title_divider.appendSpacer(25.0f);
+    checkbox_and_title_divider.append(title);
 
-	main_divider.append(checkbox_and_title_container);
-	main_container.setSizeY(dropdown_height + vertical_trailing_space);
-	
-	IMMessage onclick("option_changed");
-	onclick.addString(text);
-	onclick.addString("true");
-	checkbox_and_title_divider.addLeftMouseClickBehavior( IMFixedMessageOnClick( onclick ), "");
-	checkbox_and_title_divider.sendMouseOverToChildren();
-	
-	AddControllerItem(checkbox_and_title_container, onclick);
-	gui_elements.insertLast(Checkbox(text, checkbox_parent, checkbox_holder, config_name));
+    main_divider.append(checkbox_and_title_container);
+    main_container.setSizeY(dropdown_height + vertical_trailing_space);
+    
+    IMMessage onclick("option_changed");
+    onclick.addString(text);
+    onclick.addString("true");
+    checkbox_and_title_divider.addLeftMouseClickBehavior( IMFixedMessageOnClick( onclick ), "");
+    checkbox_and_title_divider.sendMouseOverToChildren();
+    
+    AddControllerItem(checkbox_and_title_container, onclick);
+    gui_elements.insertLast(Checkbox(text, checkbox_parent, checkbox_holder, config_name));
 
-	main_container.setElement(main_divider);
-	parent.append(main_container);
+    main_container.setElement(main_divider);
+    parent.append(main_container);
 }
 
-void AddSlider(string text, IMDivider@ parent, string config_name, float max_value, float max_percentage = 100.0f, float min_value = 0.0f){
+void AddSlider(string text, IMDivider@ parent, string config_name, float max_value, float max_percentage = 100.0f, float min_value = 0.0f, float min_percentage = 0.0f, bool exponential_curve = false){
 	float dropdown_width = 350.0f;
 	float dropdown_height = 55.0f;
 	float slider_width = 350.0f;
@@ -1698,7 +1883,7 @@ void AddSlider(string text, IMDivider@ parent, string config_name, float max_val
 	message_right.addString("+");
 	
 	AddControllerItem(slider_parent, null, message_left, message_right, null, null);
-	gui_elements.insertLast(Slider(text, slider_holder, slider_button_image, percentage, config_name, max_value, max_percentage, min_value));
+	gui_elements.insertLast(Slider(text, slider_holder, slider_button_image, percentage, config_name, max_value, max_percentage, min_value, min_percentage, exponential_curve));
 	
 	main_container.setElement(main_divider);
 	parent.append(main_container);
@@ -2022,20 +2207,21 @@ class BackgroundObject {
     }
 
     void addToGUI( IMGUI@ theGUI ) {
-
         // Set it to our background image
         IMImage backgroundImage( filename );
 
-		// Make sure that no matter the aspect ratio, it covers the whole screen top to bottom
-		if((backgroundImage.getSizeX() / backgroundImage.getSizeY()) > (screenMetrics.GUISpace.x / screenMetrics.GUISpace.y)){
-			backgroundImage.scaleToSizeY(screenMetrics.GUISpace.y);
-		}else{
-			backgroundImage.scaleToSizeX(screenMetrics.GUISpace.x);
+        backgroundImage.setSkipAspectFitting(true);
+        backgroundImage.setCenter(true);
+
+		if((backgroundImage.getSizeX() / backgroundImage.getSizeY()) > (screenMetrics.getScreenWidth() / screenMetrics.getScreenHeight())) {
+			backgroundImage.scaleToSizeY(screenMetrics.getScreenHeight());
+		} else {
+			backgroundImage.scaleToSizeX(screenMetrics.getScreenWidth());
 		}
 
         backgroundImage.setAlpha(alpha);
 
-        if( fadeIn && kAnimateMenu) {
+        if(fadeIn && kAnimateMenu) {
             backgroundImage.addUpdateBehavior( IMFadeIn( 2000, inSineTween ), filename + "-fadeIn" );
         }
 
@@ -2044,11 +2230,9 @@ class BackgroundObject {
                                                            GUIname,
                                                            startPos,
                                                            z );
-
     }
 
     void adjustPositionByMouse( IMGUI@ theGUI ) {
-
         vec2 mouseRatio = vec2( theGUI.guistate.mousePosition.x/screenMetrics.GUISpace.x,
                                 theGUI.guistate.mousePosition.y/screenMetrics.GUISpace.y );
 
@@ -2056,7 +2240,6 @@ class BackgroundObject {
                                    0 );//int( float(shiftSize.y) * mouseRatio.y ) );
 
         theGUI.getBackgroundLayer().moveElement( GUIname, startPos + shiftPosition );
-
     }
 
 }
@@ -2437,4 +2620,218 @@ void UpdateMovingSlider(){
 			}
 		}
 	}
+}
+
+class Textbox : GUIElement {
+	int initial_sequence_id;
+	IMText@ text;
+
+    string old_query = "";
+	string query = "";
+    string config_value = "";
+
+    int min_value;
+    int max_value;
+
+	float long_press_input_timer = 0.0f;
+	float long_press_timer = 0.0f;
+	float long_press_threshold = 0.5f;
+	float long_press_interval = 0.1f;
+	uint max_query_length = 20;
+	Textbox(string _config_value, int _min_value, int _max_value){
+		config_value = _config_value;
+        min_value = _min_value;
+        max_value = _max_value;
+	}
+	void Activate(){
+		if(element_open){return;}
+
+        old_query = query;
+		query = "";
+        text.setText(query);
+		element_open = true;
+		array<KeyboardPress> inputs = GetRawKeyboardInputs();
+		if(inputs.size() > 0){
+			initial_sequence_id = inputs[inputs.size()-1].s_id;
+		}else{
+			initial_sequence_id = -1;
+		}
+	}
+    void DisableElement(){
+        Deactivate();
+    }
+	void Deactivate(){
+        if(!element_open)
+            return;
+
+		element_open = false;
+        if(query.length() > 0)
+            query = GetValidInput();
+        else
+            query = old_query;
+        text.setText(query);
+
+        SaveValueToConfig();
+        ReloadStaticValues();
+	}
+	void SetText(IMText@ _text){
+		@text = @_text;
+	}
+    void SetToDefaultValue() {
+        query = GetConfigValueString(config_value);
+        text.setText(query);
+    }
+    void SaveValueToConfig() {
+        SetConfigValueString(config_value, query);
+    }
+    void PutCurrentValue() {
+        SetToDefaultValue();
+    }
+	void Update(){
+		if(element_open){
+			if(long_press_timer > long_press_threshold){
+				if(GetInputDown(0, "backspace")){
+					long_press_input_timer += time_step;
+					if(long_press_input_timer > long_press_interval){
+						long_press_input_timer = 0.0f;
+
+                        Backspace();
+					}
+				}else{
+					long_press_input_timer = 0.0f;
+				}
+				if(!GetInputDown(0, "backspace")){
+					long_press_timer = 0.0f;
+				}
+			}else{
+				if(GetInputDown(0, "backspace")){
+					long_press_timer += time_step;
+				}else{
+					long_press_timer = 0.0f;
+				}
+			}
+			
+			array<KeyboardPress> inputs = GetRawKeyboardInputs();
+			if(inputs.size() > 0){
+				uint16 possible_new_input = inputs[inputs.size()-1].s_id;
+				if(possible_new_input != uint16(initial_sequence_id)){
+					uint32 keycode = inputs[inputs.size()-1].keycode;
+					initial_sequence_id = inputs[inputs.size()-1].s_id;
+
+                    //Log(info, "KEYCODE: " + (keycode & 0xFF));
+					
+					if(keycode == int(SDLNumeric::K_ENTER) || keycode == int(SDLNumeric::KP_ENTER)){
+                        Deactivate();
+						return;
+					}
+					else if(keycode == int(SDLNumeric::K_BACKSPACE)){
+						Backspace();
+                        return;
+					}
+                    else if(query.length() == 5)
+                        return;
+
+                    string new_character('0');
+
+                    switch(keycode) {
+                        case SDLNumeric::K_0:
+                        case SDLNumeric::KP_0:
+                            break;
+                        case SDLNumeric::K_1:
+                        case SDLNumeric::KP_1:
+                            new_character[0] = int(SDLNumeric::K_1);
+                            break;
+                        case SDLNumeric::K_2:
+                        case SDLNumeric::KP_2:
+                            new_character[0] = int(SDLNumeric::K_2);
+                            break;
+                        case SDLNumeric::K_3:
+                        case SDLNumeric::KP_3:
+                            new_character[0] = int(SDLNumeric::K_3);
+                            break;
+                        case SDLNumeric::K_4:
+                        case SDLNumeric::KP_4:
+                            new_character[0] = int(SDLNumeric::K_4);
+                            break;
+                        case SDLNumeric::K_5:
+                        case SDLNumeric::KP_5:
+                            new_character[0] = int(SDLNumeric::K_5);
+                            break;
+                        case SDLNumeric::K_6:
+                        case SDLNumeric::KP_6:
+                            new_character[0] = int(SDLNumeric::K_6);
+                            break;
+                        case SDLNumeric::K_7:
+                        case SDLNumeric::KP_7:
+                            new_character[0] = int(SDLNumeric::K_7);
+                            break;
+                        case SDLNumeric::K_8:
+                        case SDLNumeric::KP_8:
+                            new_character[0] = int(SDLNumeric::K_8);
+                            break;
+                        case SDLNumeric::K_9:
+                        case SDLNumeric::KP_9:
+                            new_character[0] = int(SDLNumeric::K_9);
+                            break;
+                        default:
+                            return;
+                    }
+
+                    query.insert(query.length(), new_character);
+                    text.setText(query);
+				}
+			}
+		}
+	}
+
+    void Backspace() {
+        if(query.length() > 0){
+            query.erase(query.length() - 1, 1);
+            text.setText(query);
+        }
+        return;
+    }
+
+    string GetValidInput() {
+        int value = atoi(query);
+        if(value < min_value)
+            return "" + min_value;
+        else if(value > max_value)
+            return "" + max_value;
+        else
+            return query;
+    }
+}
+
+class DualColumns {
+    IMDivider@ main;
+    IMDivider@ left;
+    IMDivider@ right;
+
+    DualColumns(string name, int width) {
+        @main = IMDivider(name + "_main", DOHorizontal);
+        @left = IMDivider(name + "_left", DOVertical);
+        @right = IMDivider(name + "_right", DOVertical);
+
+        main.setAlignment(CALeft, CATop);
+        left.setAlignment(CALeft, CACenter);
+        right.setAlignment(CALeft, CACenter);
+
+        left.setSizeX(width / 2);
+        right.setSizeX(width / 2);
+
+        main.append(left);
+        main.append(right);
+    }
+}
+
+class FullwidthColumn {
+    IMDivider@ main;
+
+    FullwidthColumn(string name, int width) {
+        @main = IMDivider(name + "_main", DOVertical);
+
+        main.setAlignment(CACenter, CACenter);
+        main.setSizeX(width);
+    }
 }

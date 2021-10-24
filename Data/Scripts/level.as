@@ -632,3 +632,7 @@ void AddPauseMenu(){
 	imGUI.getMain().setElement(@background_container);
 	controller_wraparound = true;
 }
+
+bool DialogueCameraControl() {
+    return dialogue.has_cam_control;
+}

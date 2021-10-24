@@ -47,7 +47,7 @@ class Situation {
         Object@ obj = ReadObjectFromID(id);
         EntityType type = obj.GetType();
         if(type == _movement_object){
-            if(ReadCharacterID(id).GetBoolVar("static_char")){
+            if(ReadCharacterID(id).static_char){
                 return;
             }
             for(uint i=0; i<known_chars.size(); ++i){

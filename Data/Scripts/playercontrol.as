@@ -177,7 +177,7 @@ bool WantsToAttack() {
 }
 
 bool WantsToRollFromRagdoll(){
-    if(game_difficulty <= 0.5){
+    if(game_difficulty <= 0.4 && on_ground){
         return true;
     }
     if(!this_mo.controlled) return false;
@@ -299,8 +299,11 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
 }
 
 bool WantsToFeint(){
-    if(!this_mo.controlled) return false;
-    return GetInputDown(this_mo.controller_id, "grab");
+    if(!this_mo.controlled || game_difficulty <= 0.5){
+        return false;
+    } else {
+        return GetInputDown(this_mo.controller_id, "grab");
+    }
 }
 
 bool WantsToCounterThrow(){

@@ -1403,6 +1403,7 @@ class Dialogue {
         int connect_id = placeholder_object.GetConnectID();
        
         if( connect_id == -1 ) {
+            Log(warning, "Connection id is -1 for placeholder object" );
             return -1;
         }
 
@@ -1413,6 +1414,7 @@ class Dialogue {
         if( MovementObjectExists( connect_id ) ) {
             return connect_id;
         } else {
+            Log(warning, "There is no character with id " + connect_id + " to tie dialog to.");
             return -1; 
         }
     }
@@ -2206,10 +2208,10 @@ class Dialogue {
             }
             DrawTextAtlas(name_font_path, int(font_size*1.8), kSmallLowercase, dialogue_name, 
                           int(pos.x), int(pos.y)-int(font_size*0.8), vec4(color, 1.0f));
-            string display_text = dialogue_text.substr(0, int(dialogue_text_disp_chars));
-            DrawTextAtlas(font_path, font_size, 0, display_text, 
-                          int(pos.x)+font_size, int(pos.y)+font_size, vec4(vec3(1.0f), 1.0f));
-            TextMetrics test_metrics = GetTextAtlasMetrics(font_path, GetFontSize(), 0, display_text);
+            //string display_text = dialogue_text.substr(0, int(dialogue_text_disp_chars));
+            DrawTextAtlas2(font_path, font_size, 0, dialogue_text, 
+                          int(pos.x)+font_size, int(pos.y)+font_size, vec4(vec3(1.0f), 1.0f), int(dialogue_text_disp_chars));
+            TextMetrics test_metrics = GetTextAtlasMetrics2(font_path, GetFontSize(), 0, dialogue_text, int(dialogue_text_disp_chars));
             if(!waiting_for_dialogue && !is_waiting_time && test_metrics.bounds_y < GetFontSize() * 3){
                 TextMetrics metrics = GetTextAtlasMetrics(font_path, GetFontSize(), 0, continue_string);
                 DrawTextAtlas(font_path, font_size, 0, continue_string, 

@@ -17,7 +17,7 @@ void OnEnter(MovementObject @mo) {
         while(token_iter.FindNextToken(str)){
             int id = atoi(token_iter.GetToken(str));
             if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                ReadCharacterID(id).Execute("static_char = false;");
+                ReadCharacterID(id).Execute("this_mo.static_char = false;");
             }
         }    
 

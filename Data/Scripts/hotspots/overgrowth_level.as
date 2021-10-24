@@ -112,7 +112,7 @@ void TriggerGoalString(const string &in goal_str, GoalTriggerType type){
             if(token_iter.FindNextToken(goal_str) && type == _all_but_sting){
                 int id = atoi(token_iter.GetToken(goal_str));
                 if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                    ReadCharacterID(id).Execute("static_char = false;");
+                    ReadCharacterID(id).Execute("this_mo.static_char = false;");
                 }
                 if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _hotspot_object){
                     ReadObjectFromID(id).ReceiveScriptMessage("activate");

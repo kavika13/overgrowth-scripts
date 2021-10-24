@@ -113,23 +113,35 @@ void Draw() {
             offset = vec3(0.4, 0.0, -0.4);
         }
         if(params.HasParam("Exclamation Character")){
-            int id = params.GetInt("Exclamation Character");
-            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                DebugDrawBillboard("Data/Textures/ui/stealth_debug/exclamation_themed.png",
-                            ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
-                                1.0f+sin(the_time*3.0)*0.05,
-                                vec4(color, visible_amount),
-                              _delete_on_draw);
+            TokenIterator token_iter;
+            token_iter.Init();
+            string str = params.GetString("Exclamation Character");
+
+            while(token_iter.FindNextToken(str)){
+                int id = atoi(token_iter.GetToken(str));
+                if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                    DebugDrawBillboard("Data/Textures/ui/stealth_debug/exclamation_themed.png",
+                                ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
+                                    1.0f+sin(the_time*3.0)*0.05,
+                                    vec4(color, visible_amount),
+                                  _delete_on_draw);
+                }
             }
         }
         if(params.HasParam("Question Character")){
-            int id = params.GetInt("Question Character");
-            if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
-                DebugDrawBillboard("Data/Textures/ui/stealth_debug/question_themed.png",
-                            ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
-                                1.0f+sin(the_time*3.0)*0.05,
-                                vec4(color, visible_amount),
-                              _delete_on_draw);
+            TokenIterator token_iter;
+            token_iter.Init();
+            string str = params.GetString("Question Character");
+
+            while(token_iter.FindNextToken(str)){
+                int id = atoi(token_iter.GetToken(str));
+                if(ObjectExists(id) && ReadObjectFromID(id).GetType() == _movement_object){
+                    DebugDrawBillboard("Data/Textures/ui/stealth_debug/question_themed.png",
+                                ReadCharacterID(id).position + vec3(0, 1.6 +sin(the_time*3.0)*0.03, 0) + offset,
+                                    1.0f+sin(the_time*3.0)*0.05,
+                                    vec4(color, visible_amount),
+                                  _delete_on_draw);
+                }
             }
         }
     }

@@ -1,9 +1,24 @@
 #include "campaign_common.as"
 
+bool disable_progress = false;
+
 void Dispose() {
 }
 
+void Update() {
+    if( GetConfigValueBool("block_cheating_progress") ) {
+        if( disable_progress == false && EditorModeActive() ) {
+            Log(warning, "Detected that editor mode activated during block_cheating_progress, deactivating progress handling");
+            disable_progress = true; 
+        }
+    } else if( disable_progress ){
+        Log(warning, "Detected that block_cheating_progress was disabled, re-enabling progress handling");
+        disable_progress = false;
+    }
+}
+
 void EnterCampaign() {
+    disable_progress = false;
     SavedLevel @camp_save = save_file.GetSave(GetCurrCampaignID(),"linear_campaign","");
             
     Campaign camp = GetCampaign(GetCurrCampaignID());
@@ -19,8 +34,12 @@ void EnterCampaign() {
 
 void EnterLevel() {
     Log(info, "Entered level " + GetCurrLevelName() );
-    SetLevelPlayed(GetCurrLevelID());
-    SetLastLevelPlayed(GetCurrLevelID());
+    if(!disable_progress) {
+        SetLevelPlayed(GetCurrLevelID());
+        SetLastLevelPlayed(GetCurrLevelID());
+    } else {
+        Log(warning, "Will not mark level as last-played, we've been in editor mode and block_cheating_progress is true");
+    }
 }
 
 void LeaveLevel() {
@@ -41,7 +60,7 @@ void ReceiveMessage(string msg) {
     string token = token_iter.GetToken(msg);
 
     if(token == "levelwin" ) {
-        if(!EditorModeActive()){
+        if(!disable_progress){
             string curr_id = GetCurrLevelID();
             LevelFinished(curr_id);
 
@@ -61,7 +80,14 @@ void ReceiveMessage(string msg) {
                 }
             }
         } else {
-            Log(info, "Ignoring levelwin command, game is in editor mode");
+            Log(warning, "Ignoring levelwin command, level has been in editor mode and block_cheating_progress is true");
+            string curr_id = GetCurrLevelID();
+            if(IsLastLevel(curr_id) == false) {
+                string next_level_id = GetFollowingLevel(curr_id);
+                LoadLevelID(next_level_id);
+            } else {
+                SendLevelMessage("go_to_main_menu");		
+            }
         }
     }
 }

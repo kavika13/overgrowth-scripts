@@ -1038,18 +1038,24 @@ void Update() {
 		}
 		else if( message.name == "toggle_mod" ){
 			int index = message.getInt(0);
-			ModID current_mod = current_mods[index];
-			if(ModCanActivate(current_mod)){
-				if(ModIsActive(current_mod)){
-					ModActivation(current_mod, false);
-				}else{
-					ModActivation(current_mod, true);
-				}
-			}else{
-				imGUI.reportError("Could not activate mod " + message.getString(0));
-			}
-			SaveConfig();
-			imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
+
+            Log(info, "I" + index );
+            if(index < int(current_mods.size())) {
+                ModID current_mod = current_mods[index];
+                if(ModCanActivate(current_mod)){
+                    if(ModIsActive(current_mod)){
+                        ModActivation(current_mod, false);
+                    }else{
+                        ModActivation(current_mod, true);
+                    }
+                }else{
+                    imGUI.reportError("Could not activate mod " + message.getString(0));
+                }
+                SaveConfig();
+                imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
+            } else {
+                Log(error, "Invalid index" + index );
+            }
 		}
 		else if( message.name == "refresh_menu_by_name" ){
 			string current_controller_item_name = GetCurrentControllerItemName();

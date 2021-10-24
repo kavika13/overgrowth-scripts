@@ -178,6 +178,8 @@ void main(void)
         }
         color = FragmentColor;        
     }
+#elif defined(COPY)
+    color = textureLod( tex0, tex, 0.0 );
 #elif defined(DOF)
     color = vec4(0.0);
     const int num_samples = 10;

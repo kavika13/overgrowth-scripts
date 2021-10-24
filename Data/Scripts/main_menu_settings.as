@@ -6,6 +6,8 @@ MusicLoad ml("Data/Music/menu.xml");
 
 IMGUI@ imGUI;
 
+
+
 bool HasFocus() {
     return false;
 }
@@ -37,7 +39,7 @@ void Update() {
 		//Log( info, "Got processMessage " + message.name );
 		if( message.name == "Back" ){
 			this_ui.SendCallback( "back" );
-		}else{
+        }else{
 			ProcessSettingsMessage(message);
 		}
     }
@@ -50,7 +52,24 @@ void Update() {
 void Resize() {
     imGUI.doScreenResize(); // This must be called first
 	setBackGround();
-	RefreshAllOptions();
+
+    vec2 currentResolution = vec2(GetConfigValueInt("screenwidth"), GetConfigValueInt("screenheight"));
+    array<vec2> possibleResolutions = GetPossibleResolutions();
+
+    bool found = false;
+    for(uint i = 0; i < possibleResolutions.size(); ++i) {
+        if(possibleResolutions[i] == currentResolution) {
+            found = true;
+            break;
+        }
+    }
+
+    // Don't set custom_resolution to true automatically;
+    // the user may have entered a possible resolution manually
+    if(!found)
+        SetConfigValueBool("custom_resolution", true);
+
+    SwitchSettingsScreen(current_screen);
 }
 
 void ScriptReloaded() {

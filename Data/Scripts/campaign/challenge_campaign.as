@@ -1,6 +1,9 @@
 void Dispose() {
 }
 
+void Update() {
+}
+
 void EnterCampaign() {
 }
 
