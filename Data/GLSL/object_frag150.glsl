@@ -1,4 +1,116 @@
 void object_frag(){} // This is just here to make sure it gets added to include paths
+
+
+layout (std140) uniform ClusterInfo {
+    uvec3 grid_size;
+    uint num_decals;
+    uint num_lights;
+    uint light_cluster_data_offset;
+    uint light_data_offset;
+    uint pad2;
+    mat4 inv_proj_mat;
+    vec4 viewport;
+    float z_near;
+    float z_mult;
+    float pad3;
+    float pad4;
+};
+
+
+// this MUST match the one in source or bad things happen
+struct PointLightData {
+	vec3 pos;
+	float radius;
+	vec3 color;
+	float padding;
+};
+
+#define POINT_LIGHT_SIZE_VEC4 2u
+
+
+#define NUM_GRID_COMPONENTS 2u
+#define ZCLUSTERFUNC(val) (log(-1.0 * (val) - z_near + 1.0) * z_mult)
+
+
+#define light_decal_data_buffer tex15
+#define cluster_buffer tex13
+
+
+uniform samplerBuffer light_decal_data_buffer;
+uniform usamplerBuffer cluster_buffer;
+
+
+PointLightData FetchPointLight(uint light_index) {
+	PointLightData l;
+
+	vec4 temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 0u));
+	l.pos = temp.xyz;
+	l.radius = temp.w;
+
+	temp = texelFetch(light_decal_data_buffer, int(light_data_offset + POINT_LIGHT_SIZE_VEC4 * light_index + 1u));
+	l.color = temp.xyz;
+	l.padding = temp.w;
+
+	return l;
+}
+
+
+void CalculateLightContrib(inout vec3 out_color, vec3 world_vert, vec3 ws_normal) {
+	uint num_lights_ = uint(num_lights);
+
+	uint num_z_clusters = grid_size.z;
+
+	vec4 ndcPos;
+	ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+	ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
+	ndcPos.w = 1.0;
+
+	vec4 clipPos = ndcPos / gl_FragCoord.w;
+	vec4 eyePos = inv_proj_mat * clipPos;
+
+	float zVal = ZCLUSTERFUNC(eyePos.z);
+
+	zVal = max(0u, min(zVal, num_z_clusters - 1u));
+
+	uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
+
+	// index of cluster we're in
+	uint light_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z) + 1u;
+	uint val = texelFetch(cluster_buffer, int(light_cluster_index)).x;
+
+	// number of lights in current cluster
+	uint light_count = (val >> 16) & 0xFFFFU;
+
+	// index into cluster_lights
+	uint first_light_index = val & 0xFFFFU;
+
+	// light list data is immediately after cluster lookup data
+	uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
+	first_light_index = first_light_index + uint(light_cluster_data_offset);
+
+	// debug option, uncomment to visualize clusters
+	//out_color = vec3(min(light_count, 63u) / 63.0);
+	//out_color = vec3(g.z / num_z_clusters);
+
+	for (uint i = 0u; i < light_count; i++) {
+		uint light_index = texelFetch(cluster_buffer, int(first_light_index + i)).x;
+
+		PointLightData l = FetchPointLight(light_index);
+
+		vec3 to_light = l.pos - world_vert;
+		// TODO: inverse square falloff
+		// TODO: real light equation
+		float dist = length(to_light);
+		float falloff = max(0.0, (1.0 / dist / dist) * (1.0 - dist / l.radius));
+
+		vec3 n = normalize(to_light);
+		float d = max(0.0, dot(to_light, ws_normal));
+
+		out_color += falloff * d * l.color;
+	}
+}
+
+
 #include "lighting150.glsl"
 #include "relativeskypos.glsl"
 
@@ -137,7 +249,8 @@ ws_normal = normalize(ws_normal);
 
 #define CALC_DIRECT_DIFFUSE_COLOR \
 float NdotL = GetDirectContrib(ws_light, ws_normal,shadow_tex.r);\
-vec3 diffuse_color = GetDirectColor(NdotL);
+vec3 diffuse_color = GetDirectColor(NdotL);\
+CalculateLightContrib(diffuse_color, world_vert, ws_normal);
 
 #define CALC_DIFFUSE_LIGHTING \
 CALC_DIRECT_DIFFUSE_COLOR \

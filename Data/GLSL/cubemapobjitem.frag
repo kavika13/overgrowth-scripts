@@ -69,7 +69,7 @@ void main()
         int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
         uvec4 data = texelFetch(ambient_grid_data, cell_id/4);
         guess = data[cell_id%4];
-        use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, guess);
+        use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, guess);
     } else {
         for(int i=0; i<6; ++i){
             ambient_cube_color[i] = vec3(0.0);

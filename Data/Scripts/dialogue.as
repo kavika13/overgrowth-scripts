@@ -1702,7 +1702,7 @@ class Dialogue {
 				int cur_pos = selected_line * (metrics.bounds_y / 64); // font_size should do this too?
 				uint i = 0;
 
-				while(cur_pos > GetScreenHeight() + 100) {
+				while(cur_pos > 600) {
 					cur_pos = (selected_line - ++i) * (metrics.bounds_y / 64);
 				}
 

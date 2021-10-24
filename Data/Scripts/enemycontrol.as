@@ -52,7 +52,7 @@ float get_weapon_delay = kGetWeaponDelay;
 enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
-enum AISubGoal {_unknown = -1, _punish_fall, _provoke_attack, _avoid_jump_kick, _wait_and_attack, _rush_and_attack, _defend, _surround_target, _escape_surround, 
+enum AISubGoal {_unknown = -1, _punish_fall, _provoke_attack, _avoid_jump_kick, _wait_and_attack, _rush_and_attack, _defend, _surround_target, _escape_surround,
     _investigate_slow, _investigate_urgent, _investigate_body, _investigate_around};
 AISubGoal sub_goal = _wait_and_attack; 
 
@@ -939,7 +939,6 @@ void UpdateBrain(const Timestep &in ts){
 
     DebugDrawAIState();
     DebugDrawAIPath();
-   
 }
 
 bool IsAware(){
@@ -1189,7 +1188,9 @@ NavPath path;
 int current_path_point = 0;
 void GetPath(vec3 target_pos) {
     path = GetPath(this_mo.position,
-                   target_pos);
+                   target_pos,
+                   POLYFLAGS_ALL,
+                   POLYFLAGS_NONE);
     current_path_point = 0;
 }
 
@@ -1212,6 +1213,46 @@ vec3 GetNextPathPoint() {
     return next_point;
 }
 
+bool IsCloseToJumpNode()
+{
+    int num_points = path.NumPoints();
+    for(int i=1; i<num_points; ++i)
+    {   
+        vec3 next_point = path.GetPoint(i);
+        uint32 flag = path.GetFlag(i);
+        if(xz_distance_squared(this_mo.position, next_point) < 10.0f)
+        {
+            if( DT_STRAIGHTPATH_OFFMESH_CONNECTION & flag != 0 )
+            {
+                return true; 
+            }
+        }
+    }
+    return false;
+}
+
+vec3 GetJumpNodeDestination()
+{
+    int num_points = path.NumPoints();
+    for(int i=1; i<num_points; ++i)
+    {
+        vec3 next_point = path.GetPoint(i);
+        uint32 flag = path.GetFlag(i);
+        if(xz_distance_squared(this_mo.position, next_point) < 10.0f)
+        {
+            if( DT_STRAIGHTPATH_OFFMESH_CONNECTION & flag != 0 )
+            {
+                if( i+1 < num_points )
+                {
+                    return path.GetPoint(i+1);
+                }
+            }
+        }
+    }
+
+    return this_mo.position;
+}
+
 class WaypointInfo {
     bool success;
     vec3 target_point;
@@ -1222,13 +1263,14 @@ class WaypointInfo {
 WaypointInfo GetWaypointInfo(int id){
     WaypointInfo info;
     info.success = false;
+
     if(id != -1 && ObjectExists(id)){
         Object@ object = ReadObjectFromID(id);
         if(object.GetType() == _path_point_object){
             info.target_point = object.GetTranslation();
             info.success = true;
             info.following_friend = false;
-        } else if(object.GetType() == _movement_object){
+        } else if(object.GetType() == _movement_object) {
             if(situation.KnowsAbout(id)){
                 info.target_point = ReadCharacterID(id).position;
                 info.success = true;
@@ -1261,7 +1303,7 @@ vec3 GetCheckedRepulsorForce() {
 
 vec3 GetPatrolMovement(){
     if(time < patrol_wait_until){
-    	return vec3(0.0f);
+        return vec3(0.0f);
     }
 
     WaypointInfo waypoint_info = GetWaypointInfo(waypoint_target_id);
@@ -1353,15 +1395,16 @@ vec3 GetMovementToPoint(vec3 point, float slow_radius){
     return GetMovementToPoint(point, slow_radius, 0.0f, 0.0f);
 }
 
-bool JumpToTarget(vec3 jump_target, vec3 &out vel){
-    vec3 start_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, time);
+bool JumpToTarget(vec3 jump_target, vec3 &out vel, const float _success_threshold){
+    float r_time; 
+    vec3 start_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, r_time);
     if(start_vel.y != 0.0f){
         bool low_success = false;
         bool med_success = false;
         bool high_success = false;
-        const float _success_threshold = 0.1f;
+        //const float _success_threshold = 0.1f;
         vec3 end;
-        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.15f, time);
+        vec3 low_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.15f, r_time);
         jump_info.jump_start_vel = low_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -1382,7 +1425,7 @@ bool JumpToTarget(vec3 jump_target, vec3 &out vel){
                 low_success = true;
             }
         } 
-        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, time);
+        vec3 med_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 0.55f, r_time);
         jump_info.jump_start_vel = med_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -1403,7 +1446,7 @@ bool JumpToTarget(vec3 jump_target, vec3 &out vel){
                 med_success = true;
             }
         } 
-        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 1.0f, time);
+        vec3 high_vel = GetVelocityForTarget(this_mo.position, jump_target, run_speed*1.5f, _jump_vel*1.7f, 1.0f, r_time);
         jump_info.jump_start_vel = high_vel;
         JumpTestEq(this_mo.position, jump_info.jump_start_vel, jump_info.jump_path); 
         end = jump_info.jump_path[jump_info.jump_path.size()-1];
@@ -1493,7 +1536,10 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     // Get path to estimated target position
     vec3 target_velocity;
     vec3 target_point = point;
-    if(distance_squared(target_point, this_mo.position) > 0.2f){
+
+    //First, if far away, get a point on the navmesh close to the intended position.
+    if(distance_squared(target_point, this_mo.position) > 0.2f)
+    {
         NavPoint np = GetNavPoint(point);
 
         if( np.IsSuccess() )
@@ -1501,7 +1547,23 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
             target_point =  np.GetPoint();
         }
     }
+    //Pathfind to the target point on the navmesh.
     GetPath(target_point);
+    
+    //See if we're close to a jumping node.
+    if( IsCloseToJumpNode() )
+    {
+        vec3 pos = GetJumpNodeDestination();
+        vec3 vel;
+        if(JumpToTarget(pos, vel, 0.5f)){
+            has_jump_target = true;
+            jump_target_vel = vel;
+        }
+        else
+        {
+            //Print( "Unable to find jump path, maybe i should avoid this node" );
+        }
+    }
     {
         vec3 next_path_point = GetNextPathPoint();
         if(next_path_point != vec3(0.0f)){
@@ -1609,8 +1671,16 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
 }
 
 vec3 GetDodgeDirection() {
-    MovementObject @char = ReadCharacterID(chase_target_id);
-    return normalize(this_mo.position - char.position);
+    if( chase_target_id != -1 )
+    {
+        MovementObject @char = ReadCharacterID(chase_target_id);
+        return normalize(this_mo.position - char.position);
+    }
+    else
+    {
+        Log( error, "Trying to dodge non-existant chase target attack" );
+        return vec3(1,0,0);
+    }
 }
 
 vec3 GetAttackMovement() {

@@ -129,7 +129,7 @@ class Image : Element
 	    	imageHandle.scale.y *= (float(getSizeY())*screenMetrics.GUItoScreenYScale)/float(originalImageSize.y);
 
 	     	imageHandle.position.x = screenRenderPos.x;
-	     	imageHandle.position.y = GetScreenHeight() - screenRenderPos.y - (originalImageSize.x * imageHandle.scale.y );
+	     	imageHandle.position.y = GetScreenHeight() - screenRenderPos.y - (originalImageSize.y * imageHandle.scale.y );
 	     	imageHandle.position.z = 0.0;
 	     	
 	     	imageHandle.color = color;

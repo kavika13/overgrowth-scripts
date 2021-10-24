@@ -42,8 +42,6 @@ void main()
 
     tex_coord = tex_coord_attrib;
     morphed_tex_coord = tex_coord_attrib + morph_tex_offset_attrib;
-    fur_tex_coord = fur_tex_coord_attrib;
-#else
-    fur_tex_coord = vec2(0.0, 0.0);
 #endif
+    fur_tex_coord = fur_tex_coord_attrib;
 } 

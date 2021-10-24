@@ -102,14 +102,22 @@ class DebugPath
     {
         ClearPath();
         int num_points = path.NumPoints();
+
         for(int i=1; i<num_points; i++){
-            path_lines.insertLast(DebugDrawLine(path.GetPoint(i-1) + vec3(0.0, 0.1, 0.0), path.GetPoint(i) + vec3(0.0, 0.1, 0.0), vec3(1.0f), _persistent));
+            vec3 color(1.0f);
+            uint32 flag = path.GetFlag(i-1);
+
+            if( DT_STRAIGHTPATH_OFFMESH_CONNECTION & flag != 0 )
+            {
+                color = vec3(1.0f,0,0);
+            }
+
+            path_lines.insertLast(DebugDrawLine(path.GetPoint(i-1) + vec3(0.0, 0.1, 0.0), path.GetPoint(i) + vec3(0.0, 0.1, 0.0), color, _persistent));
+
             path_lines.insertLast(DebugDrawLine(path.GetPoint(i-1) + vec3(0.0, 0.1, 0.0), path.GetPoint(i-1) + vec3(0.0, 0.5, 0.0), vec3(1.0f,0,0),_persistent));
             path_lines.insertLast(DebugDrawLine(path.GetPoint(i) + vec3(0.0, 0.1, 0.0), path.GetPoint(i) + vec3(0.0, 0.5, 0.0), vec3(1.0f,0,0),_persistent));
         }
     }
-    
-
 }
 
 class DebugInvestigatePoints
@@ -190,11 +198,11 @@ void DebugDrawAIState()
     if( _debug_draw_ai_state )
     {
         ai_state_debug.SetActive( true  );
-        ai_state_debug.SetText("Player "+this_mo.GetID() + "\n" + GetAIGoalString(goal) + "\n" + GetAISubGoalString(sub_goal), head_pos );
+        ai_state_debug.SetText("Player "+this_mo.GetID() + "\n" + GetAIGoalString(goal) + "\n" + GetAISubGoalString(sub_goal) + "\n" + GetGeneralStateString(state) + "\n", head_pos );
 
         string label = "P"+this_mo.GetID()+"goal: ";
         string text = label;
-        text += GetAIGoalString(goal) + ", " + GetAISubGoalString(sub_goal) + ", " + GetPathFindTypeString(path_find_type) + ", " + GetClimbStageString(trying_to_climb);
+        text += GetAIGoalString(goal) + ", " + GetAISubGoalString(sub_goal) + ", " + GetPathFindTypeString(path_find_type) + ", " + GetClimbStageString(trying_to_climb) + ", " + GetGeneralStateString(state);
         DebugText(label, text,0.1f);
     }
     else
@@ -282,4 +290,17 @@ string GetClimbStageString(ClimbStage g )
         case  _climb_up: return " _climb_up";
     }
     return "Unknown";
+}
+
+string GetGeneralStateString( int state )
+{
+    switch( state )
+    {
+        case _movement_state: return "movement_state";
+        case _ground_state: return "ground_state";
+        case _attack_state: return "attack_state";
+        case _hit_reaction_state: return "hit_reaction_state";
+        case _ragdoll_state: return "ragdoll_state";
+    }
+    return "unknown";
 }

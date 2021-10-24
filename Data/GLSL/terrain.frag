@@ -35,7 +35,7 @@ void main() {
     shadow_coords[3] = shadow_matrix[3] * vec4(world_vert, 1.0);
 
     vec3 ambient_cube_color[6];
-    bool use_amb_cube = GetAmbientCube(world_vert, num_light_probes, ambient_color_buffer, ambient_cube_color, 0u);
+    bool use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, 0u);
 
     vec2 tc0 = frag_tex_coords.xy;
     vec2 tc1 = frag_tex_coords.zw;   
@@ -113,6 +113,13 @@ void main() {
     // Put it all together
     CALC_COMBINED_COLOR
     CALC_COLOR_ADJUST
-    CALC_HAZE
+    //CALC_HAZE
+    if(!use_amb_cube){
+        vec3 fog_color = textureLod(spec_cubemap,ws_vertex,5.0).xyz;
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));
+    } else {
+        vec3 fog_color = SampleAmbientCube(ambient_cube_color, ws_vertex);
+        color = mix(color, fog_color, GetHazeAmount(ws_vertex));        
+    }
     CALC_FINAL_UNIVERSAL(alpha)
 }

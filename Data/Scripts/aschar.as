@@ -1339,10 +1339,16 @@ array<float> resting_mouth_pose;
 array<float> target_resting_mouth_pose;
 float resting_mouth_pose_time = 0.0f;
 
+float old_time = 0.0f;
+
 void Update(int num_frames) {
     CheckForNANPosAndVel(1);
     Timestep ts(time_step, num_frames);    
     time += ts.step();
+        
+    if( old_time > time )
+        Log( error, "Sanity check failure, timer was reset in player character: " + this_mo.getID() + "\n");
+    old_time = time;
 
     // Update talking
     if(test_talking){
