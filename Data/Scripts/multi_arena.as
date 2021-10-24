@@ -2,6 +2,294 @@
 #include "multi_arena/multi_arena_text.as"
 #include "multi_arena/multi_arena_battle.as"
 #include "arena_meta_persistence.as"
+#include "music_load.as"
+
+MusicLoad ml("Data/Music/arena.xml");
+
+enum MusicState
+{
+    PlayerDead,
+    Tempo1,
+    Tempo2,
+    Tempo3,
+    Tempo4,
+    Tempo5
+}
+
+class CountdownTimer
+{
+    CountdownTimer( float _duration )
+    {
+        duration = _duration;
+        Reset();
+    }
+
+    float start_time;
+    float duration;
+    bool checked = false;
+
+    bool Check()
+    {
+        if( checked == false )
+        {
+            if( the_time - start_time > duration )
+            {
+                checked = true;
+                return true;
+            }
+        } 
+        return false;
+    }
+
+    void Reset()
+    {
+        start_time = the_time;
+        checked = false;
+    }
+};
+
+
+class MusicSegmentHandler
+{
+    MusicState current_state;
+    MusicState last_used_state; 
+    
+    string current_segment;
+    
+    CountdownTimer player_last_hurt_countdown(10.0f);
+    CountdownTimer aggression_reduction_counter(3.0f);
+
+    int aggression_count;
+
+    MusicSegmentHandler()
+    {
+        aggression_count = 0;
+        current_segment = "";
+        current_state = PlayerDead;
+        last_used_state = Tempo1;
+    }
+
+    void UpdatePlayedSegment()
+    {
+        if( last_used_state != current_state )
+        { 
+            bool do_queue = false;
+            string segment = "";
+            switch( current_state )
+            {
+                case PlayerDead:
+                    //Let segment finish when ending =)
+                    do_queue = true;
+                    segment = "fight1-ver1";
+                    break; 
+                case Tempo1:
+                    segment = "fight2-ver1";
+                    break;
+                case Tempo2:
+                    segment = "fight3-ver1";//"fight3-ver2"] );
+                    break;
+                case Tempo3:
+                    segment = "fight4-ver1"; //"fight4-ver2"] );
+                    break;
+                case Tempo4:
+                    segment = "fight5-ver1"; //"fight5-ver2"] ); 
+                    break;
+                case Tempo5:
+                    segment = "fight6-ver1";
+                    break;
+            }
+
+            if( current_segment != segment )
+            {
+                Log(info, "Setting Segment to " + segment );
+                if( do_queue )
+                    QueueSegment( segment );
+                else
+                    PlaySegment( segment );
+                current_segment = segment;
+            }
+            last_used_state = current_state;
+        }
+    }
+
+    void CheckPlayerHitReduce()
+    {
+        if( player_last_hurt_countdown.Check() )
+        {
+            switch( current_state )
+            {
+                case Tempo2:
+                    current_state = Tempo1;
+                    break;
+                case Tempo3:
+                    current_state = Tempo2;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    
+    void CheckAnyAggressionReduce()
+    {
+        if( aggression_reduction_counter.Check() )
+        {
+            if( aggression_count > 0 )
+                aggression_count--;
+            aggression_reduction_counter.Reset();
+        }
+
+        switch( current_state )
+        {
+            case Tempo2:
+                if( aggression_count < 3 )
+                {
+                    current_state = Tempo1;
+                }
+                break;
+            case Tempo3:
+                if( aggression_count < 5 )
+                {
+                    current_state = Tempo2;
+                }
+                break;
+            case Tempo4:
+                if( aggression_count < 7 )
+                {
+                    current_state = Tempo3;
+                }
+                break;
+            case Tempo5:
+                if( aggression_count < 12 )
+                {
+                    current_state = Tempo4;
+                }
+                break;
+        }
+    }
+
+    void Update()
+    {
+        CheckPlayerHitReduce();
+        CheckAnyAggressionReduce();
+
+        UpdatePlayedSegment();
+    }
+
+    
+    void PlayerDied()
+    {
+        /*
+        switch( current_state )
+        {
+            case PlayerDead:
+                //Nothing;
+                break;
+            default:
+                current_state = PlayerDead;
+                break;
+        }
+        */
+    }   
+
+    void PlayerRevived()
+    {
+        /*
+        switch( current_state )
+        {
+            case PlayerDead:
+                current_state = Tempo1;
+                break;
+            default:
+                break;
+        }
+        */
+    }
+
+    void PlayerKilledCharacter()
+    {
+        Log( info, "PlayerKilledCharacter" );
+        switch( current_state )
+        {
+            case Tempo1:
+                current_state = Tempo3;
+                if( aggression_count < 6 )
+                    aggression_count = 6;
+                break;
+            case Tempo2:
+                current_state = Tempo4;
+                if( aggression_count < 8 )
+                    aggression_count = 8;
+                break;
+            case Tempo3:
+                current_state = Tempo5;
+                if( aggression_count < 13 )
+                    aggression_count = 13;
+                break;
+            case Tempo4:
+                current_state = Tempo5;
+                if( aggression_count < 13 )
+                    aggression_count = 13;
+                break;
+        }
+    }
+
+    void AggressionShown()
+    {
+        aggression_count++;
+        Log( info, "Aggro:" + aggression_count );
+        aggression_reduction_counter.Reset();
+
+        switch( current_state )
+        {
+            case Tempo1:
+                if( aggression_count >= 3 )
+                {
+                    current_state = Tempo2;
+                }
+                break;
+            case Tempo2:
+                if( aggression_count >= 5 )
+                {
+                    current_state = Tempo3;
+                }
+                break;
+            case Tempo3:
+                if( aggression_count >= 7 )
+                {
+                    current_state = Tempo4;
+                }
+                break;
+        }
+    }
+
+    void StartFight()
+    {
+        switch( current_state )
+        {
+            case PlayerDead:
+                current_state = Tempo1;
+                break;
+            default:
+        }
+    }
+
+    void MatchEnded()
+    {
+        aggression_count /= 2;
+        switch( current_state )
+        {
+            case PlayerDead:
+                //Nothing;
+                break;
+            default:
+                current_state = PlayerDead;
+                break;
+        }
+    }
+};
+
+MusicSegmentHandler msh;
 
 // Difficulty of current collection of enemies
 float curr_difficulty;
@@ -86,6 +374,9 @@ void ClearMeta() {
 
 // Called by level.cpp at start of level
 void Init(string str) {
+    PlaySong("sub-arena-loop");
+    QueueSegment("fight1-ver1");
+    
     level_name = str;
     
     global_data.ReadPersistentInfo();
@@ -198,9 +489,12 @@ void SetUpLevel(float initial_difficulty) {
         if(params.HasParam("Name") && params.GetString("Name") == "arena_battle" ) {
             if( params.HasParam("Battles") ) {
                 JSON battlesJSON = params.GetJSON("Battles");
-                Print("Battle Setup Found:\n");
-                Print( battlesJSON.writeString(true) );
-                Print("\n");
+                
+                string save_file = "Data/BattleJSONDumps/" + level_name + "-battle_data.json";
+                Print("Battle Setup Found, saving to: " + save_file + "\n");
+                StartWriteFile();
+                AddFileString( battlesJSON.writeString(true) );
+                WriteFileToWriteDir( save_file );
 
                 // Pull out the battle array
                 JSONValue battlesValues = battlesJSON.getRoot()["data"]["battles"];
@@ -230,7 +524,7 @@ void SetUpLevel(float initial_difficulty) {
         //If we are in an active session, get the requested fight
         if( global_data.getSessionProfile() >= 0 )
         {
-            JSONValue world_node = global_data.getCurrentWorldNode();  
+            JSONValue world_node = global_data.getCurrentWorldNode();
             if( world_node.type() != JSONnullValue )
             {
                 if( world_node["type"].asString() == "arena_instance" )
@@ -278,10 +572,14 @@ void SetUpLevel(float initial_difficulty) {
         JSONValue thisBattle = battleInstanceValues[ battleInstanceIndex ];
 
         JSONValue battleAttributes = thisBattle["attributes"];
+        
+        string gamemode = "normal";
+        if( battleAttributes.isMember("gamemode") ) {
+            gamemode = battleAttributes["gamemode"].asString();
+        }
 
         battleMessage = battleAttributes["intro"].asString();
-
-        battle.initialize( thisBattle );
+        battle.initialize( gamemode, thisBattle );
 
         battle.spawn();
     }
@@ -311,11 +609,11 @@ void SetUpLevel(float initial_difficulty) {
     AddMetaEvent(kMessage, "set_meta_state 0 pre_intro");
     AddMetaEvent(kMessage, "set_intro_text");
     AddMetaEvent(kMessage, "set show_text true");
-    AddMetaEvent(kMessage, "wait_for_player_move 1.0");
+    //AddMetaEvent(kMessage, "wait_for_player_move 1.0");
 
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "set_meta_state 0 intro");
-    AddMetaEvent(kWait, "0.5");
+    //AddMetaEvent(kWait, "0.5");
 
 //    AddMetaEvent(kDisplay, "Welcome to the arena!");
 //    AddMetaEvent(kWait, "2.0");
@@ -327,7 +625,7 @@ void SetUpLevel(float initial_difficulty) {
         AddMetaEvent(kDisplay, "Two points to win!");
         AddMetaEvent(kMessage, "set_meta_state 1 two_points");
     }
-    AddMetaEvent(kWait, "2.0");
+    //AddMetaEvent(kWait, "2.0");
 
     if( battleMessage == "" ) {
         AddMetaEvent(kDisplay, "Time to fight!");    
@@ -360,10 +658,17 @@ void AggressionDetected(int attacker_id) {
             EndMatch(false);
         }
     }
+
+    //Player is being aggressive.
+    if(ReadCharacterID(attacker_id).controlled) {
+        msh.AggressionShown();
+    }
+
 }
 
 // Parse string messages and react to them
 void ReceiveMessage(string msg) {
+
     TokenIterator token_iter;
     token_iter.Init();
     if(!token_iter.FindNextToken(msg)) {
@@ -373,6 +678,13 @@ void ReceiveMessage(string msg) {
     // Handle simple tokens, or mark as requiring extra parameters
     MessageParseType type = kSimple;
     string token = token_iter.GetToken(msg);
+
+
+    if( token != "added_object" && token != "notify_deleted" )
+    {
+        //Log( info, "ArenaMessage: " + msg );
+    }
+
     if(token == "post_reset") {
         SetUpLevel(curr_difficulty);    
     } else if(token == "restore_health") {
@@ -383,12 +695,10 @@ void ReceiveMessage(string msg) {
         }
     } else if(token == "new_match") {
         Print("new_match received\n");
+        msh.PlayerRevived();
 
-        // Load the session data to see if we're in an arena series
-        JSONValue arenaSession = global_data.getSessionParameters();
-        
-        // If we have some values -- we're in an arena series
-        if( arenaSession.size() != 0 ) {
+        // Check if we're on a valid profile.
+        if( global_data.getSessionProfile() >= 0 ) {
             // Go back to the arena menu
             LoadLevel("back");
         }
@@ -488,17 +798,22 @@ void ReceiveMessage(string msg) {
                 Object@ other_obj = ReadObjectFromID(char_a);
                 ScriptParams@ other_params = other_obj.GetScriptParams();
         
+
                 if( player_params.GetString("Teams") != other_params.GetString("Teams") )
                 {
+                    msh.PlayerKilledCharacter();
                     Log(info,"Player got a kill\n");
                     global_data.player_kills++;
                 }
             }
             else
             {
+                msh.PlayerDied();
                 Log(info,"Player got mortally wounded\n");
                 global_data.player_deaths++;
                 global_data.addHiddenState( "mortally_wounded" );
+                //Instantly end match as the player lost due to bad damage.
+                EndMatch(false);
             }
         }
         else if( token == "character_knocked_out" )
@@ -513,10 +828,15 @@ void ReceiveMessage(string msg) {
         
                 if( player_params.GetString("Teams") != other_params.GetString("Teams") )
                 {
+                    msh.PlayerKilledCharacter();
                     Log(info,"Player got a ko\n");
                     global_data.player_kos++;
-                    global_data.addHiddenState( "knocked_out" );
                 }
+            }
+            else
+            {
+                msh.PlayerDied();
+                global_data.addHiddenState( "knocked_out" );
             }
         }
     } else if(type == kTwoInt) {
@@ -574,6 +894,7 @@ float GetRandomDifficultyNearPlayerSkill() {
 
 bool has_ended_match = false;
 void EndMatch(bool victory) {
+        msh.MatchEnded();
         float win_prob = ProbabilityOfWin(global_data.player_skill, curr_difficulty);
         float excitement_level = 1.0f-pow(0.9f,total_excitement*0.3f); 
         const float kMatchImportance = 0.3f; // How much this match influences your skill evaluation
@@ -627,7 +948,7 @@ void EndMatch(bool victory) {
     AddMetaEvent(kWait, "2.0");
     AddMetaEvent(kDisplay, "");
     AddMetaEvent(kMessage, "set show_text true");
-    AddMetaEvent(kMessage, "wait_for_click");
+    //AddMetaEvent(kMessage, "wait_for_click");
     AddMetaEvent(kMessage, "set show_text false");
     AddMetaEvent(kMessage, "new_match");
 
@@ -656,72 +977,80 @@ void VictoryCheck() {
         }
 
         if(!multiple_teams_alive && meta_states[0] == "fighting") {
-            // Store id of the team that won the last round
-            int last_round_winner = -1;
-            if("0" == team_alive) {
-                last_round_winner = 0;
-            } else if("1" == team_alive) {
-                last_round_winner = 1;
-            } else if("2" == team_alive) {
-                last_round_winner = 2;
-            } else if("3" == team_alive) {
-                last_round_winner = 3;
-            }
-            // Increment winning team score
-            if(last_round_winner != -1) {
-                ++match_score[last_round_winner];
-            }
-            
-            Print("Last round winner: "+last_round_winner+"\n");
-            int max_score = 1;
-            if(meta_states[1] == "two_points") {
-                max_score = 2;
-            }
 
-            if(match_score[last_round_winner] < max_score) {
-                ClearMeta();
-                AddMetaEvent(kMessage, "set_all_hostile false");
-                AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
-                AddMetaEvent(kDisplay, "The round is over!");
-                AddMetaEvent(kWait, "2.0");
-                AddMetaEvent(kMessage, "set_meta_state 0 resetting");
-                AddMetaEvent(kMessage, "restore_health");
+            if( battle.gamemode == "waves" && battle.spawnNextWave() ) 
+            {
+        
+            }
+            else
+            { 
+                // Store id of the team that won the last round
+                int last_round_winner = -1;
+                if("0" == team_alive) {
+                    last_round_winner = 0;
+                } else if("1" == team_alive) {
+                    last_round_winner = 1;
+                } else if("2" == team_alive) {
+                    last_round_winner = 2;
+                } else if("3" == team_alive) {
+                    last_round_winner = 3;
+                }
+                // Increment winning team score
                 if(last_round_winner != -1) {
-                    string team_color = "A";
-                    switch(last_round_winner) {
-                    case 0: team_color = "Red"; break;
-                    case 1: team_color = "Blue"; break;
-                    case 2: team_color = "Tan"; break;
-                    case 3: team_color = "Cyan"; break;
-                    }
-                    string display_text = team_color+" team has "+match_score[last_round_winner]+" point";
-                    if(match_score[last_round_winner] != 1) {
-                        display_text += "s";
-                    }
-                    display_text += "!";
-                    AddMetaEvent(kDisplay, display_text);
+                    ++match_score[last_round_winner];
+                }
+                
+                Print("Last round winner: "+last_round_winner+"\n");
+                int max_score = 1;
+                if(meta_states[1] == "two_points") {
+                    max_score = 2;
+                }
+
+                if(match_score[last_round_winner] < max_score) {
+                    ClearMeta();
+                    AddMetaEvent(kMessage, "set_all_hostile false");
+                    AddMetaEvent(kMessage, "set_meta_state 0 fighting_over_but_allowed");
+                    AddMetaEvent(kDisplay, "The round is over!");
                     AddMetaEvent(kWait, "2.0");
-                }
-                AddMetaEvent(kDisplay, "Get ready for the next round...");
-                AddMetaEvent(kWait, "2.0");
-                AddMetaEvent(kDisplay, "Fight!");
-                AddMetaEvent(kMessage, "set_all_hostile true");
-                AddMetaEvent(kMessage, "set_meta_state 0 fighting");
-                AddMetaEvent(kWait, "2.0");
-                AddMetaEvent(kDisplay, "");
-            } else {
-                bool victory = false;
-                int num_chars = GetNumCharacters();
-                for(int i=0; i<num_chars; ++i) {
-                    MovementObject@ char = ReadCharacter(i);
-                    Object@ obj = ReadObjectFromID(char.GetID());
-                    ScriptParams@ params = obj.GetScriptParams();                    
-                    if(char.controlled && params.HasParam("Teams") && params.GetString("Teams") == team_alive) {
-                        victory = true;
+                    AddMetaEvent(kMessage, "set_meta_state 0 resetting");
+                    AddMetaEvent(kMessage, "restore_health");
+                    if(last_round_winner != -1) {
+                        string team_color = "A";
+                        switch(last_round_winner) {
+                        case 0: team_color = "Red"; break;
+                        case 1: team_color = "Blue"; break;
+                        case 2: team_color = "Tan"; break;
+                        case 3: team_color = "Cyan"; break;
+                        }
+                        string display_text = team_color+" team has "+match_score[last_round_winner]+" point";
+                        if(match_score[last_round_winner] != 1) {
+                            display_text += "s";
+                        }
+                        display_text += "!";
+                        //AddMetaEvent(kDisplay, display_text);
+                        //AddMetaEvent(kWait, "2.0");
                     }
+                    //AddMetaEvent(kDisplay, "Get ready for the next round...");
+                    //AddMetaEvent(kWait, "2.0");
+                    AddMetaEvent(kDisplay, "Fight!");
+                    AddMetaEvent(kMessage, "set_all_hostile true");
+                    AddMetaEvent(kMessage, "set_meta_state 0 fighting");
+                    AddMetaEvent(kWait, "2.0");
+                    AddMetaEvent(kDisplay, "");
+                } else {
+                    bool victory = false;
+                    int num_chars = GetNumCharacters();
+                    for(int i=0; i<num_chars; ++i) {
+                        MovementObject@ char = ReadCharacter(i);
+                        Object@ obj = ReadObjectFromID(char.GetID());
+                        ScriptParams@ params = obj.GetScriptParams();                    
+                        if(char.controlled && params.HasParam("Teams") && params.GetString("Teams") == team_alive) {
+                            victory = true;
+                        }
+                    }
+                    ClearMeta();
+                    EndMatch(victory);
                 }
-                ClearMeta();
-                EndMatch(victory);
             }
         }        
     }
@@ -779,6 +1108,7 @@ void OddsFromProbability(float prob, int &out a, int &out b) {
 void SetAllHostile(bool val) {
     int num_chars = GetNumCharacters();
     if(val == true) {
+        msh.StartFight();
         for(int i=0; i<num_chars; ++i) {
              MovementObject@ char = ReadCharacter(i);
              char.ReceiveMessage("set_combat_allowed true");
@@ -855,6 +1185,7 @@ bool MetaEventWaiting() {
 }
 
 void Update() { 
+    msh.Update();
 
     global_time += uint64(time_step * 1000);
 

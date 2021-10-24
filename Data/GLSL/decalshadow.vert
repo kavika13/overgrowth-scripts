@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2D tex4;
 
 void main()

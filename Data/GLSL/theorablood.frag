@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2D tex0;
 uniform samplerCube tex3;
 uniform float shadowed;

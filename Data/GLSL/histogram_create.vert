@@ -1,3 +1,4 @@
+#version 150
 uniform sampler2D tex0;
 
 in vec2 pixel_uv;

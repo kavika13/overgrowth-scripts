@@ -15,6 +15,11 @@ bool ArenaCampaignSanityCheck( GlobalArenaData@ gad )
         is_ok = VerifyReferences( gad );
     }
 
+    if( !is_ok )
+    {
+        DisplayError( "Errors in arena scripts", "There were one or more errors in the arena script, read the logs");
+    }
+
     return is_ok;
 }
 
@@ -240,7 +245,15 @@ bool VerifyActionReferences( GlobalArenaData@ gad )
     {
         JSONValue action = actions[i];
         
-        is_ok = VerifyAction(gad,action) && is_ok;
+        bool v_is_ok = VerifyAction(gad,action);
+
+        if( !v_is_ok  )
+        {
+            Log( error, "Previous errors came from action: " + action["id"].asString() );            
+        }
+
+        is_ok =  v_is_ok && is_ok;
+        
     }
     
     return is_ok;
@@ -274,13 +287,18 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
         JSONValue add_world_map_connections     = clause["add_world_map_connections"];
         JSONValue remove_world_map_connections  = clause["remove_world_map_connections"];
 
-        if( set_world_node.type() != JSONnullValue )
+        if( set_world_node.type() == JSONstringValue )
         {
             if( gad.getWorldNode( set_world_node.asString() ).type() != JSONobjectValue )
             {
                 Log(error, "set_world_node is set to non-existant node: " + set_world_node.asString() );
                 is_ok = false;
             }
+        }
+        else if( set_world_node.type() != JSONnullValue )
+        {
+            Log( error, "set_world_node has non-string value" );
+            is_ok = false;
         }
 
         if( add_states.type() == JSONarrayValue )
@@ -296,6 +314,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 }
             }
         }
+        else if( add_states.type() != JSONnullValue )
+        {
+            Log( error, "add_states has non-array value" );
+            is_ok = false;
+        }
 
         if( lose_states.type() == JSONarrayValue )
         {
@@ -309,6 +332,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                     is_ok = false;
                 }
             }
+        }
+        else if( lose_states.type() != JSONnullValue )
+        {
+            Log( error, "lose_states has non-array value" );
+            is_ok = false;
         }
 
         if( add_hidden_states.type() == JSONarrayValue )
@@ -324,6 +352,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 }
             }
         }
+        else if( add_hidden_states.type() != JSONnullValue )
+        {
+            Log( error, "add_hidden_states has non-array value" );
+            is_ok = false;
+        }
 
         if( lose_hidden_states.type() == JSONarrayValue )
         {
@@ -338,6 +371,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 }
             }
         }
+        else if( lose_hidden_states.type() != JSONnullValue )
+        {
+            Log( error, "lose_hidden_states has non-array value" );
+            is_ok = false;
+        }
 
         if( actions.type() == JSONarrayValue )
         {
@@ -345,6 +383,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
             {
                 is_ok = VerifyActionReferenceValue(gad,actions[j]) && is_ok;
             }
+        }
+        else if( actions.type() != JSONnullValue )
+        {
+            Log( error, "actions has non-array value" );
+            is_ok = false;
         }
 
         if( set_arena_instance.type() == JSONstringValue )
@@ -355,6 +398,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 is_ok = false;
             }
         }
+        else if( set_arena_instance.type() != JSONnullValue )
+        {
+            Log( error, "set_arena_instance has non-string value" );
+            is_ok = false;
+        }
 
         if( set_meta_choice.type() == JSONstringValue )
         {
@@ -363,6 +411,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 Log(error, "set_meta_choice referes to invalid meta_choice: " + set_meta_choice.asString() );
                 is_ok = false;
             }
+        }
+        else if( set_meta_choice.type() != JSONnullValue )
+        {
+            Log( error, "set_meta_choice has non-string value" );
+            is_ok = false;
         }
 
         if( set_message.type() == JSONstringValue )
@@ -373,6 +426,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 is_ok = false;
             }
         }
+        else if( set_message.type() != JSONnullValue )
+        {
+            Log( error, "set_message has non-string value" );
+            is_ok = false;
+        }
 
         if( set_world_map.type() == JSONstringValue )
         {
@@ -381,6 +439,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 Log(error, "set_world_map referes to invalid message: " + set_world_map.asString() );
                 is_ok = false;
             }
+        }
+        else if( set_world_map.type() != JSONnullValue )
+        {
+            Log( error, "set_world_map has non-string value" );
+            is_ok = false;
         }
 
         if( add_world_map_nodes.type() == JSONarrayValue )
@@ -394,6 +457,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( add_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "add_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( remove_world_map_nodes.type() == JSONarrayValue )
         {
@@ -406,6 +474,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( remove_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "remove_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( visit_world_map_nodes.type() == JSONarrayValue )
         {
@@ -418,6 +491,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( visit_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "visit_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( unvisit_world_map_nodes.type() == JSONarrayValue )
         {
@@ -430,6 +508,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( unvisit_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "unvisit_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( available_world_map_nodes.type() == JSONarrayValue )
         {
@@ -442,6 +525,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( available_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "available_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( unavailable_world_map_nodes.type() == JSONarrayValue )
         {
@@ -454,6 +542,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( unavailable_world_map_nodes.type() != JSONnullValue )
+        {
+            Log( error, "unavailable_world_map_nodes has non array value" );
+            is_ok = false;
+        }
 
         if( set_world_map_node.type() == JSONstringValue )
         {
@@ -462,6 +555,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 Log( error, "set_world_map_node refers to invalid world_map_node: " + set_world_map_node.type() );
                 is_ok = false;
             }
+        }
+        else if( set_world_map_node.type() != JSONnullValue )
+        {
+            Log( error, "set_world_map_node has non array value" );
+            is_ok = false;
         }
 
         if( add_world_map_connections.type() == JSONarrayValue )
@@ -475,6 +573,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( add_world_map_connections.type() != JSONnullValue )
+        {
+            Log( error, "add_world_map_connections has non array value" );
+            is_ok = false;
+        }
 
         if( remove_world_map_connections.type() == JSONarrayValue )
         {
@@ -487,6 +590,11 @@ bool VerifyActionClause( GlobalArenaData@ gad, JSONValue clause )
                 } 
             }
         } 
+        else if( remove_world_map_connections.type() != JSONnullValue )
+        {
+            Log( error, "remove_world_map_connections has non array value" );
+            is_ok = false;
+        }
     }
 
     return is_ok;

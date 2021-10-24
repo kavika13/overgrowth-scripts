@@ -139,7 +139,13 @@ class Image : Element
 
 			imuiImage.setPosition( vec3( screenRenderPos.x, screenRenderPos.y, getZOrdering() ) );
 			
-			imuiImage.setColor( color );
+	        if( isColorEffected ) {
+                imuiImage.setColor( effectColor );
+            }
+            else {
+                imuiImage.setColor( color );
+            }
+
 			imuiImage.setRotation( rotation );
 
 

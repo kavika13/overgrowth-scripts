@@ -1,3 +1,5 @@
+#version 150
+
 #include "object_shared150.glsl"
 #include "object_frag150.glsl"
 #include "lighting150.glsl"

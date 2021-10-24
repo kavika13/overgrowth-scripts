@@ -230,13 +230,15 @@ class Element {
     dictionary mouseOverBehaviors;   // mouse over behaviors
     dictionary leftMouseClickBehaviors;        // mouse up behaviors
 
-    bool show;          // should this element be rendered?
-    vec4 color;         // if this element is colored, what color is it? -- other elements may define further colors
-    bool border;        // should this element have a border?
-    int borderSize;     // how thick is this border (in GUI space pixels)
-    vec4 borderColor;   // color for the border 
+    bool show;              // should this element be rendered?
+    vec4 color;             // if this element is colored, what color is it? -- other elements may define further colors
+    bool isColorEffected;   // is there a temporary color change?
+    vec4 effectColor;       // if the color is temp
+    bool border;            // should this element have a border?
+    int borderSize;         // how thick is this border (in GUI space pixels)
+    vec4 borderColor;       // color for the border 
 
-    bool mouseOver;     // has mouse been over this element
+    bool mouseOver;         // has mouse been over this element
 
     /*******************************************************************************************/
     /**
@@ -260,6 +262,9 @@ class Element {
 
         show = true;
         color = vec4(1.0,1.0,1.0,1.0);
+
+        isColorEffected = false;
+        effectColor = vec4(1.0,1.0,1.0,1.0);
         border = false;
         borderSize = 1;
         borderColor = vec4(1.0,1.0,1.0,1.0);
@@ -326,18 +331,85 @@ class Element {
      *
      */
     void setColor( vec4 _color ) {
-        color = _color;
+        color = _color; 
     } 
 
     /*******************************************************************************************/
     /**
      * @brief  Gets the current color
      * 
+     * If the color is effected, it'll return the effected color
+     *
      * @returns 4 component vector of the color
      *
      */
      vec4 getColor() {
+        if(isColorEffected ) {
+            return effectColor;    
+        }
+        else {
+            return color;
+        }
+     }
+
+     /*******************************************************************************************/
+    /**
+     * @brief  Gets the current color -- ignoring the effect color
+     *
+     * @returns 4 component vector of the color
+     *
+     */
+     vec4 getBaseColor() {
         return color;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Set the effect color for the element
+     *  
+     * @param _R Red 
+     * @param _G Green
+     * @param _B Blue
+     * @param _A Alpha
+     *
+     */
+    void setEffectColor( float _R, float _G, float _B, float _A = 1.0f ) {
+        effectColor = vec4( _R, _G, _B, _A );
+    } 
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Set the effect color for the element
+     *  
+     * @param _color 4 component vector for the color
+     *
+     */
+    void setEffectColor( vec4 _color ) {
+        isColorEffected = true;
+        effectColor = _color;
+    } 
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the effect current color
+     * 
+     * @returns 4 component vector of the color
+     *
+     */
+     vec4 getEffectColor() {
+        if( !isColorEffected ) {
+            return color;
+        }
+        return effectColor;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Clears any effect color (reseting to the base)
+     *
+     */
+     void clearColorEffect() {
+        isColorEffected = false;
      }
 
     /*******************************************************************************************/
@@ -427,6 +499,170 @@ class Element {
      float getAlpha() {
         return color.a;
      }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Sets the effect red value
+     * 
+     * @param value Color value  
+     *
+     */
+     void setEffectR( float value ) {
+        if( !isColorEffected ) {
+            effectColor = color;
+        }
+        isColorEffected = true;
+        effectColor.x = value;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Gets the effect red value
+     * 
+     * @returns Color value
+     *
+     */
+    float getEffectR() {
+        if( !isColorEffected ) {
+            return color.x;
+        }
+        else {
+            return effectColor.x;
+        }
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear effect red value
+     * 
+     */
+    void clearEffectR() {
+        isColorEffected = false;
+        effectColor.x = color.x;
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Sets the effect green value
+     * 
+     * @param value Color value  
+     *
+     */
+     void setEffectG( float value ) {
+        if( !isColorEffected ) {
+            effectColor = color;
+        }
+        isColorEffected = true;
+        effectColor.y = value;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Gets the effect green value
+     * 
+     * @returns Color value
+     *
+     */
+     float getEffectG() {
+        if( !isColorEffected ) {
+            return color.y;
+        }
+        else {
+            return effectColor.y;
+        }
+     }
+    
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear effect green value
+     * 
+     */
+    void clearEffectG() {
+        isColorEffected = false;
+        effectColor.y = color.y;
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Sets the blue value
+     * 
+     * @param value Color value  
+     *
+     */
+     void setEffectB( float value ) {
+        if( !isColorEffected ) {
+            effectColor = color;
+        }
+        isColorEffected = true;
+        effectColor.z = value;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Gets the blue value
+     * 
+     * @returns Color value
+     *
+     */
+     float getEffectB() {
+        if( !isColorEffected ) {
+            return color.z;
+        }
+        else {
+            return effectColor.z;
+        }
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear effect blue value
+     * 
+     */
+    void clearEffectB() {
+        isColorEffected = false;
+        effectColor.z = color.z;
+    }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Sets the alpha value
+     * 
+     * @param value Color value  
+     *
+     */
+     void setEffectAlpha( float value ) {
+        if( !isColorEffected ) {
+            effectColor = color;
+        }
+        isColorEffected = true;
+        effectColor.a = value;
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief Gets the alpha value
+     * 
+     * @returns Color value
+     *
+     */
+     float getEffectAlpha() {
+        if( !isColorEffected ) {
+            return color.z;
+        }
+        else {
+            return effectColor.z;
+        }
+     }
+
+    /*******************************************************************************************/
+    /**
+     * @brief  Clear effect alpha value
+     * 
+     */
+    void clearEffectAlpha() {
+        isColorEffected = false;
+        effectColor = color;
+    }
 
 
     /*******************************************************************************************/

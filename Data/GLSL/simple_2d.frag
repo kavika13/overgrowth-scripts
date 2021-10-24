@@ -20,8 +20,11 @@ out vec4 out_color;
 void main() {    
 #if defined TEXTURE
     #if defined(STAB)
+        if(var_tex_coord.x < 0.0 || var_tex_coord.x > 1.0 || var_tex_coord.y < 0.0 || var_tex_coord.y > 1.0){
+            discard;
+        }
         vec4 tex_color = texture(tex0,var_tex_coord.xy);
-        out_color = vec4(color[0] * tex_color[0], color[2], color[3], min(1.0,color[3] * tex_color[0] * 10.0));
+        out_color = vec4(color[0] * tex_color[0], color[2], 0.0, min(1.0,color[3] * tex_color[0] * 10.0));
     #else
         out_color = color * vec4(texture(tex0,var_tex_coord.xy));
     #endif

@@ -37,6 +37,49 @@ void SetCascadeShadowCoords(vec4 vert, mat5 inout vec4 sc[4]) {
     sc[2] = gl_TextureMatrix[2] * gl_ModelViewMatrix * vert;
     sc[3] = gl_TextureMatrix[3] * gl_ModelViewMatrix * vert;
 }*/
+const vec2 poisson_disc_4[4]=vec2[4](
+    vec2(-0.4215465, -0.3005172),
+    vec2(0.3845127, 0.1628611),
+    vec2(-0.03371959, 0.46099),
+    vec2(0.1679813, -0.5491683)
+);
+
+const vec2 poisson_disc_9[9] = vec2[9](
+    vec2(0.5465816, -0.02595456),
+    vec2(0.5313139, -0.5830789),
+    vec2(0.5950379, 0.5558487),
+    vec2(-0.2362069, -0.4548543),
+    vec2(0.134974, 0.8385499),
+    vec2(0.02610943, 0.05580516),
+    vec2(-0.6288149, -0.1155209),
+    vec2(-0.005609761, -0.9341435),
+    vec2(-0.7329739, 0.5158124)
+);
+
+const vec2 poisson_disc_16[16] = vec2[16](
+    vec2(0.4989825, -0.4092478),
+    vec2(-0.09638281, -0.7609485),
+    vec2(0.679416, -0.7299017),
+    vec2(0.05394743, -0.3816648),
+    vec2(0.2655547, -0.951362),
+    vec2(-0.4713327, -0.186854),
+    vec2(0.7385173, 0.1464785),
+    vec2(0.2628677, 0.1818207),
+    vec2(-0.04351781, -0.02468965),
+    vec2(0.4662065, 0.6578184),
+    vec2(-0.1140366, 0.6669924),
+    vec2(-0.4714432, -0.7921887),
+    vec2(-0.6617869, 0.1933294),
+    vec2(-0.8934375, -0.1875305),
+    vec2(-0.6286579, 0.5908005),
+    vec2(-0.2781906, 0.3561186)
+);
+
+#ifdef SIMPLE_SHADOW
+#define FOUR_TAP_STATIC
+#else
+#define FOUR_TAP
+#endif
 
 #ifdef FRAGMENT_SHADER
 float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, float rand_a) {    
@@ -63,18 +106,52 @@ float GetCascadeShadowIndex(sampler2DShadow tex5, vec4 shadow_coord, int index, 
     }
     float shadow_amount = 0.0;
     float offset = 1.5/2048.0 * mix(0.5,1.5,1.0 - primary_light_color.a / 3.0);
-    float offset_angle =  rand_a * 6.28;
-    vec2 offset_dir;
-    offset_dir.x = sin(offset_angle) * offset;
-    offset_dir.y = cos(offset_angle) * offset;
+    float offset_angle = rand_a * 6.28;
+    float sin_angle = sin(offset_angle);
+    float cos_angle = cos(offset_angle);
+    mat2 offset_rot;
+    offset_rot[0] = vec2(cos_angle, sin_angle);
+    offset_rot[1] = vec2(-sin_angle, cos_angle);
 
-    shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_dir.x, offset_dir.y, 0.0,0.0)*0.3) * 0.4;
-    shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_dir.x, offset_dir.y, 0.0,0.0)) * 0.2;
-    shadow_amount += textureProj(tex5,shadow_coord+vec4(-offset_dir.x, -offset_dir.y,0.0,0.0)) * 0.2;
-    shadow_amount += textureProj(tex5,shadow_coord+vec4(-offset_dir.y, offset_dir.x,0.0,0.0)) * 0.2;
-    shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_dir.y, -offset_dir.x,0.0,0.0)) * 0.2;
+    #ifdef ONE_TAP
+    shadow_amount = textureProj(tex5,shadow_coord);
+    #endif
 
-    shadow_amount /= 1.2;
+    #ifdef FOUR_TAP_STATIC
+    float temp = 0.5/2048.0;
+    shadow_amount += textureProj(tex5,shadow_coord+vec4(temp, 0.0, 0.0,0.0));
+    shadow_amount += textureProj(tex5,shadow_coord+vec4(0.0, temp, 0.0,0.0));
+    shadow_amount += textureProj(tex5,shadow_coord+vec4(-temp, 0.0, 0.0,0.0));
+    shadow_amount += textureProj(tex5,shadow_coord+vec4(0.0, -temp, 0.0,0.0));
+    shadow_amount /= 4.0;
+    #endif
+
+    #ifdef FOUR_TAP
+    for(int i=0; i<4; ++i){
+        vec2 offset_vec = offset_rot * poisson_disc_4[i];
+        offset_vec *= offset;
+        shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_vec.x, offset_vec.y, 0.0,0.0));
+    }
+    shadow_amount /= 4.0;
+    #endif
+
+    #ifdef NINE_TAP
+    for(int i=0; i<9; ++i){
+        vec2 offset_vec = offset_rot * poisson_disc_9[i];
+        offset_vec *= offset;
+        shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_vec.x, offset_vec.y, 0.0,0.0));
+    }
+    shadow_amount /= 9.0;
+    #endif
+
+    #ifdef SIXTEEN_TAP
+    for(int i=0; i<16; ++i){
+        vec2 offset_vec = offset_rot * poisson_disc_16[i];
+        offset_vec *= offset;
+        shadow_amount += textureProj(tex5,shadow_coord+vec4(offset_vec.x, offset_vec.y, 0.0,0.0));
+    }
+    shadow_amount /= 16.0;
+    #endif
 
     return shadow_amount;
 }

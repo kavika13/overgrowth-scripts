@@ -296,6 +296,12 @@ class JumpInfo {
             jump_vel = GetJumpVelocity(target_velocity);
         }
         this_mo.velocity = jump_vel;
+		if(this_mo.controlled){
+			AchievementEvent("player_jumped");
+		}else{
+			AchievementEvent("ai_jumped");
+		}
+		
         //Print("Start jump: "+this_mo.velocity.y+"\n");
         jetpack_fuel = _jump_fuel;
         if(character_getter.GetTag("species") != "rabbit"){

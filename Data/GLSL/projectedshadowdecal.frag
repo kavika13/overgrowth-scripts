@@ -1,3 +1,4 @@
+#version 150
 #pragma blendmode_multiply
 
 uniform sampler2DShadow tex0;

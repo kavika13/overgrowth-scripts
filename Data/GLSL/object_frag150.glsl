@@ -55,7 +55,7 @@ PointLightData FetchPointLight(uint light_index) {
 }
 
 
-void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal) {
+void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3 ws_vertex, vec3 world_vert, vec3 ws_normal, float roughness) {
 	uint num_lights_ = uint(num_lights);
 
 	uint num_z_clusters = grid_size.z;
@@ -97,20 +97,30 @@ void CalculateLightContrib(inout vec3 diffuse_color, inout vec3 spec_color, vec3
 
 		PointLightData l = FetchPointLight(light_index);
 
+        float light_size = 0.8;
+
 		vec3 to_light = l.pos - world_vert;
 		// TODO: inverse square falloff
 		// TODO: real light equation
-		float dist = length(to_light);
+		float dist = max(light_size, length(to_light));
 		float falloff = max(0.0, (1.0 / dist / dist) * (1.0 - dist / l.radius));
 
 		vec3 n = normalize(to_light);
-		float d = max(0.0, dot(to_light, ws_normal));
+        float bias = max(0.0, (light_size - length(to_light)) / light_size * 2.0);
+		float d = max(0.0, dot(n, ws_normal)+bias)/(1.0 + bias);
+
+        // Shadow from fire light
+        if(n.y > 0.5){
+            d *= mix(pow(1.0 - (n.y-0.5)*2.0, 1.0), 1.0, 0.1);
+        }
 
 		diffuse_color += falloff * d * l.color;
 
 
         vec3 H = normalize(normalize(ws_vertex*-1.0) + n);
-        float spec = min(1.0, pow(max(0.0,dot(ws_normal,H)),100.0)*1.0);
+        float spec_pow = 2/pow(roughness, 4.0) - 2.0;
+        float spec = pow(max(0.0,dot(ws_normal,H)), spec_pow);
+        spec *= 0.25 * (spec_pow + 8) / (8 * 3.141592);
 
 		spec_color += falloff * spec * l.color;
 	}

@@ -46,7 +46,8 @@ class Text : Element
     string fontName;    // Name for the font 
     float rotation;     // Rotation for the text 
     ivec2 screenSize;   // Bit of a hack as we need the screen height for getting the right metrics
-    
+    bool shadowed;      // Should the text be shadowed?
+
     /*******************************************************************************************/
     /**
      * @brief  Constructor
@@ -56,6 +57,7 @@ class Text : Element
         super();
         setColor( 1.0, 1.0, 1.0, 1.0 );
         rotation = 0;
+        shadowed = false;
     }
 
     /*******************************************************************************************/
@@ -69,6 +71,7 @@ class Text : Element
         super(name);
         setColor( 1.0, 1.0, 1.0, 1.0 );
         rotation = 0;
+        shadowed = false;
     }
 
     /*******************************************************************************************/
@@ -190,6 +193,10 @@ class Text : Element
             imuiText.setText( text );
         }
 
+        if( shadowed ) {
+            imuiText.setRenderFlags( kTextShadow );
+        }
+
         imuiText.setRotation( rotation );
 
         deriveMetrics();
@@ -226,6 +233,17 @@ class Text : Element
 
     /*******************************************************************************************/
     /**
+     * @brief  Sets the text to be shadowed
+     *  
+     * @param shadow true (default) if the text should have a shadow, false otherwise
+     *
+     */
+    void setShadowed( bool shouldShadow = true ) {
+        shadowed = shouldShadow;
+    }
+
+    /*******************************************************************************************/
+    /**
      * @brief  Rather counter-intuitively, this draws this object on the screen
      *
      * @param drawOffset Absolute offset from the upper lefthand corner (GUI space)
@@ -243,7 +261,13 @@ class Text : Element
             ivec2 screenRenderPos = screenMetrics.GUIToScreen( GUIRenderPos );
 
             imuiText.setPosition( vec3( screenRenderPos.x, screenRenderPos.y, getZOrdering() ) );
-            imuiText.setColor( color );
+            
+            if( isColorEffected ) {
+                imuiText.setColor( effectColor );
+            }
+            else {
+                imuiText.setColor( color );
+            }
 
             if( currentClipSize.x != UNDEFINEDSIZE && currentClipSize.y != UNDEFINEDSIZE ){
                 
@@ -257,7 +281,12 @@ class Text : Element
                 imuiText.setClipping( screenClipPos, screenClipSize );
             }
 
+            if( shadowed ) {
+               imuiText.setRenderFlags( kTextShadow );
+            }
+
             AHGUI_IMUIContext.queueText( imuiText );
+
         }
 
         // Call the superclass to make sure any element specific rendering is done

@@ -55,7 +55,7 @@ class RibbonBackground {
             image.tex_offset.x = display_time * 0.05;
             image.color = vec4(0.7,0.7,0.7,1.0);
             image.scale = vec3(ui_scale*stretch,-ui_scale,1.0);}
-            
+            /*
         {   HUDImage @image = hud.AddImage();
             image.SetImageFromPath("Data/Textures/ui/challenge_mode/giometric_ribbon_c.tga");
             float stretch = GetScreenHeight() / image.GetHeight() / ui_scale;
@@ -77,7 +77,7 @@ class RibbonBackground {
             image.tex_scale.y = stretch;
             image.tex_offset.y = -display_time * 0.0125;
             image.scale = vec3(ui_scale, ui_scale*stretch, 1.0);}
-        
+        */
         {   HUDImage @image = hud.AddImage();
             image.SetImageFromPath("Data/Textures/ui/challenge_mode/blue_gradient_c.tga");
             image.position.x = -2;

@@ -46,7 +46,7 @@ class FadeIn : UpdateBehavior {
 	bool initialize( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
         
       	originalAlpha = element.getAlpha();
-      	element.setAlpha( 0.0f );
+      	element.setEffectAlpha( 0.0f );
         return true;
 
     }
@@ -55,13 +55,13 @@ class FadeIn : UpdateBehavior {
         
 		float newValue = tweener( float(elapsed), 0.0f, originalAlpha, float( targetTime ) );
 			
-		element.setAlpha(newValue );
+		element.setEffectAlpha(newValue );
 
 		elapsed += delta;
 
 		if( elapsed >= targetTime ) {
 			// We're done so inform the element to remove this tween
-			element.setAlpha( originalAlpha );
+			element.clearEffectAlpha();
 			return false;
 		}
 		else {
@@ -72,7 +72,7 @@ class FadeIn : UpdateBehavior {
     }
 
     void cleanUp( Element@ element ) {
-        element.setAlpha( originalAlpha );
+        element.clearEffectAlpha();
     }
 
 }
@@ -158,7 +158,7 @@ class ChangeTextFadeOutIn : UpdateBehavior {
     	if( !fadeAwayDone ) { 
 			float newValue = tweenerOut( float(elapsed), originalAlpha, 0.0f, float( targetTime ) );
 				
-			element.setAlpha(newValue );
+			element.setEffectAlpha(newValue );
 
 			elapsed += delta;
 
@@ -167,7 +167,7 @@ class ChangeTextFadeOutIn : UpdateBehavior {
 				Text@ textElement = cast<Text>( element );
 
 				textElement.setText( targetText );
-				textElement.setAlpha( 0.0f );
+				textElement.setEffectAlpha( 0.0f );
 				elapsed = 0;
 
 				fadeAwayDone = true;
@@ -182,13 +182,13 @@ class ChangeTextFadeOutIn : UpdateBehavior {
 		else {
 			float newValue = tweenerIn( float(elapsed), 0.0f, originalAlpha, float( targetTime ) );
 				
-			element.setAlpha(newValue );
+			element.setEffectAlpha(newValue );
 
 			elapsed += delta;
 
 			if( elapsed >= targetTime ) {
 				// We're done so inform the element to remove this tween
-				element.setAlpha( originalAlpha );
+				element.clearEffectAlpha();
 				return false;
 			}
 			else {
@@ -234,7 +234,7 @@ class ChangeImageFadeOutIn : UpdateBehavior {
     	if( !fadeAwayDone ) { 
 			float newValue = tweenerOut( float(elapsed), originalAlpha, 0.0f, float( targetTime ) );
 				
-			element.setAlpha(newValue );
+			element.setEffectAlpha(newValue );
 
 			elapsed += delta;
 
@@ -247,7 +247,7 @@ class ChangeImageFadeOutIn : UpdateBehavior {
 
 				imageElement.setImageFile( targetImage );
 				imageElement.scaleToSizeX( oldX );
-				imageElement.setAlpha( 0.0f );
+				imageElement.setEffectAlpha( 0.0f );
 				elapsed = 0;
 
 				fadeAwayDone = true;
@@ -262,13 +262,13 @@ class ChangeImageFadeOutIn : UpdateBehavior {
 		else {
 			float newValue = tweenerIn( float(elapsed), 0.0f, originalAlpha, float( targetTime ) );
 				
-			element.setAlpha(newValue );
+			element.setEffectAlpha(newValue );
 
 			elapsed += delta;
 
 			if( elapsed >= targetTime ) {
 				// We're done so inform the element to remove this tween
-				element.setAlpha( originalAlpha );
+				element.clearEffectAlpha();
 				return false;
 			}
 			else {
@@ -315,7 +315,7 @@ class PulseAlpha : UpdateBehavior {
 
 	bool update( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
 	    float currentAlpha = computeTransition( midPoint, difference );
-		element.setAlpha( currentAlpha );
+		element.setEffectAlpha( currentAlpha );
 		elapsedTime += delta;
 		
 		return true;	
@@ -439,13 +439,13 @@ class MouseOverShowBorder : MouseOverBehavior {
     						      computeTransition( midPoints.z, differences.z ),
     							  computeTransition( midPoints.a, differences.a ) );
 
-    	element.setColor( currentColor );
+    	element.setEffectColor( currentColor );
 
     	elapsedTime += delta;
     }
 
     bool onFinish( Element@ element, uint64 delta, ivec2 drawOffset, GUIState& guistate ) {
-        element.setColor( originalColor );
+        element.clearColorEffect();
         return true;
     }
 }
@@ -498,7 +498,7 @@ class MouseOverShowBorder : MouseOverBehavior {
         {
             Element@ el_inst = element.findElement( sub_elements[i] );
             if( el_inst !is null )
-    	        el_inst.setColor( currentColor );
+    	        el_inst.setEffectColor( currentColor );
         }
 
     	elapsedTime += delta;
@@ -509,7 +509,7 @@ class MouseOverShowBorder : MouseOverBehavior {
         {
             Element@ el_inst = element.findElement( sub_elements[i] );
             if( el_inst !is null )
-    	        el_inst.setColor( originalColor);
+    	        el_inst.clearColorEffect();
         }
         return true;
     }

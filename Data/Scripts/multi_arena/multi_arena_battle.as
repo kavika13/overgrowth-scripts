@@ -32,6 +32,9 @@ class BattleInstance {
 
     bool weaponsInUse; // Does anybody have a weapon?
 
+    string gamemode;
+    int current_wave;
+
     /**
      * Return everything to factory defaults
      **/
@@ -46,6 +49,7 @@ class BattleInstance {
         spawnedAgents.resize(0);
         playerIndexId = -1;
         playerObjectId = -1;
+        current_wave = 1;
         battleDifficulty = global_data.player_skill;
         @player = null;
 
@@ -85,14 +89,15 @@ class BattleInstance {
         reset();
     }   
 
-    void initialize( JSONValue battleParams ) {
-
+    void initialize( string _gamemode, JSONValue battleParams ) {
         Print("Starting initialize battle\n");
 
         JSONValue newTeams = battleParams["teams"];
         JSONValue newItems = battleParams["items"];
 
         reset();
+
+        gamemode = _gamemode;
 
         // Make sure there's enough teams to make this interesting 
         int teamsWithMembers = 0; 
@@ -144,7 +149,7 @@ class BattleInstance {
 
         // Come up with a random number of characters to skip over
         //  before we choose a player (respecting the characters marked as non-player)
-        int chosenPlayerJSONId = possiblePlayerJSONIds[ rand()%(possiblePlayerJSONIds.length())];
+        int chosenPlayerJSONId = possiblePlayerJSONIds[rand()%(possiblePlayerJSONIds.length())];
         
 
         // Finally we can go through the structure and create the new objects
@@ -227,6 +232,12 @@ class BattleInstance {
         if( params.isMember( "weapon" ) ) {
             weaponType = params[ "weapon" ].asString(); 
         }        
+
+        int wave = 1;
+        if( params.isMember( "wave" ) ) {
+            wave = params[ "wave" ].asInt(); 
+            Log( info, "got wave: " + wave );
+        }
         
         if( numTeams == 0 ) {
             DisplayError("Error", "No teams defined when adding enemy" );
@@ -238,6 +249,7 @@ class BattleInstance {
         enemySpawn.difficulty =  battleDifficulty - 0.5f;
         enemySpawn.spawnPointOjectId = getObjectIdFromLocationName( spawnLocation );
         enemySpawn.locationName = spawnLocation;
+        enemySpawn.wave = wave;
 
         // if an enemy type wasn't specified, chose one 
         if( enemyType == "" or enemyType == "any" ) {
@@ -411,7 +423,6 @@ class BattleInstance {
         teamsByIndex[ numTeams - 1 ].insertLast( spawnedEntities.length() ); 
         spawnedAgents.insertLast( spawnedEntities.length() ); 
         spawnedEntities.insertLast( playerSpawn );
-
     }
 
 
@@ -483,9 +494,22 @@ class BattleInstance {
      * Get this whole show on the road
      **/
     void spawn() {
+        //Reset wave counter.
+        current_wave = 0;
+        spawnNextWave();
+    }
+
+    bool spawnNextWave()
+    {
+        bool spawned_something = false;
+        current_wave++;
 
         for( uint entityIndex = 0; entityIndex < spawnedEntities.length(); ++entityIndex ) {
-            spawnedEntities[ entityIndex ].spawn();
+            if( spawnedEntities[ entityIndex ].wave == current_wave ) 
+            {
+                spawnedEntities[ entityIndex ].spawn();
+                spawned_something = true;
+            }
         }
 
         // Get the player object
@@ -501,12 +525,16 @@ class BattleInstance {
         teams.resize( numTeams );
         for( uint teamIndex = 0; teamIndex < numTeams; ++teamIndex ) {
             for( uint charIndex = 0; charIndex < teamsByIndex.length(); ++charIndex ) {
-                int objectId = spawnedEntities[ charIndex ].spawnedObjectId;
-                teams[ teamIndex ].insertLast( ReadCharacterID( objectId ) );
+                if( spawnedEntities[ charIndex ].wave == current_wave )
+                {
+                    int objectId = spawnedEntities[ charIndex ].spawnedObjectId;
+                    teams[ teamIndex ].insertLast( ReadCharacterID( objectId ) );
+                }
             }
         }
-    }
 
+        return spawned_something;
+    }
 }
 
 BattleInstance battle; // global battle instance 

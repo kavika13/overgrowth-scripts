@@ -14,6 +14,7 @@ class BattleEntitySpawn {
     int spawnPointOjectId; // what's the object id of my spawn point
     string entityPath; // Path to xml
     int team;   // what team am I on (-1 for none)
+    int wave;
 
     /**
      * Constructor 
@@ -22,6 +23,7 @@ class BattleEntitySpawn {
         team = -1;
         spawnedObjectId = -1;
         attachedObjectId = -1;
+        wave = 1;
     }
 
     /**

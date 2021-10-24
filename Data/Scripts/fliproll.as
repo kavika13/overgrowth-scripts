@@ -1,5 +1,7 @@
 #include "interpdirection.as"
 
+bool allow_rolling = true;
+
 const float _flip_accel = 50.0f;
 const float _flip_vel_inertia = 0.89f;
 const float _flip_tuck_inertia = 0.7f;
@@ -238,6 +240,7 @@ class FlipInfo {
     void StartRoll(vec3 target_velocity) {
         if(allow_rolling){
             level.SendMessage("character_start_roll "+this_mo.getID());
+			AchievementEvent("character_start_roll");
             if(character_getter.GetTag("species") == "cat"){
                 this_mo.MaterialEvent("roll", this_mo.position - vec3(0.0f, _leg_sphere_size, 0.0f), 0.5f);
             } else {
@@ -260,6 +263,7 @@ class FlipInfo {
                 
             feet_moving = false;
             rolling = true;
+            SetOnFire(false);
         }
     }
 

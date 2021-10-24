@@ -1,3 +1,4 @@
+#version 150
 #extension GL_ARB_gpu_shader5 : enable
 #extension GL_ARB_texture_rectangle : enable
 

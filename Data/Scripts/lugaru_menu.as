@@ -1,6 +1,9 @@
 #include "ui_effects.as"
 #include "arena_meta_persistence.as"
 #include "ui_tools.as"
+#include "music_load.as"
+
+MusicLoad ml("Data/Music/menu.xml");
 
 enum MenuGUIState {
     agsDifficulty,
@@ -8,7 +11,8 @@ enum MenuGUIState {
     agsNewUser,
     agsConfirmDelete,
     agsSelectUser,
-    agsInvalidState
+    agsInvalidState,
+	agsChallenge
 };
 
 class Level
@@ -17,38 +21,58 @@ class Level
     string file;
     vec2 position;
 
-    Level(string _name, string _file, vec2 _position)
+    Level(string _file, string _name, vec2 _position)
     {
         name = _name;
         file = _file;
         position = _position;
     }
+	Level(string _file, string _name)
+    {
+        name = _name;
+        file = _file;
+    }
 };
 
-array<Level@> levels = {Level("LugaruStory/Village.xml",        "Village",          vec2(1,1)),
-                        Level("LugaruStory/Village_2.xml",      "Village 2",        vec2(1,1)),
-                        Level("LugaruStory/Wonderer.xml",       "Wonderer",         vec2(1,1)),
-                        Level("LugaruStory/Village_3.xml",      "Village 3",        vec2(1,1)),
-                        Level("LugaruStory/Clearing.xml",       "Clearing",         vec2(1,1)),
-                        Level("LugaruStory/Raider_patrol.xml",  "Raider Patrol",    vec2(1,1)),
-                        Level("LugaruStory/Raider_camp.xml",    "Raider Camp",      vec2(1,1)),
-                        Level("LugaruStory/Raider_sentries.xml","Raider Sentries",  vec2(1,1)),
-                        Level("LugaruStory/Raider_base.xml",    "Raider Base",      vec2(1,1)),
-                        Level("LugaruStory/Raider_base_2.xml",  "Raider Base 2",    vec2(1,1)),
-                        Level("LugaruStory/Old_raider_base.xml","Old Raider Base",  vec2(1,1)),
-                        Level("LugaruStory/Village_4.xml",      "Village 4",        vec2(1,1)),
-                        Level("LugaruStory/Rocky_hall.xml",     "Rocky Hall",       vec2(1,1)),
-                        Level("LugaruStory/Heading_north.xml",  "Heading North",    vec2(1,1)),
-                        Level("LugaruStory/Heading_north_2.xml","Heading North 2",  vec2(1,1)),
-                        Level("LugaruStory/Jack's_camp.xml",    "Jack's Camp",      vec2(1,1)),
+array<Level@> levels = {Level("LugaruStory/Village.xml",        "Village",          vec2(800,600)),
+						Level("LugaruStory/Wonderer.xml",       "Wonderer",         vec2(840,600)),
+                        Level("LugaruStory/Village_2.xml",      "Village 2",        vec2(800,600)),
+						Level("LugaruStory/Clearing.xml",       "Clearing",         vec2(780,560)),
+                        Level("LugaruStory/Raider_patrol.xml",  "Raider Patrol",    vec2(740,520)),
+                        Level("LugaruStory/Raider_camp.xml",    "Raider Camp",      vec2(680,480)),
+                        Level("LugaruStory/Raider_sentries.xml","Raider Sentries",  vec2(720,460)),
+                        Level("LugaruStory/Raider_base.xml",    "Raider Base",      vec2(760,490)),
+						Level("LugaruStory/Village_3.xml",      "Village 3",        vec2(800,600)),
+                        Level("LugaruStory/Raider_base_2.xml",  "Raider Base 2",    vec2(1,111)),
+                        Level("LugaruStory/Old_raider_base.xml","Old Raider Base",  vec2(820,500)),
+                        Level("LugaruStory/Village_4.xml",      "Village 4",        vec2(1,231)),
+                        Level("LugaruStory/Rocky_hall.xml",     "Rocky Hall",       vec2(880,605)),
+                        Level("LugaruStory/Heading_north.xml",  "Heading North",    vec2(1000,455)),
+                        Level("LugaruStory/Heading_north_2.xml","Heading North 2",  vec2(1050,370)),
+                        Level("LugaruStory/Jack's_camp.xml",    "Jack's Camp",      vec2(1000,300)),
                         Level("LugaruStory/Jack's_camp_2.xml",  "Jack's Camp 2",    vec2(1,1)),
-                        Level("LugaruStory/Rocky_hall_2.xml",   "Rocky Hall 2",     vec2(1,1)),
-                        Level("LugaruStory/Rocky_hall_3.xml",   "Rocky Hall 3",     vec2(1,1)),
-                        Level("LugaruStory/To_alpha_wolf.xml",  "To Alpha Wolf",    vec2(1,1)),
-                        Level("LugaruStory/To_alpha_wolf_2.xml","To Alpha Wolf 2",  vec2(1,1)),
-                        Level("LugaruStory/Wolf_den.xml",       "Wolf Den",         vec2(1,1)),
+                        Level("LugaruStory/Rocky_hall_2.xml",   "Rocky Hall 2",     vec2(880,605)),
+                        Level("LugaruStory/Rocky_hall_3.xml",   "Rocky Hall 3",     vec2(880,605)),
+                        Level("LugaruStory/To_alpha_wolf.xml",  "To Alpha Wolf",    vec2(1100,455)),
+                        Level("LugaruStory/To_alpha_wolf_2.xml","To Alpha Wolf 2",  vec2(1050,285)),
+                        Level("LugaruStory/Wolf_den.xml",       "Wolf Den",         vec2(1000,185)),
                         Level("LugaruStory/Wolf_den_2.xml",     "Wolf Den 2",       vec2(1,1)),
+
                         Level("LugaruStory/Rocky_hall_4.xml",   "Rocky Hall 4",     vec2(1,1))};
+
+array<Level@> challengelevels = {	Level("LugaruChallenge/lugaru_challenge.xml",	"Challenge Test Level"),
+			                        Level("LugaruChallenge/lugaru_challenge2.xml",   "Village 2"),
+			                        Level("LugaruChallenge/lugaru_challenge3.xml",   "Wonderer"),
+			                        Level("LugaruChallenge/lugaru_challenge4.xml",   "Village 3"),
+			                        Level("LugaruChallenge/lugaru_challenge5.xml",   "Clearing"),
+			                        Level("LugaruChallenge/lugaru_challenge6.xml",  	"Raider Patrol"),
+			                        Level("LugaruChallenge/lugaru_challenge7.xml",   "Raider Camp"),
+			                        Level("LugaruChallenge/lugaru_challenge8.xml",	"Raider Sentries"),
+			                        Level("LugaruChallenge/lugaru_challenge9.xml",   "Raider Base"),
+			                        Level("LugaruChallenge/lugaru_challenge10.xml",  	"Raider Base 2"),
+			                        Level("LugaruChallenge/lugaru_challenge11.xml",	"Old Raider Base"),
+			                        Level("LugaruChallenge/lugaru_challenge12.xml",   "Village 4"),
+			                        Level("LugaruChallenge/lugaru_challenge13.xml",   "Rocky Hall")};
 
 float limitDecimalPoints( float n, int points ) {
     return float( float(int( n * pow( 10, points ) )) / pow( 10, points ) );
@@ -78,9 +102,11 @@ class MenuGUI : AHGUI::GUI {
     int profileId = -1;         // Which profile are we working with
     bool showBorders = false;
     int textSize = 60;
-    vec4 textColor = vec4(0.5, 0.5, 0.5, 1.0);
-    int minimapTextSize = 30;
-    int minimapIconSize = 30;
+    int challengeTextSize = 70;
+    vec4 textColor = vec4(0.7, 0.7, 0.7, 1.0);
+    int minimapTextSize = 50;
+    int minimapIconSizeSelectable = 40;
+    int minimapIconSizeNotSelectable = 30;
     int levels_finished = -1;
     bool inputEnabled = false;
     array<string> inputName;
@@ -88,7 +114,14 @@ class MenuGUI : AHGUI::GUI {
     float bloodAlpha = 1.0;
     float bloodDisplayTime = 0.0f;
     float inputTime = 0.0f;
-
+	JSONValue challengeData;
+	int challengeLevelsFinished = -1;
+	vec4 lineColorActive = vec4(1.0f, 0.2f, 0.2f, 1.0f);
+	vec4 lineColorInactive = vec4(0.4f, 0.1f, 0.1f, 1.0f);
+	int worldMapSizeX = 1500;
+	int worldMapSizeY = 1000;
+	int screen_height = 1500;
+	int screen_width = 2560;
 
     /*******************************************************************************************/
     /**
@@ -119,37 +152,13 @@ class MenuGUI : AHGUI::GUI {
         footer.addSpacer( 50, DDLeft );
 
         // Create the 'main menu' text
-        AHGUI::Text mainMenu( "MAIN MENU", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-
-        // Add a little special effect
-        mainMenu.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-
-        // Have it send a message to indicate we should go back to the main menu
-        mainMenu.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mainmenu") );
-
-
-        // Make it pulse when we mouse over
-        mainMenu.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
+		DisplayText(footer, DDLeft, "MAIN MENU", textSize, textColor, true, "mainmenu", "mainmenu");
 
         // Add some space on the left
         footer.addSpacer( 50, DDRight );
 
-        // Manually add it to the divider
-        footer.addElement( mainMenu, DDLeft );
-
         // Add the version text
-        AHGUI::Text verText( "DELETE USER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        verText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("deleteuser") );
-        verText.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        footer.addElement( verText ,DDRight );
-
-
+		DisplayText(footer, DDLeft, "DELETE USER", textSize, textColor, true, "deleteuser", "deleteuser");
     }
 
     /*******************************************************************************************/
@@ -202,7 +211,12 @@ class MenuGUI : AHGUI::GUI {
             }
             break;
             case agsSelectUser: {
+				ResetActiveProfile();
                 ShowUserSelectUI();
+            }
+            break;
+			case agsChallenge: {
+                ShowChallengeUI();
             }
             break;
         }
@@ -210,52 +224,19 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void ShowConfirmDeleteUI(){
-        AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-
-        mainPane.addSpacer(50, DDLeft);
-        AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ buttonsPanel = root.addDivider( DDCenter, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
 
         buttonsPanel.addSpacer(150, DDTop);
-
-
-        AHGUI::Text deleteText( "ARE YOU SURE YOU WANT TO DELETE THIS USER?", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        deleteText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-
-        buttonsPanel.addElement( deleteText ,DDTop );
+		DisplayText(buttonsPanel, DDTop, "ARE YOU SURE YOU WANT TO DELETE THIS USER?", textSize, textColor, true);
         buttonsPanel.addSpacer(50, DDTop);
 
-        AHGUI::Divider@ yesPanel = buttonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-        yesPanel.setHorizontalAlignment(BALeft);
-
-        AHGUI::Text yesButton( "YES", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        yesButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        yesButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("yesdelete") );
-        yesButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        yesPanel.addElement(yesButton, DDLeft);
+		DisplayText(buttonsPanel, DDTop, "YES", textSize, textColor, true, "yesdelete", "yesdelete");
         buttonsPanel.addSpacer(50, DDTop);
 
-        AHGUI::Divider@ noPanel = buttonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-        noPanel.setHorizontalAlignment(BALeft);
-
-        AHGUI::Text noButton( "NO", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        noButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        noButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("nodelete") );
-        noButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        noPanel.addElement( noButton ,DDTop );
+		DisplayText(buttonsPanel, DDTop, "NO", textSize, textColor, true, "nodelete", "nodelete");
         buttonsPanel.addSpacer(50, DDTop);
-
 
         if(showBorders){
-            mainPane.setBorderSize( 10 );
-            mainPane.setBorderColor( 0.0, 0.0, 1.0, 0.6 );
-            mainPane.showBorder();
-
             buttonsPanel.setBorderSize( 10 );
             buttonsPanel.setBorderColor( 1.0, 0.0, 0.0, 0.6 );
             buttonsPanel.showBorder();
@@ -274,36 +255,14 @@ class MenuGUI : AHGUI::GUI {
 
         buttonsPanel.addSpacer(150, DDTop);
 
-        AHGUI::Text easier( "EASIER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        easier.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        easier.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("easier") );
-        easier.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        buttonsPanel.addElement( easier ,DDTop );
+		DisplayText(buttonsPanel, DDTop, "EASIER", textSize, textColor, true, "easier", "easier");
         buttonsPanel.addSpacer(50, DDTop);
 
-        AHGUI::Text difficult( "DIFFICULT", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        difficult.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        difficult.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("difficult") );
-        difficult.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        buttonsPanel.addElement( difficult ,DDTop );
+		DisplayText(buttonsPanel, DDTop, "DIFFICULT", textSize, textColor, true, "difficult", "difficult");
         buttonsPanel.addSpacer(50, DDTop);
 
-        AHGUI::Text insane( "INSANE", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        insane.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        insane.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("insane") );
-        insane.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        buttonsPanel.addElement( insane ,DDTop );
+		DisplayText(buttonsPanel, DDTop, "INSANE", textSize, textColor, true, "difficult", "difficult");
         buttonsPanel.addSpacer(50, DDTop);
-
 
         buttonsPanel.addSpacer(150, DDBottom);
 
@@ -326,26 +285,13 @@ class MenuGUI : AHGUI::GUI {
     void ShowLevelSelectUI(){
         AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
         footerPane.setName("footerdiv");
-        AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal );
 
         footerPane.addSpacer(50, DDLeft );
         footerPane.addSpacer(50, DDRight );
 
-        AHGUI::Text mainMenuButton( "MAIN MENU", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        mainMenuButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        mainMenuButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mainmenu") );
-        mainMenuButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-        footerPane.addElement( mainMenuButton ,DDLeft );
-
-        AHGUI::Text deleteUserButton( "DELETE USER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        deleteUserButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        deleteUserButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("deleteuser") );
-        deleteUserButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-        footerPane.addElement( deleteUserButton ,DDRight );
+		DisplayText(footerPane, DDLeft, "MAIN MENU", textSize, textColor, true, "mainmenu", "mainmenu");
+		DisplayText(footerPane, DDRight, "DELETE USER", textSize, textColor, true, "deleteuser", "deleteuser");
 
         AHGUI::Divider@ buttonsPanel = mainPane.addDivider( DDTop, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
 
@@ -360,114 +306,142 @@ class MenuGUI : AHGUI::GUI {
         usernamePane.addSpacer(50, DDRight );
 
         //Username
-        AHGUI::Text profileName( user_name, "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        usernamePane.addElement(profileName, DDLeft);
+		DisplayText(buttonsPanel, DDLeft, user_name, textSize, textColor, true);
         buttonsPanel.addSpacer(50, DDTop );
-
-        AHGUI::Divider@ tutorialPanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
-        tutorialPanel.setHorizontalAlignment(BALeft);
-        tutorialPanel.addSpacer(50, DDLeft );
-        tutorialPanel.addSpacer(50, DDRight );
-
-        //Tutorial
-        AHGUI::Text tutorialButton( "TUTORIAL", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        tutorialButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("starttutorial") );
-        tutorialPanel.addElement(tutorialButton, DDTop);
-
-        mainButtonsPanel.addSpacer(150, DDTop );
-        tutorialButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
 
         AHGUI::Divider@ challengePanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
         challengePanel.setHorizontalAlignment(BALeft);
         challengePanel.addSpacer(50, DDLeft );
-        challengePanel.addSpacer(50, DDRight );
 
         //Challenge
-        AHGUI::Text challengeButton( "CHALLENGE", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        challengeButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("challenge") );
-        challengePanel.addElement(challengeButton, DDTop);
         mainButtonsPanel.addSpacer(150, DDTop );
-        challengeButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
+		DisplayText(challengePanel, DDTop, "CHALLENGE", textSize, textColor, true, "challenge", "challenge");
 
         AHGUI::Divider@ changeUserPanel = mainButtonsPanel.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
         changeUserPanel.setHorizontalAlignment(BALeft);
         changeUserPanel.addSpacer(50, DDLeft );
-        changeUserPanel.addSpacer(50, DDRight );
 
-        AHGUI::Text changeUserButton( "CHANGE USER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        changeUserButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("selectuser") );
-        changeUserPanel.addElement(changeUserButton, DDTop);
-        changeUserButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
+		DisplayText(changeUserPanel, DDTop, "CHANGE USER", textSize, textColor, true, "selectuser", "selectuser");
 
-
-        AHGUI::Divider@ worldmapPane = mainPane.addDivider( DDCenter, DOHorizontal, ivec2( UNDEFINEDSIZE, 747 ) );
-        challengePanel.setVeritcalAlignment(BATop);
+        AHGUI::Divider@ worldmapPane = mainPane.addDivider( DDCenter, DOHorizontal, ivec2(worldMapSizeX, worldMapSizeY ) );
+		worldmapPane.setHorizontalAlignment(BALeft);
+        worldmapPane.addSpacer(50, DDLeft );
         //mainPane.addSpacer(50, DDTop );
 
-        AHGUI::Image worldmap("Textures/LugaruMenu/Map.png");
-        worldmap.scaleToSizeX(2000);
-        // Add this to the main pane
-        worldmapPane.addElement( worldmap, DDCenter );
+        worldmapPane.setBackgroundImage("Textures/LugaruMenu/Map.png");
+		int paneSizeX = worldmapPane.getSizeX();
+		int paneSizeY = worldmapPane.getSizeY();
 
         array<int> activeLevels = GetActiveLevels();
-
-        AHGUI::Divider@ levelsButtonPane = mainPane.addDivider( DDRight, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
         //Add the levels to the worldmap.
+        //for(uint i = 0; i < 3; i++){
+		vec2 lastPosition;
         for(uint i = 0; i < activeLevels.size(); i++){
-            AHGUI::Divider@ buttonPane = levelsButtonPane.addDivider( DDRight, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+			int levelIndex = activeLevels[i];
             AHGUI::Image levelButton("Textures/LugaruMenu/MapCircle.png");
-            vec4 buttonColor( 1.0, 0.2f, 0.2f, 1.0 );
-            levelButton.setColor( buttonColor );
-            levelButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                         vec4( 2.0, 0.2, 0.2, 1.0 ),
-                                         vec4( 2.0, 0.2, 0.2, 2.0 ), 1.0f ) );
-            levelButton.scaleToSizeX(minimapIconSize);
             // Turn it into a button
             AHGUI::Message selectMessage("loadlevel");
             selectMessage.intParams.insertLast(i);
-            levelButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
-            //buttonPane.addElement(levelButton, DDLeft);
-            //The levelname label
-            AHGUI::Text levelName( levels[i].name, "OptimusPrinceps", minimapTextSize, textColor.x, textColor.y, textColor.z, textColor.a );
-            //buttonPane.addElement(levelName, DDLeft);
+			vec4 buttonColor( 1.0, 0.2f, 0.2f, 1.0 );
+			vec4 colorStart;
+			vec4 colorEnd;
+			int buttonScale = 1;
+			int buttonLevel = 3;
+			if(i == (activeLevels.size() - 1)){
+			//if(i == (3 - 1)){
+				levelButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
+				AHGUI::Text levelName( levels[levelIndex].name, "OptimusPrinceps", paneSizeX/worldMapSizeX*minimapTextSize, 1.0f, 0.0f, 0.0f, 1.0f );
+				levelName.setShadowed(true);
+				worldmapPane.addFloatingElement(levelName, levels[levelIndex].name + "label", ivec2(int(levels[levelIndex].position.x) + 30, int(levels[levelIndex].position.y) - minimapTextSize/2), 3);
+				buttonColor = vec4( 1.0, 0.2f, 0.2f, 2.0 );
+				buttonScale = minimapIconSizeSelectable;
+				colorStart = vec4( 1.0, 0.2, 0.2, 2.0 );
+	            colorEnd = vec4( 2.0, 0.5, 0.5, 2.0 );
+				buttonLevel++;
+			}else{
+				buttonColor = vec4( 0.3, 0.1f, 0.1f, 2.0 );
+				buttonScale = minimapIconSizeNotSelectable;
+				colorStart = vec4( 0.3, 0.1f, 0.1f, 2.0 );
+	            colorEnd = vec4( 1.0f, 0.5f, 0.5f, 2.0 );
+			}
+			levelButton.setColor( buttonColor );
+			levelButton.scaleToSizeX(buttonScale);
+			levelButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
+												colorStart,
+										 		colorEnd, 1.0f ) );
+			float sizeX = levelButton.getSizeX();
+			float sizeY = levelButton.getSizeY();
+			ivec2 newPos = ivec2(int(levels[levelIndex].position.x) - int(sizeX/2), int(levels[levelIndex].position.y) - int(sizeY/2));
+			ivec2 target = ivec2(int(levels[levelIndex].position.x), int(levels[levelIndex].position.y));
+			worldmapPane.addFloatingElement(levelButton, levels[levelIndex].name, newPos, buttonLevel);
+
+			vec2 from_node_pos(
+				lastPosition.x,
+				lastPosition.y
+			);
+			vec2 to_node_pos(
+				target.x,
+				target.y
+			);
+
+			float dist = length( from_node_pos - to_node_pos );
+			vec2 dir = normalize( from_node_pos - to_node_pos );
+
+			const float pi = 3.141592f;
+			float rotation = -atan2(dir.y, dir.x) * (180/pi);
+			if(i != 0){
+				AHGUI::Image line( "Textures/world_map/line_segment.png" );
+				vec4 lineColor;
+				if(i == (activeLevels.size() - 1)){
+					lineColor = vec4( lineColorActive );
+				}else{
+					lineColor = vec4( lineColorInactive );
+				}
+				int line_segment_width = line.getSizeX();
+				int numLinesNeeded = int(distance(from_node_pos, to_node_pos) / line_segment_width) * 2;
+				for(int o = 0; o < numLinesNeeded; o++){
+					AHGUI::Image newline( "Textures/world_map/line_segment.png" );
+					vec2 linePos = mix(from_node_pos, to_node_pos,  (1.0f / numLinesNeeded) * o);
+					worldmapPane.addFloatingElement( newline, "newmapline " + i + "and" + o, ivec2(int(linePos.x), int(linePos.y))-ivec2(line_segment_width/2,line_segment_width/2), 1);
+					newline.setRotation( rotation );
+					newline.setColor(lineColor);
+				}
+			}
+			lastPosition = vec2(target.x, target.y);
         }
 
-
-
         if(showBorders){
-            mainButtonsPanel.setBorderSize( 10 );
+            mainButtonsPanel.setBorderSize( 1 );
             mainButtonsPanel.setBorderColor( 0.0, 0.0, 1.0, 0.6 );
             mainButtonsPanel.showBorder();
 
-            buttonsPanel.setBorderSize( 10 );
+            buttonsPanel.setBorderSize( 1 );
             buttonsPanel.setBorderColor( 1.0, 0.0, 0.0, 0.6 );
             buttonsPanel.showBorder();
 
-            mainPane.setBorderSize( 10 );
+            mainPane.setBorderSize( 1 );
             mainPane.setBorderColor( 0.0, 7.0, 0.0, 0.6 );
             mainPane.showBorder();
 
-            footerPane.setBorderSize( 10 );
+            footerPane.setBorderSize( 1 );
             footerPane.setBorderColor( 0.0, 7.0, 0.0, 0.6 );
             footerPane.showBorder();
 
-            usernamePane.setBorderSize( 10 );
+            usernamePane.setBorderSize( 1 );
             usernamePane.setBorderColor( 1.0, 1.0, 1.0, 0.6 );
             usernamePane.showBorder();
 
-            worldmapPane.setBorderSize( 10 );
+			challengePanel.setBorderSize( 1 );
+            challengePanel.setBorderColor( 1.0, 0.0, 1.0, 0.6 );
+            challengePanel.showBorder();
+
+			changeUserPanel.setBorderSize( 1 );
+            changeUserPanel.setBorderColor( 1.0, 0.0, 1.0, 0.6 );
+            changeUserPanel.showBorder();
+
+            worldmapPane.setBorderSize( 1 );
             worldmapPane.setBorderColor( 1.0, 0.0, 1.0, 0.6 );
             worldmapPane.showBorder();
-
-            levelsButtonPane.setBorderSize( 10 );
-            levelsButtonPane.setBorderColor( 1.0, 0.0, 1.0, 0.6 );
-            levelsButtonPane.showBorder();
         }
     }
     void ShowUserSelectUI(){
@@ -489,49 +463,24 @@ class MenuGUI : AHGUI::GUI {
 
         //Do not allow more than 8 profiles.
         if(profiles.size() < 8){
-
-            AHGUI::Text newUserButton( "NEW USER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-            newUserButton.setName("newuser");
-            newUserButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            newUserButton.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("newuser") );
-            newUserButton.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                                  vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                                  vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-            newUserPane.addElement( newUserButton ,DDBottom );
+			DisplayText(newUserPane, DDBottom, "NEW USER", textSize, textColor, true, "newuser", "newuser");
         }else{
-            AHGUI::Text newUserButton( "NO MORE USERS", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-            newUserButton.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-            mainPane.addElement( newUserButton ,DDLeft );
+			DisplayText(mainPane, DDLeft, "NO MORE USERS", textSize, textColor, true);
         }
-
-
 
         for( uint i = 0; i < profiles.size(); ++i ) {
             //Add a seperate pane for every name to line every name to the left.
             AHGUI::Divider@ namePane = usernamesPane.addDivider( DDRight, DOHorizontal, ivec2( 20, 20 ) );
             namePane.setHorizontalAlignment(BALeft);
-            AHGUI::Text verText( profiles[i]["user_name"].asString(), "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-            verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+			DisplayText(namePane, DDLeft, profiles[i]["user_name"].asString(), textSize, textColor, true, "username", "username");
+			AHGUI::Text@ userName = cast<AHGUI::Text>(root.findElement( "username" ));
             AHGUI::Message selectMessage( "selectuser" );
             //Set the ID as param so the clicked function can use the ID number.
             selectMessage.intParams.insertLast(profiles[i]["id"].asInt());
-            verText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
-            verText.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                                  vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                                  vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-            namePane.addElement( verText ,DDLeft );
+            userName.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage));
         }
-
         footerPane.addSpacer(50, DDLeft );
-
-        AHGUI::Text verText( "BACK", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        verText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mainmenu") );
-        verText.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        footerPane.addElement( verText ,DDLeft );
+		DisplayText(footerPane, DDLeft, "BACK", textSize, textColor, true, "mainmenu", "mainmenu");
 
         if(showBorders){
             footerPane.setBorderSize( 10 );
@@ -556,6 +505,95 @@ class MenuGUI : AHGUI::GUI {
         }
     }
 
+	void ShowChallengeUI(){
+		AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
+        footerPane.setName("footerdiv");
+		footerPane.addSpacer(50, DDLeft );
+
+        AHGUI::Divider@ mainPane = root.addDivider( DDBottom, DOHorizontal, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        mainPane.addSpacer(500, DDLeft );
+        mainPane.addSpacer(500, DDRight );
+        AHGUI::Divider@ levelPane = mainPane.addDivider( DDLeft, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+		mainPane.addSpacer(50, DDTop );
+        AHGUI::Divider@ highscorePane = mainPane.addDivider( DDCenter, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+        AHGUI::Divider@ besttimePane = mainPane.addDivider( DDRight, DOVertical, ivec2( UNDEFINEDSIZE, UNDEFINEDSIZE ) );
+
+        mainPane.addSpacer(50, DDLeft );
+
+        JSONValue profiles = profileData.getRoot()["profiles"];
+
+		DisplayText(levelPane, DDTop, "Level", challengeTextSize, textColor, true);
+		DisplayText(highscorePane, DDTop, "High Score", challengeTextSize, textColor, true);
+		DisplayText(besttimePane, DDTop, "Best Time", challengeTextSize, textColor, true);
+
+		levelPane.addSpacer(50, DDTop );
+		highscorePane.addSpacer(50, DDTop );
+		besttimePane.addSpacer(50, DDTop );
+
+		DisplayText(footerPane, DDLeft, "BACK", challengeTextSize, textColor, true, "back", "back");
+
+		for(uint i = 0; i < challengelevels.size(); i++){
+			vec4 scoreTextColor;
+			if(uint(challengeLevelsFinished) >= i){
+				scoreTextColor = vec4(0.7, 0.7, 0.7, 1.0);
+			}else{
+				scoreTextColor = vec4(0.7, 0.7, 0.7, 0.5);
+			}
+			DisplayText(levelPane, DDTop, challengelevels[i].name, challengeTextSize, scoreTextColor, true, "levelname" + i, "levelname" + i);
+            if(challengeData[i].isNull()){
+                challengeData[i]["highscore"] = 0;
+                challengeData[i]["besttime"] = 0;
+            }
+			DisplayText(highscorePane, DDTop, challengeData[i]["highscore"].asString(), challengeTextSize, scoreTextColor, true, "highscore" + i, "highscore" + i);
+			DisplayText(besttimePane, DDTop, GetTime(challengeData[i]["besttime"].asInt()), challengeTextSize, scoreTextColor, true, "besttime" + i, "besttime" + i);
+			if(uint(challengeLevelsFinished) >= i){
+				AHGUI::Message selectMessage("loadchallengelevel");
+	            selectMessage.intParams.insertLast(i);
+				AHGUI::Text@ levelname = cast<AHGUI::Text>(root.findElement("levelname" + i));
+				AHGUI::Text@ highscore = cast<AHGUI::Text>(root.findElement("highscore" + i));
+				AHGUI::Text@ besttime = cast<AHGUI::Text>(root.findElement("besttime" + i));
+	            levelname.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
+	            highscore.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
+	            besttime.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(selectMessage) );
+			}
+		}
+
+        if(showBorders){
+            footerPane.setBorderSize( 1 );
+            footerPane.setBorderColor( 1.0, 0.0, 0.0, 0.6 );
+            footerPane.showBorder();
+
+			besttimePane.setBorderSize( 1 );
+            besttimePane.setBorderColor( 0.0, 1.0, 0.0, 0.6 );
+            besttimePane.showBorder();
+
+			highscorePane.setBorderSize( 1 );
+            highscorePane.setBorderColor( 1.0, 0.0, 1.0, 0.6 );
+            highscorePane.showBorder();
+
+			levelPane.setBorderSize( 1 );
+            levelPane.setBorderColor( 1.0, 1.0, 0.0, 0.6 );
+            levelPane.showBorder();
+
+            mainPane.setBorderSize( 1 );
+            mainPane.setBorderColor( 0.0, 0.0, 1.0, 0.6 );
+            mainPane.showBorder();
+        }
+    }
+
+	string GetTime(int seconds){
+		string bestTime;
+		int numSeconds = seconds % 60;
+		int numMinutes = seconds / 60;
+
+		if(numSeconds < 10){
+			bestTime = numMinutes + ":0" + numSeconds;
+		}else{
+			bestTime = numMinutes + ":" + numSeconds;
+		}
+		return bestTime;
+	}
+
     void ShowNewUserSelectUI(){
         AHGUI::Divider@ mainPane = root.addDivider( DDTop, DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
         AHGUI::Divider@ footerPane = root.addDivider( DDBottomRight,  DOHorizontal, ivec2( UNDEFINEDSIZE, 200 ) );
@@ -575,23 +613,8 @@ class MenuGUI : AHGUI::GUI {
 
         footerPane.addSpacer(50, DDLeft );
 
-        AHGUI::Text verText( "BACK", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        verText.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        verText.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("mainmenu") );
-        verText.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        footerPane.addElement( verText ,DDLeft );
-
-        AHGUI::Text newUser( "NEW USER", "OptimusPrinceps", textSize, textColor.x, textColor.y, textColor.z, textColor.a );
-        newUser.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
-        newUser.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick("newuser") );
-        newUser.addMouseOverBehavior( AHGUI::MouseOverPulseColor(
-                                              vec4( 0.6, 0.8, 0.6, 0.5 ),
-                                              vec4( 1.0, 0.6, 0.6, 0.9 ), 1.0f ) );
-
-        mainPane.addElement( newUser ,DDLeft );
+		DisplayText(footerPane, DDLeft, "BACK", textSize, textColor, true, "mainmenu", "mainmenu");
+		DisplayText(mainPane, DDLeft, "NEW USER", textSize, textColor, true, "newuser", "newuser");
         mainPane.addDivider( DDTop, DOHorizontal );
         mainPane.addSpacer(200, DDTop);
 
@@ -609,37 +632,99 @@ class MenuGUI : AHGUI::GUI {
     array<int> GetActiveLevels(){
         //The first levels are just shown on the map the last one can be selected.
         array<int> returnLevels;
+		array<string> level_names;
         switch(levels_finished){
+        //switch(18){
             case 0:{
-                array<int> newarray = {0};
-                returnLevels = newarray;
+				array<string> temp_names = {"Village"};
+                level_names = temp_names;
                 break;
             }case 1:{
-                array<int> newarray = {0, 1};
-                returnLevels = newarray;
+                array<string> temp_names = {"Village", "Wonderer"};
+				level_names = temp_names;
                 break;
             }case 2:{
-                array<int> newarray = {0, 1, 2};
-                returnLevels = newarray;
+                array<string> temp_names = {"Wonderer" ,"Village 2"};
+				level_names = temp_names;
                 break;
             }case 3:{
-                array<int> newarray = {0, 1, 2, 3};
-                returnLevels = newarray;
+                array<string> temp_names = {"Wonderer" ,"Village 2", "Clearing"};
+				level_names = temp_names;
                 break;
             }case 4:{
-                array<int> newarray = {0, 1, 2, 3, 4};
-                returnLevels = newarray;
+                array<string> temp_names = {"Wonderer" ,"Village 2", "Clearing", "Raider Patrol"};
+				level_names = temp_names;
                 break;
             }case 5:{
-                array<int> newarray = {0, 1, 2, 3, 4, 5};
-                returnLevels = newarray;
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp"};
+				level_names = temp_names;
                 break;
             }case 6:{
-                array<int> newarray = {0, 1, 2, 3, 4, 5, 6};
-                returnLevels = newarray;
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries"};
+				level_names = temp_names;
+                break;
+            }case 7:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base"};
+				level_names = temp_names;
+                break;
+            }case 8:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base"};
+				level_names = temp_names;
+                break;
+            }case 9:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3"};
+				level_names = temp_names;
+                break;
+            }case 10:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall"};
+				level_names = temp_names;
+                break;
+            }case 11:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North"};
+				level_names = temp_names;
+                break;
+            }case 12:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2"};
+				level_names = temp_names;
+                break;
+            }case 13:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp"};
+				level_names = temp_names;
+                break;
+            }case 14:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp", "Rocky Hall 2"};
+				level_names = temp_names;
+                break;
+            }case 15:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp", "Rocky Hall 2", "To Alpha Wolf"};
+				level_names = temp_names;
+                break;
+            }case 16:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp", "Rocky Hall 2", "To Alpha Wolf", "To Alpha Wolf 2"};
+				level_names = temp_names;
+                break;
+            }case 17:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp", "Rocky Hall 2", "To Alpha Wolf", "To Alpha Wolf 2", "Wolf Den"};
+				level_names = temp_names;
+                break;
+            }case 18:{
+                array<string> temp_names = {"Wonderer", "Village 2", "Clearing", "Raider Patrol", "Raider Camp", "Raider Sentries", "Raider Base", "Old Raider Base", "Village 3", "Rocky Hall", "Heading North", "Heading North 2", "Jack's Camp", "Rocky Hall 2", "To Alpha Wolf", "To Alpha Wolf 2", "Wolf Den", "Rocky Hall 3"};
+				level_names = temp_names;
                 break;
             }
         }
+		for(uint i = 0; i < level_names.size(); i++){
+			int index = -1;
+			for(uint j = 0; j < levels.size(); j++){
+				if(level_names[i] == levels[j].name){
+					index = j;
+					break;
+				}
+			}
+			if(index != -1){
+				returnLevels.insertLast(index);
+			}
+		}
         return returnLevels;
     }
 
@@ -713,9 +798,9 @@ class MenuGUI : AHGUI::GUI {
                     currentState = agsSelectUser;
                 }else if(message.name == "loadlevel"){
                     LoadLevel(levels[message.intParams[0]].file);
-                }else if(message.name == "starttutorial"){
-                    LoadLevel("lugaru_tutorial.xml");
-                }
+                }else if(message.name == "challenge"){
+					currentState = agsChallenge;
+				}
             }
             break;
             case agsConfirmDelete: {
@@ -738,9 +823,17 @@ class MenuGUI : AHGUI::GUI {
                     StopTextInput();
                     inputName.resize(0);
                     currentState = agsSelectLevel;
+					WritePersistentInfo(false);
                 }
             }
             break;
+			case agsChallenge: {
+				if(message.name == "back"){
+					currentState = agsSelectLevel;
+				}else if(message.name == "loadchallengelevel"){
+                    LoadLevel(challengelevels[message.intParams[0]].file);
+				}
+			}
         }
 
     }
@@ -823,7 +916,18 @@ class MenuGUI : AHGUI::GUI {
         if(GetInputPressed(0,'esc')){
             this_ui.SendCallback("back");
         }
-
+		if(currentState == agsSelectLevel){
+			if(GetInputPressed(0,'o')){
+				clear();
+	            levels_finished--;
+				ShowLevelSelectUI();
+	        }
+			if(GetInputPressed(0,'p')){
+				clear();
+	            levels_finished++;
+				ShowLevelSelectUI();
+	        }
+		}
         // Update the GUI
         AHGUI::GUI::update();
 
@@ -870,8 +974,6 @@ class MenuGUI : AHGUI::GUI {
         // read in campaign_started
         string profiles_str = saved_level.GetValue("lugaru_profiles");
 
-        Print("Profiles string : " + profiles_str + "\n");
-
         if( profiles_str == "" ) {
             profileData = generateNewProfileSet();
         }
@@ -892,9 +994,9 @@ class MenuGUI : AHGUI::GUI {
                 dataOutdated = true;
                 //profileData = generateNewProfileSet();
             }
-
+			ResetActiveProfile();
         }
-
+		//Print( profileData.writeString(true) );
         dataLoaded = true;
 
         // Now see if we have a profile in this session -- if so load it
@@ -902,7 +1004,6 @@ class MenuGUI : AHGUI::GUI {
             // Get the id from the session and load it into the usable values
             int currentProfileId = sessionParams["profile_id"].asInt();
             setDataFrom( currentProfileId ); // This will throw an error if not found
-            Print("Found profile_id\n");
         }
 
     }
@@ -918,7 +1019,6 @@ class MenuGUI : AHGUI::GUI {
 
             // write it back
             saved_level.SetValue("lugaru_session", lugaru_session_str );
-            Print("Write back the lugaru session\n");
         }
 
         JSON sessionJSON;
@@ -974,13 +1074,24 @@ class MenuGUI : AHGUI::GUI {
         }
 
         // Write in some default value
+		// Newprofile
         newProfile[ "id" ] = JSONValue( newId );
         newProfile[ "active" ] = JSONValue( "true" );
         newProfile[ "levels_finished" ] = JSONValue( 0 );
         newProfile[ "user_name" ] = JSONValue( name );
 
+		newProfile[ "challenge_levels_finished" ] = JSONValue( 0 );
+		JSONValue challengeData;
+		for( uint i = 0; i < challengelevels.size(); ++i ) {
+			challengeData[ i ]["highscore"] = JSONValue(0);
+			challengeData[ i ]["besttime"] = JSONValue(0);
+			string levelName = challengelevels[i].file;
+			levelName = join( levelName.split( "LugaruChallenge/" ), "" );
+			levelName = join( levelName.split( ".xml" ), "" );
+			challengeData[ i ]["levelname"] = JSONValue(levelName);
+		}
+		newProfile[ "challengeData" ] = challengeData;
         return newProfile;
-
     }
 
     void setDataFrom( int targetId ) {
@@ -997,6 +1108,9 @@ class MenuGUI : AHGUI::GUI {
                 levels_finished = profiles[ i ]["levels_finished"].asInt();
                 user_name = profiles[ i ]["user_name"].asString();
                 difficulty = profiles[ i ]["difficulty"].asString();
+				challengeData = profiles[ i ]["challengeData"];
+				challengeLevelsFinished = profiles[ i ]["challenge_levels_finished"].asInt();
+				profileData.getRoot()["profiles"][i]["active"] = JSONValue( "true" );
                 // We're done here
                 break;
             }
@@ -1008,15 +1122,10 @@ class MenuGUI : AHGUI::GUI {
     }
 
     void AddBackground(){
-        HUDImage @image = hud.AddImage();
-        image.SetImageFromPath("Data/Textures/LugaruMenu/Title_FullScreen.png");
-        image.position.x = -2;
-        image.position.y = -2;
-        image.position.z = 0;
-        image.color.a = 0.5;
-        float stretch_x = (GetScreenWidth()+4) / image.GetWidth();
-        float stretch_y = (GetScreenHeight()+4) / image.GetHeight();
-        image.scale = vec3(stretch_x, stretch_y, 1.0);
+        AHGUI::Image background("Textures/LugaruMenu/Title_FullScreen.png");
+        int backgroundLevel = 0;
+        ivec2 newPos = ivec2(0, 0);
+        root.addFloatingElement(background, "Lugaru_BG", newPos, backgroundLevel);
     }
 
     void AddBloodEffect(){
@@ -1027,20 +1136,14 @@ class MenuGUI : AHGUI::GUI {
 
     void CheckForBloodEffect(){
         if(bloodEffectEnabled){
-            HUDImage @newimage = hud.AddImage();
-            newimage.SetImageFromPath("Data/Textures/diffuse.tga");
-            newimage.position.x = -2;
-            newimage.position.y = -2;
-            newimage.position.z = 3;
-            float stretch2_x = (GetScreenWidth()+4) / newimage.GetWidth();
-            float stretch2_y = (GetScreenHeight()+4) / newimage.GetHeight();
-            newimage.color.a = bloodAlpha;
-            newimage.color.x = 1.0;
-            newimage.color.y = 0.0;
-            newimage.color.z = 0.0;
-            newimage.scale = vec3(stretch2_x, stretch2_y, 0.1);
-            bloodDisplayTime += time_step;
-            bloodAlpha -= bloodDisplayTime * 0.05;
+			AHGUI::Image blood("Textures/diffuse.tga");
+			blood.setSize( screen_width,screen_height );
+			blood.setColor(vec4(0.8f, 0.0f, 0.0f, bloodAlpha));
+			int bloodLevel = 4;
+			root.addFloatingElement(blood, "Lugaru_Blood", ivec2(0, 0), bloodLevel);
+
+			bloodAlpha -= bloodDisplayTime * 0.05;
+			bloodDisplayTime += time_step;
             if(bloodAlpha < 0.0f){
                 bloodEffectEnabled = false;
             }
@@ -1061,7 +1164,6 @@ class MenuGUI : AHGUI::GUI {
         saved_level.SetValue("lugaru_session", arena_session_str );
 
         // write out the changes
-        Print("Writing session \n");
         save_file.WriteInPlace();
 
     }
@@ -1072,7 +1174,6 @@ class MenuGUI : AHGUI::GUI {
 
         // Make sure our current data has been written back to the JSON structure
         if( moveDataToStore ) {
-            Print("Writing data to profile\n");
             writeDataToProfiles(); // This'll do nothing if we haven't set a profile
         }
 
@@ -1083,10 +1184,16 @@ class MenuGUI : AHGUI::GUI {
 
         // Set the value and write to disk
         saved_level.SetValue( "lugaru_profiles", profilesString );
-        Print("Profiles string : " + profilesString + "\n");
         save_file.WriteInPlace();
 
     }
+
+	void ResetActiveProfile(){
+		//Make all the profiles inactive
+		for( uint i = 0; i < profileData.getRoot()["profiles"].size(); ++i ) {
+			profileData.getRoot()["profiles"][i]["active"] = JSONValue( "false" );
+		}
+	}
 
     void writeDataToProfiles() {
         // Make sure that the data is good
@@ -1115,8 +1222,21 @@ class MenuGUI : AHGUI::GUI {
             DisplayError("Persistence Error", "Profile id " + profileId + " not found in store.");
         }
     }
-    void PlayBackgroundMusic(){
-        //int menuSong = PlaySoundLoop("Data/Music/LugaruMenuSong.wav", 0.0f);
+	void DisplayText(AHGUI::Divider@ div, DividerDirection dd, string text, int textSize, vec4 color, bool shadowed, string textName = "singleSentence", string onClick = "none"){
+        AHGUI::Text singleSentence( text, "OptimusPrinceps", textSize, color.x, color.y, color.z, color.a );
+		singleSentence.addUpdateBehavior( AHGUI::FadeIn( 1000, @inSine ) );
+		singleSentence.setName(textName);
+		singleSentence.setShadowed(shadowed);
+        div.addElement(singleSentence, dd);
+		if(onClick != "none"){
+			singleSentence.addMouseOverBehavior( AHGUI::MouseOverPulseColor(color, vec4(0.5f), 1.0f ) );
+			singleSentence.addLeftMouseClickBehavior( AHGUI::FixedMessageOnClick(onClick) );
+		}
+        if(showBorders){
+            singleSentence.setBorderSize(1);
+            singleSentence.setBorderColor(1.0, 1.0, 1.0, 1.0);
+            singleSentence.showBorder( false );
+        }
     }
 }
 
@@ -1129,7 +1249,7 @@ bool HasFocus(){
 void Initialize(){
     menuGUI.startNewSession();
     menuGUI.ReadPersistentInfo();
-    menuGUI.PlayBackgroundMusic();
+	PlaySong("menu-lugaru");
 }
 
 void Update(){
@@ -1149,6 +1269,9 @@ void Init(string str){
 
 void StartArenaMeta(){
 
+}
+bool CanGoBack(){
+	return false;
 }
 void Dispose(){
 

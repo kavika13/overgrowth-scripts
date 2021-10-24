@@ -4,25 +4,27 @@
 #include "ambient_tet_mesh.glsl"
 #include "decals.glsl"
 
-#extension GL_ARB_texture_cube_map_array: enable
-#extension GL_ARB_separate_shader_objects: enable
-
 #ifdef PARTICLE
     uniform sampler2D tex0; // Colormap
-    uniform sampler2D tex1; // Normalmap
-    uniform samplerCube tex2; // Diffuse cubemap
-    uniform samplerCube tex3; // Diffuse cubemap
-    uniform sampler2D tex5; // Screen depth texture TODO: make this work with msaa properly
-    UNIFORM_SHADOW_TEXTURE
-    UNIFORM_LIGHT_DIR
-    uniform float size;
-    uniform vec2 viewport_dims;
     uniform vec4 color_tint;
-    uniform sampler3D tex16;
-    uniform sampler2DArray tex19;
+    #ifndef DEPTH_ONLY
+        uniform sampler2D tex1; // Normalmap
+        uniform samplerCube tex2; // Diffuse cubemap
+        uniform samplerCube tex3; // Diffuse cubemap
+        uniform sampler2D tex5; // Screen depth texture TODO: make this work with msaa properly
+        UNIFORM_SHADOW_TEXTURE
+        UNIFORM_LIGHT_DIR
+        uniform float size;
+        uniform vec2 viewport_dims;
+        uniform sampler3D tex16;
+        uniform sampler2DArray tex19;
 
-    uniform mat4 reflection_capture_matrix[10];
-    uniform int reflection_capture_num;
+        uniform mat4 reflection_capture_matrix[10];
+        uniform int reflection_capture_num;
+
+        uniform mat4 light_volume_matrix[10];
+        uniform int light_volume_num;
+    #endif
 #elif defined(DETAIL_OBJECT)
     #ifdef PLANT
     #pragma transparent
@@ -81,6 +83,9 @@
 
     uniform mat4 reflection_capture_matrix[10];
     uniform int reflection_capture_num;
+
+    uniform mat4 light_volume_matrix[10];
+    uniform int light_volume_num;
 
     //#define EMISSIVE
 
@@ -149,6 +154,7 @@ uniform float time;
     in vec2 tex_coord;
     in vec2 morphed_tex_coord;
     in vec3 world_vert;
+    in vec3 orig_vert;
     in vec3 vel;
     #endif
 #else
@@ -161,18 +167,25 @@ uniform float time;
     flat in int instance_id;
     #endif
 #endif
-layout (location = 0) out vec4 out_color;
-layout (location = 1) out vec4 out_vel;
+out vec4 out_color;
+out vec4 out_vel;
 
 #define shadow_tex_coords tc1
 #define tc0 frag_tex_coords
 
 //#ifdef PARTICLE
+
 float LinearizeDepth(float z) {
   float n = 0.1; // camera z near
-  float f = 100000.0; // camera z far
-  float depth = (2.0 * n) / (f + n - z * (f - n));
-  return (f-n)*depth + n;
+  float epsilon = 0.000001;
+  float z_scaled = z * 2.0 - 1.0; // Scale from 0 - 1 to -1 - 1
+  float B = (epsilon-2.0)*n;
+  float A = (epsilon - 1.0);
+  float result = B / (z_scaled + A);
+  if(result < 0.0){
+    result = 99999999.0;
+  }
+  return result;
 }
 //#endif
 
@@ -228,7 +241,7 @@ void CalculateLightContribParticle(inout vec3 diffuse_color, vec3 world_vert) {
     }
 }
 
-#if !defined(PLANT) && !defined(DETAIL_OBJECT)
+#if !defined(PLANT) && !defined(DETAIL_OBJECT) && !defined(DEPTH_ONLY)
 vec3 LookupSphereReflectionPos(vec3 world_vert, vec3 spec_map_vec, int which) {
     //vec3 sphere_pos = world_vert - reflection_capture_pos[which];
     //sphere_pos /= reflection_capture_scale[which];
@@ -257,14 +270,16 @@ vec3 LookupSphereReflectionPos(vec3 world_vert, vec3 spec_map_vec, int which) {
 #endif
 
 
+const float water_speed = 0.03;
+
 float GetWaterHeight(vec2 pos){
-    float scale = 0.0005;
+    float scale = 0.001;
     float height = 0.0;
-    float water_speed = 0.03;
     height += texture(tex0, pos + normalize(vec2(0.0, 1.0))*time*water_speed).x * scale;
     height += texture(tex0, pos * 0.3 + normalize(vec2(1.0, 0.0))*time*water_speed * pow(0.3, 0.5)).x * scale / 0.3;
     height += texture(tex0, pos * 0.1 + normalize(vec2(-1.0, 0.0))*time*water_speed * pow(0.1, 0.5)).x * scale / 0.1;
     height += texture(tex0, pos * 0.05 + normalize(vec2(-1.0, 1.0))*time*water_speed * pow(0.05, 0.5)).x * scale / 0.05;
+
     /*
     height += sin(pos.x * 11.0 + time * water_speed) * scale;
     height += sin(pos.y * 3.0 + time * water_speed) * scale * 2.0;
@@ -325,6 +340,7 @@ vec2 LookupFauxCubemap(vec3 vec, float lod) {
     return coord;
 }
 
+#ifndef DEPTH_ONLY
 vec3 GetAmbientColor(vec3 world_vert, vec3 ws_normal) {    
     uint guess = 0u;
     int grid_coord[3];
@@ -351,33 +367,34 @@ vec3 GetAmbientColor(vec3 world_vert, vec3 ws_normal) {
             ambient_cube_color[i] = vec3(0.0);
         }
     }
-    vec3 ambient_color;
-    vec3 tex_3d = vec3(world_vert.x, world_vert.y, world_vert.z);
+    vec3 ambient_color = vec3(0.0);
+    /*vec3 tex_3d = vec3(world_vert.x, world_vert.y, world_vert.z);
     tex_3d *= 0.001;
     tex_3d += vec3(0.5);
-    if(false && tex_3d[0] > 0.0 && tex_3d[1] > 0.0 && tex_3d[2] > 0.0 && tex_3d[0] < 1.0 && tex_3d[1] < 1.0 && tex_3d[2] < 1.0){
+    if(tex_3d[0] > 0.0 && tex_3d[1] > 0.0 && tex_3d[2] > 0.0 && tex_3d[0] < 1.0 && tex_3d[1] < 1.0 && tex_3d[2] < 1.0){
         for(int i=0; i<6; ++i){
             ambient_cube_color[i] = texture(tex16, vec3((tex_3d[0] + i)/ 6.0, tex_3d[1], tex_3d[2])).xyz * 4.0;            
         }
         ambient_color = SampleAmbientCube(ambient_cube_color, ws_normal);
         use_3d_tex = true;
-    } else if(!use_amb_cube){
+    } else */if(!use_amb_cube){
         ambient_color = LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0);
     } else {
         ambient_color = SampleAmbientCube(ambient_cube_color, ws_normal);
     }
     return ambient_color;
 }
+#endif
 
-#if !defined(PLANT) && !defined(DETAIL_OBJECT)
+#if !defined(PLANT) && !defined(DETAIL_OBJECT) && !defined(DEPTH_ONLY)
 vec3 LookUpReflectionShapes(sampler2DArray reflections_tex, vec3 world_vert, vec3 reflect_dir, float lod) {
-    vec3 reflection_color;
+    vec3 reflection_color = vec3(0.0);
     float total = 0.0;
     {
-        /*float weight = 0.00000001;
+        float weight = 0.00000001;
         vec2 coord = LookupFauxCubemap(reflect_dir, lod);    
         reflection_color.xyz += textureLod(reflections_tex, vec3(coord, 0), lod).xyz * weight;
-        total += weight;     */       
+        total += weight;
     }
     for(int i=0; i<reflection_capture_num; ++i){
         //vec3 temp = (world_vert - reflection_capture_pos[i]) / reflection_capture_scale[i];
@@ -401,13 +418,47 @@ vec3 LookUpReflectionShapes(sampler2DArray reflections_tex, vec3 world_vert, vec
 }
 #endif
 
+float hash( vec2 p )
+{
+    float h = dot(p,vec2(127.1,311.7));
+    
+    return -1.0 + 2.0*fract(sin(h)*43758.5453123);
+}
+
+float noise( in vec2 p )
+{
+    vec2 i = floor( p );
+    vec2 f = fract( p );
+    
+    vec2 u = f*f*(3.0-2.0*f);
+
+    return mix( mix( hash( i + vec2(0.0,0.0) ), 
+                     hash( i + vec2(1.0,0.0) ), u.x),
+                mix( hash( i + vec2(0.0,1.0) ), 
+                     hash( i + vec2(1.0,1.0) ), u.x), u.y);
+}
+
+float fractal( in vec2 uv){
+    float f = 0.0;
+    mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
+    f  = 0.5000*noise( uv ); uv = m*uv;
+    f += 0.2500*noise( uv ); uv = m*uv;
+    f += 0.1250*noise( uv ); uv = m*uv;
+    f += 0.0625*noise( uv ); uv = m*uv;
+    f += 0.03125*noise( uv ); uv = m*uv;
+    f += 0.016625*noise( uv ); uv = m*uv;
+    return f;
+}
+
+//#define TEXEL_DENSITY_VIZ
+#define WATER_DECAL_ENABLED
 void main() {   
     #ifdef DETAIL_OBJECT
         CALC_COLOR_MAP    
         #ifdef PLANT
             colormap.a = pow(colormap.a, max(0.1,min(1.0,3.0/length(ws_vertex))));
         #ifndef TERRAIN
-                colormap.a -= max(0.0f, -1.0f + (length(ws_vertex)/max_distance * (1.0+rand(gl_FragCoord.xy)*0.5f))*2.0f);
+                colormap.a -= max(0.0, -1.0 + (length(ws_vertex)/max_distance * (1.0+rand(gl_FragCoord.xy)*0.5))*2.0);
         #endif
         #ifndef ALPHA_TO_COVERAGE
             if(colormap.a < 0.5){
@@ -457,6 +508,64 @@ void main() {
         #endif
         return;
     #elif defined(PARTICLE)
+    #if defined(WATER_DECAL_ENABLED) && !defined(DEPTH_ONLY) // Hide particles if they intersect water fog decal
+        { // Water decal
+            uint num_z_clusters = grid_size.z;
+
+            vec4 ndcPos;
+            ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+            ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
+            ndcPos.w = 1.0;
+
+            vec4 clipPos = ndcPos / gl_FragCoord.w;
+            vec4 eyePos = inv_proj_mat * clipPos;
+
+            float zVal = ZCLUSTERFUNC(eyePos.z);
+
+            zVal = max(0u, min(zVal, num_z_clusters - 1u));
+
+            uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
+
+            // index of cluster we're in
+            uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z);
+            uint val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
+
+            // number of decals in current cluster
+            uint decal_count = (val >> 16) & 0xFFFFU;
+
+            // debug option, uncomment to visualize clusters
+            //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
+            //colormap.xyz = vec3(g.z / num_z_clusters);
+
+            // index into cluster_decals
+            uint first_decal_index = val & 0xFFFFU;
+
+            // decal list data is immediately after cluster lookup data
+            uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
+            first_decal_index = first_decal_index + 2u * num_clusters;
+
+            vec3 world_dx = dFdx(world_vert);
+            vec3 world_dy = dFdy(world_vert);
+            for (uint i = 0u; i < decal_count; ++i) {
+                // texelFetch takes int
+                uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
+
+                DecalData decal = FetchDecal(decal_index);
+                if(int(decal.tint.a) == 5){
+
+                    mat4 test = inverse(decal.transform);
+
+                    vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
+
+                    if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
+                    } else {
+                        discard;
+                    }
+                }
+            }
+        }
+    #endif // WATER_DECAL_ENABLED
+
         vec4 colormap = texture(tex0, tex_coord);
         float random = rand(gl_FragCoord.xy);
         #ifdef DEPTH_ONLY
@@ -464,96 +573,123 @@ void main() {
                 discard;
             }
             return;
-        #endif
-        vec3 ws_vertex;
-        vec4 shadow_coords[4];
-
-        int num_samples = 2;
-        vec3 far = world_vert + normalize(world_vert-cam_pos) * size * 0.5;
-        vec3 near = world_vert - normalize(world_vert-cam_pos) * size * 0.5;
-        float shadowed = 0.0;
-        for(int i=0; i<num_samples; ++i){
-            vec3 sample_vert = mix(far, near, (i+random)/float(num_samples));
-            ws_vertex = sample_vert - cam_pos;
-            shadow_coords[0] = shadow_matrix[0] * vec4(sample_vert, 1.0);
-            shadow_coords[1] = shadow_matrix[1] * vec4(sample_vert, 1.0);
-            shadow_coords[2] = shadow_matrix[2] * vec4(sample_vert, 1.0);
-            shadow_coords[3] = shadow_matrix[3] * vec4(sample_vert, 1.0);
-            float len = length(ws_vertex);
-            shadowed += GetCascadeShadow(shadow_sampler, shadow_coords, len);
-        }
-        shadowed /= float(num_samples);
-        shadowed = 1.0 - shadowed;
-
-        float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
-        float particle_depth = LinearizeDepth(gl_FragCoord.z);
-        float depth = env_depth - particle_depth;
-        float depth_blend = depth / size * 0.5;
-        depth_blend = max(0.0,min(1.0,depth_blend));
-        depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
-        
-        #ifdef NORMAL_MAP_TRANSLUCENT
-            vec4 normalmap = texture(tex1, tex_coord);
-            vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
-                                  tangent_to_world1 * (normalmap.r*2.0-1.0) +
-                                  tangent_to_world2 * (normalmap.g*2.0-1.0));            
-            float NdotL = GetDirectContrib(ws_light, ws_normal, 1.0);
-            float thin = min(1.0,pow(colormap.a*color_tint.a*depth_blend,2.0)*2.0);
-            NdotL = max(NdotL, max(0.0,(1.0-thin*0.5)));
-            NdotL *= (1.0-shadowed);
-            vec3 diffuse_color = GetDirectColor(NdotL);
-            vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
-        #elif defined(SPLAT)
-            vec4 normalmap = texture(tex1, tex_coord);
-            vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
-                                  tangent_to_world1 * (normalmap.r*2.0-1.0) +
-                                  tangent_to_world2 * (normalmap.g*2.0-1.0));     
-
-            float NdotL;
-            NdotL = dot(ws_light, ws_normal)*0.5+0.5;
-            NdotL = mix(NdotL, 1.0, (1.0 - pow(colormap.a,2.0))*0.5);
-            NdotL *= (1.0-shadowed);
-
-            vec3 diffuse_color = GetDirectColor(NdotL);
-            vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
-            //out_color.xyz = ws_normal;
-            //out_color.a = colormap.a*color_tint.a*depth_blend;
-            //return;
         #else
-            float NdotL = GetDirectContribSimple((1.0-shadowed)*0.5);
-            vec3 diffuse_color = GetDirectColor(NdotL);
-            //vec3 ambient_color = LookupCubemapSimpleLod(cam_pos - world_vert, tex3, 5.0);
-            vec3 ambient_color = GetAmbientColor(world_vert, cam_pos - world_vert);
-        #endif
+            vec3 ws_vertex;
+            vec4 shadow_coords[4];
 
-        diffuse_color += ambient_color * GetAmbientContrib(1.0);
-        CalculateLightContribParticle(diffuse_color, world_vert);
-
-        vec3 color = diffuse_color * colormap.xyz *color_tint.xyz;
-        
-        #ifdef SPLAT
-            ws_vertex = world_vert - cam_pos;
-            vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
-            blood_spec *= 10.0;
-            vec3 spec_map_vec = reflect(ws_vertex,ws_normal); 
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
-            float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
-            float fresnel = pow(glancing, 6.0);
-            fresnel = mix(fresnel, 1.0, 0.05);
-            color = mix(color, (blood_spec + reflection_color), fresnel);
-        #endif
-
-        float alpha = colormap.a*color_tint.a*depth_blend;
-        #ifdef SPLAT
-            if(alpha < 0.3){
-                discard;
+            int num_samples = 2;
+            vec3 far = world_vert + normalize(world_vert-cam_pos) * size * 0.5;
+            vec3 near = world_vert - normalize(world_vert-cam_pos) * size * 0.5;
+            float shadowed = 0.0;
+            for(int i=0; i<num_samples; ++i){
+                vec3 sample_vert = mix(far, near, (i+random)/float(num_samples));
+                ws_vertex = sample_vert - cam_pos;
+                shadow_coords[0] = shadow_matrix[0] * vec4(sample_vert, 1.0);
+                shadow_coords[1] = shadow_matrix[1] * vec4(sample_vert, 1.0);
+                shadow_coords[2] = shadow_matrix[2] * vec4(sample_vert, 1.0);
+                shadow_coords[3] = shadow_matrix[3] * vec4(sample_vert, 1.0);
+                float len = length(ws_vertex);
+                shadowed += GetCascadeShadow(shadow_sampler, shadow_coords, len);
             }
-            alpha = min(1.0, (alpha - 0.3) * 6.0);
+            shadowed /= float(num_samples);
+            shadowed = 1.0 - shadowed;
+
+            float env_depth = LinearizeDepth(texture(tex5,gl_FragCoord.xy / viewport_dims).r);
+            float particle_depth = LinearizeDepth(gl_FragCoord.z);
+            float depth = env_depth - particle_depth;
+            float depth_blend = depth / size * 0.5;
+            depth_blend = max(0.0,min(1.0,depth_blend));
+            depth_blend *= max(0.0,min(1.0, particle_depth*0.5-0.1));
+            
+
+            #ifdef NORMAL_MAP_TRANSLUCENT
+                vec4 normalmap = texture(tex1, tex_coord);
+                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                                      tangent_to_world1 * (normalmap.r*2.0-1.0) +
+                                      tangent_to_world2 * (normalmap.g*2.0-1.0));            
+                float NdotL = GetDirectContrib(ws_light, ws_normal, 1.0);
+                float thin = min(1.0,pow(colormap.a*color_tint.a*depth_blend,2.0)*2.0);
+                NdotL = max(NdotL, max(0.0,(1.0-thin*0.5)));
+                NdotL *= (1.0-shadowed);
+                vec3 diffuse_color = GetDirectColor(NdotL);
+                vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
+            #elif defined(SPLAT)
+                vec4 normalmap = texture(tex1, tex_coord);
+                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                                      tangent_to_world1 * (normalmap.r*2.0-1.0) +
+                                      tangent_to_world2 * (normalmap.g*2.0-1.0));     
+
+                float NdotL;
+                NdotL = dot(ws_light, ws_normal)*0.5+0.5;
+                NdotL = mix(NdotL, 1.0, (1.0 - pow(colormap.a,2.0))*0.5);
+                NdotL *= (1.0-shadowed);
+
+                vec3 diffuse_color = GetDirectColor(NdotL);
+                vec3 ambient_color = GetAmbientColor(world_vert, ws_normal);//LookupCubemapSimpleLod(ws_normal, tex3, 5.0);
+                //out_color.xyz = ws_normal;
+                //out_color.a = colormap.a*color_tint.a*depth_blend;
+                //return;
+            #elif defined(WATER)
+                vec4 normalmap = texture(tex1, tex_coord);
+                vec3 ws_normal = vec3(tangent_to_world3 * normalmap.b +
+                                      tangent_to_world1 * (normalmap.r*2.0-1.0) +
+                                      tangent_to_world2 * (normalmap.g*2.0-1.0));
+
+                vec3 diffuse_color;
+                //Prevent compile warning, this value might be used by water later.
+                vec3 ambient_color = vec3(0.0);
+            #else
+                float NdotL = GetDirectContribSimple((1.0-shadowed)*0.5);
+                vec3 diffuse_color = GetDirectColor(NdotL);
+                //vec3 ambient_color = LookupCubemapSimpleLod(cam_pos - world_vert, tex3, 5.0);
+                vec3 ambient_color = GetAmbientColor(world_vert, cam_pos - world_vert);
+            #endif
+
+            diffuse_color += ambient_color * GetAmbientContrib(1.0);
+            CalculateLightContribParticle(diffuse_color, world_vert);
+
+            vec3 color = diffuse_color * colormap.xyz *color_tint.xyz;
+            
+            #ifdef SPLAT
+                ws_vertex = world_vert - cam_pos;
+                vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
+                blood_spec *= 10.0;
+                vec3 spec_map_vec = reflect(ws_vertex,ws_normal); 
+                vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
+                float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
+                float fresnel = pow(glancing, 6.0);
+                fresnel = mix(fresnel, 1.0, 0.05);
+                color = mix(color, (blood_spec + reflection_color), fresnel);
+            #elif defined(WATER)
+                ws_vertex = world_vert - cam_pos;
+                vec3 blood_spec = vec3(GetSpecContrib(ws_light, normalize(ws_normal), ws_vertex, 1.0, 200.0)) * (1.0-shadowed);
+                blood_spec *= 10.0;
+                vec3 spec_map_vec = reflect(ws_vertex,ws_normal); 
+                vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), 0.0);
+                float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
+                float fresnel = pow(glancing, 6.0);
+                fresnel = mix(fresnel, 1.0, 0.05);
+                //color = pow(max(0.0, dot(ws_light, mix(normalize(ws_vertex), -ws_normal, 0.2))), 5.0) * (1.0-shadowed) * 2.0 * primary_light_color.a * primary_light_color.xyz;
+                color = LookUpReflectionShapes(tex19, world_vert, normalize(mix(normalize(ws_vertex), -ws_normal, 0.5)), 0.0);
+                color = mix(color, (blood_spec + reflection_color), fresnel);
+                colormap.a *= 0.5;
+            #endif
+
+            float alpha = colormap.a*color_tint.a*depth_blend;
+            #ifdef SPLAT
+                if(alpha < 0.3){
+                    discard;
+                }
+                alpha = min(1.0, (alpha - 0.3) * 6.0);
+            #endif
+            out_color = vec4(color, alpha);
         #endif
-        out_color = vec4(color, alpha);
         //out_color.xyz = vec3(pow(colormap.a,2.0));
         //out_color = vec4(1.0);
     #else
+    #ifdef NO_INSTANCE_ID
+        int instance_id = 0;
+    #endif
     #ifdef CHARACTER
         float alpha = texture(fur_tex, fur_tex_coord).a;
     #else
@@ -563,6 +699,9 @@ void main() {
             vec2 detail_coords = frag_tex_coords.zw;
         #else
             vec2 base_tex_coords = frag_tex_coords;
+            #ifdef DETAILMAP4
+            vec2 detail_coords = base_tex_coords*detail_scale[instance_id].xy;
+            #endif
         #endif
         vec4 colormap = texture(tex0, base_tex_coords);
     #endif
@@ -603,10 +742,19 @@ void main() {
         return;
     #else
 
-    #ifdef NO_INSTANCE_ID
-        int instance_id = 0;
-    #endif
     #ifdef DETAILMAP4
+        #ifdef TEXEL_DENSITY_VIZ
+            int max_res[2];
+            max_res[0] = max(textureSize(tex0,0)[0], textureSize(tex1,0)[0]);
+            max_res[1] = max(textureSize(tex0,0)[1], textureSize(tex1,0)[1]);
+            out_color.xyz = vec3((int(tc0[0] * max_res[0] / 32.0)+int(tc0[1] * max_res[1] / 32.0))%2);
+            max_res[0] = max(textureSize(detail_color, 0)[0], textureSize(detail_normal, 0)[0]);
+            max_res[1] = max(textureSize(detail_color, 0)[1], textureSize(detail_normal, 0)[1]);
+            out_color.xyz += vec3((int(detail_coords[0] * max_res[0] / 32.0)+int(detail_coords[1] * max_res[1] / 32.0))%2);
+            out_color.xyz *= 0.5;
+            out_color.a = 1.0;
+            return;
+        #endif
         vec4 weight_map = GetWeightMap(weight_tex, base_tex_coords);
         float total = weight_map[0] + weight_map[1] + weight_map[2] + weight_map[3];
         weight_map /= total;
@@ -641,7 +789,7 @@ void main() {
         vec3 ws_normal;
         {
             #ifdef TERRAIN
-                vec4 normalmap;
+                vec4 normalmap = vec4(0.0);
                 if(detail_fade < 1.0){
                     for(int i=0; i<4; ++i){
                         if(weight_map[i] > 0.0){
@@ -650,7 +798,7 @@ void main() {
                     }
                 }
             #else
-                vec4 normalmap;
+                vec4 normalmap = vec4(0.0);
                 if(detail_fade < 1.0){
                     // TODO: would it be possible to reduce this to two samples by using the tex coord z to interpolate?
                     for(int i=0; i<4; ++i){
@@ -707,29 +855,51 @@ void main() {
         #endif
         colormap.a = max(0.0,colormap.a); 
     #elif defined(ITEM)
+        #ifdef TEXEL_DENSITY_VIZ
+            int max_res[2];
+            max_res[0] = max(textureSize(tex0,0)[0], textureSize(tex1,0)[0]);
+            max_res[1] = max(textureSize(tex0,0)[1], textureSize(tex1,0)[1]);
+            out_color.xyz = vec3((int(tc0[0] * max_res[0] / 32.0)+int(tc0[1] * max_res[1] / 32.0))%2);
+            return;
+        #endif
+
         float blood_amount, wetblood;
-        ReadBloodTex(blood_tex, tc0, blood_amount, wetblood);
+        vec4 blood_texel = textureLod(blood_tex, tc0, 0.0);
+        blood_amount = min(blood_texel.r*5.0, 1.0);
+        wetblood = max(0.0,blood_texel.g*1.4-0.4);
+
         vec4 normalmap = texture(tex1,tc0); 
         vec3 os_normal = UnpackObjNormal(normalmap); 
         vec3 ws_normal = model_rotation_mat * os_normal; 
         ws_normal = normalize(ws_normal);
         colormap.xyz *= mix(vec3(1.0),color_tint,normalmap.a);
-        CALC_BLOOD_ON_COLOR_MAP
+        //CALC_BLOOD_ON_COLOR_MAP
     #elif defined(CHARACTER)
+        #ifdef TEXEL_DENSITY_VIZ
+            int max_res[2];
+            max_res[0] = max(textureSize(color_tex,0)[0], textureSize(normal_tex,0)[0]);
+            max_res[1] = max(textureSize(color_tex,0)[1], textureSize(normal_tex,0)[1]);
+            out_color.xyz = vec3((int(morphed_tex_coord[0] * max_res[0] / 32.0)+int(morphed_tex_coord[1] * max_res[1] / 32.0))%2);
+            return;
+        #endif
         // Reconstruct third bone axis
         vec3 concat_bone3 = cross(concat_bone1, concat_bone2);
 
+        float blood_amount, wetblood;
+        vec4 blood_texel = textureLod(blood_tex, tex_coord, 0.0);
+        ReadBloodTex(blood_tex, tex_coord, blood_amount, wetblood);
+
+        vec2 tex_offset = vec2(pow(blood_texel.g, 8.0)) * 0.001;
+
         // Get world space normal
-        vec4 normalmap = texture(normal_tex, tex_coord);
+        vec4 normalmap = texture(normal_tex, tex_coord + tex_offset);
         vec3 unrigged_normal = UnpackObjNormal(normalmap);
         vec3 ws_normal = normalize(concat_bone1 * unrigged_normal.x +
                                    concat_bone2 * unrigged_normal.y +
                                    concat_bone3 * unrigged_normal.z);
-        float blood_amount, wetblood;
-        ReadBloodTex(blood_tex, tex_coord, blood_amount, wetblood);
 
-        vec4 colormap = texture(color_tex, morphed_tex_coord);
-        vec4 tintmap = texture(tint_map, morphed_tex_coord);
+        vec4 colormap = texture(color_tex, morphed_tex_coord + tex_offset);
+        vec4 tintmap = texture(tint_map, morphed_tex_coord + tex_offset);
         vec3 tint_mult = mix(vec3(0.0), tint_palette[0], tintmap.r) +
                          mix(vec3(0.0), tint_palette[1], tintmap.g) +
                          mix(vec3(0.0), tint_palette[2], tintmap.b) +
@@ -738,9 +908,18 @@ void main() {
         colormap.xyz *= tint_mult;
         CALC_BLOOD_ON_COLOR_MAP
     #else
+        #ifdef TEXEL_DENSITY_VIZ
+            int max_res[2];
+            max_res[0] = max(textureSize(tex0,0)[0], textureSize(tex1,0)[0]);
+            max_res[1] = max(textureSize(tex0,0)[1], textureSize(tex1,0)[1]);
+            out_color.xyz = vec3((int(tc0[0] * max_res[0] / 32.0)+int(tc0[1] * max_res[1] / 32.0))%2);
+            out_color.a = 1.0;
+            return;
+        #endif
         #ifdef WATER
             vec3 base_ws_normal;
             vec3 base_water_offset;
+            float water_depth = LinearizeDepth(gl_FragCoord.z);
         #endif
         #ifdef TANGENT
             vec3 ws_normal;
@@ -751,13 +930,24 @@ void main() {
                     float sample_height[3];
                     float eps = 0.01;
                     vec2 water_uv = world_vert.xz * 0.2;
-                    //water_uv.y -= time;
+                    vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
+                    proj_test_point /= proj_test_point.w;
+                    proj_test_point.xy += vec2(1.0);
+                    proj_test_point.xy *= 0.5;
+                    float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r);
+                    if(gl_FrontFacing){
+                        water_depth += (texture(tex0, water_uv * 0.3 + normalize(vec2(0.0, 1.0))*time*water_speed).y + texture(tex0, water_uv * 0.5 + normalize(vec2(1.0, 0.0))*time*water_speed*1.1).y) * (normalize(ws_vertex).y+1.0) * 0.1;
+                        if(water_depth > old_depth){
+                            discard;
+                        }
+                    }
                     sample_height[0] = GetWaterHeight(water_uv);
                     sample_height[1] = GetWaterHeight(water_uv + vec2(eps, 0.0));
                     sample_height[2] = GetWaterHeight(water_uv + vec2(0.0, eps));
                     unpacked_normal.x = sample_height[1] - sample_height[0];
                     unpacked_normal.y = sample_height[2] - sample_height[0];
                     unpacked_normal.z = eps;
+                    
                     base_water_offset = normalize(unpacked_normal);
                     base_ws_normal = normalize((model_mat[instance_id] * vec4((tan_to_obj * vec3(0,0,1)),0.0)).xyz);
                 #endif
@@ -773,74 +963,113 @@ void main() {
 #ifdef ALPHA
     float spec_amount = normalmap.a;
 #else
-    float spec_amount = GammaCorrectFloat(colormap.a);
+    float spec_amount = colormap.a;
+    #if !defined(CHARACTER) && !defined(ITEM) && !defined(METALNESS_PBR) 
+        spec_amount = GammaCorrectFloat(spec_amount);
+    #endif
 #endif
-
-// wet character
-/*#ifdef CHARACTER
-    spec_amount = mix(spec_amount, 1.0, 0.4);
-    colormap.xyz *= 0.4;
-#endif*/
 
 #endif
     
     #ifdef CHARACTER
+        spec_amount = GammaCorrectFloat(spec_amount);
         float roughness = pow(1.0 - spec_amount, 20.0);
     #elif defined(ITEM)
-        float roughness = mix(normalmap.a, 0.5, blood_amount);
+        float roughness = normalmap.a;
+    #elif defined(METALNESS_PBR)
+        float roughness = (1.0 - normalmap.a);
     #else
         float roughness = mix(0.7, 1.0, pow((colormap.x + colormap.y + colormap.z) / 3.0, 0.01));
     #endif
 
 
+// wet character
+#ifdef CHARACTER
+    float wet = 0.0;
+    if(blood_texel.g < 1.0){
+        wet = blood_texel.g;//pow(max(blood_texel.g-0.2, 0.0)/0.8, 0.5);
+        colormap.xyz *= mix(1.0, 0.5, wet);
+        roughness = mix(roughness, 0.3, wet);
+    }
+#endif
+
     float ambient_mult = 1.0;
 #if !defined(PLANT)
-    CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, world_vert);
+    CalculateDecals(colormap, ws_normal, spec_amount, roughness, ambient_mult, world_vert, time);
 #endif
 
     CALC_SHADOWED
+    #ifdef SIMPLE_SHADOW
+        shadow_tex.r *= ambient_mult;
+    #endif
     CALC_DIRECT_DIFFUSE_COLOR
-    uint guess = 0u;
-    int grid_coord[3];
-    bool in_grid = true;
-    for(int i=0; i<3; ++i){            
-        if(world_vert[i] > grid_bounds_max[i] || world_vert[i] < grid_bounds_min[i]){
-            in_grid = false;
-            break;
-        }
-    }
     
+
     bool use_amb_cube = false;
     bool use_3d_tex = false;
     vec3 ambient_cube_color[6];
-    if(in_grid){
-        grid_coord[0] = int((world_vert[0] - grid_bounds_min[0]) / (grid_bounds_max[0] - grid_bounds_min[0]) * float(subdivisions_x));
-        grid_coord[1] = int((world_vert[1] - grid_bounds_min[1]) / (grid_bounds_max[1] - grid_bounds_min[1]) * float(subdivisions_y));
-        grid_coord[2] = int((world_vert[2] - grid_bounds_min[2]) / (grid_bounds_max[2] - grid_bounds_min[2]) * float(subdivisions_z));
-        int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
-        uvec4 data = texelFetch(ambient_grid_data, cell_id/4);
-        guess = data[cell_id%4];
-        use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, guess);
-    } else {
-        for(int i=0; i<6; ++i){
-            ambient_cube_color[i] = vec3(0.0);
+    vec3 ambient_color = vec3(0.0);
+
+/*
+    #ifndef ITEM // Otherwise item turns white on Humble ATI card?
+    for(int i=0; i<light_volume_num; ++i){
+        //vec3 temp = (world_vert - reflection_capture_pos[i]) / reflection_capture_scale[i];
+        vec3 temp = (inverse(light_volume_matrix[i]) * vec4(world_vert, 1.0)).xyz;
+        vec3 scale_vec = (light_volume_matrix[i] * vec4(1.0, 1.0, 1.0, 0.0)).xyz;
+        float scale = dot(scale_vec, scale_vec);
+        float val = dot(temp, temp);
+        if(temp[0] <= 1.0 && temp[0] >= -1.0 &&
+           temp[1] <= 1.0 && temp[1] >= -1.0 &&
+           temp[2] <= 1.0 && temp[2] >= -1.0)
+        {
+            vec3 tex_3d = temp * 0.5 + vec3(0.5);
+            vec4 test = texture(tex16, vec3((tex_3d[0] + 0)/ 6.0, tex_3d[1], tex_3d[2])) * 4.0; 
+            if(test.a >= 1.0){
+                ambient_cube_color[0] = test.xyz;           
+                for(int j=1; j<6; ++j){
+                    ambient_cube_color[j] = texture(tex16, vec3((tex_3d[0] + j)/ 6.0, tex_3d[1], tex_3d[2])).xyz * 4.0;            
+                }
+                ambient_color = SampleAmbientCube(ambient_cube_color, ws_normal);
+                use_3d_tex = true;
+            }
+            //out_color.xyz = world_vert * 0.01;
+            //out_color.xyz = ambient_cube_color[0];
+            //return;
         }
     }
-    vec3 ambient_color;
-    vec3 tex_3d = vec3(world_vert.x, world_vert.y, world_vert.z);
-    tex_3d *= 0.001;
-    tex_3d += vec3(0.5);
-    if(false && tex_3d[0] > 0.0 && tex_3d[1] > 0.0 && tex_3d[2] > 0.0 && tex_3d[0] < 1.0 && tex_3d[1] < 1.0 && tex_3d[2] < 1.0){
-        for(int i=0; i<6; ++i){
-            ambient_cube_color[i] = texture(tex16, vec3((tex_3d[0] + i)/ 6.0, tex_3d[1], tex_3d[2])).xyz * 4.0;            
+    #endif*/
+
+    if(!use_3d_tex){
+        uint guess = 0u;
+        int grid_coord[3];
+        bool in_grid = true;
+        for(int i=0; i<3; ++i){            
+            if(world_vert[i] > grid_bounds_max[i] || world_vert[i] < grid_bounds_min[i]){
+                in_grid = false;
+                break;
+            }
         }
+        if(in_grid){
+            grid_coord[0] = int((world_vert[0] - grid_bounds_min[0]) / (grid_bounds_max[0] - grid_bounds_min[0]) * float(subdivisions_x));
+            grid_coord[1] = int((world_vert[1] - grid_bounds_min[1]) / (grid_bounds_max[1] - grid_bounds_min[1]) * float(subdivisions_y));
+            grid_coord[2] = int((world_vert[2] - grid_bounds_min[2]) / (grid_bounds_max[2] - grid_bounds_min[2]) * float(subdivisions_z));
+            int cell_id = ((grid_coord[0] * subdivisions_y) + grid_coord[1])*subdivisions_z + grid_coord[2];
+            uvec4 data = texelFetch(ambient_grid_data, cell_id/4);
+            guess = data[cell_id%4];
+            use_amb_cube = GetAmbientCube(world_vert, num_tetrahedra, ambient_color_buffer, ambient_cube_color, guess);
+        } else {
+            for(int i=0; i<6; ++i){
+                ambient_cube_color[i] = vec3(0.0);
+            }
+        }
+
         ambient_color = SampleAmbientCube(ambient_cube_color, ws_normal);
-        use_3d_tex = true;
-    } else if(!use_amb_cube){
-        ambient_color = LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0);
-    } else {
-        ambient_color = SampleAmbientCube(ambient_cube_color, ws_normal);
+
+        if(!use_amb_cube){
+            ambient_color = LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0);
+        }
     }
+
     diffuse_color += ambient_color * GetAmbientContrib(shadow_tex.g) * ambient_mult;
     #ifdef PLANT
         vec3 translucent_lighting = GetDirectColor(shadow_tex.r) * primary_light_color.a; 
@@ -852,18 +1081,23 @@ void main() {
     #else
         vec3 spec_color = vec3(0.0);
         #ifdef CHARACTER
-            float spec_pow = mix(1200.0, 20.0, pow(roughness,2.0));
-            float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r, spec_pow); 
-            spec *= 100.0 * mix(1.0, 0.01, roughness); 
+            float reflection_roughness = roughness;
+            roughness = mix(0.00001, 0.9, roughness);
+
+            float spec_pow = 2/pow(roughness, 4.0) - 2.0;
+            float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,spec_pow); 
+            spec *= (spec_pow + 8) / (8 * 3.141592);
             spec_color = primary_light_color.xyz * vec3(spec); 
+
             vec3 spec_map_vec = reflect(ws_vertex,ws_normal); 
 
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), roughness*3.0);
+            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, normalize(spec_map_vec), reflection_roughness*3.0);
             spec_color += reflection_color;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
-            float base_reflectivity = spec_amount * 0.1;
+            float base_reflectivity = mix(spec_amount * 0.1, 0.03, wet);
             float fresnel = pow(glancing, 6.0) * (1.0 - roughness * 0.5);
+            fresnel = mix(fresnel, pow(glancing, 5.0), wet);
             fresnel *= (1.0 + ws_normal.y) * 0.5;
 
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
@@ -878,20 +1112,53 @@ void main() {
                 vec3 spec_map_vec = reflect(ws_vertex, ws_normal);
                 spec_color += SampleAmbientCube(ambient_cube_color, spec_map_vec) * 0.2 * max(0.0,(1.0 - blood_amount * 2.0));
             }*/
-        #elif defined(ITEM)
+        /*#elif defined(ITEM)
+            float reflection_roughness = roughness;
+            roughness = mix(0.00001, 0.9, roughness);
             float spec_pow = mix(1200.0, 20.0, pow(roughness,2.0));
             float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,spec_pow); 
             spec *= 20.0 * mix(1.0, 0.01, roughness); 
             spec_color = primary_light_color.xyz * vec3(spec); 
             vec3 spec_map_vec = reflect(ws_vertex,ws_normal); 
             
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, roughness * 3.0);
+            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
             spec_color += reflection_color;
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
             float base_reflectivity = spec_amount;
             float fresnel = pow(glancing, 6.0) * mix(0.7, 1.0, blood_amount);
             float spec_val = mix(base_reflectivity, 1.0, fresnel);
+            spec_amount = spec_val;*/
+        #elif defined(METALNESS_PBR) || defined(ITEM)
+            #ifdef ITEM
+                spec_amount = GammaCorrectFloat(spec_amount);
+
+                colormap.xyz = mix(colormap.xyz, blood_tint * 0.4, blood_amount);
+                spec_amount = mix(spec_amount, 0.0, blood_amount);
+                roughness = mix(roughness, 0.0, blood_amount * 0.2);
+            #endif
+            float reflection_roughness = roughness;
+            roughness = mix(0.00001, 0.9, roughness);
+            float metalness = pow(spec_amount, 0.3);
+            spec_amount = mix((1.0 - roughness) * 0.15, 1.0, metalness);
+            float spec_pow = 2/pow(roughness, 4.0) - 2.0;
+            float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,spec_pow); 
+            spec *= (spec_pow + 8) / (8 * 3.141592);
+            spec_color = primary_light_color.xyz * vec3(spec); 
+            vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal)); 
+
+
+            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, min(2.5, reflection_roughness * 5.0));
+            // Disabled in case ambient_cube_color is not initialized
+            //reflection_color = mix(reflection_color, SampleAmbientCube(ambient_cube_color, spec_map_vec), max(0.0, reflection_roughness * 2.0 - 1.0));
+            spec_color += reflection_color;
+
+            float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
+            float base_reflectivity = spec_amount;
+            float fresnel = pow(glancing, 4.0) * (1.0 - roughness) * mix(0.5, 1.0, metalness);
+            float spec_val = mix(base_reflectivity, 1.0, fresnel);
             spec_amount = spec_val;
+            //out_color.xyz = reflection_color;
+            //return;
         #else
             #ifdef WATER
                 roughness = 0.0;
@@ -905,13 +1172,15 @@ void main() {
             #else
                 float spec_pow = mix(1200.0, 20.0, pow(roughness,2.0));
             #endif
+            float reflection_roughness = roughness;
+            roughness = mix(0.00001, 0.9, roughness);
             float spec = GetSpecContrib(ws_light, ws_normal, ws_vertex, shadow_tex.r,spec_pow); 
             spec *= 100.0* mix(1.0, 0.01, roughness); 
             spec_color = primary_light_color.xyz * vec3(spec); 
             vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal)); 
 
 
-            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, roughness * 3.0);
+            vec3 reflection_color = LookUpReflectionShapes(tex19, world_vert, spec_map_vec, reflection_roughness * 3.0);
             spec_color += reflection_color;
 
             float glancing = max(0.0, min(1.0, 1.0 + dot(normalize(ws_vertex), ws_normal)));
@@ -921,30 +1190,36 @@ void main() {
                 if(!gl_FrontFacing){
                     fresnel = pow(glancing, 0.2);
                 } else {
-                    fresnel = pow(glancing, 5.0);
+                    fresnel = pow(glancing, 3.0);
                 }
                 float spec_val = mix(base_reflectivity, 1.0, fresnel);
                 spec_amount = 1.0;
+                //out_color.xyz = reflection_color;
+                //return;
             #else
-                float fresnel = pow(glancing, 10.0) * (1.0 - roughness);
+                float fresnel = pow(glancing, 4.0) * (1.0 - roughness) * 0.05;
                 float spec_val = mix(base_reflectivity, 1.0, fresnel);
                 spec_amount = spec_val;
             #endif
         #endif
-        #if !defined(ALPHA) && !defined(DETAILMAP4) && !defined(CHARACTER) && !defined(ITEM)
+        #if defined(METALNESS_PBR)
+            colormap.xyz *= color_tint[instance_id].xyz;
+        #elif !defined(ALPHA) && !defined(DETAILMAP4) && !defined(CHARACTER) && !defined(ITEM)
             colormap.xyz *= mix(vec3(1.0),color_tint[instance_id].xyz,normalmap.a);
         #endif
-        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal);
+        CalculateLightContrib(diffuse_color, spec_color, ws_vertex, world_vert, ws_normal, roughness);
+        #if defined(METALNESS_PBR) || defined(ITEM)
+            spec_color = mix(spec_color, spec_color * colormap.xyz, metalness);
+        #endif
         vec3 color = mix(diffuse_color * colormap.xyz, spec_color, spec_amount);
     #endif
-
     #ifdef CHARACTER
         // Add rim highlight
         vec3 view = normalize(ws_vertex*-1.0);
         float back_lit = max(0.0,dot(normalize(ws_vertex),ws_light)); 
         float rim_lit = max(0.0,(1.0-dot(view,ws_normal)));
         rim_lit *= pow((dot(ws_light,ws_normal)+1.0)*0.5,0.5);
-        color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * normalmap.a * primary_light_color.xyz * primary_light_color.a * shadow_tex.r;
+        color += vec3(back_lit*rim_lit) * (1.0 - blood_amount) * normalmap.a * primary_light_color.xyz * primary_light_color.a * shadow_tex.r * mix(vec3(1.0), colormap.xyz, 0.8);
     #endif
     //CALC_HAZE
     //AddHaze(color, ws_vertex, spec_cubemap);
@@ -1004,57 +1279,44 @@ void main() {
 #endif
 
 #ifdef WATER
+    vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
+    proj_test_point /= proj_test_point.w;
+    proj_test_point.xy += vec2(1.0);
+    proj_test_point.xy *= 0.5;
+    float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    vec2 distort = vec2(base_water_offset.xy) * max(0.0, min(old_depth, 1.0) ) / (water_depth * 1.0 + 0.3);
+    proj_test_point.xy += distort;
+    float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    if(depth < 0.5){        
+        proj_test_point.xy -= distort * 0.5;
+        depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    }
+    if(depth < 0.25){
+        proj_test_point.xy -= distort * 0.5;
+        depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
+    }
+    vec3 under_water = texture(tex17, proj_test_point.xy).xyz;
     if(gl_FrontFacing){
-        vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
-        proj_test_point /= proj_test_point.w;
-        proj_test_point.xy += vec2(1.0);
-        proj_test_point.xy *= 0.5;
-        float water_depth = LinearizeDepth(gl_FragCoord.z);
-        float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;
-        vec2 distort = vec2(base_water_offset.xy) * max(0.4, min(old_depth, 1.0) ) / (water_depth * 0.1 + 1.0);
-        proj_test_point.xy += distort;
-        float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        if(depth < 0.0){        
-            proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        }
-        if(depth < 0.0){
-            proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        }
-        vec3 under_water = texture(tex17, proj_test_point.xy).xyz;
-        under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3, 0.2))));
+        #ifndef WATER_DECAL_ENABLED
+            under_water = mix(under_water, diffuse_color * colormap.xyz, max(0.0, min(1.0, pow(depth * 0.3, 0.2))));
+        #endif
         float min_depth = -0.3;
         float max_depth = 0.1;
+        float foam_detail = texture(tex0, (world_vert.xz + normalize(vec2(0.0, 1.0))*time*water_speed)*5.0).y + texture(tex0, (world_vert.xz + normalize(vec2(1.0, 0.0))*time*water_speed)*7.0).y;
+        foam_detail *= 0.5;
+        foam_detail = min(1.0, foam_detail+0.3);
         if(depth < max_depth && depth > min_depth && abs(old_depth - depth) < 0.1){
             if(depth > 0.0){
-                under_water = mix(diffuse_color * 0.3, under_water, depth/max_depth);
+                under_water = mix(diffuse_color * 0.3, under_water, min(1.0, depth/max_depth + foam_detail));
             } else {
                 under_water = mix(diffuse_color * 0.3, under_water, depth/-min_depth);            
             }
         }
         out_color.xyz = mix(under_water, out_color.xyz, spec_val);
+        //out_color.xyz = vec3(old_depth);
         //out_color.xyz = vec3(max(0.0, min(1.0, pow(depth * 0.1,0.8))));
         out_color.a = 1.0;
     } else {
-        vec4 proj_test_point = (projection_view_mat * vec4(world_vert, 1.0));
-        proj_test_point /= proj_test_point.w;
-        proj_test_point.xy += vec2(1.0);
-        proj_test_point.xy *= 0.5;
-        float water_depth = LinearizeDepth(gl_FragCoord.z);
-        float old_depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - water_depth;;
-        vec2 distort = vec2(base_water_offset.xy) * max(0.4, min(old_depth, 1.0) ) / (water_depth * 0.1 + 1.0);
-        proj_test_point.xy += distort;
-        float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        if(depth < 0.0){        
-            proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        }
-        if(depth < 0.0){
-            proj_test_point.xy -= distort * 0.5;
-            depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) - LinearizeDepth(gl_FragCoord.z);
-        }
-        vec3 under_water = texture(tex17, proj_test_point.xy).xyz;
         out_color.xyz *= 0.1;
         out_color.xyz = mix(under_water, out_color.xyz, spec_val);
         out_color.a = 1.0;
@@ -1062,22 +1324,50 @@ void main() {
 #endif
 
 // Screen space reflection test
-#ifdef SCREEN_SPACE_REFLECTION
-   #ifdef WATER 
+//#define SCREEN_SPACE_REFLECTION
+#if defined(SCREEN_SPACE_REFLECTION) && !defined(DEPTH_ONLY) 
+   #if defined(WATER)
     {
+
     vec3 spec_map_vec = normalize(reflect(ws_vertex,ws_normal));
     //out_color.xyz = vec3(0.0);
     bool done = false;
     bool good = false;
     int count = 0;
     vec4 proj_test_point;
-    float step_size = 0.1;
+    float step_size = 0.01;
     vec3 march = world_vert;
     float screen_step_mult = abs(dot(spec_map_vec, normalize(ws_vertex)));
     float random = rand(gl_FragCoord.xy);
+
+    vec3 test_point = march;
+    #ifdef TERRAIN
+        proj_test_point = (mvp * vec4(test_point, 1.0));
+    #else
+        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+    #endif
+    proj_test_point /= proj_test_point.w;
+    proj_test_point.xy += vec2(1.0);
+    proj_test_point.xy *= 0.5;
+    vec2 a = proj_test_point.xy;
+
+    test_point += spec_map_vec * 0.1;
+    #ifdef TERRAIN
+        proj_test_point = (mvp * vec4(test_point, 1.0));
+    #else
+        proj_test_point = (projection_view_mat * vec4(test_point, 1.0));
+    #endif
+    proj_test_point /= proj_test_point.w;
+    proj_test_point.xy += vec2(1.0);
+    proj_test_point.xy *= 0.5;
+    vec2 b = proj_test_point.xy;
+
+    screen_step_mult = length(a - b) * 10.0;
+    step_size /= screen_step_mult;
+
     while(!done){
-        march += spec_map_vec * step_size / screen_step_mult;
-        vec3 test_point = march + (spec_map_vec * step_size / screen_step_mult * random);
+        march += spec_map_vec * step_size;
+        vec3 test_point = march + (spec_map_vec * step_size * random * 1.5);
         #ifdef TERRAIN
             proj_test_point = (mvp * vec4(test_point, 1.0));
         #else
@@ -1086,13 +1376,14 @@ void main() {
         proj_test_point /= proj_test_point.w;
         proj_test_point.xy += vec2(1.0);
         proj_test_point.xy *= 0.5;
+        proj_test_point.z = (proj_test_point.z + 1.0) * 0.5;
         proj_test_point.z = LinearizeDepth(proj_test_point.z);
-        float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r) * 0.5;
+        float depth = LinearizeDepth(texture(tex18, proj_test_point.xy).r);
         ++count;
-        if(count > 15 || proj_test_point.x < 0.0 || proj_test_point.y < 0.0 || proj_test_point.x > 1.0 || proj_test_point.y > 1.0){
+        if(count > 20 || proj_test_point.x < 0.0 || proj_test_point.y < 0.0 || proj_test_point.x > 1.0 || proj_test_point.y > 1.0){
             done = true;
         }
-        if( depth < proj_test_point.z && abs(depth - proj_test_point.z) < step_size*2.0){
+        if( depth < proj_test_point.z && abs(depth - proj_test_point.z) < step_size * 2.0){
             done = true;
             good = true;
         }
@@ -1104,11 +1395,21 @@ void main() {
     //out_color.xyz = texture(tex17, proj_test_point.xy).xyz;
     //out_color.xyz = vec3(proj_test_point.x);
     float reflect_amount = min(1.0, pow(-abs(dot(ws_normal, normalize(ws_vertex))) + 1.0, 2.0));
+    reflect_amount = 1.0;
+    float screen_space_amount = 0.0;
+    //good = false;
+    vec3 reflect_color;
     if(good){
-        out_color.xyz = mix(out_color.xyz, texture(tex17, proj_test_point.xy).xyz, reflect_amount);
-    } else {
-        out_color.xyz = mix(out_color.xyz, LookupCubemapSimple(spec_map_vec, spec_cubemap), reflect_amount);        
+        reflect_color = texture(tex17, proj_test_point.xy).xyz;
+        screen_space_amount = 1.0;
+        screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.x-0.5))*2.0, 1.0))*8.0);
+        screen_space_amount *= min(1.0, max(0.0, pow((0.5 - abs(proj_test_point.y-0.5))*2.0, 1.0))*8.0);
     }
+    reflect_color = mix(reflect_color, 
+                        LookUpReflectionShapes(tex19, world_vert, spec_map_vec, 0.0/*roughness * 3.0*/), 
+                        1.0 - screen_space_amount);
+    
+    out_color.xyz = mix(out_color.xyz, reflect_color, reflect_amount);
     //out_color.xyz = vec3(reflect_amount);
     //out_color.xyz = vec3(abs(depth - proj_test_point.z) * 0.1);
     } 
@@ -1155,7 +1456,7 @@ void main() {
     out_color.xyz = avg;
     out_color.xyz = ambient_color;*/
 //#ifndef WATER
-#ifdef WATER_DECAL_ENABLED
+#if defined(WATER_DECAL_ENABLED)
     { // Water decal
         uint num_z_clusters = grid_size.z;
 
@@ -1198,105 +1499,209 @@ void main() {
             uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
 
             DecalData decal = FetchDecal(decal_index);
+            if(int(decal.tint.a) == 5){
+                float spawn_time = decal.transform[0][3];
+                decal.transform[0][3] = 0.0;
+                mat4 test = inverse(decal.transform);
 
-            mat4 test = inverse(decal.transform);
+                vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
 
-            vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
-
-            if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
-            } else {
-                //spec_amount = mix(spec_amount, 1.0, 0.1);
-                //colormap.xyz *= 0.4;
-                // Find water surface
-                vec3 cam_temp = (test * vec4(cam_pos, 1.0)).xyz;
-                //mix(cam_temp[1], temp[1], t) = 0.5;
-                //cam_temp[1] - t * cam_temp[1] + temp[1] * t = 0.5;
-                float t = (cam_temp[1] - 0.5) / (cam_temp[1] - temp[1]);
-                vec3 world_vert_surface_temp = mix(cam_temp, temp, t);
-                //vec3 world_vert_surface = (decal.transform * vec4(world_vert_surface_temp, 1.0)).xyz;//mix(cam_pos, world_vert, t);
-                vec3 world_vert_surface = mix(cam_pos, world_vert, t);
-                vec3 world_vert_up = (decal.transform * vec4(vec3(temp.x, 0.5, temp.z), 1.0)).xyz;
-                float surface_depth = (test * vec4(world_vert_surface, 1.0)).xyz[1];
-                float world_depth = (test * vec4(world_vert, 1.0)).xyz[1];
-                float fog_dist;
-                if(cam_temp[1] > 0.5){
-                    fog_dist = length(world_vert - world_vert_surface);                 
+                if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
                 } else {
-                    fog_dist = length(world_vert - cam_pos);                      
-                }
-                float fog_amount = min(1.0, fog_dist * 0.2);
-                float water_depth = distance(world_vert_up, world_vert);
-                vec3 start;
-                float start_depth;
-                if(cam_temp[1] > 0.5){
-                    start = world_vert_surface;
-                    start_depth = 0.0;
-                } else {
-                    start = cam_pos;   
-                    vec3 cam_pos_up = (decal.transform * vec4(vec3(cam_temp.x, 0.5, cam_temp.z), 1.0)).xyz;
-                    start_depth = distance(cam_pos_up, cam_pos);
-                }
-                const int num_samples = 5;
-                vec3 total_color = vec3(0.0);
-                float total = 0.0;
-                for(int i=0; i<num_samples; ++i){
-                    float t = i / float(num_samples-1);
-                    float temp_depth = mix(start_depth, water_depth, t);
-                    vec3 pos = mix(start, world_vert, t);
-                    float weight = 1.0 / (length(start-pos)+1.0);
-                    total_color += vec3(1.0 - pow(temp_depth * 0.5, 1.0)) * weight;
-                    total += weight;
-                }
-                vec3 fog_color = total_color / total;
-                fog_color *= vec3(0.05, 0.03, 0.03);
-                #ifndef WATER
-                float caustics = (sin(world_vert.x*-10.0 + time * 5.0) + sin(world_vert.z*-7.0 + time * 3.0) + sin(world_vert.z*11.0 + world_vert.x * 5.0 + time * 2.0)+ sin(world_vert.z*-13.0 + world_vert.x * 7.0 + time * 1.4))/8.0;
-                caustics = pow(max(0.0, min(1.0, 1.0 - abs(caustics) * 4.0)), 2.0) * 2.0;
-                out_color.xyz *= vec3(mix(1.0, caustics, min(1.0, water_depth * 0.3)));
-                #endif
-                vec3 shadow_color;
-                vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), ws_light));
-                vec3 up = normalize(cross(right, ws_light));
-                {
-                    vec3 color = vec3(0.0);
-                    int num_samples = 5;
-                    float random = rand(gl_FragCoord.xy);
-                    vec3 target_vert = world_vert;
-                    float max_length = 2.0;
-                    if(length(target_vert - start) > max_length){
-                        target_vert = normalize(target_vert - start) * max_length + start;
+                    //spec_amount = mix(spec_amount, 1.0, 0.1);
+                    //colormap.xyz *= 0.4;
+                    // Find water surface
+                    vec3 cam_temp = (test * vec4(cam_pos, 1.0)).xyz;
+                    //mix(cam_temp[1], temp[1], t) = 0.5;
+                    //cam_temp[1] - t * cam_temp[1] + temp[1] * t = 0.5;
+                    float t = (cam_temp[1] - 0.5) / (cam_temp[1] - temp[1]);
+                    vec3 world_vert_surface_temp = mix(cam_temp, temp, t);
+                    //vec3 world_vert_surface = (decal.transform * vec4(world_vert_surface_temp, 1.0)).xyz;//mix(cam_pos, world_vert, t);
+                    vec3 world_vert_surface = mix(cam_pos, world_vert, t);
+                    vec3 world_vert_up = (decal.transform * vec4(vec3(temp.x, 0.5, temp.z), 1.0)).xyz;
+                    float surface_depth = (test * vec4(world_vert_surface, 1.0)).xyz[1];
+                    float world_depth = (test * vec4(world_vert, 1.0)).xyz[1];
+                    float fog_dist;
+                    if(cam_temp[1] > 0.5){
+                        fog_dist = length(world_vert - world_vert_surface);                 
+                    } else {
+                        fog_dist = length(world_vert - cam_pos);                      
                     }
+                    float fog_amount = min(1.0, fog_dist * 0.2);
+                    float water_depth = distance(world_vert_up, world_vert);
+                    vec3 start;
+                    float start_depth;
+                    if(cam_temp[1] > 0.5){
+                        start = world_vert_surface;
+                        start_depth = 0.0;
+                    } else {
+                        start = cam_pos;   
+                        vec3 cam_pos_up = (decal.transform * vec4(vec3(cam_temp.x, 0.5, cam_temp.z), 1.0)).xyz;
+                        start_depth = distance(cam_pos_up, cam_pos);
+                    }
+                    const int num_samples = 5;
+                    vec3 total_color = vec3(0.0);
                     float total = 0.0;
                     for(int i=0; i<num_samples; ++i){
-                        vec3 sample_vert = mix(target_vert, start, (i+random)/float(num_samples));
-                        ws_vertex = sample_vert - start;
-                        shadow_coords[0] = shadow_matrix[0] * vec4(sample_vert, 1.0);
-                        shadow_coords[1] = shadow_matrix[1] * vec4(sample_vert, 1.0);
-                        shadow_coords[2] = shadow_matrix[2] * vec4(sample_vert, 1.0);
-                        shadow_coords[3] = shadow_matrix[3] * vec4(sample_vert, 1.0);
-                        float len = length(ws_vertex);
-                        float weight = 1.0;
-                        float lit = GetCascadeShadow(shadow_sampler, shadow_coords, len) * weight;
-                        vec2 temp = vec2(dot(right, sample_vert), dot(up, sample_vert));
-                        lit *= abs((sin(temp.x*-5.0 + time * 2.0) + sin(temp.y*-7.0 + time * 1.5) + sin(temp.x*3.0+temp.y*4.0 + time * 2.3))/3.0);
-                        color += lit;
+                        float t = i / float(num_samples-1);
+                        float temp_depth = mix(start_depth, water_depth, t);
+                        vec3 pos = mix(start, world_vert, t);
+                        float weight = 1.0 / (length(start-pos)+1.0);
+                        total_color += vec3(1.0 - pow(temp_depth * 0.5, 1.0)) * weight;
                         total += weight;
                     }
-                    color /= total;
-                    shadow_color = color;
+                    vec3 fog_color = total_color / total;
+                    fog_color *= vec3(0.05, 0.03, 0.03);
+                    #ifndef WATER
+                    float caustics = (sin(world_vert.x*-10.0 + time * 5.0) + sin(world_vert.z*-7.0 + time * 3.0) + sin(world_vert.z*11.0 + world_vert.x * 5.0 + time * 2.0)+ sin(world_vert.z*-13.0 + world_vert.x * 7.0 + time * 1.4))/8.0;
+                    caustics = pow(max(0.0, min(1.0, 1.0 - abs(caustics) * 4.0)), 2.0) * 2.0;
+                    out_color.xyz *= vec3(mix(1.0, caustics, min(1.0, water_depth * 0.3)));
+                    #endif
+                    vec3 shadow_color;
+                    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), ws_light));
+                    vec3 up = normalize(cross(right, ws_light));
+                    {
+                        vec3 color = vec3(0.0);
+                        int num_samples = 5;
+                        float random = rand(gl_FragCoord.xy);
+                        vec3 target_vert = world_vert;
+                        float max_length = 2.0;
+                        if(length(target_vert - start) > max_length){
+                            target_vert = normalize(target_vert - start) * max_length + start;
+                        }
+                        float total = 0.0;
+                        for(int i=0; i<num_samples; ++i){
+                            vec3 sample_vert = mix(target_vert, start, (i+random)/float(num_samples));
+                            ws_vertex = sample_vert - start;
+                            shadow_coords[0] = shadow_matrix[0] * vec4(sample_vert, 1.0);
+                            shadow_coords[1] = shadow_matrix[1] * vec4(sample_vert, 1.0);
+                            shadow_coords[2] = shadow_matrix[2] * vec4(sample_vert, 1.0);
+                            shadow_coords[3] = shadow_matrix[3] * vec4(sample_vert, 1.0);
+                            float len = length(ws_vertex);
+                            float weight = 1.0;
+                            float lit = GetCascadeShadow(shadow_sampler, shadow_coords, len) * weight;
+                            vec2 temp = vec2(dot(right, sample_vert), dot(up, sample_vert));
+                            lit *= abs((sin(temp.x*-5.0 + time * 2.0) + sin(temp.y*-7.0 + time * 1.5) + sin(temp.x*3.0+temp.y*4.0 + time * 2.3))/3.0);
+                            color += lit;
+                            total += weight;
+                        }
+                        color /= total;
+                        shadow_color = color;
+                    }
+                    fog_color.xyz *= (shadow_color * 2.0 + 1.0);
+                    out_color.xyz = mix(out_color.xyz, out_color.xyz * fog_color, min(1.0, pow(water_depth * 0.5, 1.0)));
+                    out_color.xyz = mix(out_color.xyz, fog_color, fog_amount);
                 }
-                fog_color.xyz *= (shadow_color * 2.0 + 1.0);
-                out_color.xyz = mix(out_color.xyz, out_color.xyz * fog_color, min(1.0, pow(water_depth * 0.5, 1.0)));
-                out_color.xyz = mix(out_color.xyz, fog_color, fog_amount);
             }
         }
     }
 
     #endif // WATER_DECAL_ENABLED
-    #if !defined(CHARACTER) && !defined(TERRAIN) && !defined(PLANT)
+    #define FIRE_DECAL_ENABLED
+#ifdef FIRE_DECAL_ENABLED
+    { // Water decal
+        uint num_z_clusters = grid_size.z;
 
+        vec4 ndcPos;
+        ndcPos.xy = ((2.0 * gl_FragCoord.xy) - (2.0 * viewport.xy)) / (viewport.zw) - 1;
+        ndcPos.z = 2.0 * gl_FragCoord.z - 1; // this assumes gl_DepthRange is not changed
+        ndcPos.w = 1.0;
 
+        vec4 clipPos = ndcPos / gl_FragCoord.w;
+        vec4 eyePos = inv_proj_mat * clipPos;
+
+        float zVal = ZCLUSTERFUNC(eyePos.z);
+
+        zVal = max(0u, min(zVal, num_z_clusters - 1u));
+
+        uvec3 g = uvec3(gl_FragCoord.xy / 32.0, zVal);
+
+        // index of cluster we're in
+        uint decal_cluster_index = NUM_GRID_COMPONENTS * ((g.y * grid_size.x + g.x) * num_z_clusters + g.z);
+        uint val = texelFetch(cluster_buffer, int(decal_cluster_index)).x;
+
+        // number of decals in current cluster
+        uint decal_count = (val >> 16) & 0xFFFFU;
+
+        // debug option, uncomment to visualize clusters
+        //colormap.xyz = vec3(min(decal_count, 63u) / 63.0);
+        //colormap.xyz = vec3(g.z / num_z_clusters);
+
+        // index into cluster_decals
+        uint first_decal_index = val & 0xFFFFU;
+
+        // decal list data is immediately after cluster lookup data
+        uint num_clusters = grid_size.x * grid_size.y * grid_size.z;
+        first_decal_index = first_decal_index + 2u * num_clusters;
+
+        vec3 world_dx = dFdx(world_vert);
+        vec3 world_dy = dFdy(world_vert);
+        for (uint i = 0u; i < decal_count; ++i) {
+            // texelFetch takes int
+            uint decal_index = texelFetch(cluster_buffer, int(first_decal_index + i)).x;
+
+            DecalData decal = FetchDecal(decal_index);
+            if(int(decal.tint.a) == 3){
+
+                float spawn_time = decal.transform[0][3];
+                decal.transform[0][3] = 0.0;
+                mat4 test = inverse(decal.transform);
+
+                vec3 temp = (test * vec4(world_vert, 1.0)).xyz;
+
+                if(temp[0] < -0.5 || temp[0] > 0.5 || temp[1] < -0.5 || temp[1] > 0.5 || temp[2] < -0.5 || temp[2] > 0.5){
+                } else {
+                    float fade = max(0.0, (0.5 - length(temp))*8.0)* max(0.0, fractal(temp.xz*7.0)+0.3);
+                    temp = world_vert * 2.0;
+                    float fire = abs(fractal(temp.xz*11.0+time*3.0)+fractal(temp.xy*7.0-time*3.0)+fractal(temp.yz*5.0-time*3.0));
+                    float flame_amount = max(0.0, 0.5 - (fire*0.5 / pow(fade, 2.0))) * 2.0;
+                    flame_amount += pow(max(0.0, 0.7-fire), 2.0);
+                    out_color.xyz = mix(out_color.xyz, 
+                                    vec3(1.5, 0.5, 0.0) * flame_amount, 
+                                    min(1.0 ,max(0.0, fade * 4.0)));
+                }
+            }
+        }
+    }
+
+    #endif // FIRE_DECAL_ENABLED
+    
+    #ifdef CHARACTER
+        vec3 temp = orig_vert * 2.0;
+
+        int burn_int = int(blood_texel.b * 255.0);
+        if(burn_int > 0){
+            int on_fire = 0;
+            if(burn_int > 127){
+                on_fire = 1;
+            }
+            int burnt_amount = burn_int - on_fire * 128;
+
+            float burned = abs(fractal(temp.xz*11.0)+fractal(temp.xy*7.0)+fractal(temp.yz*5.0));
+            out_color.xyz *= mix(1.0, burned*0.3, float(burnt_amount)/127.0);
+            if(on_fire == 1){
+                float fade = 0.4;// max(0.0, (0.5 - length(temp))*8.0)* max(0.0, fractal(temp.xz*7.0)+0.3);
+                float fire = abs(fractal(temp.xz*11.0+time*3.0)+fractal(temp.xy*7.0-time*3.0)+fractal(temp.yz*5.0-time*3.0));
+                float flame_amount = max(0.0, 0.5 - (fire*0.5 / pow(fade, 2.0))) * 2.0;
+                //fade = pow(abs(fractal(temp.xz*3.0+time)+fractal(temp.xy*2.0-time)+fractal(temp.yz*3.0-time))*0.9, 4.0);
+                flame_amount += pow(max(0.0, 0.7-fire), 2.0);
+                float opac = mix(pow(1.0-abs(dot(ws_normal, -normalize(ws_vertex))), 5.0), 1.0, pow((ws_normal.y+1.0)/2.0, 9.0));
+                out_color.xyz = mix(out_color.xyz, 
+                                vec3(1.5, 0.5, 0.0) * flame_amount, 
+                                opac);
+                out_vel.xyz += vec3(0.0, fire, 0.0) * 10.0 * on_fire;
+            }
+        }
     #endif
     #endif // DEPTH_ONLY
     #endif // PARTICLE
+
+/*
+    #if !defined(DEPTH_ONLY) && !defined(PLANT)
+      //out_color.xyz = vec3(blood_texel.b);
+      out_color.xyz = LookUpReflectionShapes(tex19, world_vert, normalize(ws_vertex), 0.0);
+    #endif*/
+
+    //out_color.xyz = colormap.xyz; // albedo
+    //out_color.xyz = vec3(colormap.a); // metalness
 }

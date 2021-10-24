@@ -236,14 +236,14 @@ class GUI {
 
         // If we haven't updated yet, set the time
         if( lastUpdateTime == 0 ) {
-            lastUpdateTime = uint64( the_time * 1000 );
+            lastUpdateTime = uint64( ui_time * 1000 );
         }
 
         // Calculate the delta time 
-        uint64 delta = uint64( the_time * 1000 ) - lastUpdateTime;
+        uint64 delta = uint64( ui_time * 1000 ) - lastUpdateTime;
 
         // Update the time
-        lastUpdateTime = uint64( the_time * 1000 );
+        lastUpdateTime = uint64( ui_time * 1000 );
 
         // Get the input from the engine
         AHGUI_IMUIContext.UpdateControls();
@@ -312,6 +312,10 @@ class GUI {
             // We need to inform the elements
             root.doScreenResize();
             root.doRelayout();
+            while( needsRelayout ) {
+                needsRelayout = false;
+                root.doRelayout();
+            }
         }
 
         ivec2 origin(0,0);

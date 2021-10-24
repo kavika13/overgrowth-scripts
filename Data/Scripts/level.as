@@ -7,6 +7,7 @@ uint32 gui_id;
 bool has_display_text = false;
 uint32 display_text_id;
 string hotspot_image_string;
+bool menu_paused = false;
 
 Dialogue dialogue;
 
@@ -73,7 +74,7 @@ void DrawDialogueTextCanvas(int obj_id){
 
 void Init(string p_level_name) {
     dialogue.Init();
-        
+
     int num_number_canvases = 9;
     number_text_canvases.resize(num_number_canvases);
     for(int i=0; i<num_number_canvases; ++i){
@@ -145,7 +146,13 @@ void ReceiveMessage(string msg) {
         token_iter.FindNextToken(msg);
         gui.Execute(display_text_id,"SetText(\""+token_iter.GetToken(msg)+"\")");
         has_display_text = true;
-    } else if(token == "displaygui"){
+    }else if(token == "displayvideo"){
+		token_iter.FindNextToken(msg);
+		DebugText("awe", "" + msg, _fade);
+        gui_id = gui.AddGUI("video",token_iter.GetToken(msg),GetScreenWidth() - 200,GetScreenHeight() - 200,0);
+    } else if(token == "removevideo"){
+		gui.RemoveGUI(gui_id);
+    }else if(token == "displaygui"){
         token_iter.FindNextToken(msg);
         gui_id = gui.AddGUI("displaygui_call",token_iter.GetToken(msg),220,250,0);
         has_gui = true;
@@ -161,6 +168,13 @@ void ReceiveMessage(string msg) {
     } else if(token == "start_dialogue"){
 		token_iter.FindNextToken(msg);
         dialogue.StartDialogue(token_iter.GetToken(msg));
+    } else if(token == "open_menu") {
+        if(!level.HasFocus()){
+            gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,290,0);
+            SetPaused(true);
+            menu_paused = true;
+            has_gui = true;
+        }
     } else {
         dialogue.ReceiveMessage(msg);
     }
@@ -168,18 +182,33 @@ void ReceiveMessage(string msg) {
 
 void DrawGUI() {
     if(hotspot_image_string.length() != 0){
-        HUDImage@ image = hud.AddImage();   
+        HUDImage@ image = hud.AddImage();
         image.SetImageFromPath(hotspot_image_string);
         image.position = vec3(700,200,0);
     }
     dialogue.Display();
 }
 
-void Update() {  
+void Update(int paused) {  
     if(level.HasFocus()){
         SetGrabMouse(false);
+    } else {
+        if(menu_paused){
+            SetPaused(false);
+            menu_paused = false;
+        }
     }
 
+    /*SetSunColor(vec3(sin(the_time*1.35)*0.5f+0.5f, sin(the_time*1.15)*0.5f+0.5f, sin(the_time*1.75)*0.5f+0.5f)*3.0f);
+    SetSunPosition(vec3(sin(the_time), 1.0, cos(the_time)));
+    SetSunAmbient((sin(the_time*1.25)*0.5f+0.5f) * 3.0);
+    SetFlareDiffuse((1.0f - (sin(the_time*1.25)*0.5f+0.5f)) * 5.0);
+    SetSkyTint(vec3(sin(the_time*1.3)*0.5f+0.5f, sin(the_time*1.1)*0.5f+0.5f, sin(the_time*1.7)*0.5f+0.5f)*3.0f);
+    */
+    /*
+    SetSunColor(vec3(0.0f));
+    SetSkyTint(vec3(0.0f));
+    SetSunAmbient(3.0);*/
     if(has_gui){
         EnterTelemetryZone("Update gui");
         string callback = gui.GetCallback(gui_id);
@@ -203,7 +232,9 @@ void Update() {
                 break;
             }
             if(callback == "media_mode"){
-                SetMediaMode(true);  
+                SetMediaMode(true);
+                gui.RemoveGUI(gui_id);
+                has_gui = false;
             }
             if(callback == "settings"){
                 gui.RemoveGUI(gui_id);
@@ -215,27 +246,26 @@ void Update() {
         }
         LeaveTelemetryZone();
     }
-    if(!has_gui && GetInputDown(controller_id, "esc") && GetPlayerCharacterID() == -1){
-        gui_id = gui.AddGUI("gamemenu","dialogs\\gamemenu.html",220,290,0);
-        has_gui = true;
-    }
-    if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
-        level.SendMessage("manual_reset");
-    }
 
-    if(DebugKeysEnabled() && GetInputDown(controller_id, "x")){  
-        int num_items = GetNumItems();
-        for(int i=0; i<num_items; i++){
-            ItemObject@ item_obj = ReadItem(i);
-            item_obj.CleanBlood();
+    if(paused == 0){
+        if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
+            level.SendMessage("manual_reset");
         }
+
+        if(DebugKeysEnabled() && GetInputDown(controller_id, "x")){  
+            int num_items = GetNumItems();
+            for(int i=0; i<num_items; i++){
+                ItemObject@ item_obj = ReadItem(i);
+                item_obj.CleanBlood();
+            }
+        }
+        EnterTelemetryZone("Update dialogue");
+        dialogue.Update();
+        LeaveTelemetryZone();
+        EnterTelemetryZone("SetAnimUpdateFreqs");
+        SetAnimUpdateFreqs();
+        LeaveTelemetryZone();
     }
-    EnterTelemetryZone("Update dialogue");
-    dialogue.Update();
-    LeaveTelemetryZone();
-    EnterTelemetryZone("SetAnimUpdateFreqs");
-    SetAnimUpdateFreqs();
-    LeaveTelemetryZone();
 }
 
 const float _max_anim_frames_per_second = 100.0f;
@@ -334,5 +364,3 @@ JSON getArenaSpawns() {
     return testValue;
 
 }
-
-

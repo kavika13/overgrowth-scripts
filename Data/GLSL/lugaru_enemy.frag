@@ -1,3 +1,5 @@
+#version 150
+
 #pragma transparent
 #pragma blendmode_add
 

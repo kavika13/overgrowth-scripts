@@ -1,3 +1,7 @@
+#include "music_load.as"
+
+MusicLoad ml("Data/Music/challengelevel.xml");
+
 void Init(string p_level_name)
 {
     DebugDrawText(vec3(0,20,-10),GetBuildVersionShort(),1.0f, true, _persistent);
@@ -21,8 +25,33 @@ void DrawGUI()
 {
 }
 
+bool t = true;
+int c = 0;
+
+string randSong()
+{
+    array<string> songs = {"sub_arena_loop", "ambient-tense", "ambient-happy", "combat", "sad" };
+
+    c = (c+1)%songs.size();
+
+    return songs[c];
+}
+
 void Update()
 {
+    if( IsKeyDown( GetCodeForKey("f6") ) )
+    {
+        if( t )
+        { 
+            PlaySong( randSong() );
+            t = false;
+        }
+    }
+    else
+    {
+        t = true;
+    }
+
     DebugDrawPoint( vec3(0,20,0), vec4(0,1.0f,0,1.0f), _delete_on_update );
     /*
     mat4 meshTransform;
