@@ -593,7 +593,7 @@ void UpdateBrain(const Timestep &in ts){
 
         // If ray check is successful, update knowledge of target position and velocity
         vec3 real_target_pos = ReadCharacterID(target_id).position;
-        vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+        vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
         if(ReadCharacterID(target_id).VisibilityCheck(head_pos)){
             last_seen_target_position = real_target_pos;
             last_seen_target_velocity = ReadCharacterID(target_id).velocity;
@@ -686,7 +686,7 @@ void HandleDebugRayDraw() {
             //Print(""+ray.x+" "+ray.y+" "+ray.z+"\n");
             ray_len = GetVisionDistance(this_mo.position+ray); 
             //Print(""+ray_len+"\n");
-            vec3 head_pos = this_mo.GetAvgIKChainPos("head");
+            vec3 head_pos = this_mo.rigged_object().GetAvgIKChainPos("head");
             head_pos += vec3(0.0f,0.06f,0.0f);
             int line = DebugDrawLine(head_pos, 
                                      head_pos + ray * ray_len,
@@ -804,7 +804,7 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
     bool should_block = ShouldDefend(BLOCK);
     if(should_block && !going_to_block){
         MovementObject @char = ReadCharacterID(target_id);
-        block_delay = char.GetTimeUntilEvent("blockprepare");
+        block_delay = char.rigged_object().anim_client().GetTimeUntilEvent("blockprepare");
         if(block_delay != -1.0f){
             going_to_block = true;
         }
@@ -826,7 +826,7 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
             ItemObject@ item_obj = ReadItemID(nearby_weapon);
             if(length_squared(item_obj.GetLinearVelocity())>1.0f){
                 going_to_block = true;
-                const float kKnifeCatchProbability = 0.5f;
+                const float kKnifeCatchProbability = 0.7f;
                 block_delay = 0.0f;
                 if(RangedRandomFloat(0.0f,1.0f) > kKnifeCatchProbability){
                     block_delay += 0.4f;
@@ -849,7 +849,7 @@ bool WantsToDodge(const Timestep &in ts){
     bool should_block = ShouldDefend(DODGE);
     if(should_block && !going_to_dodge){
         MovementObject @char = ReadCharacterID(target_id);
-        dodge_delay = char.GetTimeUntilEvent("blockprepare");
+        dodge_delay = char.rigged_object().anim_client().GetTimeUntilEvent("blockprepare");
         if(dodge_delay != -1.0f){
             going_to_dodge = true;
         }

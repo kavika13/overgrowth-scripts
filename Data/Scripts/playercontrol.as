@@ -37,7 +37,6 @@ void UpdateBrain(const Timestep &in ts){
 
     situation.Update();
     force_look_target_id = situation.GetForceLookTarget();
-    old_targ_vel = GetTargetVelocity();
 
     if(!GetInputDown(this_mo.controller_id, "drop")){
         drop_key_state = _dks_nothing;
@@ -224,22 +223,13 @@ vec3 GetDodgeDirection() {
     return GetTargetVelocity();
 }
 
-vec3 older_targ_vel;
-vec3 old_targ_vel;
 bool WantsToDodge(const Timestep &in ts) {
     if(!this_mo.controlled) return false;
-
     vec3 targ_vel = GetTargetVelocity();
-   
     bool movement_key_down = false;
-    if(length_squared(targ_vel) > 0.1f && distance_squared(targ_vel, older_targ_vel) > 0.8f)
-    {
+    if(length_squared(targ_vel) > 0.1f){
         movement_key_down = true;
     }
-
-    older_targ_vel = old_targ_vel;
-    old_targ_vel = targ_vel;
-
     return movement_key_down;
 }
 

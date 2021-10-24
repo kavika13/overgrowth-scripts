@@ -11,6 +11,7 @@ float reset_timer = _reset_delay;
 
 void Init(string p_level_name) {
     challenge_end_gui.Init();
+    level_name = p_level_name;
 }
 
 class Achievements {

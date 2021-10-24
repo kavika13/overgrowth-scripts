@@ -74,8 +74,8 @@ class Situation {
             if(!known_chars[i].friendly){
                 MovementObject@ char = ReadCharacterID(known_chars[i].id);
                 if((char.GetIntVar("knocked_out") == _awake ||
-                    char.GetFloatVar("knocked_out_time") < 2.0f) &&
-                   distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2){
+                    char.GetFloatVar("knocked_out_time") > the_time - 2.0f)/* &&
+                   distance_squared(char.position, this_mo.position) < _combat_pose_dist_threshold_2*/){
                     return true;
                 }
             }

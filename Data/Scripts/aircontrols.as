@@ -93,15 +93,15 @@ class JumpInfo {
         up_coord += 0.5f;
         float flailing = GetFlailingAmount();
         flailing = min(0.6f+sin(time*2.0f)*0.2f,flailing);
-        this_mo.SetBlendCoord("up_coord",up_coord);
-        this_mo.SetBlendCoord("tuck_coord",flip_info.GetTuck());
-        this_mo.SetBlendCoord("flail_coord",flailing);
+        this_mo.rigged_object().anim_client().SetBlendCoord("up_coord",up_coord);
+        this_mo.rigged_object().anim_client().SetBlendCoord("tuck_coord",flip_info.GetTuck());
+        this_mo.rigged_object().anim_client().SetBlendCoord("flail_coord",flailing);
         int8 flags = 0;
         if(left_foot_jump){
             flags = _ANM_MIRRORED;
         }
         this_mo.SetCharAnimation("jump",20.0f,flags);
-        this_mo.SetIKEnabled(false);
+        this_mo.rigged_object().ik_enabled = false;
     }
 
     void UpdateWallRunAnimation() {
@@ -111,9 +111,9 @@ class JumpInfo {
         wall_right.z = temp;
         float speed = length(this_mo.velocity);
         this_mo.SetCharAnimation("wall",5.0f);
-        this_mo.SetBlendCoord("ground_speed",speed);
-        this_mo.SetBlendCoord("speed_coord",speed*0.25f);
-        this_mo.SetBlendCoord("dir_coord",dot(normalize(this_mo.velocity), wall_right));
+        this_mo.rigged_object().anim_client().SetBlendCoord("ground_speed",speed);
+        this_mo.rigged_object().anim_client().SetBlendCoord("speed_coord",speed*0.25f);
+        this_mo.rigged_object().anim_client().SetBlendCoord("dir_coord",dot(normalize(this_mo.velocity), wall_right));
         vec3 flat_vel = this_mo.velocity;
         flat_vel.y = 0.0f;
         wall_run_facing = normalize(this_mo.GetFacing() + flat_vel*0.25f);
@@ -133,11 +133,11 @@ class JumpInfo {
             ledge_info.UpdateIKTargets();
         } else {            
             vec3 no_offset(0.0f);
-            this_mo.SetIKTargetOffset("leftarm",no_offset);
-            this_mo.SetIKTargetOffset("rightarm",no_offset);
-            this_mo.SetIKTargetOffset("left_leg",no_offset);
-            this_mo.SetIKTargetOffset("right_leg",no_offset);
-            this_mo.SetIKTargetOffset("full_body",no_offset);
+            this_mo.rigged_object().SetIKTargetOffset("leftarm",no_offset);
+            this_mo.rigged_object().SetIKTargetOffset("rightarm",no_offset);
+            this_mo.rigged_object().SetIKTargetOffset("left_leg",no_offset);
+            this_mo.rigged_object().SetIKTargetOffset("right_leg",no_offset);
+            this_mo.rigged_object().SetIKTargetOffset("full_body",no_offset);
         }
     }
 
@@ -320,9 +320,9 @@ class JumpInfo {
         flip_info.StartedJump();
         ledge_delay = 0.0f;
 
-        this_mo.SetIKTargetOffset("left_leg",vec3(0.0f));
-        this_mo.SetIKTargetOffset("right_leg",vec3(0.0f));
-        this_mo.SetIKTargetOffset("full_body",vec3(0.0f));
+        this_mo.rigged_object().SetIKTargetOffset("left_leg",vec3(0.0f));
+        this_mo.rigged_object().SetIKTargetOffset("right_leg",vec3(0.0f));
+        this_mo.rigged_object().SetIKTargetOffset("full_body",vec3(0.0f));
     }
 
     // adjusts the velocity of jumps and wall jumps based on ground_normal

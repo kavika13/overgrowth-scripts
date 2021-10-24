@@ -80,7 +80,7 @@ class FlipInfo {
     }
 
     void FlipRecover() {
-        vec3 axis = this_mo.GetAvgAngularVelocity();
+        vec3 axis = this_mo.rigged_object().GetAvgAngularVelocity();
         axis.y = 0.0f;
         if(length(axis)>2.0f){
             axis = normalize(axis);

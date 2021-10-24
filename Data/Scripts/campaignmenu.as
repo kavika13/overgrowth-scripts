@@ -9,7 +9,7 @@ void Initialize(){
     gui_id = gui.AddGUI( "levelpicker", "challengemenu/challenge.html", 800, 800, 0 );
     gui.Execute(gui_id, "setTitle('select campaign')");
     gui.Execute(gui_id, "addLevel('Turner', 'Rescue as many slaves as you can', 'a', 'red')");
-    gui.Execute(gui_id, "addLevel('Gladiator', 'Achieve fame and fortune so you can buy your freedom', 'Project60/16_red_desert_super_empty_script.xml', 'green')");
+    gui.Execute(gui_id, "addLevel('Gladiator', 'Achieve fame and fortune so you can buy your freedom', 'arenas/stucco_courtyard_arena.xml', 'green')");
     gui.Execute(gui_id, "addLevel('Bandit', 'Become the most feared bandit on the island', 'b', 'red')");
     
     ribbon_background.Init();

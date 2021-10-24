@@ -158,10 +158,10 @@ void SetAnimUpdateFreqs() {
         }
         int period = 120.0f/(framerate_request[i]*scale);
         if(char.GetIntVar("tether_id") != -1){
-            char.SetAnimUpdatePeriod(2);
+            char.rigged_object().SetAnimUpdatePeriod(2);
             char.SetScriptUpdatePeriod(2);
         } else {
-            char.SetAnimUpdatePeriod(period);
+            char.rigged_object().SetAnimUpdatePeriod(period);
             char.SetScriptUpdatePeriod(4);
         }
     }

@@ -211,21 +211,6 @@ void AddHaze( inout vec3 color,
 float Exposure() {
     return gl_LightSource[0].ambient.a;
 }
-/*
-float GetAnis(vec3 ws_vertex, vec3 ws_light, vec3 ws_normal){
-    vec3 V = normalize(ws_vertex*-1.0);
-    vec3 L = normalize(ws_light);
-    vec3 N = normalize(ws_normal);
-    //vec3 thread = normalize(cross(vec3(0,1,0),L));
-    vec3 thread = vec3(0,1,0);
-    vec3 T = normalize(thread-dot(thread,N)*N);
-    vec3 H = normalize(V + L);
-    N = normalize(H - dot(T,H)*T);
-    float spec_val = min(1.0, pow(max(0.0,dot(N,H)),100.0)*1.0);
-    spec_val *= dot(N,ws_normal);
-    spec_val *= max(0.0,min(1.0,dot(ws_normal,L)*10.0));
-    return spec_val;
-}*/
 
 float GammaCorrectFloat(in float val) {
 #ifdef GAMMA_CORRECT
@@ -257,12 +242,11 @@ void ReadBloodTex(in sampler2D tex, in vec2 tex_coords, out float blood_amount, 
     wetblood = max(0.0,blood_tex.g*1.4-0.4);
 }
 
-void ApplyBloodToColorMap(inout vec4 colormap, in float blood_amount, in float temp_wetblood){
+void ApplyBloodToColorMap(inout vec4 colormap, in float blood_amount, in float temp_wetblood, in vec3 blood_tint_color){
     float wetblood = mix(temp_wetblood, 0.4, colormap.a);
-    colormap = mix(colormap, 
-                   mix(vec4(0.2*wetblood+0.05,0.0,0.0,wetblood),
-                       colormap*vec4(0.8,0.0,0.0,0.0)+vec4(0.0,0.0,0.0,wetblood*0.5+0.5),
-                       (1.0-wetblood)*0.5), 
-                   blood_amount);
+    vec4 old_blood = vec4(blood_tint_color * (0.8*wetblood+0.2), wetblood);
+    vec4 new_blood = vec4(colormap.xyz * blood_tint_color, wetblood*0.5+0.5);
+    vec4 blood_color = mix(old_blood, new_blood, (1.0-wetblood)*0.5);
+    colormap = mix(colormap, blood_color, blood_amount);
 }
 #endif
