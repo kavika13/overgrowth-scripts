@@ -7718,9 +7718,19 @@ void DrawArms(const BoneTransform &in chest_transform, const BoneTransform &in l
             }
             float softness_override = rigged_object.GetStatusKeyValue(right==1?"rightarm_blend":"leftarm_blend");
             //softness_override = mix(softness_override, 1.0f, min(1.0f, flip_ik_fade));
+            
+            //We want to make the arms stiff when the character is climbing wiht arms,
             if(ledge_info.on_ledge){
                 softness_override = 1.0f;
             }
+
+            //Check if character has been teleported and prevent affects of arm physics if that's the case.
+            if( length(arm_points[start+2]-old_arm_points[start+2]) > 10.0f )
+            {
+                //Log(warning, "Massive movement in arm positions detected, skipping arm physics for this frame. TODO\n");
+                softness_override = 1.0f;
+            }
+
             { // Blend with original position to override physics
                 arm_points[start+0] = mix(arm_points[start+0], shoulder, softness_override);
                 arm_points[start+1] = mix(arm_points[start+1], elbow, softness_override);
@@ -7850,6 +7860,8 @@ array<float> target_ear_rotation;
 array<float> ear_rotation;
 array<float> ear_rotation_time;
 
+int skip_ear_physics_counter = 0;
+
 void DrawEar(bool right, const BoneTransform &in head_transform, int num_frames){
     EnterTelemetryZone("DrawEar");
     RiggedObject@ rigged_object = this_mo.rigged_object();
@@ -7931,42 +7943,61 @@ void DrawEar(bool right, const BoneTransform &in head_transform, int num_frames)
             temp_old_ear_points[start+i] = ear_points[start+i];
         }
 
+        //The following contains ear physics, they are acting odd in cutscenes, therefore we disabled them during them.
+        //One of the values in this routine goes insane for some reason.
+
         float ear_damping = 0.95f;
         float low_ear_rotation_damping = 0.9f;
         float up_ear_rotation_damping = 0.92f;
 
         ear_points[start+0] = base;
         vec3 vel_offset = this_mo.velocity * time_step * num_frames;
-        ear_points[start+1] += (((ear_points[start+1] - old_ear_points[start+1]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
-        ear_points[start+2] += (((ear_points[start+2] - old_ear_points[start+2]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
-         quaternion rotation;
-        GetRotationBetweenVectors(middle-base, ear_points[start+1]-base, rotation);
-        vec3 rotated_tip = Mult(rotation, tip-middle)+ear_points[start+1];
-        ear_points[start+2] += (rotated_tip - ear_points[start+2]) * (1.0f - pow(up_ear_rotation_damping, num_frames));
-        ear_points[start+1] += (middle - ear_points[start+1]) * (1.0f - pow(low_ear_rotation_damping, num_frames));
-       
-        for(int i=0; i<3; ++i){
-            ear_points[start+1] = base + normalize(ear_points[start+1]-base) * low_dist;
-            vec3 mid = (ear_points[start+1] + ear_points[start+2])*0.5f;
-            vec3 dir = normalize(ear_points[start+1] - ear_points[start+2]);
-            ear_points[start+2] = mid - dir * high_dist * 0.5f;
-            ear_points[start+1] = mid + dir * high_dist * 0.5f;
+
+        if( length(ear_points[start+0]-old_ear_points[start+0]) > 10.0f )
+        {
+            //Log(warning, "Massive movement in ear_position detected, skipping ear physics for a couple of frames until position is gussed to have returned to stable. TODO\n");
+            //TODO: Find the source of the massive position change, and fix it, often caused by something 
+            //when using the dialogue editor
+            skip_ear_physics_counter = 5;
         }
 
-        if(flip_info.IsFlipping() && on_ground){
-            col.GetSweptSphereCollision(ear_points[start+0], ear_points[start+1], 0.03f);
-            ear_points[start+1] = sphere_col.adjusted_position;
-            col.GetSweptSphereCollision(ear_points[start+1], ear_points[start+2], 0.03f);
-            ear_points[start+2] = sphere_col.adjusted_position;
+        if( skip_ear_physics_counter == 0 )
+        {
+            ear_points[start+1] += (((ear_points[start+1] - old_ear_points[start+1]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
+            ear_points[start+2] += (((ear_points[start+2] - old_ear_points[start+2]) - vel_offset) * pow(ear_damping, num_frames) + vel_offset) * ear_damping * ear_damping;
+             quaternion rotation;
+            GetRotationBetweenVectors(middle-base, ear_points[start+1]-base, rotation);
+            vec3 rotated_tip = Mult(rotation, tip-middle)+ear_points[start+1];
+            ear_points[start+2] += (rotated_tip - ear_points[start+2]) * (1.0f - pow(up_ear_rotation_damping, num_frames));
+            ear_points[start+1] += (middle - ear_points[start+1]) * (1.0f - pow(low_ear_rotation_damping, num_frames));
+           
+            for(int i=0; i<3; ++i){
+                ear_points[start+1] = base + normalize(ear_points[start+1]-base) * low_dist;
+                vec3 mid = (ear_points[start+1] + ear_points[start+2])*0.5f;
+                vec3 dir = normalize(ear_points[start+1] - ear_points[start+2]);
+                ear_points[start+2] = mid - dir * high_dist * 0.5f;
+                ear_points[start+1] = mid + dir * high_dist * 0.5f;
+            }
+
+            if(flip_info.IsFlipping() && on_ground){
+                col.GetSweptSphereCollision(ear_points[start+0], ear_points[start+1], 0.03f);
+                ear_points[start+1] = sphere_col.adjusted_position;
+                col.GetSweptSphereCollision(ear_points[start+1], ear_points[start+2], 0.03f);
+                ear_points[start+2] = sphere_col.adjusted_position;
+            }
+
+            //debug_lines.push_back(DebugDrawLine(ear_points[start+0], ear_points[start+1], vec3(1.0f), _fade));
+            //debug_lines.push_back(DebugDrawLine(ear_points[start+1], ear_points[start+2], vec3(1.0f), _fade));
+            rigged_object.RotateBoneToMatchVec(ear_points[start+0], ear_points[start+1], ik_chain_elements[chain_start+1]);
+            rigged_object.RotateBoneToMatchVec(ear_points[start+1], ear_points[start+2], ik_chain_elements[chain_start+0]);
+            middle = ear_points[start+1];
+            tip = ear_points[start+2];
+        }
+        else
+        {
+            skip_ear_physics_counter--;
         }
 
-        //debug_lines.push_back(DebugDrawLine(ear_points[start+0], ear_points[start+1], vec3(1.0f), _fade));
-        //debug_lines.push_back(DebugDrawLine(ear_points[start+1], ear_points[start+2], vec3(1.0f), _fade));
-        rigged_object.RotateBoneToMatchVec(ear_points[start+0], ear_points[start+1], ik_chain_elements[chain_start+1]);
-        rigged_object.RotateBoneToMatchVec(ear_points[start+1], ear_points[start+2], ik_chain_elements[chain_start+0]);
-        middle = ear_points[start+1];
-        tip = ear_points[start+2];
-    
         for(int i=0; i<3; ++i){
             old_ear_points[start+i] = temp_old_ear_points[start+i];
         }
