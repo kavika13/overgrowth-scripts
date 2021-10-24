@@ -172,9 +172,18 @@ bool WantsToSheatheItem() {
     return item_key_state == _iks_sheathe;
 }
 
-bool WantsToUnSheatheItem() {
+bool WantsToUnSheatheItem(int &out src) {
     if(!this_mo.controlled) return false;
-    return item_key_state == _iks_unsheathe;
+    if(item_key_state != _iks_unsheathe){ 
+        return false;
+    }
+    src = -1;
+    if(weapon_slots[_sheathed_right] != -1){
+        src = _sheathed_right;
+    } else if(weapon_slots[_sheathed_left] != -1){
+        src = _sheathed_left;
+    }
+    return true;
 }
 
 

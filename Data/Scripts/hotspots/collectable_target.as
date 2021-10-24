@@ -15,7 +15,7 @@ void SetParameters() {
 }
 
 void HandleEventItem(string event, ItemObject @obj){
-    Print("ITEMOBJECT EVENT: "+event+"\n");
+    //Print("ITEMOBJECT EVENT: "+event+"\n");
     if(event == "enter"){
         OnEnterItem(obj);
     } 

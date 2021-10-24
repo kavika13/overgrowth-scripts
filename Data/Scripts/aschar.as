@@ -349,7 +349,7 @@ void MakeBeaconParticle(){
 }
 
 void Update(int _num_frames) {
-    int num_items = GetNumItems();
+    /*int num_items = GetNumItems();
     string str;
     for(int i=0; i<num_items; ++i){
         ItemObject@ item_obj = ReadItem(i);
@@ -357,8 +357,8 @@ void Update(int _num_frames) {
         if(sp.HasParam("attachment")){
             DebugText("Test",sp.GetString("attachment"),0.5f);
         }
-    }
-
+    }*/   
+    
     /*if(this_mo.controlled){
         DebugText("char"+this_mo.getID()+"0","Character ID: "+this_mo.getID(), 0.5f);
         DebugText("char"+this_mo.getID()+"00","Pos: "+
@@ -2596,11 +2596,6 @@ void HandleEditorAttachment(int which, int attachment_type, bool mirror){
     }
 }
 
-void AttachMisc(int which){
-    ItemObject@ item_obj = ReadItemID(which);
-    this_mo.AttachItemToSlot(which, _at_grip, false);
-}
-
 void GrabWeaponFromBody(int stuck_id, int weapon_id, const vec3 &in pos) {{
     MovementObject@ char = ReadCharacterID(stuck_id);
     char.UnStickItem(weapon_id);
@@ -4653,6 +4648,9 @@ int GetNearestPickupableWeapon(vec3 point, float max_range){
     int hands_free = GetNumHandsFree();
     for(int i=0; i<num_items; i++){
         ItemObject@ item_obj = ReadItem(i);
+        if(item_obj.GetType() == _misc){
+            continue;
+        }
         if(item_obj.GetNumHands() > hands_free){
             continue;
         }
@@ -4814,15 +4812,10 @@ void HandlePickUp() {
         }
     }
     if(sheathe_layer_id == -1){
+        int src;
         if(WantsToSheatheItem() && weapon_slots[primary_weapon_slot] != -1){ 
             StartSheathing(primary_weapon_slot);
-        } else if(WantsToUnSheatheItem() && weapon_slots[primary_weapon_slot] == -1){
-            int src = -1;
-            if(weapon_slots[_sheathed_right] != -1){
-                src = _sheathed_right;
-            } else if(weapon_slots[_sheathed_left] != -1){
-                src = _sheathed_left;
-            }
+        } else if(WantsToUnSheatheItem(src) && weapon_slots[primary_weapon_slot] == -1){
             if(src != -1){
                 int flags = 0;
                 if(primary_weapon_slot == _held_left){

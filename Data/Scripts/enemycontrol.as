@@ -387,9 +387,15 @@ bool WantsToSheatheItem() {
     return false;
 }
 
-bool WantsToUnSheatheItem() {
+bool WantsToUnSheatheItem(int &out src) {
     if(startled || goal != _attack || weapon_slots[primary_weapon_slot] != -1){
         return false;
+    }
+    src = -1; 
+    if(weapon_slots[_sheathed_right] != -1 && ReadItemID(weapon_slots[_sheathed_right]).GetType() == _weapon){
+        src = _sheathed_right;
+    } else if(weapon_slots[_sheathed_left] != -1 && ReadItemID(weapon_slots[_sheathed_left]).GetType() == _weapon){
+        src = _sheathed_left;
     }
     return true;
 }
