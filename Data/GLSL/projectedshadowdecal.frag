@@ -53,19 +53,10 @@ void main()
         color.a *=max(0.0,(1.0 - distance_fade));
         color.a *= 1.0 - GetHazeAmount(ws_vertex);
         
-        color.xyz = LookupCubemapSimple(normal, tex3)*GetAmbientMultiplier();
+        color.xyz = LookupCubemapSimpleLod(normal, tex3, 5.0)*GetAmbientMultiplier();
         float avg_color = (color.x + color.y + color.z) * 0.333;
         color.xyz = (color.xyz - vec3(avg_color))*1.3 + vec3(avg_color);
         color.xyz *= color.a;
-
-        // * GetAmbientContrib(shadow_tex.g)
-
-        //color.xyz = vec3(1.0)-(gl_LightSource[0].diffuse.xyz * gl_LightSource[0].diffuse.a);
-        //color.xyz += LookupCubemapSimple(normal, tex3)*color.a*GetAmbientMultiplier();
-        //color.a = 1.0;
-
-        //color = vec4(vec3(depth),1.0);
-        //color = vec4(vec3(projected_how_far),1.0);
 
         gl_FragColor = color;
     }

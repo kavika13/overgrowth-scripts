@@ -5,13 +5,9 @@ varying float opac;
 
 #include "lighting.glsl"
 
-void main()
-{    
+void main() {    
     vec3 color;
-    
     color = textureCube(tex2,normal).xyz;
-
     color *= Exposure();
-
     gl_FragColor = vec4(color,opac);
 }

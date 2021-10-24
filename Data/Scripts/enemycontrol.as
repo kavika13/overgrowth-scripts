@@ -407,7 +407,7 @@ void UpdateBrain(const Timestep &in ts){
     move_delay = max(0.0f, move_delay - ts.step());
 
     bool wants_to_get_weapon = false;
-    if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile){
+    if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile && goal != _patrol){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
         float nearest_dist = 0.0f;

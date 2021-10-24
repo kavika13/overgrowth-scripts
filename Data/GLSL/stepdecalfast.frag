@@ -4,7 +4,6 @@
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
-uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2D tex5;
 uniform vec3 cam_pos;

@@ -7,6 +7,7 @@ LedgeInfo ledge_info;
 
 bool left_handed = true;
 bool dialogue_control = false;
+vec3 dialogue_position;
 
 enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking, _jumped, _can_climb,
              _grabbed_ledge, _climbed_up};
@@ -426,7 +427,13 @@ float ragdoll_cam_recover_time = 0.0f;
 float ragdoll_cam_recover_speed = 1.0f;
 
 int count = 0;
-int being_executed = 0;
+
+enum ExecutionType {
+	NO_EXECUTION = 0,
+	STARTING_THROAT_CUT = 1,
+	FINISHING_THROAT_CUT = 2
+};
+ExecutionType being_executed = NO_EXECUTION;
 
 void ChokedOut(int target){
     head_choke_queue = target;
@@ -890,29 +897,15 @@ void SetIKChainInflate(const string &in name, float val) {
     }
 }
 
-void Update(int num_frames) {
-    Timestep ts(time_step, num_frames);
-
-    //this_mo.rigged_object().SetIKChainInflate("leftarm",sin(time)+1.0f);
+void ApplyBoneInflation() {
     int num_bones = this_mo.rigged_object().skeleton().NumBones();
     for(int i=0; i<num_bones; ++i){
         this_mo.rigged_object().skeleton().SetBoneInflate(i, 1.0f);
     }
 
-    const float fat = p_fat;//sin(time);
-    const float muscle = p_muscle;//sin(time*0.7f);
-    const float ear_size = p_ear_size;//1.5f+sin(time*0.5f);
-
-    //SetIKChainElementInflate("leftarm",0,0.1f);
-    /*SetIKChainElementInflate("leftarm",1,1.5f);
-    SetIKChainElementInflate("leftarm",2,1.5f);
-    SetIKChainElementInflate("leftarm",3,2.0f);
-    SetIKChainElementInflate("leftarm",4,2.0f);
-    SetIKChainElementInflate("leftarm",5,2.0f);*/
-    //SetIKChainElementInflate("leftarm",6,0.1f);
-    //SetIKChainElementInflate("leftarm",7,0.1f);
-    //SetIKChainElementInflate("leftarm",8,0.1f);
-
+    const float fat = p_fat;
+    const float muscle = p_muscle;
+    const float ear_size = p_ear_size;
     
     SetIKChainElementInflate("torso",2,max(0.7f+muscle*0.5f, 1.0f + max(fat*0.5f,fat)));
     SetIKChainElementInflate("torso",1,max(0.5f+muscle*0.2f, 1.0f + max(fat*0.75f,fat)));
@@ -944,47 +937,40 @@ void Update(int num_frames) {
     SetIKChainElementInflate("rightarm",3,max(0.6f, 1.0f + max(fat, muscle)));
     SetIKChainElementInflate("rightarm",4,max(0.6f, 1.0f + max(fat, muscle)));
     SetIKChainElementInflate("rightarm",5,max(0.6f, 1.0f + max(fat*0.5f,muscle)));
+}
+
+void Update(int num_frames) {
+    Timestep ts(time_step, num_frames);    
+    time += ts.step();
     
-    /*
-    SetIKChainInflate("leftear",0.1f);
-    SetIKChainInflate("rightear",0.1f);
-    SetIKChainInflate("rightarm",0.1f);
-    SetIKChainInflate("leftarm",0.1f);
-    SetIKChainInflate("left_leg",0.1f);
-    SetIKChainInflate("right_leg",0.1f);
-    SetIKChainInflate("torso",0.0f);
-    SetIKChainInflate("head",0.1f);
-    SetIKChainInflate("tail",0.1f);
-    */
-    
+    // Update talking
     if(test_talking){
         test_talking_amount = min(test_talking_amount + ts.step() * 20.0f, 1.0f);
         speak_sound_delay -= ts.step();
         if(speak_sound_delay <= 0.0f){
             string sound = "Data/Sounds/voice/speak_test/speak_test.xml";
-            //this_mo.ForceSoundGroupVoice(sound, 0.0f);
             speak_sound_delay = 0.25f;
         }
     } else {
         test_talking_amount = max(test_talking_amount - ts.step() * 5.0f, 0.0f);
     }
     float talk_speed_mult = 1.5f;
-    // Test of talking animation
-    this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f*talk_speed_mult)+sin(time*13.0f))*0.25f+0.5f,0.7f * test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
-    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f*talk_speed_mult)*0.5f+0.5f,0.3f * test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("ah",sin(time*22.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("oh",(sin(time*6.0f*talk_speed_mult)+sin(time*13.0f))*0.25f+0.5f, 0.7f*test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("w",sin(time*15.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
+    this_mo.rigged_object().SetMorphTargetWeight("mouth_open",sin(time*12.0f*talk_speed_mult)*0.5f+0.5f, 0.3f*test_talking_amount);
     
-    time += ts.step();
-    
+    // Cinematic posing
     if(dialogue_control){
         on_ground = true;
+        this_mo.position = dialogue_position;
         this_mo.SetTilt(vec3(0.0f,1.0f,0.0f));
         this_mo.SetFlip(vec3(0.0f,1.0f,0.0f),0.0f,0.0f);
         this_mo.SetAnimation(dialogue_anim, 3.0f, 0);
         idle_stance_amount = 0.2f;
         UpdateBlink(ts);
         UpdateEyeLook(ts);
+        HandleFootStance(ts);
         {
             vec3 ik_pos = this_mo.rigged_object().GetAvgIKChainPos("torso");
             vec3 dir = normalize(dialogue_torso_target - ik_pos);
@@ -1073,13 +1059,13 @@ void Update(int num_frames) {
         return;
     }    
     
-    if(being_executed == 1){
+    if(being_executed == FINISHING_THROAT_CUT){
         int other_id = tether_id;
         CutThroat();
         vec3 impulse = this_mo.GetFacing() * 1000.0f;
         this_mo.rigged_object().ApplyForceToRagdoll(impulse, this_mo.rigged_object().GetIKChainPos("head", 1));
         ReadCharacterID(other_id).Execute("ChokedOut(" + this_mo.getID() + ");");
-        being_executed = 0;
+        being_executed = NO_EXECUTION;
     }
 
     if(cut_throat && blood_amount > 0.0f){
@@ -1108,9 +1094,6 @@ void Update(int num_frames) {
     }
 
     HandleSpecialKeyPresses();
-    if(in_animation){
-        return;
-    }
     UpdateBrain(ts); //in playercontrol.as or enemycontrol.as
     UpdateState(ts);
 
@@ -1366,14 +1349,21 @@ void HandleSpecialKeyPresses() {
             }
         }
         if(GetInputPressed(this_mo.controller_id, "1")){ 
-            if(rand()%2 == 0){ 
+            int rand_int = rand()%3;
+            switch(rand_int){
+            case 0:
                 SwitchCharacter("Data/Characters/guard.xml");
-            } else {
+                break;
+            case 1:
                 SwitchCharacter("Data/Characters/raider_rabbit.xml");
+                break;
+            case 2:
+                SwitchCharacter("Data/Characters/pale_turner.xml");
+                break;
             }
         }
         if(GetInputPressed(this_mo.controller_id, "2")){
-            int rand_int = rand()%6;
+            int rand_int = rand()%8;
             switch(rand_int){
             case 0: 
                 SwitchCharacter("Data/Characters/male_rabbit_1.xml"); break;
@@ -1387,24 +1377,39 @@ void HandleSpecialKeyPresses() {
                 SwitchCharacter("Data/Characters/female_rabbit_2.xml"); break;
             case 5: 
                 SwitchCharacter("Data/Characters/female_rabbit_3.xml"); break;
+            case 6: 
+            case 7: 
+                SwitchCharacter("Data/Characters/pale_rabbit_civ.xml"); break;
             }
         }
         if(GetInputPressed(this_mo.controller_id, "3")){
-            SwitchCharacter("Data/Characters/pale_turner.xml");
+            int rand_int = rand()%4;
+            switch(rand_int){
+            case 0: 
+                SwitchCharacter("Data/Characters/fancy_striped_cat.xml"); break;
+            case 1: 
+                SwitchCharacter("Data/Characters/female_cat.xml"); break;
+            case 2: 
+                SwitchCharacter("Data/Characters/male_cat.xml"); break;
+            case 3: 
+                SwitchCharacter("Data/Characters/striped_cat.xml"); break;
+            }
         }
         if(GetInputPressed(this_mo.controller_id, "4")){
-            SwitchCharacter("Data/Characters/pale_rabbit_civ.xml");
+            int rand_int = rand()%3;
+            switch(rand_int){
+            case 0: 
+                SwitchCharacter("Data/Characters/rat.xml"); break;
+            case 1: 
+                SwitchCharacter("Data/Characters/hooded_rat.xml"); break;
+            case 2: 
+                SwitchCharacter("Data/Characters/female_rat.xml"); break;
+            }
         }
         if(GetInputPressed(this_mo.controller_id, "5")){
             SwitchCharacter("Data/Characters/wolf.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "6")){
-            SwitchCharacter("Data/Characters/rabbot.xml");
-        }
-        if(GetInputPressed(this_mo.controller_id, "7")){
-            SwitchCharacter("Data/Characters/cat.xml");
-        }
-        if(GetInputPressed(this_mo.controller_id, "8")){
             int rand_int = rand()%4;
             switch(rand_int){
             case 0: 
@@ -1416,6 +1421,9 @@ void HandleSpecialKeyPresses() {
             case 3: 
                 SwitchCharacter("Data/Characters/lt_dog_male_2.xml"); break;
             }
+        }
+        if(GetInputPressed(this_mo.controller_id, "7")){
+            SwitchCharacter("Data/Characters/rabbot.xml");
         }
         if(GetInputPressed(this_mo.controller_id, "b")){
             int8 flags = _ANM_FROM_START;
@@ -3204,6 +3212,17 @@ void ReceiveMessage(string msg){
         float rotation = atof(token);
         vec3 new_facing = Mult(quaternion(vec4(0,1,0,rotation*3.1415f/180.0f)), vec3(1,0,0));
         this_mo.SetRotationFromFacing(new_facing);
+    } else if(token == "set_dialogue_position"){ // params: float rotation
+        // Get params     
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_position.x = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_position.y = atof(token);
+        token_iter.FindNextToken(msg);
+        token = token_iter.GetToken(msg);
+        dialogue_position.z = atof(token);
     } else if(token == "set_torso_target"){ // params: vec3 pos, float control
         // Get params
         vec3 pos;        
@@ -3513,7 +3532,7 @@ void HandleAnimationCombatEvent(const string&in event, const vec3&in world_pos) 
     if(event == "throatcut"){
         if(tether_id != -1){
             MovementObject@ char = ReadCharacterID(tether_id);
-            char.Execute("Execute(1);"); 
+            char.Execute("Execute(FINISHING_THROAT_CUT);"); 
             vec3 pos = char.rigged_object().GetIKChainPos("head",1); 
             for(int i=0; i<3; ++i){
                 AddBloodToCutPlaneWeapon(this_mo.getID(), pos + vec3(RangedRandomFloat(-0.3f,0.3f),RangedRandomFloat(-0.3f,0.3f),RangedRandomFloat(-0.3f,0.3f)));
@@ -3661,7 +3680,8 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
                 if(TargetedJump()){
                     jump_info.StartJump(GetTargetJumpVelocity(), true);
                 } else {
-                    jump_info.StartJump(target_velocity, false);
+                    float speed_mult = min(1.0f, length(this_mo.velocity)/max_speed + 0.2f);
+                    jump_info.StartJump(target_velocity * speed_mult, false);
                 }
                 HandleAIEvent(_jumped);
                 SetOnGround(false);
@@ -3677,15 +3697,13 @@ void UpdateGroundMovementControls(const Timestep &in ts) {
     float flat_ground_length = length(flat_ground_normal);
     flat_ground_normal = normalize(flat_ground_normal);
     if(flat_ground_length > 0.9f){
-        if(this_mo.controlled && dot(target_velocity, flat_ground_normal)<0.0f){
-            target_velocity -= dot(target_velocity, flat_ground_normal) *
-                               flat_ground_normal;
+        if(this_mo.controlled && dot(target_velocity, flat_ground_normal) < 0.0f){
+            target_velocity -= dot(target_velocity, flat_ground_normal) * flat_ground_normal;
         }
     }
     if(flat_ground_length > 0.6f){
         if(this_mo.controlled && dot(this_mo.velocity, flat_ground_normal)>-0.8f){
-            target_velocity -= dot(target_velocity, flat_ground_normal) *
-                               flat_ground_normal;
+            target_velocity -= dot(target_velocity, flat_ground_normal) * flat_ground_normal;
             target_velocity += flat_ground_normal * flat_ground_length;
             feet_moving = true;
         }
@@ -3742,28 +3760,6 @@ void MoveIKTarget(string str, vec3 offset) {
 
 void draw() {
     this_mo.rigged_object().Draw();
-    //DebugDrawWireSphere(this_mo.position, _leg_sphere_size, vec3(1.0f), _delete_on_draw);
-    /*DebugDrawLine(this_mo.position,
-                  this_mo.position + this_mo.GetFacing(),
-                  vec3(1.0f),
-                  _delete_on_draw);*/
-    /*mat4 transform = this_mo.rigged_object().GetAvgIKChainTransform("head");
-    mat4 transform_offset;
-    transform_offset.SetRotationX(-70);
-    transform.SetRotationPart(transform.GetRotationPart()*transform_offset);
-    DebugDrawWireMesh("Data/Models/fov.obj", transform, vec4(1.0f), _delete_on_draw); 
-    
-    array<int> nearby_characters;
-    GetCharactersInHull("Data/Models/fov.obj", transform, nearby_characters);
-    for(int i=0; i<nearby_characters.size(); ++i){
-        if(nearby_characters[i] == this_mo.getID()){
-            continue;    
-        }
-        DebugDrawWireSphere(ReadCharacterID(nearby_characters[i]).position,
-                            1.0f,
-                            vec3(1.0f,0.0f,0.0f),
-                            _delete_on_draw);
-    }*/
 }
 
 void ForceApplied(vec3 force) {
@@ -3927,7 +3923,7 @@ void UpdateGroundControls(const Timestep &in ts) {
     if(tethered == _TETHERED_FREE){
         UpdateGroundAttackControls(ts);
     } else if(tethered == _TETHERED_REARCHOKE && WantsToAttack() && !executing && weapon_slots[primary_weapon_slot] != -1) {
-        //Print("Throat cut!\n");
+    	// Cut victim's throat
         uint8 flags = _ANM_FROM_START;
         if(mirrored_stance){
             flags = flags|_ANM_MIRRORED;   
@@ -3941,7 +3937,7 @@ void UpdateGroundControls(const Timestep &in ts) {
         PlaySoundGroup(sound, pos, _sound_priority_very_high);  
         MovementObject@ char = ReadCharacterID(tether_id);
         char.rigged_object().CutPlane(vec3(0.0f,1.0f,0.0f), pos, this_mo.GetFacing() * -1.0f, 0, 0);
-        char.Execute("Execute(2);");
+        char.Execute("Execute(STARTING_THROAT_CUT);");
     }
     UpdateGroundMovementControls(ts);
 }
@@ -4015,38 +4011,35 @@ void UpdateMovementControls(const Timestep &in ts) {
             UpdateGroundControls(ts);
         } 
         flip_info.UpdateRoll(ts);
+    } else if(ledge_info.on_ledge){
+        ledge_info.UpdateLedge(ts);
+        flip_info.UpdateFlip(ts);
     } else {
-        if(ledge_info.on_ledge){
-            ledge_info.UpdateLedge(ts);
-            flip_info.UpdateFlip(ts);
+        jump_info.UpdateAirControls(ts);
+        UpdateAirAttackControls();
+        if(jump_info.ClimbedUp()){
+            SetOnGround(true);
+            duck_amount = 1.0f;
+            duck_vel = 2.0f;
+            target_duck_amount = 1.0f;
+            ApplyIdle(20.0f, true);
+            HandleBumperCollision();
+            HandleStandingCollision();
+            this_mo.position = sphere_col.position;
+            this_mo.velocity = GetTargetVelocity() * true_max_speed * 0.2f;
+            feet_moving = false;
+            this_mo.MaterialEvent("land_soft", this_mo.position);
         } else {
-            jump_info.UpdateAirControls(ts);
-            UpdateAirAttackControls();
-            if(jump_info.ClimbedUp()){
-                SetOnGround(true);
-                duck_amount = 1.0f;
-                duck_vel = 2.0f;
-                target_duck_amount = 1.0f;
-                ApplyIdle(20.0f, true);
-                HandleBumperCollision();
-                HandleStandingCollision();
-                this_mo.position = sphere_col.position;
-                //this_mo.velocity = vec3(0.0f);
-                this_mo.velocity = GetTargetVelocity() * true_max_speed * 0.2f;
-                feet_moving = false;
-                this_mo.MaterialEvent("land_soft", this_mo.position);
-            } else {
-                flip_info.UpdateFlip(ts);
-                
-                target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z)*2.0f;
-                vec3 flail_tilt(sin(time*5.0f)*10.0f,0.0f,cos(time*3.0f+0.75f)*10.0f);
-                target_tilt += jump_info.GetFlailingAmount()*flail_tilt;
-                if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
-                    target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
-                }
-                if(this_mo.velocity.y<0.0f || flip_info.HasFlipped()){
-                    target_tilt *= -1.0f;
-                }
+            flip_info.UpdateFlip(ts);
+            // Update air tilt            
+            target_tilt = vec3(this_mo.velocity.x, 0, this_mo.velocity.z) * 2.0f;
+            vec3 flail_tilt(sin(time*5.0f)*10.0f,0.0f,cos(time*3.0f+0.75f)*10.0f);
+            target_tilt += jump_info.GetFlailingAmount()*flail_tilt;
+            if(abs(this_mo.velocity.y)<_tilt_transition_vel && !flip_info.HasFlipped()){
+                target_tilt *= pow(abs(this_mo.velocity.y)/_tilt_transition_vel,0.5);
+            }
+            if(this_mo.velocity.y < 0.0f || flip_info.HasFlipped()){
+                target_tilt *= -1.0f;
             }
         }
     }
@@ -4267,19 +4260,6 @@ vec3 HandlePiecewiseBumperCollision(vec3 old_pos){
     this_mo.position = new_pos;
     return new_pos - old_new_pos;
 }
-
-vec3 HandleSweptBumperCollision(vec3 old_pos){
-    vec3 new_pos = this_mo.position; 
-    old_pos.y += 0.3f;
-    new_pos.y += 0.3f;
-    vec3 slide = col.GetSlidingCapsuleCollision(old_pos, new_pos, _bumper_size);
-    vec3 offset = slide - new_pos;
-    slide.y -= 0.3f;
-    // the value of sphere_col.adjusted_position variable was set by the GetSlidingSphereCollision() called on the previous line.
-    this_mo.position = slide;
-    return offset;
-}
-
 
 bool HandleStandingCollision() {
     vec3 upper_pos = this_mo.position+vec3(0,0.1f,0);
@@ -5160,7 +5140,7 @@ void DecalCheck(){
     }
 }
 
-void Execute(int type) {
+void Execute(ExecutionType type) {
     being_executed = type;
 }
 
@@ -6250,7 +6230,7 @@ void UpdateAnimation(const Timestep &in ts) {
                         if(weap_id == -1){
                             this_mo.SetAnimation("Data/Animations/r_rearchokedstance.xml", 5.0f, flags);
                         } else {
-                            if(being_executed != 2){
+                            if(being_executed != STARTING_THROAT_CUT){
                                 this_mo.SetAnimation("Data/Animations/r_rearknifecapturedstance.xml", 5.0f, flags);
                             } else {
                                 this_mo.SetAnimation("Data/Animations/r_throatcuttee.anm", 10.0f, flags);
@@ -6524,11 +6504,6 @@ void UpdateIKTargets(int num_frames) {
     MovementState_UpdateIKTargets(ts);
 }
 
-void UpdateVelocity(const Timestep &in ts) {
-    // GetTargetVelocitY() is defined in enemycontrol.as and playercontrol.as. Player target velocity depends on the camera and controls, AI's on player's position.
-    this_mo.velocity += GetTargetVelocity() * _walk_accel * ts.step();
-}
-
 void ApplyPhysics(const Timestep &in ts) {
     if(!on_ground){
         this_mo.velocity += physics.gravity_vector * ts.step();
@@ -6620,4 +6595,6 @@ void SetParameters() {
     if(params.HasParam("Unarmed Stance Override")){
         this_mo.OverrideCharAnim("idle", params.GetString("Unarmed Stance Override"));
     }
+
+    ApplyBoneInflation();
 }

@@ -4,7 +4,7 @@ void object_frag(){} // This is just here to make sure it gets added to include 
 #include "relativeskypos.glsl"
 #include "pseudoinstance.glsl"
 
-#ifndef GL_ARB_sample_shading_available
+#ifndef ARB_sample_shading_available
 #define CALC_MOTION_BLUR \
     if(stipple_val != 1 && \
        (int(mod(gl_FragCoord.x + float(x_stipple_offset),float(stipple_val))) != 0 ||  \
@@ -73,7 +73,6 @@ void object_frag(){} // This is just here to make sure it gets added to include 
 #define color_tex tex0
 #define normal_tex tex1
 #define spec_cubemap tex2
-#define diffuse_cubemap tex3
 #define shadow_sampler tex4
 #define projected_shadow_sampler tex5
 #define translucency_tex tex5
@@ -85,7 +84,6 @@ void object_frag(){} // This is just here to make sure it gets added to include 
 uniform sampler2D color_tex; \
 uniform sampler2D normal_tex; \
 uniform samplerCube spec_cubemap; \
-uniform samplerCube diffuse_cubemap; \
 UNIFORM_SHADOW_TEXTURE
 
 #define weight_tex tex5
@@ -199,12 +197,12 @@ vec3 diffuse_color = GetDirectColor(NdotL);
 
 #define CALC_DIFFUSE_LIGHTING \
 CALC_DIRECT_DIFFUSE_COLOR \
-diffuse_color += LookupCubemapSimple(ws_normal, diffuse_cubemap) *\
+diffuse_color += LookupCubemapSimpleLod(ws_normal, spec_cubemap, 5.0) *\
                  GetAmbientContrib(shadow_tex.g);
 
 #define CALC_DIFFUSE_TRANSLUCENT_LIGHTING \
 CALC_DIRECT_DIFFUSE_COLOR \
-vec3 ambient = LookupCubemapSimple(ws_normal, tex3) * GetAmbientContrib(shadow_tex.g); \
+vec3 ambient = LookupCubemapSimpleLod(ws_normal, tex2, 5.0) * GetAmbientContrib(shadow_tex.g); \
 diffuse_color += ambient; \
 vec3 translucent_lighting = GetDirectColor(shadow_tex.r) * gl_LightSource[0].diffuse.a; \
 translucent_lighting += ambient; \
@@ -273,7 +271,7 @@ CALC_BALANCE_AMBIENT \
 color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
 
 #define CALC_HAZE \
-AddHaze(color, TransformRelPosForSky(ws_vertex), diffuse_cubemap);
+AddHaze(color, ws_vertex, spec_cubemap);
 
 #define CALC_EXPOSURE \
 color *= Exposure();

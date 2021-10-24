@@ -76,6 +76,7 @@ class Dialogue {
     float cam_dist;
     int say_char;
     int dialogue_obj_id;
+    bool clear_on_complete;
 
     bool show_editor_info;
     int selected_line;
@@ -119,6 +120,7 @@ class Dialogue {
             ScriptParams@ params = obj.GetScriptParams();
             if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue") && params.HasParam("DisplayName") && params.GetString("DisplayName") == name){
                 SetDialogueObjID(object_ids[i]);
+                clear_on_complete = true;
                 Play();
             }
         }
@@ -240,6 +242,7 @@ class Dialogue {
         dialogue_obj_id = -1;
         text_dirty = true;
         strings.resize(0);
+        clear_on_complete = false;
         
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
@@ -602,6 +605,9 @@ class Dialogue {
         if(index == 0){
             camera.SetFlags(kEditorCamera);
             SetGUIEnabled(true);
+            if(clear_on_complete){
+                ClearEditor();
+            }
         }
 
         if(dialogue_editor_gui_id != -1){
@@ -1386,6 +1392,7 @@ class Dialogue {
                 MovementObject@ mo = ReadCharacterID(char_id);
                 mo.position = pos;
                 mo.ReceiveMessage("set_rotation "+rot);
+                mo.ReceiveMessage("set_dialogue_position "+pos.x+" "+pos.y+" "+pos.z);
             }
             break; }
         case kWaitForClick:
@@ -1504,6 +1511,7 @@ class Dialogue {
             return;
         }
 
+        // Draw actual dialogue text
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             // Draw text background
             HUDImage @blackout_image = hud.AddImage();
@@ -1549,6 +1557,7 @@ class Dialogue {
             text_image.color = vec4(1,1,1,1);
         }
 
+        // Draw editor text
         if(show_editor_info && !has_cam_control && EditorModeActive()){
             if(text_dirty){
                 TextCanvasTexture @editor_text = level.GetTextElement(editor_text_id);
@@ -1597,8 +1606,8 @@ class Dialogue {
                 // Draw text canvas to screen
                 HUDImage @text_image = hud.AddImage();
                 text_image.SetImageFromText(level.GetTextElement(editor_text_id)); 
-                text_image.position.x = GetScreenWidth()/2-256;
-                text_image.position.y = GetScreenHeight()/2-256;
+                text_image.position.x = GetScreenWidth()/2-256+70;
+                text_image.position.y = GetScreenHeight()-512-100;
                 text_image.position.z = 4;
                 text_image.color = vec4(1,1,1,1);
             }

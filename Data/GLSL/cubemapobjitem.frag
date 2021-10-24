@@ -1,7 +1,7 @@
 #include "object_shared.glsl"
 #include "object_frag.glsl"
 
-#ifdef GL_ARB_sample_shading_available
+#ifdef ARB_sample_shading_available
 #extension GL_ARB_sample_shading: enable
 #endif
 

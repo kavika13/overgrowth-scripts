@@ -1,7 +1,8 @@
+#extension GL_ARB_shader_texture_lod : require
+
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
-uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform vec3 color_tint;
 uniform float wetness;
@@ -34,8 +35,7 @@ void main()
     
     vec3 diffuse_map_vec = normal;
     diffuse_map_vec = tangent_to_world * diffuse_map_vec;
-    diffuse_map_vec.y *= -1.0;
-    diffuse_color += textureCube(tex3,diffuse_map_vec).xyz * 0.5;
+    diffuse_color += textureCubeLod(tex2,diffuse_map_vec,5.0).xyz * 0.5;
     
     vec3 H = normalize(normalize(vertex_pos*-1.0) + normalize(light_pos));
     float spec = min(1.0, pow(max(0.0,dot(normal,H)),850.0)*pow(20.0,wetness)*0.5 * NdotL) ;
@@ -43,7 +43,6 @@ void main()
     
     vec3 spec_map_vec = reflect(vertex_pos,normal);
     spec_map_vec = tangent_to_world * spec_map_vec;
-    spec_map_vec.y *= -1.0;
     spec_color += textureCube(tex2,spec_map_vec).xyz * 0.01;
     
     vec4 colormap = texture2D(tex0,gl_TexCoord[0].xy);
@@ -52,7 +51,7 @@ void main()
     float fresnel = 1.0;// - dot(normalize(vertex_pos), vec3(0,0,-1))*0.8;
     color = diffuse_color * colormap.xyz * color_tint + spec_color * fresnel;
     
-    AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
+    AddHaze(color, ws_vertex, tex2);
 
     //    colormap.a = 1.0;
     //color = colormap.xyz;

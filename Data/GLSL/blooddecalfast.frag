@@ -3,7 +3,6 @@
 uniform sampler2D tex0;
 uniform sampler2D tex1;
 uniform samplerCube tex2;
-uniform samplerCube tex3;
 uniform sampler2D tex4;
 uniform sampler2D tex5;
 uniform vec3 cam_pos;
@@ -38,7 +37,7 @@ void main()
         float NdotL = GetDirectContrib(ws_light, ws_normal, shadow_tex.r);
         vec3 diffuse_color = GetDirectColor(NdotL);
 
-        diffuse_color += LookupCubemapSimple(ws_normal, tex3) *
+        diffuse_color += LookupCubemapSimpleLod(ws_normal, tex2, 5.0) *
                          GetAmbientContrib(shadow_tex.g);
 
         // Calculate specular lighting
@@ -57,7 +56,7 @@ void main()
         color *= BalanceAmbient(NdotL);
         
         color *= vec3(min(1.0,shadow_tex.g*2.0)*extra_ao + (1.0-extra_ao));
-        AddHaze(color, TransformRelPosForSky(ws_vertex), tex3);
+        AddHaze(color, ws_vertex, tex2);
         
         color *= Exposure();
 
