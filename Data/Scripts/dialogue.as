@@ -111,11 +111,13 @@ const float kTextRightMargin = 100;
 int voice_preview = 0;
 float voice_preview_time = -100;
 
+enum SavePopupValue { NONE, YES, NO };
+
 class Dialogue {
     // Contains information from undo/redo
     string history_str;
     // This state is important for undo/redo
-    int dialogue_obj_id;
+    int dialogue_obj_id = -1;
     array<ScriptElement> strings;
     array<ScriptElement> sub_strings;
     array<int> connected_char_ids;
@@ -149,6 +151,7 @@ class Dialogue {
     float cam_zoom;
 
     bool clear_on_complete;
+    bool preview = false;
 
     bool show_editor_info;
     int selected_line; // Which line we are editing
@@ -157,6 +160,14 @@ class Dialogue {
     float start_time = 0.0; // How long since dialogue started
 
     int old_cursor_pos = -1; // Detect if cursor pos has changed since last check
+
+    string potential_display_name = "";
+    int old_participant_count = -1;
+
+    bool invalid_file = false;
+    bool modified = false;
+
+    string full_path;
 
     // Adds an extra '\' before '\' or '"' characters in string
     string EscapeString(const string &in str){
@@ -313,25 +324,39 @@ class Dialogue {
 
     void ClearEditor() {
         Log(info,"Clearing editor");        
-        if(dialogue_obj_id != -1){
-            ClearSpawnedObjects();
-        }
-        selected_line = 0;
-        dialogue_obj_id = -1;
-        strings.resize(0);
         clear_on_complete = false;
-        connected_char_ids.resize(0);
-        dialogue_colors.resize(0);
-        dialogue_voices.resize(0);
-        dof_params.resize(0);
-        active_char = 0;
         queue_skip = false;
         ready_to_skip = false;
-        
+        queued_id = -1;
+
         int num = GetNumCharacters();
         for(int i=0; i<num; ++i){
             MovementObject@ char = ReadCharacter(i);
             char.ReceiveScriptMessage("set_dialogue_control false");
+        }
+
+        if(preview) {
+            preview = false;
+        } else {
+            if(dialogue_obj_id != -1){
+                if(old_participant_count != -1) {
+                    ReadObjectFromID(dialogue_obj_id).GetScriptParams().SetString("NumParticipants", "" + old_participant_count);
+                    UpdateDialogueObjectConnectors(dialogue_obj_id);
+                }
+                ClearSpawnedObjects();
+            }
+            connected_char_ids.resize(0);
+            selected_line = 0;
+            dialogue_obj_id = -1;
+            strings.resize(0);
+            invalid_file = false;
+            old_participant_count = -1;
+            dialogue_colors.resize(0);
+            dialogue_voices.resize(0);
+            dof_params.resize(0);
+            modified = false;
+            active_char = 0;
+            full_path = "";
         }
     }
 
@@ -352,7 +377,7 @@ class Dialogue {
 
         has_cam_control = false;
         show_dialogue = false;
-        show_editor_info = true;
+        show_editor_info = false;
         waiting_for_dialogue = false;
         if(level.GetScriptParams().HasParam("Dialogue Colors")){            
             LoadNameInfo(level.GetScriptParams().GetString("Dialogue Colors"));
@@ -478,22 +503,63 @@ class Dialogue {
         return str;
     }
 
-    void SaveScriptToParams() {
+    void SaveScript() {
         if(dialogue_obj_id == -1){
             return;
-        }
-        string dialogue_script;
-        int num_lines = int(strings.size());
-        for(int i=0; i<num_lines; ++i){
-            if(strings[i].visible){
-                dialogue_script += strings[i].str;
-                dialogue_script += "\n";
-            }
         }
 
         Object @obj = ReadObjectFromID(dialogue_obj_id);
         ScriptParams @params = obj.GetScriptParams();
-        params.SetString("Script", dialogue_script);
+
+        if(!potential_display_name.isEmpty()) {
+            params.SetString("DisplayName", potential_display_name);
+            obj.SetEditorLabel(params.GetString("DisplayName"));
+            cast<PlaceholderObject@>(obj).SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\"");
+            potential_display_name = "";
+        }
+
+        if(full_path != "") {
+            SaveToFile(full_path);
+        } else {
+            string dialogue_script;
+            int num_lines = int(strings.size());
+            for(int i=0; i<num_lines; ++i){
+                if(strings[i].visible){
+                    dialogue_script += strings[i].str;
+                    dialogue_script += "\n";
+                }
+            }
+            params.SetString("Script", dialogue_script);
+        }
+
+        modified = false;
+        cast<PlaceholderObject@>(obj).SetUnsavedChanges(true);
+        old_participant_count = -1;
+    }
+
+    void SaveToFile(const string &in path) {
+        Log(info,"Save to file: "+path);
+        int num_strings = strings.size();
+        StartWriteFile();
+        for(int i=0; i<num_strings; ++i){
+            if(!strings[i].visible){
+                continue;
+            }
+            AddFileString(strings[i].str);
+            if(i != num_strings - 1){
+                AddFileString("\n");
+            }
+        }
+        WriteFileKeepBackup(path);
+        Object @obj = ReadObjectFromID(dialogue_obj_id);
+        cast<PlaceholderObject@>(obj).SetUnsavedChanges(true);
+        ScriptParams @params = obj.GetScriptParams();
+        params.SetString("Dialogue", FindShortestPath(path));
+        if(params.HasParam("Script")) {
+            params.Remove("Script");
+        }
+        modified = false;
+        old_participant_count = -1;
     }
 
     void AddInvisibleStrings() {   
@@ -641,6 +707,18 @@ class Dialogue {
         }
     }
 
+    void ReloadScript() {
+        array<ScriptElement> old_strings = strings;
+        strings.resize(0);
+        int index = 0;
+        for(uint i = 0; i < old_strings.size(); ++i) {
+            if(old_strings[i].visible) {
+                AddLine(old_strings[i].str, index++);
+            }
+        }
+        AddInvisibleStrings();
+    }
+
     void UpdateConnectedChars() {
         bool changed = false;
         Object @obj = ReadObjectFromID(dialogue_obj_id);
@@ -680,48 +758,84 @@ class Dialogue {
             }
         }
         if(changed){
-            ClearSpawnedObjects();
-            string script = params.GetString("Script");
-            UpdateStringsFromScript(script);
-            AddInvisibleStrings();
+            ReloadScript();
+            /*ClearSpawnedObjects();
+            if(params.HasParam("Script")) {
+                string script = params.GetString("Script");
+                UpdateStringsFromScript(script);
+                AddInvisibleStrings();
+            } else {
+                string path = params.GetString("Dialogue");
+                if(path != "empty") {
+                    if(LoadScriptFile(path)) {
+                        AddInvisibleStrings();
+                    }
+                }
+            }*/
         }
     }
 
+    int queued_id = -1;
     void SetDialogueObjID(int id) {
-        if(dialogue_obj_id != id){
-            ClearEditor();
-            dialogue_obj_id = id;
-            if(id != -1){
-                Object @obj = ReadObjectFromID(dialogue_obj_id);
-                ScriptParams @params = obj.GetScriptParams();
+        if(dialogue_obj_id != id) {
+            if(!show_editor_info || !EditorModeActive()) {
+                SetActiveDialogue(id);
+            } else {
+                queued_id = id;
+            }
+        }
+    }
 
-                if(!params.HasParam("NumParticipants") || !params.HasParam("Dialogue")){
-                    Log(info,"Selected dialogue object does not have the necessary parameters (id "+id+")");
-                } else {
-                    if(!params.HasParam("Script")){
-            			if(params.GetString("Dialogue") == "empty" || !LoadScriptFile(params.GetString("Dialogue"))) {
-                            // Create placeholder script
-            				strings.resize(0);
-            				AddLine("#name \"Unnamed\"", strings.size());
-            				AddLine("#participants 1", strings.size());
-            				AddLine("", strings.size());
-            				AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
-            			}
-                    } else {
-                        // Parse script directly from parameters
-                        string script = params.GetString("Script");
-                        UpdateStringsFromScript(script);
+    void SetActiveDialogue(int id) {
+        ClearEditor();
+        dialogue_obj_id = id;
+        if(dialogue_obj_id != -1){
+            Object @obj = ReadObjectFromID(dialogue_obj_id);
+            ScriptParams @params = obj.GetScriptParams();
+
+            if(!params.HasParam("NumParticipants") || !params.HasParam("Dialogue")){
+                Log(info,"Selected dialogue object does not have the necessary parameters (id "+dialogue_obj_id+")");
+            } else {
+                bool script_exists = params.HasParam("Script");
+                bool dialogue_exists = params.HasParam("Dialogue") && params.GetString("Dialogue") != "empty";
+                // Always load from inline dialogue if there is an ambiguity
+               if(script_exists) {
+                    // Parse inline script
+                    string script = params.GetString("Script");
+                    UpdateStringsFromScript(script);
+                    if(dialogue_exists) {
+                        Log(warning, "Both inline dialogue script and external dialogue file exists, will use the inline script");
                     }
-
-                    SaveScriptToParams();
-                    
-                    UpdateConnectedChars();
-
-                    UpdateStringsFromScript(params.GetString("Script"));
-                    AddInvisibleStrings();
-                    UpdateScriptFromStrings();
-                    selected_line = 1;
+                } else if(dialogue_exists) {
+                    string path = params.GetString("Dialogue");
+                    if(!LoadScriptFile(path)) {
+                        Log(warning, "Dialogue object tried to load non-existent file \"" + path + "\"");
+                        if(show_dialogue && EditorModeActive()) {
+                            // Only actually make this change if the dialogue is opened in the editor.
+                            // Otherwise, for instance, an invalid campaign map would trigger the
+                            // "Save changes?" popup on completion, even when played in "game" mode
+                            params.SetString("Dialogue", "empty");
+                            invalid_file = true;
+                            cast<PlaceholderObject@>(obj).SetUnsavedChanges(true);
+                        }
+                        strings.resize(0);
+                        AddLine("#name \"Unnamed\"", strings.size());
+                        AddLine("#participants 1", strings.size());
+                        AddLine("", strings.size());
+                        AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
+                    }
+                } else {
+                    strings.resize(0);
+                    AddLine("#name \"Unnamed\"", strings.size());
+                    AddLine("#participants 1", strings.size());
+                    AddLine("", strings.size());
+                    AddLine("say 1 \"Name\" \"Type your dialogue here.\"", strings.size());
                 }
+
+                UpdateConnectedChars();
+                //AddInvisibleStrings();
+                UpdateScriptFromStrings();
+                selected_line = 1;
             }
         }
     }
@@ -742,7 +856,11 @@ class Dialogue {
     }
 
     bool LoadScriptFile(const string &in path) {
-        if(!LoadFile(path)){
+        if(path.isEmpty()) {
+            return false;
+        }
+        full_path = FindFilePath(path);
+        if(!LoadFile(GetLocalizedDialoguePath(FindShortestPath(full_path)))){
             return false;
         } else {
             strings.resize(0);
@@ -874,22 +992,6 @@ class Dialogue {
         skip_dialogue = false;
     }
 
-    void SaveToFile(const string &in path) {
-        Log(info,"Save to file: "+path);
-        int num_strings = strings.size();
-        StartWriteFile();
-        for(int i=0; i<num_strings; ++i){
-            if(!strings[i].visible){
-                continue;
-            }
-            AddFileString(strings[i].str);
-            if(i != num_strings - 1){
-                AddFileString("\n");
-            }
-        }
-        //WriteFile("Data/Dialogues/dialogue_save_test.txt");
-        WriteFile(path);
-    }
 
     void ClearUnselectedObjects() {
         int num_strings = int(strings.size());
@@ -903,6 +1005,8 @@ class Dialogue {
 
     void RecordInput(const string &in new_string, int line, int last_wait) {
         if(new_string != strings[line].str){
+            cast<PlaceholderObject@>(ReadObjectFromID(dialogue_obj_id)).SetUnsavedChanges(true);
+            modified = true;
             if(strings[line].record_locked && last_wait > line){
                 int spawned_id = strings[line].spawned_id;
                 strings[line].spawned_id = -1;
@@ -947,7 +1051,7 @@ class Dialogue {
         }
     }
 
-    void Update() {     
+    void Update() {
         if(fade_out_end != -1.0){
             return;
         }
@@ -1223,7 +1327,7 @@ class Dialogue {
                     break;
                 }
             }
-            SaveScriptToParams();
+            //SaveScriptToParams();
             LeaveTelemetryZone(); // editor object transforms
         }
         LeaveTelemetryZone(); // dialogue update
@@ -1387,11 +1491,7 @@ class Dialogue {
             se.params[0] = token_iter.GetToken(msg);            
         } else if(token == "#name"){
             if(token_iter.FindNextToken(msg)){
-                Object @obj = ReadObjectFromID(dialogue_obj_id);
-                ScriptParams@ params = obj.GetScriptParams();
-                params.SetString("DisplayName", token_iter.GetToken(msg));
-                obj.SetEditorLabel(params.GetString("DisplayName"));
-                cast<PlaceholderObject@>(obj).SetEditorDisplayName("Dialogue \""+params.GetString("DisplayName")+"\"");
+                potential_display_name = token_iter.GetToken(msg);
             }
         } else if(token == "#participants"){
             if(token_iter.FindNextToken(msg)) {
@@ -1399,8 +1499,15 @@ class Dialogue {
                 if(token_iter.GetToken(msg) == "0" || (participant_count > 0 && participant_count < 32)) {
                     Object @obj = ReadObjectFromID(dialogue_obj_id);
                     ScriptParams@ params = obj.GetScriptParams();
+                    int previous_participant_count = params.GetInt("NumParticipants");
+                    if(old_participant_count == -1) {
+                        old_participant_count = previous_participant_count;
+                    }
                     params.SetInt("NumParticipants", participant_count);
                     UpdateDialogueObjectConnectors(dialogue_obj_id);
+                    if(previous_participant_count != participant_count) {
+                        cast<PlaceholderObject@>(obj).SetUnsavedChanges(true);
+                    }
                 } 
             }
         }
@@ -2013,7 +2120,18 @@ class Dialogue {
                 ScriptParams@ params = obj.GetScriptParams();
                 if(obj.IsSelected() && obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
                     dialogue.SetDialogueObjID(object_ids[i]);
-                    params.SetString("Dialogue", "empty");
+                    show_editor_info = true;
+                }
+            }
+        } else if(token.findFirst("edit_dialogue_id") != -1) {
+            Log(info, "Got edit_dialogue_id");
+            int id = parseInt(token.substr(16));
+            Log(info, "id is " + id);
+            Object @obj = ReadObjectFromID(id);
+            if(obj !is null) {
+                ScriptParams@ params = obj.GetScriptParams();
+                if(obj.GetType() == _placeholder_object && params.HasParam("Dialogue")){
+                    dialogue.SetDialogueObjID(id);
                     show_editor_info = true;
                 }
             }
@@ -2022,6 +2140,8 @@ class Dialogue {
             if(index == 0 && dialogue_obj_id != -1){
                 //camera.SetFlags(kPreviewCamera);
                 //SetGUIEnabled(false);
+                preview = true;
+                clear_on_complete = true;
                 Play();
             }
         } else if(token == "request_preview_dof"){
@@ -2068,6 +2188,8 @@ class Dialogue {
             
                 ExecutePreviousCommands(selected_line);
             }
+        } else if(token == "save_selected_dialogue") {
+            SaveScript();
         }
     }
 
@@ -2078,6 +2200,27 @@ class Dialogue {
     void Display() {
         if(MediaMode()){
             return;
+        }
+
+        // This needs to be here in case the "Save dialogue?" popup needs to be
+        // drawn
+        if(queued_id != -1) {
+            bool skip_dialogue = false;
+            if(dialogue_obj_id != -1) {
+                skip_dialogue = !modified;
+            } else {
+                skip_dialogue = true;
+            }
+
+            if(!skip_dialogue && !ImGui_IsPopupOpen("savedialoguepopup")) {
+                ImGui_OpenPopup("savedialoguepopup");
+            }
+            SavePopupValue save_popup_value = SavePopup();
+
+            if(skip_dialogue || save_popup_value != NONE) {
+                SetActiveDialogue(queued_id);
+                queued_id = -1;
+            }
         }
 
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
@@ -2152,15 +2295,26 @@ class Dialogue {
 
         // Draw editor text
         if(dialogue_obj_id != -1 && show_editor_info && !has_cam_control && EditorModeActive()){
+            Object @obj = ReadObjectFromID(dialogue_obj_id);
+            ScriptParams @params = obj.GetScriptParams();
+            PlaceholderObject@ placeholder_obj = cast<PlaceholderObject@>(obj);
+
             ImGui_SetNextWindowSize(vec2(600.0f, 300.0f), ImGuiSetCond_FirstUseEver);
-            ImGui_Begin("Dialogue Editor", show_editor_info, ImGuiWindowFlags_MenuBar);
+            ImGui_Begin("Dialogue Editor - " + params.GetString("DisplayName") + (modified ? "*" : "") + "###Dialogue Editor", show_editor_info, ImGuiWindowFlags_MenuBar);
             if(ImGui_BeginMenuBar()){
                 if(ImGui_BeginMenu("File")){
                     if(ImGui_MenuItem("Save")){
-                        string path = GetUserPickedWritePath("txt", "Data/Dialogues");
-                        if(path != ""){
-                            SaveToFile(path);
+                        SaveScript();
+                    }
+                    if(ImGui_MenuItem("Save to file")){
+                        full_path = GetUserPickedWritePath("txt", "Data/Dialogues");
+                        if(full_path != ""){
+                            SaveScript();
                         }
+                    }
+                    if(ImGui_MenuItem("Save inline")){
+                        params.SetString("Dialogue", "empty");
+                        SaveScript();
                     }
                     ImGui_EndMenu();
                 }
@@ -2185,9 +2339,30 @@ class Dialogue {
                 }
                 ImGui_EndMenuBar();
             }
+
+            SavePopupValue popup_value = SavePopup();
+            if(popup_value != NONE) {
+                modified = false;
+                show_editor_info = false;
+            }
             if(!show_editor_info){ // User closed dialogue editor window
-                ClearEditor();
+                if(modified) {
+                    ImGui_OpenPopup("savedialoguepopup");
+                    show_editor_info = true;
+                } else {
+                    ClearEditor();
+                }
             } else {
+                if(invalid_file) {
+                    ImGui_Text("Level xml contained invalid file, dialogue will be saved inline");
+                } else {
+                    if(params.GetString("Dialogue") == "empty") {
+                        ImGui_Text("Not saving to file");
+                        if(ImGui_IsItemHovered()) {
+                            ImGui_SetTooltip("Consider saving to file to allow translations to be made");
+                        }
+                    }
+                }
                 //UpdateScriptFromStrings();
                 int new_cursor_pos = imgui_text_input_CursorPos;
 
@@ -2195,10 +2370,10 @@ class Dialogue {
                 if(ImGui_InputTextMultiline("##TEST", vec2(-1.0, -1.0))){
                     ClearSpawnedObjects();
                     UpdateStringsFromScript(ImGui_GetTextBuf());
-                    //Log(info,"Test");
                     AddInvisibleStrings();
-                    SaveScriptToParams();
+                    modified = true;
                 }
+                bool is_active = ImGui_IsItemActive();
                 ImGui_NextColumn();
                 for(int i=0, len=strings.size(); i<len; ++i){
                     vec4 color = vec4(1.0);
@@ -2210,7 +2385,7 @@ class Dialogue {
                     }
                     ImGui_TextColored(color, strings[i].str);
                 }
-                if(new_cursor_pos != old_cursor_pos){
+                if(new_cursor_pos != old_cursor_pos && is_active){
                     int line = 0;
                     for(int i=0, len=strings.size(); i<len; ++i){
                         if(strings[i].visible && new_cursor_pos >= strings[i].line_start_char){
@@ -2236,6 +2411,28 @@ class Dialogue {
         return int(max(18, min(GetScreenHeight() / 30, GetScreenWidth() / 50)));
     }
 
+    SavePopupValue SavePopup() {
+        SavePopupValue return_value = NONE;
+        ImGui_SetNextWindowSize(vec2(350.0f, 100.0f), ImGuiSetCond_Always);
+        if(ImGui_BeginPopupModal("savedialoguepopup", ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+            ImGui_SetCursorPos(vec2(35.0f, 30.0f));
+            ImGui_Text("Dialogue has unsaved changes, save them?");
+            ImGui_SetCursorPosX(70.0f);
+            if(ImGui_Button("Yes", vec2(100.0f, 0.0f))) {
+                SaveScript();
+                ImGui_CloseCurrentPopup();
+                return_value = YES;
+            }
+            ImGui_SameLine();
+            if(ImGui_Button("No", vec2(100.0f, 0.0f))) {
+                ImGui_CloseCurrentPopup();
+                return_value = NO;
+            }
+            ImGui_EndPopup();
+        }
+        return return_value;
+    }
+
     void Display2() {
         if(MediaMode()){
             return;
@@ -2245,8 +2442,8 @@ class Dialogue {
         if(show_dialogue && (camera.GetFlags() == kPreviewCamera || has_cam_control)){
             EnterTelemetryZone("Draw actual dialogue text");
             bool use_keyboard = (max(last_mouse_event_time, last_keyboard_event_time) > last_controller_event_time);
-            string continue_string = (use_keyboard?"left mouse button":GetStringDescriptionForBinding("xbox", "attack"))+" to continue"+
-                        "\n"+GetStringDescriptionForBinding(use_keyboard?"key":"xbox", "skip_dialogue")+" to skip";
+            string continue_string = GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "attack")+" to continue"+
+                        "\n"+GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "skip_dialogue")+" to skip";
 
             int font_size = GetFontSize();
             if(font_size != old_font_size){

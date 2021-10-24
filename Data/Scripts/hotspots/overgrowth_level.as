@@ -16,6 +16,7 @@ int sting_handle = -1;
 string music_prefix;
 string success_sting = "Data/Music/slaver_loop/the_slavers_success.wav";
 string defeat_sting = "Data/Music/slaver_loop/the_slavers_defeat.wav";
+string death_message = "Press $attack$ to try again";
 
 // Audience info
 float audience_excitement;
@@ -26,9 +27,27 @@ float crowd_cheer_amount;
 float crowd_cheer_vel;
 float boo_amount = 0.0;
 
+// Duplicated from aschar to maintain backwards compat; can't add methods since
+// they might not exists in some mod's old aschar
+enum DeathHint {
+    _hint_none,
+    _hint_deflect_thrown,
+    _hint_cant_swim,
+    _hint_extinguish,
+    _hint_escape_throw,
+    _hint_no_dog_choke,
+    _hint_roll_stand,
+    _hint_vary_attacks,
+    _hint_one_at_a_time,
+    _hint_avoid_spikes,
+    _hint_stealth
+};
+
 void SetParameters() {
     params.AddString("music", "slaver");
     params.AddString("player_spawn", "");
+    params.AddString("death_message", death_message);
+    params.AddIntCheckbox("press_attack_to_restart", true);
     if(params.GetString("music") == "slaver"){
         AddMusic("Data/Music/slaver_loop/layers.xml");
         PlaySong("slavers1");
@@ -679,6 +698,53 @@ void Update() {
 
     SetSoundGain(audience_sound_handle, crowd_cheer_amount*2.0f);
     SetSoundPitch(audience_sound_handle, mix(min(0.8f + crowd_cheer_amount * 0.5f,1.2f), 0.7, boo_amount));
+
+    int player_id = GetPlayerCharacterID();
+    if(player_id != -1 && ObjectExists(player_id)){
+       MovementObject@ char = ReadCharacter(player_id);
+        bool use_keyboard = (max(last_mouse_event_time, last_keyboard_event_time) > last_controller_event_time);
+        if(char.GetIntVar("knocked_out") != _awake) {
+            string respawn = params.GetString("death_message");
+            int index = respawn.findFirst("$attack$");
+            while(index != -1) {
+                respawn.erase(index, 8);
+                respawn.insert(index, GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "attack"));
+
+                index = respawn.findFirst("$attack$", index + 8);
+            }
+
+            if(GetConfigValueBool("tutorials")) {
+                switch(DeathHint(char.GetIntVar("death_hint"))) {
+                    case _hint_deflect_thrown:
+                        level.SendMessage("tutorial "+"Press "+GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "grab")+" just before impact to catch or deflect projectiles."+respawn);
+                        break;
+                    case _hint_escape_throw:
+                        level.SendMessage("tutorial "+"Press "+GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "grab")+" to escape from throws."+respawn);
+                        break;
+                    case _hint_cant_swim:
+                        level.SendMessage("tutorial "+"Rabbits don't know how to swim."+respawn);
+                        break;
+                    case _hint_extinguish:
+                        level.SendMessage("tutorial "+"If you catch on fire, you can roll to put yourself out."+respawn);
+                        break;
+                    case _hint_roll_stand:
+                        level.SendMessage("tutorial "+"When knocked down, press "+GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "crouch")+" to roll to your feet"+respawn);
+                        //level.SendMessage("tutorial "+"When knocked down, you can still block attacks by pressing "+GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "grab")+" just before impact"+respawn);
+                        break;
+                    case _hint_vary_attacks:
+                        level.SendMessage("tutorial "+"Mix up your attacks to get through enemy defenses"+respawn);
+                        break;
+                    case _hint_stealth:
+                        level.SendMessage("tutorial Sometimes sneak attacks are much easier than direct combat."+respawn);
+                        break;
+                    default:
+                        level.SendMessage("tutorial "+""+respawn);
+                }
+            } else {
+                level.SendMessage("screen_message "+""+respawn);
+            }
+        }
+    }
 }
 
 bool can_press_attack = false;
@@ -735,7 +801,7 @@ void PreDraw(float curr_game_time) {
                 if(!GetInputDown(0, "attack")){
                     can_press_attack = true;
                 }
-                if((GetInputDown(0, "attack") && can_press_attack) || GetInputDown(0, "skip_dialogue") || GetInputDown(0, "keypadenter"))
+                if(params.GetInt("press_attack_to_restart") == 1 && ((GetInputDown(0, "attack") && can_press_attack) || GetInputDown(0, "skip_dialogue") || GetInputDown(0, "keypadenter")))
                 {
                     if(sting_handle != -1){
                         music_sting_end = the_time;

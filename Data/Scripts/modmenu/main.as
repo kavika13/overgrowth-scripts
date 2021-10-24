@@ -197,8 +197,9 @@ array<ModID> FilterCore(array<ModID> input_mods){
 }
 
 void BuildUI(){
+    gui_elements.resize(0);
+	waiting_anims.resize(0);
 	ClearControllerItems();
-	/*waiting_anims.resize(0);*/
 	IMDivider mainDiv( "mainDiv", DOHorizontal );
 	imGUI.getMain().setAlignment(CACenter, CATop);
 	imGUI.getMain().setElement(mainDiv);
@@ -795,7 +796,7 @@ IMContainer@ AddModItem(IMDivider@ parent, ModID mod_id, uint index, bool fadein
 	string mod_path = ModGetPath(mod_id);
 	uint max_title_length = 27;
 	
-	IMContainer mod_item_container(mod_item_width, mod_item_height + vertical_offset);
+	IMContainer mod_item_container("mod_item_container" + ModGetID(mod_id), mod_item_width, mod_item_height + vertical_offset);
 	mod_item_container.setAlignment(CALeft, CACenter);
 	IMDivider mod_item_divider("mod_item_divider", DOHorizontal);
 	mod_item_divider.appendSpacer(left_trailing_space);
@@ -898,7 +899,7 @@ IMContainer@ AddModItem(IMDivider@ parent, ModID mod_id, uint index, bool fadein
 	@new_controller_item.message = on_click;
 	@new_controller_item.message_on_select = inspect;
 	new_controller_item.execute_on_select = true;
-	new_controller_item.skip_show_border = true;
+	//new_controller_item.skip_show_border = true;
 	AddControllerItem(@new_controller_item);
 	mod_item_divider.appendSpacer(left_trailing_space);
 	
@@ -1020,12 +1021,7 @@ bool CanGoBack() {
 void Update() {
 	workshopwatcher.Update();
 	UpdateWaitingAnims();
-	if(!search.active){
-		UpdateController();
-	}
-	search.Update();
 	UpdateKeyboardMouse();
-	UpdateMovingSlider();
     // process any messages produced from the update
     while( imGUI.getMessageQueueSize() > 0 ) {
         IMMessage@ message = imGUI.getNextMessage();
@@ -1070,18 +1066,18 @@ void Update() {
 			SetCurrentControllerItem(current_controller_item_name);
 		}
 		else if( message.name == "refresh_menu_by_id" ){
-			int index = GetCurrentControllerItemIndex();
+			//int index = GetCurrentControllerItemIndex();
 			BuildUI();
-			SetCurrentControllerItem(index);
-			if(message.getString(0) == "also_execute_on_select"){
-				ExecuteOnSelect();
-			}
+			//SetCurrentControllerItem(index);
+			//if(message.getString(0) == "also_execute_on_select"){
+			//	ExecuteOnSelect();
+			//}
 		}
 		else if( message.name == "inspect" ){
-			if(inspected == message.getInt(0)){
+			/*if(inspected == message.getInt(0)){
 				SetItemActive(current_item);
 				return;
-			}
+			}*/
 			inspected = message.getInt(0);
 			inspect_fadein = true;
 			imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
@@ -1115,12 +1111,20 @@ void Update() {
             DeactivateAllMods(); 
         }
 		else if( message.name == "activate_search" ){
-			search.Activate();
+			if(!search.active) {
+				search.Activate();
+			} else {
+				//ResetModsList();
+				//SetCurrentControllerItem(0);
+				search.active = false;
+				search.pressed_return = true;
+				imGUI.receiveMessage( IMMessage("refresh_menu_by_name") );
+			}
 		}
 		else if( message.name == "clear_search_results" ){
 			ResetModsList();
 			search.ResetSearch();
-			SetCurrentControllerItem(0);
+			//SetCurrentControllerItem(0);
 			imGUI.receiveMessage( IMMessage("refresh_menu_by_id") );
 		}
 		else if( message.name == "add_tooltip" ){
@@ -1166,7 +1170,10 @@ void Update() {
         }
     }
 	// Do the general GUI updating
+	search.Update();
 	imGUI.update();
+	UpdateController();
+	UpdateMovingSlider();
 }
 
 ModID getModID(string id){

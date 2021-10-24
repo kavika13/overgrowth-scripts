@@ -14,6 +14,8 @@ class LevelInfo
     bool unlocked = true;
     bool last_played = false;
     bool disabled = false;
+    int completed_levels = -1;
+    int total_levels = -1;
 
     LevelInfo(ModLevel level, int _highest_diff, bool _level_played, bool _unlocked, bool _last_played)
     {
@@ -30,7 +32,7 @@ class LevelInfo
         last_played = _last_played;
     }
 
-    LevelInfo(string _file, string _name, string _image, string _campaign_id, int _highest_diff, bool _level_played, bool _unlocked, bool _last_played)
+    LevelInfo(string _file, string _name, string _image, string _campaign_id, int _highest_diff, bool _level_played, bool _unlocked, bool _last_played, int _completed_levels, int _total_levels)
     {
         name = _name;
         file = _file;
@@ -41,6 +43,8 @@ class LevelInfo
         level_played = _level_played;
         unlocked = _unlocked;
         last_played = _last_played;
+        completed_levels = _completed_levels;
+        total_levels = _total_levels;
     }
 
 	LevelInfo(string _file, string _name, string _image, bool _coming_soon, bool _unlocked, bool _last_played)

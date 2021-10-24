@@ -824,7 +824,8 @@ AISubGoal PickAttackSubGoal() {
     if(game_difficulty < 0.25 || species == _wolf) {
         target_goal = _rush_and_attack;
     } else {
-        is_currently_agressive = RangedRandomFloat(0.0f, 1.0f) < p_aggression;
+        bool is_group_leader = group_leader == -1 && followers.size() > 0;
+        is_currently_agressive = RangedRandomFloat(0.0f, 1.0f) < (p_aggression + (is_group_leader ? 0.125 : 0.0));
     }
 
     if(is_currently_agressive) {

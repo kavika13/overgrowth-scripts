@@ -39,7 +39,14 @@ void SetPlayMenuList() {
     for( uint i = 0; i < hard_order.length(); i++ ) {
         Campaign camp = GetCampaign(hard_order[i]);
         string camp_thumbnail_path = camp.GetThumbnail();
-        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetHighestDifficultyFinishedCampaign(camp.GetID()), GetLastLevelPlayed(camp.GetID()).length() > 0, true, IsLastCampaignPlayed(camp)));
+        int completed_levels = 0;
+        array<ModLevel>@ campaign_levels = camp.GetLevels();
+        for(uint j = 0; j < campaign_levels.size(); ++j) {
+            if(GetHighestDifficultyFinished(camp.GetID(), campaign_levels[j].GetID()) != 0) {
+                completed_levels++;
+            }
+        }
+        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetHighestDifficultyFinishedCampaign(camp.GetID()), GetLastLevelPlayed(camp.GetID()).length() > 0, true, IsLastCampaignPlayed(camp), completed_levels, campaign_levels.size()));
     }
 
     array<Campaign>@ campaigns = GetCampaigns();
@@ -63,7 +70,9 @@ void SetPlayMenuList() {
                             0,
                             GetLastLevelPlayed(camp.GetID()).length() > 0,
                             true, 
-                            IsLastCampaignPlayed(camp)
+                            IsLastCampaignPlayed(camp),
+                            -1,
+                            -1
                 )
             );
         }

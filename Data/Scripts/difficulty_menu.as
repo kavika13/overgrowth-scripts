@@ -77,7 +77,9 @@ void Initialize() {
 
     imGUI.setup();
     SetList();
-    BuildUI();
+    BuildHeader();
+    BuildMain();
+    BuildFooter();
 	SetDarkenedBackground();
 	AddVerticalBar();
 }
@@ -91,13 +93,16 @@ void SetList() {
     }
 }
 
-void BuildUI() {
-    IMDivider upperMainDiv("upperMainDiv", DOVertical);
-    IMDivider mainDiv( "mainDiv", DOHorizontal );
+void BuildHeader() {
 	IMDivider header_divider( "header_div", DOHorizontal );
 	header_divider.setAlignment(CACenter, CACenter);
 	AddTitleHeader("Choose Difficulty", header_divider);
 	imGUI.getHeader().setElement(header_divider);
+}
+
+void BuildMain() {
+    IMDivider upperMainDiv("upperMainDiv", DOVertical);
+    IMDivider mainDiv( "mainDiv", DOHorizontal );
 
 	float subtitle_width = 200;
 	float subtitle_height = 100;
@@ -107,16 +112,9 @@ void BuildUI() {
 	IMDivider subtitle_divider("subtitle_divider", DOVertical);
 	subtitle_container.setElement(subtitle_divider);
 
-	//subtitle_divider.setAlignment(CALeft, CACenter);
-	//subtitle_divider.setZOrdering(5);
-	//subtitle_divider.appendSpacer(15.0f);
     subtitle_divider.append(IMText("Note: You can change the difficulty at any point." , subtitle_font));
-    //subtitle_divider.append(IMText("difficulty later in the settings." , subtitle_font));
 
     upperMainDiv.append(subtitle_container);
-
-    // Add it to the main panel of the GUI
-    imGUI.getMain().setElement( @upperMainDiv );
 
 	CreateDifficultyButtons(mainDiv, play_menu, "play_menu", 2000.0f, 300.0f);
 
@@ -144,16 +142,13 @@ void BuildUI() {
     upperMainDiv.append(description_container);
     upperMainDiv.append(checkbox_container);
 
-    // Add it to the main panel of the GUI
     imGUI.getMain().setElement( @upperMainDiv );
-
-    AddBackConfirmButton();
 
     if(current_difficulty != -1)
         SetDescription(current_difficulty);
 }
 
-void AddBackConfirmButton(){
+void BuildFooter() {
     float button_trailing_space = 100.0f;
     
     IMDivider holder("bottom_holder", DOHorizontal);
@@ -211,7 +206,7 @@ void AddButton(IMDivider@ row, LevelInfo@ level, int number, float level_item_wi
     FontSetup menu_item_font(button_font_small.fontName, int((level_item_width + level_item_height) / max(13.0f, level.name.length() * 0.65f)) , button_font_small.color, button_font_small.shadowed);
 
     //This divider has all the elements of a level.
-    IMDivider level_divider("button_divider", DOHorizontal);
+    IMDivider level_divider("button_divider" + number, DOHorizontal);
 
     //The container is used to add floating elements.
     IMContainer level_container(level_item_width, level_item_height);
@@ -259,7 +254,6 @@ void AddButton(IMDivider@ row, LevelInfo@ level, int number, float level_item_wi
     }
     level_preview.addMouseOverBehavior(mouseover_scale, "");
 
-
     //This is the background for the level name.
     IMImage title_background( button_background_diamond );        
     if(kAnimateMenu){
@@ -286,6 +280,7 @@ void AddButton(IMDivider@ row, LevelInfo@ level, int number, float level_item_wi
     @new_controller_item.message = on_click;
     level_container.setName("menu_item" + (number));
     @new_controller_item.element = level_container;
+    level_container.sendMouseOverToChildren(true);
     AddControllerItem(@new_controller_item);
     row.append(level_divider);
 }
@@ -314,7 +309,9 @@ void Update() {
             ledge_grab = ledge_grab_preset_values[current_difficulty];
             tutorials = tutorials_preset_values[current_difficulty];
 
-            ScriptReloaded();
+            ClearControllerItems();
+            BuildMain();
+            BuildFooter();
         } else if( message.name == "hover_leave_file" ) {
             if( current_difficulty != -1 ) {
                 current_difficulty_description = current_difficulty;

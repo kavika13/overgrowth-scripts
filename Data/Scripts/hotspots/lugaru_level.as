@@ -1,9 +1,12 @@
 #include "threatcheck.as"
 #include "campaign_common.as"
 
+string death_message = "Press $attack$ to try again";
 
 void SetParameters() {
 	//params.AddString("next_level", "");
+    params.AddString("death_message", death_message);
+    params.AddIntCheckbox("press_attack_to_restart", true);
     params.AddString("music", "lugaru_ambient_grass");
 }
 
@@ -51,7 +54,7 @@ void Update() {
 				ko_time = the_time;
 			}
 			if(ko_time < the_time - 1.0){
-				if(GetInputPressed(0, "attack") || ko_time < the_time - 5.0){
+				if(params.GetInt("press_attack_to_restart") == 1 && (GetInputPressed(0, "attack") || ko_time < the_time - 5.0)){
 	            	level.SendMessage("reset"); 				
                     level.SendMessage("skip_dialogue");                 
 				}
@@ -60,6 +63,17 @@ void Update() {
 		} else {
 			ko_time = -1.0f;
 		}
+
+        bool use_keyboard = (max(last_mouse_event_time, last_keyboard_event_time) > last_controller_event_time);
+        string respawn = params.GetString("death_message");
+        int index = respawn.findFirst("$attack$");
+        while(index != -1) {
+            respawn.erase(index, 8);
+            respawn.insert(index, GetStringDescriptionForBinding(use_keyboard?"key":"gamepad_0", "attack"));
+
+            index = respawn.findFirst("$attack$", index + 8);
+        }
+        level.SendMessage("screen_message "+""+respawn);
 	} else {
         ko_time = -1.0f;
     }

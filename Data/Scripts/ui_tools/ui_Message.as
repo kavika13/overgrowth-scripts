@@ -54,7 +54,7 @@ class Message
      */
     Message@ opAssign(const Message &in other)
 	{
-		sender = other.sender;
+		@sender = @other.sender;
 		name = other.name;
         stringParams = other.stringParams;
         intParams = other.intParams;

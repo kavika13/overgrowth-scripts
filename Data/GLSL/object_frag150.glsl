@@ -383,6 +383,8 @@ CALC_FINAL_UNIVERSAL(colormap.a)
 #define decalWatersplat 6
 #define decalEnvShadow 7
 #define decalWaterFroth 8
+#define decalSpongeSquare 9
+#define decalSpongeRound 10
 
 
 vec4 GetWeightMap(sampler2D tex, vec2 coord){

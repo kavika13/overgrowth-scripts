@@ -227,6 +227,8 @@ void ReceiveMessage(string msg) {
 				toggle_gui = true;
 			}
 		}
+    } else if(token.findFirst("menu_player") == 0) {
+        ProcessSettingsMessage(IMMessage(token));
     } else {
         dialogue.ReceiveMessage(msg);
     }
@@ -347,6 +349,7 @@ void DrawGUI3() {
 }
 
 
+bool capture_input = false;
 void Update(int paused) {
     const bool kDialogueQueueDebug = false;
     if(kDialogueQueueDebug){
@@ -386,6 +389,11 @@ void Update(int paused) {
 				draw_settings = false;
 				category_elements.resize(0);
 				AddPauseMenu();
+            }else if( message.name == "rebuild_settings"){
+                imGUI.clear();
+                imGUI.setup();
+                ResetController();
+                BuildUI("Graphics");
 			}else{
 				ProcessSettingsMessage(message);
 			}
@@ -405,8 +413,9 @@ void Update(int paused) {
             if(draw_settings)
             {
                 checkCustomResolution();
-                ResetController();
-                BuildUI(current_screen);
+                //ResetController();
+                //BuildUI(current_screen);
+                SwitchSettingsScreen(current_screen);
             }
         }
 		else if( message.name == "Retry")
@@ -424,6 +433,11 @@ void Update(int paused) {
 			toggle_gui = true;
 			SetMediaMode(true);
 		}
+        else if ( message.name == "capture_input" ){
+            capture_input = true;
+        } else if( message.name == "release_input" ){
+            capture_input = false;
+        }
     }
 
     if( non_tutorial_message == false && tutorial_message.length() > 0 && GetConfigValueBool("tutorials") == false ) {
@@ -431,7 +445,7 @@ void Update(int paused) {
     }
 
     if(paused == 0){
-        if(DebugKeysEnabled() && GetInputPressed(controller_id, "l")){
+        if(DebugKeysEnabled() && !GetInputDown(controller_id, "lctrl") && GetInputPressed(controller_id, "l") && !dialogue.show_editor_info){
             Log(info,"Reset key pressed");
             level.SendMessage("manual_reset");
         }
@@ -451,9 +465,10 @@ void Update(int paused) {
         LeaveTelemetryZone();
     }
 	if(has_gui){
-		UpdateSettings();
+		UpdateSettings(false);
 		imGUI.update();
-		UpdateController();
+        if(!capture_input)
+		    UpdateController();
 	}
 }
 
@@ -479,7 +494,8 @@ void SetAnimUpdateFreqs() {
         scale *= _max_anim_frames_per_second/total_framerate_request;
     }
     for(int i=0; i<num; ++i)
-{        MovementObject@ char = ReadCharacter(i);
+    {
+        MovementObject@ char = ReadCharacter(i);
         //DebugText("update_script_period"+i, i+" script period: "+char.update_script_period, 0.5);
         //DebugText("update_script_counter"+i, i+" script counter: "+char.update_script_counter, 0.5);
         //DebugText("anim_update_period"+i, i+" anim_update_period: "+char.rigged_object().anim_update_period, 0.5);
@@ -488,15 +504,19 @@ void SetAnimUpdateFreqs() {
         if(char.controlled || needs_anim_frames==0){
             continue;
         }
-        int period = int(120.0f/(framerate_request[i]*scale));
-        period = int(min(10,max(4, period)));
-        if(needs_anim_frames == 2){
-            period = min(period, 4);
-        }
         if(char.GetIntVar("tether_id") != -1){
             char.rigged_object().SetAnimUpdatePeriod(2);
             char.SetScriptUpdatePeriod(2);
         } else {
+            int period = int(120.0f/(framerate_request[i]*scale));
+            period = int(min(10,max(4, period)));
+            if(needs_anim_frames == 2){
+                period = min(period, 4);
+            }
+            float dist = distance(char.position, cam_pos);
+            if(dist < 10.0f && period > 8) {
+                period = 8;
+            }
             char.rigged_object().SetAnimUpdatePeriod(period);
             char.SetScriptUpdatePeriod(4);
         }
