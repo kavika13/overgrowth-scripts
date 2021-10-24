@@ -20,6 +20,9 @@ void Update() {
     if(!co.controlled){
         return;
     }
+    if(level.QueryIntFunction("int HasCameraControl()") == 1){
+        return;
+    }
     
     camera.SetInterpSteps(1);
     if(GetInputPressed(controller_id, "o") && GetInputDown(controller_id, "ctrl")){
@@ -60,33 +63,26 @@ void Update() {
     else {
         old_position = co.position;
         vec3 vel;
-        
         if(!co.frozen){
             vec3 target_velocity;
-
             bool moving = false;
-
             vec3 flat_facing = camera.GetFlatFacing();
             vec3 flat_right = vec3(-flat_facing.z, 0.0f, flat_facing.x);
-
             target_velocity += GetMoveXAxis(controller_id)*flat_right;
             if(!GetInputDown(controller_id, "crouch")){
                 target_velocity -= GetMoveYAxis(controller_id)*camera.GetFacing();
             } else {
                 target_velocity.y -= GetMoveYAxis(controller_id);
             }
-            
             if(length_squared(target_velocity) > 0.0f){
                 moving = true;
             }
-
             if (moving) {
                 speed += time_step * _acceleration;
             } else {
                 speed = 1.0f;
             }
             speed = max(0.0f, speed);
-
             target_velocity = normalize(target_velocity);
             target_velocity *= sqrt(speed) * _base_speed;
             if(GetInputDown(controller_id, "space")){
@@ -94,40 +90,23 @@ void Update() {
             }
             co.velocity = co.velocity * _camera_inertia + target_velocity * (1.0f - _camera_inertia);
             co.position += co.velocity * time_step;
-
-            
-            /*vec3 start = co.position;
-            vec3 end = co.position + camera.GetMouseRay()*50.0f;
-            col.CheckRayCollisionCharacters(start, end);
-            DebugDrawWireSphere(sphere_col.position, 0.05f, vec3(1.0f), _delete_on_update);
-            */
-             
             if(GetInputDown(controller_id, "mouse0") && !co.ignore_mouse_input){
                 target_rotation -= GetLookXAxis(controller_id);
                 target_rotation2 -= GetLookYAxis(controller_id);
             }
             SetGrabMouse(false);
         }
-        
-        /*if(scenegraph && ActiveCamera::Get()->GetCollisionDetection()){
-            float _camera_collision_radius = 0.4f;
-            vec3 old_new_position = position;
-            position = scenegraph->bullet_world->CheckCapsuleCollisionSlide(old_position, position, _camera_collision_radius) ;
-            velocity += (position - old_new_position)/Timer::Instance()->multiplier;
-        }*/
+
         float _camera_collision_radius = 0.4f;
         vec3 old_new_position = co.position;
         co.position = col.GetSlidingCapsuleCollision(old_position, co.position, _camera_collision_radius) ;
         co.velocity += (co.position - old_new_position)/time_step;
     
-
-
         rotation = rotation * _camera_rotation_inertia + 
                    target_rotation * (1.0f - _camera_rotation_inertia);
         rotation2 = rotation2 * _camera_rotation_inertia + 
                    target_rotation2 * (1.0f - _camera_rotation_inertia);
-            
-
+    
         float smooth_inertia = 0.9f;
         smooth_speed = mix(length(co.velocity), smooth_speed, smooth_inertia);
         
@@ -149,10 +128,6 @@ void Update() {
         
         camera.CalcFacing();
         camera.CalcUp();
-        
-        /*DebugText("camx","Camera X: "+co.position.x,0.5f);
-        DebugText("camy","Camera Y: "+co.position.y,0.5f);
-        DebugText("camz","Camera Z: "+co.position.z,0.5f);*/
 
         UpdateListener(co.position,vel,camera.GetFacing(),camera.GetUpVector());
     }

@@ -449,7 +449,7 @@ void SetUpLevel(float initial_difficulty){
     bool use_weapons = knife_test || rand()%3==0;
     if(use_weapons){
         string weap_str;
-        int rnd = rand()%3;
+        int rnd = rand()%4;
         if(knife_test){
             rnd = 0;
         }
@@ -457,6 +457,7 @@ void SetUpLevel(float initial_difficulty){
         case 0: weap_str = "Data/Items/DogWeapons/DogKnife.xml"; break;
         case 1: weap_str = "Data/Items/DogWeapons/DogBroadSword.xml"; break;
         case 2: weap_str = "Data/Items/DogWeapons/DogSword.xml"; break;
+        case 3: weap_str = "Data/Items/DogWeapons/DogSpear.xml"; break;
         }
 
         int num_chars = GetNumCharacters();
