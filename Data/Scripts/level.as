@@ -193,8 +193,8 @@ void Update() {
             }
             if(callback == "settings"){
                 gui.RemoveGUI(gui_id);
-                gui_id = gui.AddGUI("gamemenu","settings\\settings.html",600,600,0);
-                has_gui = true;
+                OpenSettings();
+                has_gui = false;
                 break;
             }
             callback = gui.GetCallback(gui_id);

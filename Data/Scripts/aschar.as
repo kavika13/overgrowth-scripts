@@ -6052,6 +6052,7 @@ void Reset() {
     blood_amount = _max_blood_amount;
     ResetMind();
     reset_no_collide = the_time;
+    tether_id = -1;
 }
 
 void StartFootStance() {
