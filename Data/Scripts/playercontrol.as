@@ -100,7 +100,7 @@ void HandleAIEvent(AIEvent event){
     }
 }
 
-void ReceiveMessage(string msg){
+void MindReceiveMessage(string msg){
 }
 
 bool WantsToCrouch() {
@@ -220,9 +220,13 @@ bool WantsToAccelerateJump() {
     return GetInputDown(this_mo.controller_id, "jump");
 }
 
+vec3 GetDodgeDirection() {
+    return GetTargetVelocity();
+}
+
 vec3 older_targ_vel;
 vec3 old_targ_vel;
-bool WantsToDodge() {
+bool WantsToDodge(const Timestep &in ts) {
     if(!this_mo.controlled) return false;
 
     vec3 targ_vel = GetTargetVelocity();

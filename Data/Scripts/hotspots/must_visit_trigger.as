@@ -21,6 +21,7 @@ void HandleEvent(string event, MovementObject @mo){
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
         visited = true;
+        Print("Visited!");
     }
 }
 

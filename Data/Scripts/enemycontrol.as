@@ -17,6 +17,7 @@ int old_waypoint_target = -1;
 const float _view_distance = 90.0f;
 const float _throw_counter_probability = 0.2f;
 bool will_throw_counter;
+int ground_punish_decision = -1;
 
 float notice_target_aggression_delay = 0.0f;
 int notice_target_aggression_id = 0.0f;
@@ -27,13 +28,22 @@ const float _block_reflex_delay_min = 0.1f;
 const float _block_reflex_delay_max = 0.2f;
 float block_delay;
 bool going_to_block = false;
+float dodge_delay;
+bool going_to_dodge = false;
 float roll_after_ragdoll_delay;
 bool throw_after_active_block;
+
+bool in_arena = false;
+bool combat_allowed = true;
+
+const float kGetWeaponDelay = 0.4f;
+float get_weapon_delay = kGetWeaponDelay;
 
 enum AIGoal {_patrol, _attack, _investigate, _get_help, _escort, _get_weapon, _navigate, _struggle, _hold_still};
 AIGoal goal = _patrol;
 
-enum AISubGoal {_unknown = -1, _punish_fall = 0, _provoke_attack = 1, _avoid_jump_kick = 2, _wait_and_attack = 3, _rush_and_attack = 4, _defend = 5, _surround_target = 6, _escape_surround = 7};
+enum AISubGoal {_unknown = -1, _punish_fall = 0, _provoke_attack = 1, _avoid_jump_kick = 2, 
+_wait_and_attack = 3, _rush_and_attack = 4, _defend = 5, _surround_target = 6, _escape_surround = 7};
 AISubGoal sub_goal = _wait_and_attack; 
 
 vec3 nav_target;
@@ -250,7 +260,7 @@ void SetGoal(AIGoal new_goal){
 
 float move_delay = 0.0f;
 
-void ReceiveMessage(string msg){
+void MindReceiveMessage(string msg){
     TokenIterator token_iter;
     token_iter.Init();
     if(!token_iter.FindNextToken(msg)){
@@ -272,6 +282,27 @@ void ReceiveMessage(string msg){
         } else if(second_token == "false"){
             SetHostile(false);
         }
+    } else if(token == "set_combat_allowed"){
+        token_iter.FindNextToken(msg);
+        string second_token = token_iter.GetToken(msg);
+        if(second_token == "true"){
+            combat_allowed = true;
+        } else if(second_token == "false"){
+            combat_allowed = false;
+        }
+    } else if(token == "in_arena"){
+        token_iter.FindNextToken(msg);
+        string second_token = token_iter.GetToken(msg);
+        if(second_token == "true"){
+            in_arena = true;
+        } else if(second_token == "false"){
+            in_arena = false;
+        }
+    } else if(token == "notice"){
+        Print("Received notice message\n");
+        token_iter.FindNextToken(msg);
+        int id = atoi(token_iter.GetToken(msg));
+        Notice(id);
     }
 }
 
@@ -320,7 +351,41 @@ void SetHostile(bool val){
     }
 }
 
+void DisplayGoals() {
+    string label = "Player "+this_mo.GetID()+" goal: ";
+    string text = label;
+    switch(goal){
+        case _patrol:       text += "_patrol"; break;
+        case _attack:       text += "_attack"; break;
+        case _investigate:  text += "_investigate"; break;
+        case _get_help:     text += "_get_help"; break;
+        case _escort:       text += "_escort"; break;
+        case _get_weapon:   text += "_get_weapon"; break;
+        case _navigate:     text += "_navigate"; break;
+        case _struggle:     text += "_struggle"; break;
+        case _hold_still:   text += "_hold_still"; break;
+    }
+    text += ", ";
+    switch(sub_goal){
+        case _unknown:         text += "_unknown"; break;
+        case _punish_fall:     text += "_punish_fall"; break;
+        case _provoke_attack:  text += "_provoke_attack"; break;
+        case _avoid_jump_kick: text += "_avoid_jump_kick"; break;
+        case _wait_and_attack: text += "_wait_and_attack"; break;
+        case _defend:          text += "_defend"; break;
+        case _rush_and_attack: text += "_rush_and_attack"; break;
+        case _surround_target: text += "_surround_target"; break;
+        case _escape_surround: text += "_escape_surround"; break;
+        default: text += sub_goal; break;
+    }
+    DebugText(label, text,0.1f);
+}
+
 void UpdateBrain(const Timestep &in ts){
+    const bool display_goals = false;
+    if(display_goals){
+        DisplayGoals();
+    }
     if(GetInputDown(this_mo.controller_id, "c") && !GetInputDown(this_mo.controller_id, "ctrl")){
         if(hostile_switchable){
             SetHostile(!hostile);
@@ -341,6 +406,7 @@ void UpdateBrain(const Timestep &in ts){
     }
     move_delay = max(0.0f, move_delay - ts.step());
 
+    bool wants_to_get_weapon = false;
     if(weapon_slots[primary_weapon_slot] == -1 && goal != _struggle && goal != _hold_still && hostile){
         int num_items = GetNumItems();
         int nearest_weapon = -1;
@@ -362,9 +428,19 @@ void UpdateBrain(const Timestep &in ts){
             }
         }
         if(nearest_weapon != -1){
-            goal = _get_weapon;
+            wants_to_get_weapon = true;
             weapon_target_id = nearest_weapon;
         }
+    }
+
+    if(wants_to_get_weapon){
+        if(get_weapon_delay >= 0.0f){
+            get_weapon_delay -= time_step;
+        } else {
+            goal = _get_weapon;
+        }
+    } else {
+        get_weapon_delay = kGetWeaponDelay;
     }
 
     if(hostile){
@@ -412,7 +488,7 @@ void UpdateBrain(const Timestep &in ts){
             notice_target_aggression_delay = 0.0f;   
         }
                 
-        if(target.GetIntVar("knocked_out") != _awake){
+        if(target.GetIntVar("knocked_out") != _awake && !in_arena){
             SetGoal(_patrol);
         }
                 
@@ -428,14 +504,31 @@ void UpdateBrain(const Timestep &in ts){
                     break;
             }
         }
+
         if(target.GetIntVar("state") == _ragdoll_state){
+            if(ground_punish_decision == -1){
+                if((RangedRandomFloat(0.0f,1.0f) < p_ground_aggression)){
+                    ground_punish_decision = 1;
+                } else {
+                    ground_punish_decision = 0;
+                }
+            }
+        } else {
+            ground_punish_decision = -1;
+        }
+                
+        if(ground_punish_decision == 1){
             target_goal = _punish_fall;
         } else {
             if(sub_goal == _punish_fall){
                 target_goal = PickAttackSubGoal();
             }
         }
-                
+                        
+        if(!combat_allowed){
+            target_goal = _defend;
+        }
+
         if(!target.GetBoolVar("on_ground")){
             target_goal = _avoid_jump_kick;
         } else if(sub_goal == _avoid_jump_kick){
@@ -462,7 +555,11 @@ void UpdateBrain(const Timestep &in ts){
             break;
         case _defend:
             if(CheckRangeChange(ts)){
-                target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                if(!combat_allowed){
+                    target_attack_range = RangedRandomFloat(3.0f, 5.0f);
+                } else {
+                    target_attack_range = RangedRandomFloat(1.5f, 3.0f);
+                }
             }
             ai_attacking = false;
             break;
@@ -556,7 +653,6 @@ void UpdateBrain(const Timestep &in ts){
         }
     }
 
-
     //MouseControlPathTest();
     //HandleDebugRayDraw();
 
@@ -599,10 +695,6 @@ void HandleDebugRayDraw() {
             ray_lines.insertLast(line);
         }
     }
-}
-
-bool WantsToDodge() {
-    return false;
 }
 
 bool WantsToSheatheItem() {
@@ -684,14 +776,24 @@ bool WantsToRollFromRagdoll(){
     }
 }
 
-bool ShouldBlock(){
-    if(goal != _attack || startled || active_block_recharge > 0.0f || 
+enum BlockOrDodge{BLOCK, DODGE};
+
+bool ShouldDefend(BlockOrDodge bod){
+    float recharge;
+    if(bod == BLOCK){
+        recharge = active_block_recharge;
+    } else if(bod == DODGE){
+        recharge = active_dodge_recharge;
+    }
+    if(goal != _attack || startled || recharge > 0.0f || 
        target_id == -1 || !hostile)
     {
         return false;
     }
     MovementObject @char = ReadCharacterID(target_id);
-    if(char.GetIntVar("state") == _attack_state){
+    if((bod == BLOCK && char.GetIntVar("state") == _attack_state) || 
+       (bod == DODGE && char.GetIntVar("knife_layer_id") != -1))
+    {
         return true;
     } else {
         return false;
@@ -699,7 +801,7 @@ bool ShouldBlock(){
 }
 
 bool WantsToStartActiveBlock(const Timestep &in ts){
-    bool should_block = ShouldBlock();
+    bool should_block = ShouldDefend(BLOCK);
     if(should_block && !going_to_block){
         MovementObject @char = ReadCharacterID(target_id);
         block_delay = char.GetTimeUntilEvent("blockprepare");
@@ -718,11 +820,54 @@ bool WantsToStartActiveBlock(const Timestep &in ts){
             block_delay += 0.4f;
         }
     }
+    if(!going_to_block && goal == _attack){
+        int nearby_weapon = GetNearestThrownWeapon(this_mo.position, 2.0f);
+        if(nearby_weapon != -1){
+            ItemObject@ item_obj = ReadItemID(nearby_weapon);
+            if(length_squared(item_obj.GetLinearVelocity())>1.0f){
+                going_to_block = true;
+                const float kKnifeCatchProbability = 0.5f;
+                block_delay = 0.0f;
+                if(RangedRandomFloat(0.0f,1.0f) > kKnifeCatchProbability){
+                    block_delay += 0.4f;
+                }
+            }
+        }
+    }
     if(going_to_block){
         block_delay -= ts.step();
         block_delay = min(1.0f, block_delay);
         if(block_delay <= 0.0f){
             going_to_block = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WantsToDodge(const Timestep &in ts){
+    bool should_block = ShouldDefend(DODGE);
+    if(should_block && !going_to_dodge){
+        MovementObject @char = ReadCharacterID(target_id);
+        dodge_delay = char.GetTimeUntilEvent("blockprepare");
+        if(dodge_delay != -1.0f){
+            going_to_dodge = true;
+        }
+        float temp_block_skill = p_block_skill;
+        float temp_block_skill_power = 0.5 * pow(4.0, char.GetFloatVar("attack_predictability"));
+        if(sub_goal == _provoke_attack){
+            temp_block_skill_power += 1.0;
+        }
+        temp_block_skill = 1.0 - pow((1.0 - temp_block_skill),temp_block_skill_power);
+        if(RangedRandomFloat(0.0f,1.0f) > temp_block_skill){
+            dodge_delay += 0.4f;
+        }
+    }
+    if(going_to_dodge){
+        dodge_delay -= ts.step();
+        dodge_delay = min(1.0f, dodge_delay);
+        if(dodge_delay <= 0.0f){
+            going_to_dodge = false;
             return true;
         }
     }
@@ -1083,12 +1228,21 @@ vec3 GetNavMeshMovement(vec3 point, float slow_radius, float target_dist, float 
     }*/
 }
 
-vec3 GetAttackMovement() {
-    vec3 move_vel = GetMovementToPoint(target_history.GetPos(0.3), max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
-    
-    //CheckJumpTarget(last_seen_target_position);
+vec3 GetDodgeDirection() {
+    MovementObject @char = ReadCharacterID(target_id);
+    return normalize(this_mo.position - char.position);
+}
 
-    return move_vel;    
+vec3 GetAttackMovement() {
+    if(combat_allowed){
+        return GetMovementToPoint(target_history.GetPos(0.3), max(0.2f,1.0f-target_attack_range), target_attack_range, strafe_vel);
+    } else {
+        /*if(distance_squared(this_mo.position, target_history.GetPos(0.3)) < 16.0f){
+            return GetMovementToPoint(target_history.GetPos(0.3), 1.0f, 5.0f, strafe_vel);
+        }*/
+        return vec3(0.0f);
+    }
+    //CheckJumpTarget(last_seen_target_position);
 }
 
 

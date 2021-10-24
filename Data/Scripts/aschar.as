@@ -11,12 +11,18 @@ enum AIEvent{_ragdolled, _activeblocked, _thrown, _choking, _jumped, _can_climb,
              _grabbed_ledge, _climbed_up};
 
 int head_choke_queue = -1;
-vec3 push_velocity;
+
+vec3 push_velocity; // Accumulates collision response between characters
+
 float block_stunned = 0.0f;
 int block_stunned_by_id = -1;
+
+// For sliding on ice
 vec3 old_slide_vel;
 vec3 new_slide_vel;
 float friction = 1.0f;
+
+// Throat cut variables
 uint32 last_blood_particle_id = 0;
 int blood_delay = 0;
 bool cut_throat = false;
@@ -26,8 +32,11 @@ float blood_amount = _max_blood_amount;
 const float _spurt_frequency = 7.0f;
 float spurt_sound_delay = 0.0f;
 const float _spurt_delay_amount = 6.283185f/_spurt_frequency;
+
 const float _body_part_drag_dist = 0.2f;
 bool in_animation = false;
+
+// Knife combat variables
 bool backslash = false;
 float last_knife_time = 0.0f;
 int knife_layer_id = -1;
@@ -35,6 +44,7 @@ int throw_knife_layer_id = -1;
 
 float plant_rustle_delay = 0.0f;
 float in_plant = 0.0f;
+
 float blood_damage = 0.0f; // How much blood damage remains to be dealt
 float blood_health = 1.0f; // How much blood remaining before passing out
 float block_health = 1.0f; // How strong is auto-block? Similar to ssb shield
@@ -44,8 +54,13 @@ float permanent_health = 1.0f; // Remaining non-regenerating health until killed
 int knocked_out = _awake;
 float knocked_out_time = 0.0f;
 
+// Body bob offset so that characters don't sway in sync
+float body_bob_freq;
+float body_bob_time_offset;
+
 // Parameter values
 float p_aggression;
+float p_ground_aggression;
 float p_damage_multiplier;
 float p_block_skill;
 float p_block_followup;
@@ -147,7 +162,7 @@ const int _block_impact = 3;
 const int _invalid = 4;
 
 bool startled = false;
-const float drop_weapon_probability = 0.3f;
+const float drop_weapon_probability = 0.2f;
 
 // whether the character is in the ground or in the air, and how long time has passed since the status changed. 
 bool on_ground = false;
@@ -391,6 +406,50 @@ void ChokedOut(int target){
     head_choke_queue = target;
 }
 
+void CatchItem(int id){
+    ItemObject@ io = ReadItemID(id);
+    vec3 lin_vel = io.GetLinearVelocity();
+    vec3 force = (lin_vel - this_mo.velocity) * io.GetMass();
+    float force_len = length(force);
+    this_mo.velocity = force * 0.1f;
+
+    vec3 face_dir = lin_vel * -1.0f;
+    face_dir.y = 0.0f;
+    face_dir = normalize(face_dir);
+    this_mo.SetRotationFromFacing(face_dir);
+
+    vec3 flat_item_to_char = io.GetPhysicsPosition() - this_mo.position;
+    flat_item_to_char.y = 0.0f;
+    flat_item_to_char = normalize(flat_item_to_char);
+    this_mo.SetRotationFromFacing(flat_item_to_char);
+
+    vec3 flat_lin_dir = lin_vel;
+    flat_lin_dir.y = 0.0f;
+    flat_lin_dir = normalize(flat_lin_dir);
+    bool mirror = mirrored_stance;
+    string anim_path;
+    if(dot(flat_item_to_char, flat_lin_dir) < -0.95f){
+        anim_path = "Data/Animations/r_blockfronthard.anm";
+    } else {
+        anim_path = "Data/Animations/r_hitspinright.anm";
+        vec3 perp = vec3(flat_item_to_char.z, 0.0f, -flat_item_to_char.x);
+        mirror = (dot(perp, flat_lin_dir) < 0.0f);
+    }
+    SetState(_hit_reaction_state);
+    hit_reaction_anim_set = true;
+
+    int8 flags = _ANM_MOBILE | _ANM_FROM_START;
+    if(mirror){
+        flags = flags | _ANM_MIRRORED;
+    }
+    this_mo.SetAnimation(anim_path,10.0f,flags);
+    this_mo.SetAnimationCallback("void EndHitReaction()");
+
+    PlayItemGrabSound(io, 1.0f);
+
+    AttachWeapon(id);
+}
+
 void HitByItem(string material, vec3 point, int id, int type) {
     //Print(""+ this_mo.getID() + " was hit by item id "+id+" with material \""+material+"\" at ");
     //PrintVec3(point);
@@ -407,6 +466,7 @@ void HitByItem(string material, vec3 point, int id, int type) {
     if(type == 2){
         TakeBloodDamage(force_len / 8.0f);
     }
+    level.SendMessage("item_hit "+this_mo.getID());
     if(length(force) > 20.0f || knocked_out != _awake || !on_ground){
         HandleRagdollImpactImpulse(force * 200.0f, point, 0.0f);
     } else {
@@ -731,8 +791,24 @@ void PrintWeaponSlotDebugText(){
     DebugText("char"+this_mo.getID()+"7","Primary weapon slot: "+primary_weapon_slot, 0.5f);
 }
 
+string StateStr(int val){
+    switch(val){
+        case _movement_state:     return "_movement_state";
+        case _ground_state:       return "_ground_state";
+        case _attack_state:       return "_attack_state";
+        case _hit_reaction_state: return "_hit_reaction_state";
+        case _ragdoll_state:      return "_ragdoll_state";
+    }
+    return "unknown";
+}
+
 void Update(int num_frames) {
     Timestep ts(time_step, num_frames);
+
+    bool display_player_state = false;
+    if(this_mo.controlled && display_player_state){
+        DebugText("player_state","State: "+StateStr(state),0.5f);
+    }
 
     ApplyLevelBoundaries();
 
@@ -1052,7 +1128,9 @@ void HandleSpecialKeyPresses() {
             }
             in_animation = true;
             this_mo.SetAnimationCallback("void EndAnim()");*/
+            
             SwapWeaponHands();
+            
             //CheckPossibleAttacks();
         }
         if(GetInputPressed(this_mo.controller_id, "h")){
@@ -1256,6 +1334,7 @@ void UpdateState(const Timestep &in ts) {
         UpdateAnimation(ts);
         ApplyPhysics(ts);
         HandlePickUp();
+        HandleThrow();
         HandleCollisions(ts);
     } else if(state == _ground_state){
         UpdateDuckAmount(ts);
@@ -1270,6 +1349,7 @@ void UpdateState(const Timestep &in ts) {
             UpdateGroundAttackControls(ts);
        } 
         UpdateHitReaction(ts);
+        HandleThrow();
         HandleAccelTilt(ts);
         HandleCollisions(ts);
     }
@@ -1683,11 +1763,11 @@ void UpdateActiveBlockMechanics(const Timestep &in ts) {
 
 void UpdateActiveDodgeMechanics(const Timestep &in ts) {
     bool can_dodge = CanBlock();
-    if(WantsToDodge() && can_dodge){
+    if(WantsToDodge(ts) && can_dodge){
         if(active_dodge_recharge <= 0.0f){
             active_dodging = true;
             active_dodge_duration = 0.2f;
-            dodge_dir = GetTargetVelocity();
+            dodge_dir = GetDodgeDirection();
         }
         active_dodge_recharge = 0.2f;
     } 
@@ -2170,6 +2250,10 @@ int BlockedAttack(const vec3&in dir, const vec3&in pos, int attacker_id){
     if(this_mo.controlled){
         camera.AddShake(0.5f);
     }
+
+    this_mo.velocity += GetAdjustedAttackDir(dir) * 2.0f;
+    tilt = GetAdjustedAttackDir(dir) * 20.0f;
+
     return _block_impact;
 }
 
@@ -2416,9 +2500,11 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
        flip_info.IsFlipping() || 
        state == _attack_state || 
        !on_ground || 
+       knife_layer_id != -1 ||
        blood_health <= 0.0f || 
        state == _ragdoll_state ||
-       (sharp_damage > 0.0f && weapon_slots[primary_weapon_slot] == -1))
+       dot(dir, this_mo.GetFacing()) > 0.0f ||
+       sharp_damage > 0.0f)
     {
        can_passive_block = false;
     }
@@ -2431,7 +2517,8 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
     bool knocked_over = false;
     
     if(!can_passive_block){
-        if(sharp_damage > 0.0f){        
+        if(sharp_damage > 0.0f){     
+            level.SendMessage("cut "+this_mo.getID()+" "+attacker_id);   
             TakeSharpDamage(sharp_damage * attack_damage_mult, pos, attacker_id);
         }
 		if(sharp_damage == 0.0f || knocked_out != _awake){
@@ -2477,7 +2564,8 @@ int HitByAttack(const vec3&in dir, const vec3&in pos, int attacker_id, float att
         }
     } else {
         string sound;
-        if(block_health > 0.0f && weapon_slots[primary_weapon_slot] != -1){
+        if(false && weapon_slots[primary_weapon_slot] != -1 && can_passive_block){
+            level.SendMessage("passive_blocked "+this_mo.getID()+" "+attacker_id);
             HandleWeaponCollision(attacker_id, pos);
         } else {
             sound = "Data/Sounds/weapon_foley/cut/flesh_hit.xml";
@@ -2504,7 +2592,7 @@ void HandleRagdollImpactImpulse(const vec3&in impulse, const vec3&in pos, float 
     temp_health = max(0.0f, temp_health);
 }
 
-void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, float force){
+vec3 GetAdjustedAttackDir(const vec3&in dir) {
     vec3 impact_dir = attack_getter2.GetImpactDir();
     vec3 right;
     right.x = -dir.z;
@@ -2513,7 +2601,11 @@ void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, flo
     vec3 impact_dir_adjusted = impact_dir.x * right +
                                impact_dir.z * dir;
     impact_dir_adjusted.y += impact_dir.y;
-    HandleRagdollImpactImpulse(impact_dir_adjusted * force, pos, damage);
+    return impact_dir_adjusted;
+}
+
+void HandleRagdollImpact(const vec3&in dir, const vec3&in pos, float damage, float force){
+    HandleRagdollImpactImpulse(GetAdjustedAttackDir(dir) * force, pos, damage);
 }
 
 void HandlePassiveBlockImpact(const vec3&in dir, const vec3&in pos){
@@ -2535,7 +2627,7 @@ bool HandleDodge(const vec3&in dir, int attacker_id){
     vec3 face_dir = ReadCharacterID(attacker_id).position - this_mo.position;
     face_dir.y = 0.0;
     face_dir = normalize(face_dir);
-    if(dot(face_dir, dodge_dir) > 0.85f){
+    if(dot(face_dir, dir) > 0.85f){
         return false;
     }
 
@@ -2607,11 +2699,11 @@ void EndHitReaction() {
 }
 
 void AchievementEvent(string event_str){
-    level.Execute("AchievementEvent(\""+event_str+"\")");
+    level.SendMessage("achievement_event "+event_str);
 }
 
 void AchievementEventFloat(string event_str, float val){
-    level.Execute("AchievementEventFloat(\""+event_str+"\", "+val+")");
+    level.SendMessage("achievement_event_float "+event_str + " " + val);
 }
 
 void SetKnockedOut(int val) {
@@ -2620,6 +2712,20 @@ void SetKnockedOut(int val) {
         if(val == _dead || blood_health <= 0.0f ){
             AchievementEvent("enemy_died");
         }
+    }
+}
+
+void ReceiveMessage(string msg){
+    TokenIterator token_iter;
+    token_iter.Init();
+    if(!token_iter.FindNextToken(msg)){
+        return;
+    }
+    string token = token_iter.GetToken(msg);
+    if(token == "restore_health"){
+        RecoverHealth();
+    } else {
+        MindReceiveMessage(msg); // Pass message to mind if it doesn't match body messages
     }
 }
 
@@ -2654,6 +2760,11 @@ void TakeDamage(float how_much){
             //SetRagdollType(_RGDL_INJURED);
         }
     }
+    for(int i=0; i<3; ++i){
+        if(RangedRandomFloat(0.0f,1.1f) < how_much){
+            this_mo.CreateBloodDrip("head", 0, vec3(RangedRandomFloat(-1.0f,1.0f),RangedRandomFloat(-0.2f,0.2f),0.0f));
+        }
+    }
 }
 
 void TakeBloodDamage(float how_much){
@@ -2662,7 +2773,12 @@ void TakeBloodDamage(float how_much){
     }
     how_much *= p_damage_multiplier;
     blood_health -= how_much;
+    if(permanent_health > blood_health){
+        permanent_health -= how_much * 0.5f;
+    }
+    temp_health = min(permanent_health, temp_health);
     if(blood_health <= 0.0f && knocked_out == _awake){
+        level.SendMessage("character_died "+this_mo.getID());
         SetKnockedOut(_unconscious);
     }
 }
@@ -2683,12 +2799,7 @@ void HandleAnimationEvent(string event, vec3 world_pos){
     //DebugDrawText(world_pos, event, _persistent);
 }
 
-void AttachWeapon(int which){
-    if(weapon_slots[primary_weapon_slot] != -1 && weapon_slots[secondary_weapon_slot] != -1){
-        Print("Can't attach weapon, already holding one!");
-        return;
-    }
-    ItemObject@ item_obj = ReadItemID(which);
+void PlayItemGrabSound(ItemObject@ item_obj, float gain){
     vec3 pos = item_obj.GetPhysicsPosition();
     string sound_modifier = item_obj.GetSoundModifier();
     string sound;
@@ -2697,7 +2808,15 @@ void AttachWeapon(int which){
     } else {
         sound = "Data/Sounds/weapon_foley/grab/weapon_grap_metal_leather_glove.xml";
     }
-    PlaySoundGroup(sound, pos,0.5f);
+    PlaySoundGroup(sound, pos,gain);
+}
+
+void AttachWeapon(int which){
+    if(weapon_slots[primary_weapon_slot] != -1 && weapon_slots[secondary_weapon_slot] != -1){
+        Print("Can't attach weapon, already holding one!");
+        return;
+    }
+    PlayItemGrabSound(ReadItemID(which), 0.5f);
     if(weapon_slots[primary_weapon_slot] == -1){
         bool mirror = primary_weapon_slot != _held_right;
         this_mo.AttachItemToSlot(which, _at_grip, mirror);
@@ -2726,9 +2845,6 @@ void HandleEditorAttachment(int which, int attachment_type, bool mirror){
             weap_slot = _sheathed_left;
         }         
     }
-    
-    Print("HandleEditorAttachment("+which+", "+attachment_type+", "+mirror+");\n");
-    
     if(weap_slot == -1 || weapon_slots[weap_slot] != -1){
         return;
     }    
@@ -3370,10 +3486,18 @@ void ApplyIdle(float speed, bool start){
     }
 
     if(blood_health < 1.0f){
-        if(blood_health < 0.5f && length_squared(this_mo.velocity) < 0.5f){
-            this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedidle.xml", speed, flags,"idle");
+        if(weapon_slots[primary_weapon_slot] == -1){
+            if(blood_health < 0.5f && length_squared(this_mo.velocity) < 0.5f){
+                this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedidle.xml", speed, flags,"idle");
+            } else {
+                this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedidle.xml", speed, flags,"idle");
+            }
         } else {
-            this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedidle.xml", speed, flags,"idle");
+            if(blood_health < 0.5f){
+                this_mo.SetAnimAndCharAnim("Data/Animations/r_woundedarmed.xml", speed, flags,"idle");
+            } else {
+                this_mo.SetAnimAndCharAnim("Data/Animations/r_halfwoundedarmed.xml", speed, flags,"idle");
+            }
         }
     } else {
         if(idle_type == _combat){
@@ -3388,6 +3512,7 @@ void ApplyIdle(float speed, bool start){
             this_mo.SetAnimAndCharAnim(path, speed, flags,"idle");
         }
     }
+
     /*if(this_mo.controlled){
         DebugText("a","Primary weapon: "+weapon_slots[primary_weapon_slot],0.5f);
     }*/
@@ -3962,7 +4087,7 @@ void UpdateDuckAmount(const Timestep &in ts) { // target_duck_amount is 1.0 when
     duck_vel += (target_duck_amount - duck_amount) * ts.step() * _duck_accel;
     duck_vel *= pow(_duck_vel_inertia,ts.frames());
     duck_amount += duck_vel * ts.step();
-    duck_amount = min(1.0,duck_amount);
+    //duck_amount = min(1.0,duck_amount);
 }
 
 
@@ -4356,6 +4481,9 @@ void PlayStandAnimation(bool blocked) {
 }
 
 void SetState(int _state) {
+    if(state == _ragdoll_state && _state != _ragdoll_state){
+        this_mo.UnRagdoll();
+    }
     state = _state;
     if(state == _movement_state){
         StartFootStance();
@@ -4383,7 +4511,6 @@ void WakeUp(int how) {
     ragdoll_cam_recover_time = 1.0f;
 
     SetState(_movement_state);
-    this_mo.UnRagdoll();
     
     HandleBumperCollision();
     HandleStandingCollision();
@@ -4729,6 +4856,28 @@ int GetNearestPickupableWeapon(vec3 point, float max_range){
     }
 }
 
+int GetNearestThrownWeapon(vec3 point, float max_range){
+    int num_items = GetNumItems();
+    int closest_id = -1;
+    float closest_dist = 0.0f;
+    for(int i=0; i<num_items; i++){
+        ItemObject@ item_obj = ReadItem(i);
+        if(item_obj.IsHeld()){
+            continue;
+        }
+        vec3 item_pos = item_obj.GetPhysicsPosition();
+        if(closest_id == -1 || distance_squared(point, item_pos) < closest_dist){ 
+            closest_dist = distance_squared(point, item_pos);
+            closest_id = item_obj.GetID();
+        }
+    }
+    if(closest_dist < max_range*max_range){
+        return closest_id;
+    } else {
+        return -1;
+    }
+}
+
 void StartSheathing(int slot){
     ItemObject @obj = ReadItemID(weapon_slots[slot]);
     bool prefer_same_side = obj.GetMass() < 0.55f;
@@ -4778,12 +4927,48 @@ void StartSheathing(int slot){
     }
 }
 
+void HandleThrow() {
+    if(WantsToThrowItem() && weapon_slots[primary_weapon_slot] != -1 && throw_knife_layer_id == -1){        
+        float throw_range = 50.0f;
+        int target = GetClosestCharacterID(throw_range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
+        if(target != -1 && (on_ground || flip_info.IsFlipping())){
+            target_id = target;
+            going_to_throw_item = true;
+            going_to_throw_item_time = time;
+        }
+    }
+    if(going_to_throw_item && going_to_throw_item_time <= time && going_to_throw_item_time > time - 1.0f){
+        if(!flip_info.IsFlipping() || flip_info.flip_progress > 0.5f){
+            int8 flags = 0;
+            if(primary_weapon_slot == _held_left){
+                flags |= _ANM_MIRRORED;   
+            }
+            if(!flip_info.IsFlipping()){
+                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,flags);
+            } else {
+                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowfliplayer.anm",8.0f,flags);
+            }
+            going_to_throw_item = false;
+        }
+    }
+}
+
 void HandlePickUp() {
     if((WantsToDropItem() && throw_knife_layer_id == -1) || knocked_out != _awake){
         DropWeapon();
     }
     if(knocked_out != _awake || state == _ragdoll_state || tethered != _TETHERED_FREE){
         return;
+    }
+    if(active_blocking){
+        int nearest_thrown_id = GetNearestThrownWeapon(this_mo.position, 2.0f);
+        if(nearest_thrown_id != -1){
+            ItemObject@ io = ReadItemID(nearest_thrown_id);
+            vec3 vel = io.GetLinearVelocity();
+            if(length_squared(vel) > 5.0f && dot(this_mo.GetFacing(), vel) < 0.0f){
+                CatchItem(nearest_thrown_id);
+            }
+        }
     }
     if(WantsToPickUpItem()){
         if(weapon_slots[primary_weapon_slot] == -1 || weapon_slots[secondary_weapon_slot] == -1){
@@ -4837,29 +5022,6 @@ void HandlePickUp() {
             this_mo.RemoveLayer(pickup_layer, 4.0f);
             pickup_layer = -1;
         } 
-    }
-    if(WantsToThrowItem() && weapon_slots[primary_weapon_slot] != -1 && throw_knife_layer_id == -1){        
-        float throw_range = 50.0f;
-        int target = GetClosestCharacterID(throw_range, _TC_ENEMY | _TC_CONSCIOUS | _TC_NON_RAGDOLL);
-        if(target != -1 && (on_ground || flip_info.IsFlipping())){
-            target_id = target;
-            going_to_throw_item = true;
-            going_to_throw_item_time = time;
-        }
-    }
-    if(going_to_throw_item && going_to_throw_item_time <= time && going_to_throw_item_time > time - 1.0f){
-        if(!flip_info.IsFlipping() || flip_info.flip_progress > 0.5f){
-            int8 flags = 0;
-            if(primary_weapon_slot == _held_left){
-                flags |= _ANM_MIRRORED;   
-            }
-            if(!flip_info.IsFlipping()){
-                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowlayer.anm",8.0f,flags);
-            } else {
-                throw_knife_layer_id = this_mo.AddLayer("Data/Animations/r_knifethrowfliplayer.anm",8.0f,flags);
-            }
-            going_to_throw_item = false;
-        }
     }
     if(sheathe_layer_id == -1){
         int src;
@@ -5421,7 +5583,8 @@ void UpdateAnimation(const Timestep &in ts) {
             }
             if((speed < _walk_threshold && GetTargetVelocity() != vec3(0.0f)) || 
                 knife_layer_id != -1 || 
-                throw_knife_layer_id != -1 && (speed < _walk_threshold * 2.0f)){
+                throw_knife_layer_id != -1 && (speed < _walk_threshold * 2.0f))
+            {
                 stance_move = true;
             }
             if(WantsToWalkBackwards() && length_squared(flat_velocity) > 0.001f){
@@ -5708,9 +5871,10 @@ void MovementState_UpdateIKTargets(const Timestep &in ts) {
 
         vec3 body_offset(0.0f);
         if(idle_stance_amount > 0.0f){
-            body_offset.y = sin(time*4.0f)*0.02f*idle_stance_amount;
-            body_offset.x = sin(time*2.0f)*0.02f*idle_stance_amount;
-            body_offset.z = sin(time*1.5f)*0.02f*idle_stance_amount;
+            float body_bob_time = time + body_bob_time_offset;
+            body_offset.y = sin(body_bob_time*4.0f*body_bob_freq)*0.02f*idle_stance_amount;
+            body_offset.x = sin(body_bob_time*2.0f*body_bob_freq)*0.02f*idle_stance_amount;
+            body_offset.z = sin(body_bob_time*1.5f*body_bob_freq)*0.02f*idle_stance_amount;
         }
 
         //float curr_avg_offset_height = min(0.0f,
@@ -5798,6 +5962,9 @@ void SetParameters() {
     params.AddFloatSlider("Block Follow-up",0.5,"min:0,max:1,step:0.1,text_mult:100");
     p_block_followup = min(1.0f, max(0.0f, params.GetFloat("Block Follow-up")));
 
+    params.AddFloatSlider("Ground Aggression",0.5,"min:0,max:1,step:0.1,text_mult:100");
+    p_ground_aggression = min(1.0f, max(0.0f, params.GetFloat("Ground Aggression")));
+
     params.AddFloatSlider("Attack Speed",1,"min:0,max:2,step:0.1,text_mult:100");
     p_attack_speed_mult = min(2.0f, max(0.1f, params.GetFloat("Attack Speed")));
 
@@ -5822,4 +5989,11 @@ void SetParameters() {
     mirrored_stance = left_handed;
     primary_weapon_slot = left_handed?_held_left:_held_right;
     secondary_weapon_slot = left_handed?_held_right:_held_left;
+    
+    body_bob_freq = RangedRandomFloat(0.9f,1.1f);
+    body_bob_time_offset = RangedRandomFloat(0.0f,100.0f);
+
+    if(params.HasParam("Unarmed Stance Override")){
+        this_mo.OverrideCharAnim("idle", params.GetString("Unarmed Stance Override"));
+    }
 }

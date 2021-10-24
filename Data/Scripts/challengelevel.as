@@ -38,7 +38,7 @@ class Achievements {
         Init();
     }
     void UpdateDebugText() {
-        /*DebugText("achmt0", "Flawless: "+flawless_, 0.5f);
+        DebugText("achmt0", "Flawless: "+flawless_, 0.5f);
         DebugText("achmt1", "No Injuries: "+!injured_, 0.5f);
         DebugText("achmt2", "No First Strikes: "+no_first_strikes_, 0.5f);
         DebugText("achmt3", "No Counter Strikes: "+no_counter_strikes_, 0.5f);
@@ -48,13 +48,13 @@ class Achievements {
         //DebugText("achmt_damage0", "Block damage: "+total_block_damage_, 0.5f);
         //DebugText("achmt_damage1", "Impact damage: "+total_damage_, 0.5f);
         //DebugText("achmt_damage2", "Blood loss: "+total_blood_loss_, 0.5f);
-        
+
         SavedLevel @level = save_file.GetSavedLevel(level_name);
         DebugText("saved_achmt0", "Saved Flawless: "+(level.GetValue("flawless")=="true"), 0.5f);
         DebugText("saved_achmt1", "Saved No Injuries: "+(level.GetValue("no_injuries")=="true"), 0.5f);
         DebugText("saved_achmt2", "Saved No Kills: "+(level.GetValue("no_kills")=="true"), 0.5f);
         DebugText("saved_achmt3", "Saved No Alert: "+(level.GetValue("no_alert")=="true"), 0.5f);
-        DebugText("saved_achmt4", "Saved Time: "+level.GetValue("time"), 0.5f);*/
+        DebugText("saved_achmt4", "Saved Time: "+level.GetValue("time"), 0.5f);
     }
     void Save() {
         SavedLevel @saved_level = save_file.GetSavedLevel(level_name);
@@ -129,10 +129,30 @@ void Reset(){
 }
 
 void ReceiveMessage(string msg) {
-    if(msg == "reset"){
+    TokenIterator token_iter;
+    token_iter.Init();
+    if(!token_iter.FindNextToken(msg)){
+        return;
+    }
+    string token = token_iter.GetToken(msg);
+    if(token == "reset"){
         Reset();
-    } else if(msg == "dispose_level"){
+    } else if(token == "dispose_level"){
         gui.RemoveAll();
+    } else if(token == "achievement_event"){
+        token_iter.FindNextToken(msg);
+        AchievementEvent(token_iter.GetToken(msg));
+    } else if(token == "achievement_event_float"){
+        token_iter.FindNextToken(msg);
+        string str = token_iter.GetToken(msg);
+        token_iter.FindNextToken(msg);
+        float val = atof(token_iter.GetToken(msg));
+        AchievementEventFloat(str, val);
+    } else if(token == "victory_trigger_enter"){
+        ++in_victory_trigger;
+        in_victory_trigger = max(1,in_victory_trigger);
+    } else if(token == "victory_trigger_exit"){
+        --in_victory_trigger;
     }
 }
 
@@ -142,30 +162,30 @@ void DrawGUI() {
 
 void AchievementEvent(string event_str){
     if(event_str == "player_was_hit"){
-	    achievements.PlayerWasHit();
-	} else if(event_str == "player_was_injured"){
-	    achievements.PlayerWasInjured();
-	} else if(event_str == "player_attacked"){
-	    achievements.PlayerAttacked();
-	} else if(event_str == "player_sneak_attacked"){
-	    achievements.PlayerSneakAttacked();
-	} else if(event_str == "player_counter_attacked"){
-	    achievements.PlayerCounterAttacked();
-	} else if(event_str == "enemy_died"){
-	    achievements.EnemyDied();
-	} else if(event_str == "enemy_alerted"){
-	    achievements.EnemyAlerted();
-	}
+        achievements.PlayerWasHit();
+    } else if(event_str == "player_was_injured"){
+        achievements.PlayerWasInjured();
+    } else if(event_str == "player_attacked"){
+        achievements.PlayerAttacked();
+    } else if(event_str == "player_sneak_attacked"){
+        achievements.PlayerSneakAttacked();
+    } else if(event_str == "player_counter_attacked"){
+        achievements.PlayerCounterAttacked();
+    } else if(event_str == "enemy_died"){
+        achievements.EnemyDied();
+    } else if(event_str == "enemy_alerted"){
+        achievements.EnemyAlerted();
+    }
 }
 
 void AchievementEventFloat(string event_str, float val){
     if(event_str == "player_block_damage"){
-	    achievements.PlayerBlockDamage(val);
-	} else if(event_str == "player_damage"){
-	    achievements.PlayerDamage(val);
-	} else if(event_str == "player_blood_loss"){
-	    achievements.PlayerBloodLoss(val);
-	}
+        achievements.PlayerBlockDamage(val);
+    } else if(event_str == "player_damage"){
+        achievements.PlayerDamage(val);
+    } else if(event_str == "player_blood_loss"){
+        achievements.PlayerBloodLoss(val);
+    }
 }
 
 string StringFromFloatTime(float time){
@@ -197,7 +217,7 @@ class ChallengeEndGUI {
         imui_context.Init();
         ribbon_background.Init();
     }
-    
+
     void Update(){
         visible = UpdateVisible(visible, target_visible);
         if(gui_id != -1){
@@ -216,14 +236,14 @@ class ChallengeEndGUI {
         ribbon_background.Update();
         UpdateMusic();
     }
-    
+
     void CreateGUI() {
         gui_id = gui.AddGUI("text2","challengelevel/challenge.html",800,600, _GG_IGNORES_MOUSE);   
-        
+
         string mission_objective;
         string mission_objective_color;
         bool success = true;
-        
+
         for(int i=0; i<level.GetNumObjectives(); ++i){
             string objective = level.GetObjective(i);
             if(objective == "destroy_all"){
@@ -281,28 +301,28 @@ class ChallengeEndGUI {
                 }
                 mission_objective += "Reach the goal without any pursuers";
             }
-            
-        if(objective == "collect"){
-            if(NumUnsatisfiedCollectableTargets() != 0){
-                success = false;
-                mission_objective += "x ";
-                mission_objective_color = "red";
-            }  else {
-                mission_objective += "v ";
-                mission_objective_color = "green";
+
+            if(objective == "collect"){
+                if(NumUnsatisfiedCollectableTargets() != 0){
+                    success = false;
+                    mission_objective += "x ";
+                    mission_objective_color = "red";
+                }  else {
+                    mission_objective += "v ";
+                    mission_objective_color = "green";
+                }
+                mission_objective += "Collect items";
             }
-            mission_objective += "Collect items";
         }
-        }
-        
+
         string title = success?'challenge complete':'challenge incomplete';
         gui.Execute(gui_id,"addElement('', 'title', '"+title+"')");
         gui.Execute(gui_id,"addElement('', 'hr', '')");
         gui.Execute(gui_id,"addElement('', 'spacer', '')");
         gui.Execute(gui_id,"addElement('objectives', 'heading', 'objectives:')");
-        
+
         gui.Execute(gui_id,"addElement('', '"+mission_objective_color+
-                "', '"+mission_objective+"', 'objectives')");
+            "', '"+mission_objective+"', 'objectives')");
         gui.Execute(gui_id,"addElement('time', 'heading', 'time:')");
         string time_color;
         if(success){
@@ -332,12 +352,12 @@ class ChallengeEndGUI {
                                 knocked_out = 2;
                             }
                             switch(knocked_out){
-                                case 0:    
-                                    gui.Execute(gui_id,"addElement('', 'ok', '', 'enemies')"); break;
-                                case 1:    
-                                    gui.Execute(gui_id,"addElement('', 'ko', '', 'enemies')"); break;
-                                case 2:    
-                                    gui.Execute(gui_id,"addElement('', 'dead', '', 'enemies')"); break;
+                            case 0:    
+                                gui.Execute(gui_id,"addElement('', 'ok', '', 'enemies')"); break;
+                            case 1:    
+                                gui.Execute(gui_id,"addElement('', 'ko', '', 'enemies')"); break;
+                            case 2:    
+                                gui.Execute(gui_id,"addElement('', 'dead', '', 'enemies')"); break;
                             }
                         }
                     }
@@ -345,7 +365,7 @@ class ChallengeEndGUI {
             }
         }
         gui.Execute(gui_id,"addElement('extra', 'heading', 'extra:')");
-        
+
         int num_achievements = level.GetNumAchievements();
         for(int i=0; i<num_achievements; ++i){
             string achievement = level.GetAchievement(i);
@@ -369,10 +389,10 @@ class ChallengeEndGUI {
             gui.Execute(gui_id,"addElement('', '"+color_str+"', '"+display_str+"', 'extra')");
         }
     }
-    
+
     ~ChallengeEndGUI() {
     }
-   
+
     bool DrawButton(const string &in path, const vec2 &in pos, float ui_scale, int widget_id) {
         HUDImage @image = hud.AddImage();
         image.SetImageFromPath(path);
@@ -385,9 +405,9 @@ class ChallengeEndGUI {
         UIState state;
         bool button_pressed = imui_context.DoButton(widget_id, 
             vec2(image.position.x,
-                 image.position.y),
+            image.position.y),
             vec2(image.position.x+image.GetWidth() * image.scale.x,
-                 image.position.y+image.GetHeight() * image.scale.y),
+            image.position.y+image.GetHeight() * image.scale.y),
             state);
         if(state == kActive){
             vec3 old_scale = image.scale;
@@ -407,27 +427,27 @@ class ChallengeEndGUI {
 
     void DrawGUI(){
         imui_context.UpdateControls();
-		if(visible < 0.01){
+        if(visible < 0.01){
             return;
         }
         float ui_scale = 0.5f;
-        
+
         if(DrawButton("Data/Textures/ui/challenge_mode/quit_icon_c.tga",
-                   vec2(GetScreenWidth() - 256 * ui_scale * 1, 0), 
-                   ui_scale, 0))
+            vec2(GetScreenWidth() - 256 * ui_scale * 1, 0), 
+            ui_scale, 0))
         {
             level.SendMessage("go_to_main_menu");
         }
         if(DrawButton("Data/Textures/ui/challenge_mode/retry_icon_c.tga",
-                   vec2(GetScreenWidth() - 256 * ui_scale * 2, 0), 
-                   ui_scale, 1))
+            vec2(GetScreenWidth() - 256 * ui_scale * 2, 0), 
+            ui_scale, 1))
         {
             level.SendMessage("reset"); 
         }
         if(DrawButton("Data/Textures/ui/challenge_mode/continue_icon_c.tga",
-        //if(DrawButton("Data/Textures/ui/challenge_mode/fast_forward_icon.tga",
-                        vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
-                       ui_scale, 2))
+            //if(DrawButton("Data/Textures/ui/challenge_mode/fast_forward_icon.tga",
+                vec2(GetScreenWidth() - 256 * ui_scale * 3, 0), 
+                ui_scale, 2))
         {
             target_visible = 0.0f;
         }
@@ -438,7 +458,8 @@ class ChallengeEndGUI {
 ChallengeEndGUI challenge_end_gui;
 
 void Update() {
-    if(GetPlayerCharacterID() != -1){
+    const bool display_achievements = false;
+    if(display_achievements && GetPlayerCharacterID() != -1){
         achievements.UpdateDebugText();
     }
     challenge_end_gui.Update();
@@ -480,7 +501,8 @@ void VictoryCheckNormal() {
         return;
     }
     bool victory = true;
-    
+    const bool display_victory_conditions = false;
+
     float max_reset_delay = _reset_delay;
     for(int i=0; i<level.GetNumObjectives(); ++i){
         string objective = level.GetObjective(i);
@@ -488,44 +510,56 @@ void VictoryCheckNormal() {
             int threats_remaining = ThreatsRemaining();
             int threats_possible = ThreatsPossible();
             if(threats_remaining > 0 || threats_possible == 0){
-               victory = false;
-               //DebugText("victory_a","Did not yet defeat all enemies",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_a","Did not yet defeat all enemies",0.5f);
+                }
             }
         }
         if(objective == "reach_a_trigger"){
             max_reset_delay = 1.0;
             if(in_victory_trigger <= 0){
-               victory = false;
-               //DebugText("victory_b","Did not yet reach trigger",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_b","Did not yet reach trigger",0.5f);
+                }
             }
         }
         if(objective == "reach_a_trigger_with_no_pursuers"){
             max_reset_delay = 1.0;
             if(in_victory_trigger <= 0){
-               victory = false;
-               //DebugText("victory_c","Did not yet reach trigger",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_c","Did not yet reach trigger",0.5f);
+                }
             } else if(NumActivelyHostileThreats() > 0){
-               victory = false;
-               DebugText("victory_c","Reached trigger, but still pursued",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_c","Reached trigger, but still pursued",0.5f);
+                }
             } 
         }
         if(objective == "must_visit_trigger"){
             max_reset_delay = 1.0;
             if(NumUnvisitedMustVisitTriggers() != 0){
-               victory = false;
-               //DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
+                }
             } 
         }
         if(objective == "collect"){
             max_reset_delay = 1.0;
             if(NumUnsatisfiedCollectableTargets() != 0){
-               victory = false;
-               //DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
+                victory = false;
+                if(display_victory_conditions){
+                    DebugText("victory_d","Did not visit all must-visit triggers",0.5f);
+                }
             } 
         }
     }
     reset_timer = min(max_reset_delay, reset_timer);
-    
+
     bool failure = false;
     MovementObject@ player_char = ReadCharacter(player_id);
     if(player_char.GetIntVar("knocked_out") != _awake){
@@ -546,15 +580,6 @@ void VictoryCheckNormal() {
         reset_timer = _reset_delay;
         no_win_time = time;
     }
-}
-
-void OnVictoryTriggerEnter(){
-    ++in_victory_trigger;
-    in_victory_trigger = max(1,in_victory_trigger);
-}
-
-void OnVictoryTriggerExit(){
-    --in_victory_trigger;
 }
 
 void UpdateMusic() {

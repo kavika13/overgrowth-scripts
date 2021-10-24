@@ -15,7 +15,7 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
-        level.SendMessage("displaytext \"Display Text\"");
+        level.SendMessage("displaytext \""+params.GetString("Display Text")+"\"");
     }
 }
 

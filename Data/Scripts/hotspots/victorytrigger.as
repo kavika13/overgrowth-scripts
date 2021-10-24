@@ -14,12 +14,12 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
-        level.Execute("OnVictoryTriggerEnter()");
+        level.SendMessage("victory_trigger_enter");
     }
 }
 
 void OnExit(MovementObject @mo) {
     if(mo.controlled){
-        level.Execute("OnVictoryTriggerExit()");
+        level.SendMessage("victory_trigger_exit");
     }
 }
