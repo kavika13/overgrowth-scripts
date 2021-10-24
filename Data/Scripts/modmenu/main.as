@@ -164,7 +164,7 @@ void Initialize() {
 	current_mods = SortAlphabetically(FilterCore(GetModSids()));
 	search.SetCollection(current_mods);
 	BuildUI();
-	setBackGround();
+	SetDarkenedBackground();
 }
 
 array<ModID> SortAlphabetically(array<ModID> input_mods){
@@ -982,10 +982,10 @@ void AddAdvanced(IMDivider@ parent){
 }
 
 void AddDeactivateAllMods(IMDivider@ parent) {
-	//Get More Mods
 	float deactivate_mods_width = 500;
 	float deactivate_mods_height = 75;
-	IMContainer deactivate_mods_container(deactivate_mods_width, deactivate_mods_height);
+	float vertical_offset = 10.0f;
+	IMContainer deactivate_mods_container(deactivate_mods_width, deactivate_mods_height + vertical_offset);
 	deactivate_mods_container.sendMouseOverToChildren(true);
 	deactivate_mods_container.addLeftMouseClickBehavior( IMFixedMessageOnClick("deactivate_all_mods"), "");
 	AddControllerItem(deactivate_mods_container, IMMessage("deactivate_all_mods"));
@@ -997,13 +997,20 @@ void AddDeactivateAllMods(IMDivider@ parent) {
 	deactivate_mods_text.addMouseOverBehavior( text_color_mouse_over, "" );
 	IMImage deactivate_mods_background( button_background_diamond_thin );
 	deactivate_mods_background.setSize(vec2(deactivate_mods_width, deactivate_mods_height));
+	deactivate_mods_background.setClip(false);
+	deactivate_mods_background.addMouseOverBehavior(IMMouseOverScale( move_time, 12.0f, inQuartTween ), "");
 	deactivate_mods_divider.append(deactivate_mods_text);
-	deactivate_mods_container.addFloatingElement(deactivate_mods_background, "background", vec2(0,0));
+	deactivate_mods_container.addFloatingElement(deactivate_mods_background, "background", vec2(0, vertical_offset / 2.0));
 	parent.append(deactivate_mods_container);
+}
+
+void SetDarkenedBackground() {
+    setBackGround(0.5f);
 }
 
 void Dispose() {
 	imGUI.clear();
+    SaveModConfig();
 }
 
 bool CanGoBack() {
@@ -1298,7 +1305,7 @@ class WorkshopWatcher{
 
 void Resize() {
     imGUI.doScreenResize(); // This must be called first
-	setBackGround();
+	SetDarkenedBackground();
 }
 
 void ScriptReloaded() {

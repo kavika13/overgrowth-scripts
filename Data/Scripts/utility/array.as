@@ -15,3 +15,12 @@ array<string> CreateUnion( array<string> arr1, array<string> arr2 )
     }
     return res;
 }
+
+bool contains(array<string> arr, string val) {
+    for( uint i = 0; i < arr.size(); i++ ){
+        if(arr[i] == val){
+            return true;
+        }
+    }
+    return false;
+}

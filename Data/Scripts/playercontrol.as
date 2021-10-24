@@ -89,8 +89,9 @@ void UpdateBrain(const Timestep &in ts){
                on_ground && 
                !flip_info.IsFlipping() &&
                GetThrowTarget() == -1 && 
-               target_rotation2 < -60.0f)
-            {
+               target_rotation2 < -60.0f) {
+                drop_key_state = _dks_drop;
+            } else if(GetInputDown(this_mo.controller_id, "grab") && tethered != _TETHERED_REARCHOKE ) {
                 drop_key_state = _dks_drop;
             } else {
                 drop_key_state = _dks_throw;

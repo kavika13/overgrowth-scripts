@@ -16,7 +16,6 @@ bool non_tutorial_message = false;
 string tutorial_message = "";
 string tutorial_message_display = "";
 float tutorial_opac = 0.0;
-bool tutorial_enable = false;
 float reset_time = -999.0f;
 
 array<string> dialogue_queue;
@@ -150,8 +149,6 @@ void ReceiveMessage(string msg) {
         fade_in_start = the_time;
         fade_in_end = the_time+0.4f;
         reset_time = the_time;
-    } else if(token == "tutorial_enable"){
-        tutorial_enable = true;
     } else if(token == "displaytext"){
         has_display_text = true;
         token_iter.FindNextToken(msg);
@@ -278,7 +275,7 @@ void DrawGUI2() {
     dialogue.Display2();
     LeaveTelemetryZone();
 
-    if(tutorial_enable && !MediaMode()){
+    if(!MediaMode()){
         if(dialogue.has_cam_control){
             tutorial_opac = 0.0;
         }
@@ -400,7 +397,16 @@ void Update(int paused) {
         {
 			draw_settings = true;
 			ResetController();
-			BuildUI();
+			BuildUI("Graphics");
+        }
+        else if( message.name == "Settings_refresh" )
+        {
+            if(draw_settings)
+            {
+                checkCustomResolution();
+                ResetController();
+                BuildUI(current_screen);
+            }
         }
 		else if( message.name == "Retry")
 		{
@@ -557,6 +563,8 @@ void SetWindowDimensions(int w, int h)
 {
     dialogue.ResizeUpdate(w,h);
 	imGUI.doScreenResize();
+    
+    imGUI.receiveMessage( IMMessage("Settings_refresh") );
 }
 
 void AddPauseMenu(){

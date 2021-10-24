@@ -31,13 +31,8 @@ float blackout_amount = 0.0;
 float ko_time = -1.0;
 float win_time = -1.0;
 bool sent_level_complete_message = false;
-bool queue_enable_tutorial = true;
 
 void Update() {
-    if(queue_enable_tutorial){
-        level.SendMessage("tutorial_enable");
-        queue_enable_tutorial = false;
-    }
     int player_id = GetPlayerCharacterID();
     if(player_id != -1 && ReadCharacter(player_id).QueryIntFunction("int CombatSong()") == 1 && ReadCharacter(player_id).GetIntVar("knocked_out") == _awake){
         PlaySong("lugaru_combat");

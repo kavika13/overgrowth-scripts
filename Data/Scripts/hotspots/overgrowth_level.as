@@ -682,15 +682,9 @@ void Update() {
 }
 
 bool can_press_attack = false;
-bool queue_enable_tutorial = true;
 
 void PreDraw(float curr_game_time) {
     EnterTelemetryZone("Overgrowth Level PreDraw");
-
-    if(queue_enable_tutorial){
-        level.SendMessage("tutorial_enable");
-        queue_enable_tutorial = false;
-    }
 
     if(kDebugText){
         DebugText("progress", "progress: "+progress, 0.5);

@@ -1,5 +1,6 @@
 #include "menu_common.as"
 #include "music_load.as"
+#include "save/linear.as"
 
 MusicLoad ml("Data/Music/menu.xml");
 
@@ -27,7 +28,7 @@ void LoadModCampaign() {
 
     Log( info, "size: " + campaign_levels.length());
     for( uint k = 0; k < campaign_levels.length(); k++ ) {
-        level_list.insertLast(LevelInfo(campaign_levels[k]));
+        level_list.insertLast(LevelInfo(campaign_levels[k],GetHighestDifficultyFinishedCampaign(campaign_id),GetLevelPlayed(campaign_levels[k].GetID()),IsLevelUnlocked(campaign_levels[k]),IsLastPlayedLevel(campaign_levels[k])));
     }
 }
 

@@ -1,3 +1,4 @@
+#include "save/general.as"
 #include "menu_common.as"
 #include "music_load.as"
 
@@ -29,19 +30,15 @@ void Initialize() {
     BuildUI();
 	setBackGround();
 	AddVerticalBar();
-
-    if(GetConfigValueBool("difficulty_set") == false) {
-        this_ui.SendCallback( "difficulty_menu.as" );
-    }
 }
 
-array<string> hard_order = {"com-wolfire-overgrowth-campaign","com-wolfire-lugaru-campaign"};
+array<string> hard_order = {"com-wolfire-overgrowth-campaign","com-wolfire-lugaru-campaign","com-wolfire-timbles-therium"};
 
-void SetPlayMenuList(){
+void SetPlayMenuList() {
     for( uint i = 0; i < hard_order.length(); i++ ) {
         Campaign camp = GetCampaign(hard_order[i]);
         string camp_thumbnail_path = camp.GetThumbnail();
-        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetLastLevelPlayed(camp.GetID()).length() > 0));
+        play_menu.insertLast(LevelInfo(camp.GetMenuScript(), camp.GetTitle(), camp_thumbnail_path, camp.GetID(), GetHighestDifficultyFinishedCampaign(camp.GetID()), GetLastLevelPlayed(camp.GetID()).length() > 0, true, IsLastCampaignPlayed(camp)));
     }
 
     array<Campaign>@ campaigns = GetCampaigns();
@@ -62,7 +59,10 @@ void SetPlayMenuList(){
                             camp.GetTitle(), 
                             camp_thumbnail_path, 
                             camp.GetID(),
-                            GetLastLevelPlayed(camp.GetID()).length() > 0
+                            0,
+                            GetLastLevelPlayed(camp.GetID()).length() > 0,
+                            true, 
+                            IsLastCampaignPlayed(camp)
                 )
             );
         }
@@ -79,7 +79,7 @@ void SetPlayMenuList(){
                 if( thumbnail_path == "" ) {
                     thumbnail_path = "../" + ModGetThumbnail(active_sids[i]);
                 }
-                LevelInfo li(menu_items[k].GetPath(), menu_items[k].GetTitle(), thumbnail_path);
+                LevelInfo li(menu_items[k].GetPath(), menu_items[k].GetTitle(), thumbnail_path, true, false);
                 li.hide_stars = true;
 				play_menu.insertLast(li);
             }
@@ -113,7 +113,7 @@ void BuildUI(){
 
 void AddCustomLevelsMenuItem() {
 	if(NrCustomLevels() != 0) {
-        LevelInfo li("custom_levels.as", "Custom Levels", "Textures/ui/menus/main/custom_level_thumbnail.jpg");
+        LevelInfo li("custom_levels.as", "Custom Levels", "Textures/ui/menus/main/custom_level_thumbnail.jpg", true, false);
         li.hide_stars = true;
 		play_menu.insertLast(li);
 	}

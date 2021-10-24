@@ -1,6 +1,9 @@
 #version 150
 #extension GL_ARB_shading_language_420pack : enable
 in vec3 normal_frag;
+#ifndef HAS_GEOM 
+    #define position_frag world_position
+#endif
 in vec3 position_frag;
 
 uniform vec3 camera_position;

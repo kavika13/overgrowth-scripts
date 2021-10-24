@@ -2,6 +2,7 @@ void Init() {
 }
 
 void SetParameters() {
+    params.AddString("branch","");
 }
 
 void HandleEvent(string event, MovementObject @mo){
@@ -14,7 +15,12 @@ void HandleEvent(string event, MovementObject @mo){
 
 void OnEnter(MovementObject @mo) {
     if(mo.controlled){
-       SendGlobalMessage("levelwin");
+        string branch = params.GetString("branch");
+        if(branch == "") {
+            SendGlobalMessage("levelwin");
+        } else {
+            SendGlobalMessage("levelwin " + branch);
+        }
     }
 }
 

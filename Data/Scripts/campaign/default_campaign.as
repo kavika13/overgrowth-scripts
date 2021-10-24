@@ -1,3 +1,4 @@
+#include "save/linear.as"
 #include "campaign_common.as"
 
 bool disable_progress = false;
@@ -6,15 +7,15 @@ void Dispose() {
 }
 
 void Update() {
-    if( GetConfigValueBool("block_cheating_progress") ) {
-        if( disable_progress == false && EditorModeActive() ) {
-            Log(warning, "Detected that editor mode activated during block_cheating_progress, deactivating progress handling");
-            disable_progress = true; 
-        }
-    } else if( disable_progress ){
-        Log(warning, "Detected that block_cheating_progress was disabled, re-enabling progress handling");
-        disable_progress = false;
-    }
+    //if( GetConfigValueBool("block_cheating_progress") ) {
+    //    if( disable_progress == false && EditorModeActive() ) {
+    //        Log(warning, "Detected that editor mode activated during block_cheating_progress, deactivating progress handling");
+    //        disable_progress = true; 
+    //    }
+    //} else if( disable_progress ){
+    //    Log(warning, "Detected that block_cheating_progress was disabled, re-enabling progress handling");
+    //    disable_progress = false;
+    //}
 }
 
 void EnterCampaign() {

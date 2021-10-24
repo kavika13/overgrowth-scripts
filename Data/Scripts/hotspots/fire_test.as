@@ -131,83 +131,92 @@ void OnEnter(MovementObject @mo) {
     }
 }
 
+void SetEnabled(bool val){
+    if(!val){
+        Dispose();
+    }
+}
+
 void OnExit(MovementObject @mo) {
 }
 
 void PreDraw(float curr_game_time) {
-    EnterTelemetryZone("Fire Hotspot Predraw");
-    float delta_time = curr_game_time - last_game_time;
+    int obj_id = hotspot.GetID();
+    if(ObjectExists(obj_id) && ReadObjectFromID(hotspot.GetID()).GetEnabled()){
+        EnterTelemetryZone("Fire Hotspot Predraw");
+        float delta_time = curr_game_time - last_game_time;
 
-    Object@ obj = ReadObjectFromID(hotspot.GetID());
-    vec3 pos = obj.GetTranslation();
-    vec3 scale = obj.GetScale();
-    quaternion rot = obj.GetRotation();
-    if(int(ribbons.size()) != num_ribbons){
-        ribbons.resize(num_ribbons);
-        for(int i=0; i<num_ribbons; ++i){
-            ribbons[i].rel_pos = vec3(RangedRandomFloat(-1.0f, 1.0f), 0.0f, RangedRandomFloat(-1.0f,1.0f));
-            ribbons[i].base_rand += RangedRandomFloat(0.0f, 100.0f);
-            ribbons[i].spawn_new_particle_delay = RangedRandomFloat(0.0f, 0.1f);
+        Object@ obj = ReadObjectFromID(hotspot.GetID());
+        vec3 pos = obj.GetTranslation();
+        vec3 scale = obj.GetScale();
+        quaternion rot = obj.GetRotation();
+        if(int(ribbons.size()) != num_ribbons){
+            ribbons.resize(num_ribbons);
+            for(int i=0; i<num_ribbons; ++i){
+                ribbons[i].rel_pos = vec3(RangedRandomFloat(-1.0f, 1.0f), 0.0f, RangedRandomFloat(-1.0f,1.0f));
+                ribbons[i].base_rand += RangedRandomFloat(0.0f, 100.0f);
+                ribbons[i].spawn_new_particle_delay = RangedRandomFloat(0.0f, 0.1f);
+            }
         }
-    }
-    --count;
-    for(int ribbon_index=0; 
-        ribbon_index < num_ribbons;
-        ++ribbon_index)
-    {
-        ribbons[ribbon_index].pos = pos + rot*vec3(ribbons[ribbon_index].rel_pos[0]*scale[0],scale[1]*2.0,ribbons[ribbon_index].rel_pos[2]*scale[2]);
-    }
-    if(count <= 0){
-        count = 10;
-    }
-    delay -= delta_time;
-
-    if(delay <= 0.0f){
-        for(int i=0; i<1; ++i){
-            uint32 id = MakeParticle("Data/Particles/firespark.xml", ribbons[int(RangedRandomFloat(0, num_ribbons-0.01))].pos, vec3(RangedRandomFloat(-2.0f, 2.0f), RangedRandomFloat(5.0f, 10.0f), RangedRandomFloat(-2.0f, 2.0f)), vec3(1.0f));
-        }
-        delay = RangedRandomFloat(0.0f, 0.6f);
-    }
-    if(fire_object_id == -1){
-        fire_object_id = CreateObject("Data/Objects/default_light.xml", true);
-    }
-    if(sound_handle == -1){
-        if(!level.WaitingForInput()){
-            sound_handle = PlaySoundLoopAtLocation("Data/Sounds/fire/campfire_loop.wav",pos,0.0f);
-            sound_start_time = curr_game_time;
-        }
-    } else {
-        SetSoundPosition(sound_handle, pos);
-        SetSoundGain(sound_handle, min(1.0, curr_game_time - sound_start_time));
-    }
-
-    if(int(ribbons.size()) == num_ribbons){
+        --count;
         for(int ribbon_index=0; 
             ribbon_index < num_ribbons;
             ++ribbon_index)
-        {   
-            //ribbons[ribbon_index].Update(delta_time, curr_game_time);
-            CFireRibbonUpdate(ribbons[ribbon_index], delta_time, curr_game_time, ReadObjectFromID(hotspot.GetID()).GetTranslation()); 
-            //ribbons[ribbon_index].PreDraw(curr_game_time);
-            CFireRibbonPreDraw(ribbons[ribbon_index], curr_game_time); 
+        {
+            ribbons[ribbon_index].pos = pos + rot*vec3(ribbons[ribbon_index].rel_pos[0]*scale[0],scale[1]*2.0,ribbons[ribbon_index].rel_pos[2]*scale[2]);
         }
-        float amplify = 1.0f;
-        if(params.HasParam("Light Amplify")){
-            amplify *= params.GetFloat("Light Amplify");
+        if(count <= 0){
+            count = 10;
         }
-        float distance = 10.0f;
-        if(params.HasParam("Light Distance")){
-            distance *= params.GetFloat("Light Distance");
+        delay -= delta_time;
+
+        if(delay <= 0.0f){
+            for(int i=0; i<1; ++i){
+                uint32 id = MakeParticle("Data/Particles/firespark.xml", ribbons[int(RangedRandomFloat(0, num_ribbons-0.01))].pos, vec3(RangedRandomFloat(-2.0f, 2.0f), RangedRandomFloat(5.0f, 10.0f), RangedRandomFloat(-2.0f, 2.0f)), vec3(1.0f));
+            }
+            delay = RangedRandomFloat(0.0f, 0.6f);
         }
-        if(ribbons[0].particles.size()>3){
-            Object@ fire_obj = ReadObjectFromID(fire_object_id);
-            fire_obj.SetTranslation(mix(ribbons[0].particles[3].pos, ribbons[0].particles[2].pos, ribbons[0].spawn_new_particle_delay / 0.1f));
-            fire_obj.SetTint(amplify * 0.2 * vec3(2.0,1.0,0.0)*(2.0 + mix(ribbons[0].particles[3].heat, ribbons[0].particles[2].heat, ribbons[0].spawn_new_particle_delay / 0.1f)));
-            fire_obj.SetScale(vec3(distance));
+        if(fire_object_id == -1){
+            fire_object_id = CreateObject("Data/Objects/default_light.xml", true);
         }
+        if(sound_handle == -1){
+            if(!level.WaitingForInput()){
+                sound_handle = PlaySoundLoopAtLocation("Data/Sounds/fire/campfire_loop.wav",pos,0.0f);
+                sound_start_time = curr_game_time;
+            }
+        } else {
+            SetSoundPosition(sound_handle, pos);
+            SetSoundGain(sound_handle, min(1.0, curr_game_time - sound_start_time));
+        }
+
+        if(int(ribbons.size()) == num_ribbons){
+            for(int ribbon_index=0; 
+                ribbon_index < num_ribbons;
+                ++ribbon_index)
+            {   
+                //ribbons[ribbon_index].Update(delta_time, curr_game_time);
+                CFireRibbonUpdate(ribbons[ribbon_index], delta_time, curr_game_time, ReadObjectFromID(hotspot.GetID()).GetTranslation()); 
+                //ribbons[ribbon_index].PreDraw(curr_game_time);
+                CFireRibbonPreDraw(ribbons[ribbon_index], curr_game_time); 
+            }
+            float amplify = 1.0f;
+            if(params.HasParam("Light Amplify")){
+                amplify *= params.GetFloat("Light Amplify");
+            }
+            float distance = 10.0f;
+            if(params.HasParam("Light Distance")){
+                distance *= params.GetFloat("Light Distance");
+            }
+            if(ribbons[0].particles.size()>3){
+                Object@ fire_obj = ReadObjectFromID(fire_object_id);
+                fire_obj.SetTranslation(mix(ribbons[0].particles[3].pos, ribbons[0].particles[2].pos, ribbons[0].spawn_new_particle_delay / 0.1f));
+                fire_obj.SetTint(amplify * 0.2 * vec3(2.0,1.0,0.0)*(2.0 + mix(ribbons[0].particles[3].heat, ribbons[0].particles[2].heat, ribbons[0].spawn_new_particle_delay / 0.1f)));
+                fire_obj.SetScale(vec3(distance));
+            }
+        }
+        last_game_time = curr_game_time;
+        LeaveTelemetryZone();
     }
-    last_game_time = curr_game_time;
-    LeaveTelemetryZone();
 }
 
 vec4 ColorFromHeat(float heat){
